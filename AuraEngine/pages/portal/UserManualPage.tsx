@@ -14,7 +14,7 @@ interface LayoutContext {
   refreshProfile: () => Promise<void>;
 }
 
-type SectionKey = 'welcome' | 'getting-started' | 'lead-management' | 'content-creation' | 'analytics-reporting' | 'automation-workflows' | 'team-collaboration' | 'integrations' | 'troubleshooting' | 'advanced-features' | 'training' | 'whats-next' | 'advantages' | 'features' | 'impact' | 'future' | 'comparison';
+type SectionKey = 'welcome' | 'getting-started' | 'lead-management' | 'content-creation' | 'analytics-reporting' | 'automation-workflows' | 'team-collaboration' | 'integrations' | 'troubleshooting' | 'advanced-features' | 'training' | 'outreach-templates' | 'whats-next' | 'advantages' | 'features' | 'impact' | 'future' | 'comparison';
 
 // === Lead Scoring Table ===
 const LEAD_SCORE_TIERS = [
@@ -1023,6 +1023,117 @@ const MAINTENANCE_SCHEDULE = [
   { date: 'Mar 17, 2024', time: '2-4 AM EST' },
 ];
 
+// === Outreach Templates ===
+const OUTREACH_TEMPLATES = [
+  {
+    id: 1,
+    type: 'Cold Email / Sequence Opener',
+    icon: <MailIcon className="w-5 h-5" />,
+    color: 'indigo',
+    subject: 'Found a match between {{company}} and what we do',
+    body: [
+      'Hi {{lead_name}},',
+      '',
+      'I was looking at {{company}}\'s work in {{insights.industry_or_detail}}, and it struck me how much your focus on {{insights.pain_point_or_goal}} aligns with what we help companies like yours accomplish.',
+      '',
+      'We\'ve worked with similar teams to {{insights.hook_achievement_or_solution}}\u2014often seeing results like {{insights.results_or_metric}}.',
+      '',
+      'Would you be open to a brief 15-minute chat next week to explore whether there\'s a fit here?',
+      '',
+      'Best,',
+      '[Your Name]',
+      '[Your Role] | [Your Company]',
+      '[Calendly link]',
+    ],
+  },
+  {
+    id: 2,
+    type: 'Follow-Up / Value-Add Touch',
+    icon: <RefreshIcon className="w-5 h-5" />,
+    color: 'violet',
+    subject: 'Re: Connecting {{insights.relevant_detail}}',
+    body: [
+      'Hi {{lead_name}},',
+      '',
+      'Following up on my last note\u2014I was revisiting {{company}}\'s recent {{insights.news_or_development}} and it reminded me of a case study where we helped [Similar Company] achieve {{insights.relevant_outcome}}.',
+      '',
+      'I\'ve attached a short overview below. If useful, I\'d be happy to walk through it together.',
+      '',
+      'When might you have 10 minutes free?',
+      '',
+      'Best,',
+      '[Your Name]',
+      '',
+      'P.S. Here\'s the one-pager \u2192 [Link to relevant resource]',
+    ],
+  },
+  {
+    id: 3,
+    type: 'Social / InMail Message',
+    icon: <MessageIcon className="w-5 h-5" />,
+    color: 'emerald',
+    subject: '',
+    body: [
+      'Hi {{lead_name}},',
+      '',
+      'Came across your recent post about {{insights.topic_or_challenge}}\u2014great insights. At [Your Company], we specialize in helping {{insights.company_type}} tackle similar challenges, particularly around {{insights.specific_pain_point}}.',
+      '',
+      'I noticed {{company}} has been focusing on {{insights.company_initiative}}\u2014we\'ve seen interesting results when combining that with [Your Solution].',
+      '',
+      'If you\'re open to it, I\'d love to share a quick case study. No pressure at all.',
+      '',
+      'Cheers,',
+      '[Your Name]',
+      '[Your Company]',
+    ],
+  },
+  {
+    id: 4,
+    type: 'Voicemail / Call Script',
+    icon: <HelpCircleIcon className="w-5 h-5" />,
+    color: 'amber',
+    subject: '',
+    body: [
+      '"Hi {{lead_name}}, this is [Your Name] from [Your Company].',
+      '',
+      'I\'m reaching out because I saw that {{company}} recently {{insights.news_or_achievement}}\u2014congrats on that\u2014and it reminded me of how we helped [Client] achieve {{insights.relevant_result}}.',
+      '',
+      'I\'d love to share a quick insight with you. You can reach me at [Phone] or just reply to this email.',
+      '',
+      'Have a great day."',
+    ],
+  },
+  {
+    id: 5,
+    type: 'Post-Meeting / Next-Step Follow-Up',
+    icon: <CheckIcon className="w-5 h-5" />,
+    color: 'rose',
+    subject: 'As discussed: {{insights.next_step_topic}}',
+    body: [
+      'Hi {{lead_name}},',
+      '',
+      'Great speaking with you earlier. As promised, here\'s the [resource/material] we discussed regarding {{insights.discussion_point}}.',
+      '',
+      'Next steps, as I understand them:',
+      '1. {{insights.action_item_1}}',
+      '2. {{insights.action_item_2}}',
+      '',
+      'I\'ve also taken the liberty of scheduling {{next_step}} as discussed. Please let me know if you\'d prefer a different time.',
+      '',
+      'Looking forward,',
+      '[Your Name]',
+    ],
+  },
+];
+
+const OUTREACH_TIPS = [
+  { tip: 'Personalize beyond basics', desc: 'Mention a recent post, company milestone, or shared connection.' },
+  { tip: 'Lead with value', desc: 'Frame your message around their challenge or goal.' },
+  { tip: 'Be concise and clear', desc: 'Busy professionals appreciate brevity.' },
+  { tip: 'Include a clear, low-effort CTA', desc: 'A short meeting, a relevant resource, or a specific question.' },
+  { tip: 'Use AI insights authentically', desc: 'Don\'t overstate; simply connect dots between their situation and your solution.' },
+];
+
 const UserManualPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const [activeSection, setActiveSection] = useState<SectionKey>('welcome');
@@ -1040,6 +1151,7 @@ const UserManualPage: React.FC = () => {
     { key: 'troubleshooting', label: 'Troubleshooting', icon: <HelpCircleIcon className="w-4 h-4" /> },
     { key: 'advanced-features', label: 'Advanced', icon: <CogIcon className="w-4 h-4" /> },
     { key: 'training', label: 'Training', icon: <AcademicCapIcon className="w-4 h-4" /> },
+    { key: 'outreach-templates', label: 'Outreach', icon: <MailIcon className="w-4 h-4" /> },
     { key: 'whats-next', label: 'What\'s Next', icon: <FlameIcon className="w-4 h-4" /> },
     { key: 'advantages', label: 'Competitive Edge', icon: <ShieldIcon className="w-4 h-4" /> },
     { key: 'features', label: 'Exclusive Features', icon: <SparklesIcon className="w-4 h-4" /> },
@@ -3087,6 +3199,94 @@ const UserManualPage: React.FC = () => {
                     ))}
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === SECTION: SDR Outreach Templates === */}
+      {activeSection === 'outreach-templates' && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-lg font-black text-slate-900">SDR Outreach Templates</h2>
+            <p className="text-xs text-slate-500 mt-0.5">AI-powered, insight-driven templates for every stage of the sales conversation</p>
+            <p className="text-[10px] text-indigo-500 font-mono mt-1">Prompt: "You are a world-class SDR. Generate a {'{{type}}'} for {'{{lead_name}}'} at {'{{company}}'}. Context: {'{{insights}}'}"</p>
+          </div>
+
+          {/* Templates */}
+          {OUTREACH_TEMPLATES.map(tpl => (
+            <div key={tpl.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className={`px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-${tpl.color}-50 to-${tpl.color}-50/30`}>
+                <div className="flex items-center space-x-3">
+                  <div className={`w-8 h-8 rounded-lg bg-${tpl.color}-100 flex items-center justify-center text-${tpl.color}-600`}>{tpl.icon}</div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-[10px] font-black text-${tpl.color}-600 bg-${tpl.color}-100 px-2 py-0.5 rounded-full`}>#{tpl.id}</span>
+                      <h3 className="text-sm font-black text-slate-900">{tpl.type}</h3>
+                    </div>
+                    {tpl.subject && <p className="text-xs text-slate-500 mt-0.5">Subject: <span className="font-mono text-indigo-600">{tpl.subject}</span></p>}
+                  </div>
+                </div>
+              </div>
+              <div className="p-6">
+                <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
+                  {tpl.body.map((line, i) => (
+                    <p key={i} className={`text-xs leading-relaxed ${
+                      line === '' ? 'h-3' :
+                      line.startsWith('"') || line.endsWith('"') ? 'text-slate-700 italic' :
+                      line.startsWith('Hi {{') || line.startsWith('Best,') || line.startsWith('Cheers,') || line.startsWith('Looking forward') ? 'text-slate-700' :
+                      line.startsWith('[') ? 'text-slate-400 text-[10px]' :
+                      line.startsWith('P.S.') ? 'text-indigo-600 font-medium' :
+                      line.startsWith('1.') || line.startsWith('2.') ? 'text-slate-600 pl-4' :
+                      line.includes('{{') ? 'text-slate-700' : 'text-slate-600'
+                    }`}>
+                      {line.split(/(\{\{[^}]+\}\})/).map((part, j) =>
+                        part.startsWith('{{') ? (
+                          <span key={j} className="text-indigo-600 font-mono text-[11px] bg-indigo-50 px-1 rounded">{part}</span>
+                        ) : (
+                          <span key={j}>{part}</span>
+                        )
+                      )}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Tips for Maximum Impact */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-yellow-50">
+              <div className="flex items-center space-x-2">
+                <LightBulbIcon className="w-4 h-4 text-amber-500" />
+                <h3 className="text-sm font-black text-slate-900">Tips for Maximum Impact</h3>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              {OUTREACH_TIPS.map((t, i) => (
+                <div key={t.tip} className="flex items-start space-x-3">
+                  <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px] font-black flex-shrink-0">{i + 1}</div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">{t.tip}</p>
+                    <p className="text-xs text-slate-500">{t.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Available Personalization Tags */}
+          <div className="bg-slate-900 rounded-2xl p-6">
+            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-3">Available Personalization Tags</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                '{{lead_name}}', '{{company}}', '{{insights.industry_or_detail}}',
+                '{{insights.pain_point_or_goal}}', '{{insights.news_or_development}}', '{{insights.relevant_outcome}}',
+                '{{insights.topic_or_challenge}}', '{{insights.company_initiative}}', '{{insights.specific_pain_point}}',
+                '{{insights.next_step_topic}}', '{{insights.action_item_1}}', '{{next_step}}',
+              ].map(tag => (
+                <div key={tag} className="bg-slate-800 rounded-lg px-3 py-2 font-mono text-[10px] text-indigo-300 border border-slate-700">{tag}</div>
               ))}
             </div>
           </div>
