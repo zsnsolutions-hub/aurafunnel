@@ -6,7 +6,8 @@ import {
   SparklesIcon, MailIcon, GlobeIcon, HashIcon, BookIcon, BriefcaseIcon, BoltIcon,
   CopyIcon, CheckIcon, ClockIcon, EyeIcon, XIcon, PlusIcon, DownloadIcon,
   ArrowRightIcon, ArrowLeftIcon, CalendarIcon, SendIcon, SplitIcon, ChartIcon,
-  TrendUpIcon, TrendDownIcon, TargetIcon, FlameIcon, RefreshIcon
+  TrendUpIcon, TrendDownIcon, TargetIcon, FlameIcon, RefreshIcon,
+  KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 
@@ -50,6 +51,46 @@ interface ContentPerformance {
   openRate: number;
   clickRate: number;
   responseRate: number;
+  status: 'sent' | 'scheduled' | 'draft';
+}
+
+interface CustomPrompt {
+  id: string;
+  label: string;
+  prompt: string;
+  category: ContentCategory;
+  usedCount: number;
+  createdAt: Date;
+}
+
+interface ContentQualityScore {
+  overall: number;
+  personalization: number;
+  engagement: number;
+  clarity: number;
+  ctaStrength: number;
+  readability: number;
+}
+
+interface WritingMetrics {
+  wordCount: number;
+  readingTime: string;
+  sentenceCount: number;
+  avgSentenceLength: number;
+  readabilityGrade: string;
+  readabilityScore: number;
+}
+
+interface ToneBreakdown {
+  label: string;
+  value: number;
+  color: string;
+}
+
+interface CalendarEntry {
+  date: string;
+  title: string;
+  type: string;
   status: 'sent' | 'scheduled' | 'draft';
 }
 
@@ -323,6 +364,12 @@ const ContentGen: React.FC = () => {
   const [deliveryConfirmed, setDeliveryConfirmed] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
   const [performanceData] = useState<ContentPerformance[]>(generateMockPerformance);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showPromptLibrary, setShowPromptLibrary] = useState(false);
+  const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [contentHistory, setContentHistory] = useState<{ id: string; timestamp: Date; blocks: ContentBlock[]; label: string }[]>([]);
+  const [showWritingAssistant, setShowWritingAssistant] = useState(true);
 
   const generationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -380,6 +427,131 @@ const ContentGen: React.FC = () => {
       avgResponseRate: +(sent.reduce((a, p) => a + p.responseRate, 0) / sent.length).toFixed(1),
       totalPieces: sent.length,
     };
+  }, [performanceData]);
+
+  // ── KPI Stats ──
+  const kpiStats = useMemo(() => {
+    const sent = performanceData.filter(p => p.status === 'sent');
+    const totalGenerated = performanceData.length + blocks.length;
+    const activeSequences = performanceData.filter(p => p.status === 'scheduled').length;
+    const avgOpenRate = sent.length > 0 ? +(sent.reduce((a, p) => a + p.openRate, 0) / sent.length).toFixed(1) : 0;
+    const bestType = sent.length > 0
+      ? sent.reduce((best, p) => p.openRate > best.openRate ? p : best, sent[0]).type
+      : 'N/A';
+    const creditsRemaining = creditsTotal - creditsUsed;
+    const aiAccuracy = sent.length > 0 ? Math.round(65 + (avgOpenRate / 2)) : 0;
+    return { totalGenerated, activeSequences, avgOpenRate, bestType, creditsRemaining, aiAccuracy };
+  }, [performanceData, blocks.length, creditsTotal, creditsUsed]);
+
+  // ── Content Quality Score ──
+  const contentQuality = useMemo((): ContentQualityScore | null => {
+    if (!activeBlock?.body || activeBlock.body.length < 20) return null;
+    const body = activeBlock.body;
+    const subject = activeBlock.subject || '';
+
+    const hasPersonalization = /\{\{.+?\}\}/.test(body);
+    const subjectHasPersonalization = /\{\{.+?\}\}/.test(subject);
+    const hasCTA = /\b(book|schedule|call|demo|try|start|click|learn|reserve|sign up|register|download|get)\b/i.test(body);
+    const hasQuestion = body.includes('?');
+    const hasNumbers = /\d+%?/.test(body);
+    const hasSocialProof = /\b(used by|trusted by|join|companies|customers|clients|teams)\b/i.test(body);
+    const words = body.split(/\s+/).filter(Boolean).length;
+
+    let personalization = 30;
+    if (hasPersonalization) personalization += 30;
+    if (subjectHasPersonalization) personalization += 20;
+    if (/\{\{company\}\}/.test(body)) personalization += 10;
+    if (/\{\{industry\}\}/.test(body)) personalization += 10;
+
+    let engagement = 20;
+    if (hasQuestion) engagement += 20;
+    if (hasSocialProof) engagement += 20;
+    if (hasNumbers) engagement += 15;
+    if (body.includes('P.S.') || body.includes('p.s.')) engagement += 10;
+    if (words > 50 && words < 200) engagement += 15;
+
+    let clarity = 40;
+    const sentences = body.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const avgSentLen = sentences.length > 0 ? words / sentences.length : words;
+    if (avgSentLen < 20) clarity += 30;
+    else if (avgSentLen < 30) clarity += 15;
+    if (body.includes('\n\n')) clarity += 15;
+    if (/[•\-\*]\s/.test(body)) clarity += 15;
+
+    let ctaStrength = 10;
+    if (hasCTA) ctaStrength += 35;
+    if (/\[.+?\]/.test(body)) ctaStrength += 25;
+    if (/\bfree\b/i.test(body)) ctaStrength += 15;
+    if (/\btoday\b|\bnow\b|\bthis week\b/i.test(body)) ctaStrength += 15;
+
+    let readability = 50;
+    if (avgSentLen < 15) readability += 30;
+    else if (avgSentLen < 25) readability += 20;
+    const longWords = body.split(/\s+/).filter(w => w.length > 12).length;
+    if (longWords < 3) readability += 20;
+
+    const scores = {
+      personalization: Math.min(personalization, 100),
+      engagement: Math.min(engagement, 100),
+      clarity: Math.min(clarity, 100),
+      ctaStrength: Math.min(ctaStrength, 100),
+      readability: Math.min(readability, 100),
+    };
+    const overall = Math.round(Object.values(scores).reduce((a, v) => a + v, 0) / 5);
+
+    return { overall, ...scores };
+  }, [activeBlock?.body, activeBlock?.subject]);
+
+  // ── Writing Metrics ──
+  const writingMetrics = useMemo((): WritingMetrics | null => {
+    if (!activeBlock?.body || activeBlock.body.length < 10) return null;
+    const body = activeBlock.body;
+    const words = body.split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+    const minutes = Math.ceil(wordCount / 200);
+    const readingTime = minutes < 1 ? '< 1 min' : `${minutes} min`;
+    const sentences = body.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const sentenceCount = sentences.length;
+    const avgSentenceLength = sentenceCount > 0 ? Math.round(wordCount / sentenceCount) : 0;
+
+    let grade = 'Easy';
+    let score = 80;
+    if (avgSentenceLength > 25) { grade = 'Complex'; score = 40; }
+    else if (avgSentenceLength > 18) { grade = 'Moderate'; score = 60; }
+    else if (avgSentenceLength > 12) { grade = 'Clear'; score = 75; }
+    else { grade = 'Simple'; score = 90; }
+
+    return { wordCount, readingTime, sentenceCount, avgSentenceLength, readabilityGrade: grade, readabilityScore: score };
+  }, [activeBlock?.body]);
+
+  // ── Tone Analysis ──
+  const toneAnalysis = useMemo((): ToneBreakdown[] => {
+    if (!activeBlock?.body || activeBlock.body.length < 20) return [];
+    const body = activeBlock.body.toLowerCase();
+
+    const professional = /\b(regarding|furthermore|accordingly|therefore|hereby|pursuant|facilitate)\b/i.test(body) ? 70 : 35;
+    const friendly = /\b(hi|hey|thanks|awesome|great|love|happy|glad|cheers)\b/i.test(body) ? 75 : 30;
+    const urgent = /\b(now|today|limited|hurry|fast|quick|immediately|asap|deadline|last chance)\b/i.test(body) ? 80 : 20;
+    const empathetic = /\b(understand|care|support|help|feel|concern|worry|struggle)\b/i.test(body) ? 70 : 25;
+    const datadriven = /\d+%|\b(data|metric|analytics|report|statistics|results|performance)\b/i.test(body) ? 75 : 20;
+
+    return [
+      { label: 'Professional', value: Math.min(professional, 100), color: 'indigo' },
+      { label: 'Friendly', value: Math.min(friendly, 100), color: 'emerald' },
+      { label: 'Urgent', value: Math.min(urgent, 100), color: 'rose' },
+      { label: 'Empathetic', value: Math.min(empathetic, 100), color: 'violet' },
+      { label: 'Data-Driven', value: Math.min(datadriven, 100), color: 'amber' },
+    ];
+  }, [activeBlock?.body]);
+
+  // ── Calendar Entries ──
+  const calendarEntries = useMemo((): CalendarEntry[] => {
+    return performanceData.map(p => ({
+      date: new Date(p.sentAt).toISOString().split('T')[0],
+      title: p.title,
+      type: p.type,
+      status: p.status,
+    }));
   }, [performanceData]);
 
   // ── Handlers ──
@@ -586,6 +758,46 @@ const ContentGen: React.FC = () => {
     setTimeout(() => setDeliveryConfirmed(false), 3000);
   };
 
+  // ── Prompt Library ──
+  const handleSaveCustomPrompt = useCallback((label: string) => {
+    if (!activeBlock?.body) return;
+    const newPrompt: CustomPrompt = {
+      id: `prompt-${Date.now()}`,
+      label,
+      prompt: activeBlock.body.slice(0, 200),
+      category: contentType,
+      usedCount: 0,
+      createdAt: new Date(),
+    };
+    setCustomPrompts(prev => [newPrompt, ...prev].slice(0, 15));
+    // Persist
+    try {
+      const stored = JSON.parse(localStorage.getItem('aura_custom_prompts') || '[]');
+      localStorage.setItem('aura_custom_prompts', JSON.stringify([newPrompt, ...stored].slice(0, 15)));
+    } catch {}
+  }, [activeBlock?.body, contentType]);
+
+  // ── Content History (version snapshots) ──
+  const snapshotContent = useCallback(() => {
+    if (blocks.length === 0) return;
+    const snapshot = {
+      id: `snap-${Date.now()}`,
+      timestamp: new Date(),
+      blocks: JSON.parse(JSON.stringify(blocks)),
+      label: `v${contentHistory.length + 1} — ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    };
+    setContentHistory(prev => [snapshot, ...prev].slice(0, 10));
+  }, [blocks, contentHistory.length]);
+
+  const restoreSnapshot = useCallback((snapId: string) => {
+    const snap = contentHistory.find(s => s.id === snapId);
+    if (snap) {
+      snapshotContent(); // save current before restoring
+      setBlocks(snap.blocks);
+      setActiveBlockIdx(0);
+    }
+  }, [contentHistory, snapshotContent]);
+
   // ── Load saved draft on mount ──
   useEffect(() => {
     try {
@@ -612,6 +824,87 @@ const ContentGen: React.FC = () => {
     };
   }, []);
 
+  // Load custom prompts from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('aura_custom_prompts');
+      if (stored) setCustomPrompts(JSON.parse(stored));
+    } catch {}
+  }, []);
+
+  // ── Keyboard Shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+
+      // Ctrl+S → Save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
+      // Ctrl+G → Generate (only from step 2)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g' && wizardStep === 2) {
+        e.preventDefault();
+        runGeneration();
+        return;
+      }
+      // Ctrl+P → Preview
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p' && blocks.length > 0) {
+        e.preventDefault();
+        setShowPreview(prev => !prev);
+        return;
+      }
+
+      if (isInput || showPreview) return;
+
+      // ? → Shortcuts modal
+      if (e.key === '?' && !showShortcuts) {
+        e.preventDefault();
+        setShowShortcuts(true);
+        return;
+      }
+      // Escape → close modals
+      if (e.key === 'Escape') {
+        if (showShortcuts) setShowShortcuts(false);
+        if (showPromptLibrary) setShowPromptLibrary(false);
+        if (showCalendar) setShowCalendar(false);
+        return;
+      }
+      // 1-5 → wizard steps
+      if (/^[1-5]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+        const step = parseInt(e.key) as WizardStep;
+        if (step <= wizardStep || (step === 4 && blocks.length > 0)) {
+          e.preventDefault();
+          setWizardStep(step);
+        }
+        return;
+      }
+      // p → prompt library
+      if (e.key === 'p' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setShowPromptLibrary(prev => !prev);
+        return;
+      }
+      // c → calendar
+      if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setShowCalendar(prev => !prev);
+        return;
+      }
+      // w → toggle writing assistant (step 4)
+      if (e.key === 'w' && wizardStep === 4) {
+        e.preventDefault();
+        setShowWritingAssistant(prev => !prev);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardStep, blocks.length, showShortcuts, showPromptLibrary, showCalendar, showPreview]);
+
   // ═══════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════
@@ -635,24 +928,49 @@ const ContentGen: React.FC = () => {
             <p className="text-[10px] text-slate-400">{targetLeads.length} leads targeted &middot; {(creditsTotal - creditsUsed).toLocaleString()} credits left</p>
           </div>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setShowCalendar(!showCalendar)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center space-x-1.5 ${
+              showCalendar ? 'bg-violet-50 border-violet-200 text-violet-600' : 'bg-white border-slate-200 text-slate-500 hover:border-violet-200'
+            }`}
+          >
+            <CalendarIcon className="w-3.5 h-3.5" />
+            <span>Calendar</span>
+          </button>
+          <button
+            onClick={() => setShowPromptLibrary(!showPromptLibrary)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center space-x-1.5 ${
+              showPromptLibrary ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:border-amber-200'
+            }`}
+          >
+            <LayersIcon className="w-3.5 h-3.5" />
+            <span>Prompts</span>
+          </button>
           <button
             onClick={() => setShowPerformance(!showPerformance)}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center space-x-2 ${
-              showPerformance ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-200'
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center space-x-1.5 ${
+              showPerformance ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200'
             }`}
           >
             <ChartIcon className="w-3.5 h-3.5" />
             <span>Performance</span>
           </button>
           {blocks.length > 0 && (
-            <button onClick={downloadAll} className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" title="Download">
+            <button onClick={downloadAll} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" title="Download">
               <DownloadIcon className="w-4 h-4" />
             </button>
           )}
           <button
+            onClick={() => setShowShortcuts(true)}
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            title="Keyboard shortcuts"
+          >
+            <KeyboardIcon className="w-4 h-4" />
+          </button>
+          <button
             onClick={handleSave}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all border ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
               saved ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-200'
             }`}
           >
@@ -701,6 +1019,143 @@ const ContentGen: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* ═══ KPI STATS BANNER ═══ */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        {[
+          { label: 'Total Generated', value: kpiStats.totalGenerated, icon: <SparklesIcon className="w-4 h-4" />, color: 'indigo', trend: kpiStats.totalGenerated > 5 ? 'up' : null },
+          { label: 'Active Sequences', value: kpiStats.activeSequences, icon: <ActivityIcon className="w-4 h-4" />, color: 'violet', trend: null },
+          { label: 'Avg Open Rate', value: `${kpiStats.avgOpenRate}%`, icon: <EyeIcon className="w-4 h-4" />, color: 'emerald', trend: kpiStats.avgOpenRate > 30 ? 'up' : 'down' },
+          { label: 'Best Type', value: kpiStats.bestType, icon: <StarIcon className="w-4 h-4" />, color: 'amber', trend: null },
+          { label: 'Credits Left', value: kpiStats.creditsRemaining.toLocaleString(), icon: <BoltIcon className="w-4 h-4" />, color: 'blue', trend: null },
+          { label: 'AI Accuracy', value: `${kpiStats.aiAccuracy}%`, icon: <BrainIcon className="w-4 h-4" />, color: 'rose', trend: kpiStats.aiAccuracy > 80 ? 'up' : null },
+        ].map(stat => (
+          <div key={stat.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className={`w-8 h-8 rounded-lg bg-${stat.color}-50 flex items-center justify-center text-${stat.color}-500`}>
+                {stat.icon}
+              </div>
+              {stat.trend === 'up' && <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" />}
+              {stat.trend === 'down' && <TrendDownIcon className="w-3.5 h-3.5 text-rose-400" />}
+            </div>
+            <p className="text-lg font-black text-slate-900">{stat.value}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ CONTENT CALENDAR MINI ═══ */}
+      {showCalendar && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <CalendarIcon className="w-4 h-4 text-violet-500" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Content Calendar — This Week</p>
+            </div>
+            <button onClick={() => setShowCalendar(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+            {(() => {
+              const today = new Date();
+              const startOfWeek = new Date(today);
+              startOfWeek.setDate(today.getDate() - today.getDay());
+              return Array.from({ length: 7 }, (_, i) => {
+                const day = new Date(startOfWeek);
+                day.setDate(startOfWeek.getDate() + i);
+                const dateStr = day.toISOString().split('T')[0];
+                const entries = calendarEntries.filter(e => e.date === dateStr);
+                const isToday = dateStr === today.toISOString().split('T')[0];
+                return (
+                  <div key={i} className={`p-3 rounded-xl border text-center min-h-[80px] ${isToday ? 'border-indigo-300 bg-indigo-50/50' : 'border-slate-100 bg-slate-50/50'}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-wider mb-1 ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                      {day.toLocaleDateString('en-US', { weekday: 'short' })}
+                    </p>
+                    <p className={`text-sm font-black mb-1.5 ${isToday ? 'text-indigo-700' : 'text-slate-700'}`}>
+                      {day.getDate()}
+                    </p>
+                    {entries.map((entry, ei) => (
+                      <div key={ei} className={`px-1.5 py-0.5 rounded text-[8px] font-bold mb-0.5 truncate ${
+                        entry.status === 'sent' ? 'bg-emerald-100 text-emerald-700' :
+                        entry.status === 'scheduled' ? 'bg-amber-100 text-amber-700' :
+                        'bg-slate-200 text-slate-600'
+                      }`}>
+                        {entry.title.slice(0, 12)}
+                      </div>
+                    ))}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <div className="flex items-center space-x-4 mt-3 pt-3 border-t border-slate-100">
+            <div className="flex items-center space-x-1.5"><div className="w-2 h-2 rounded-full bg-emerald-400" /><span className="text-[9px] font-bold text-slate-400">Sent</span></div>
+            <div className="flex items-center space-x-1.5"><div className="w-2 h-2 rounded-full bg-amber-400" /><span className="text-[9px] font-bold text-slate-400">Scheduled</span></div>
+            <div className="flex items-center space-x-1.5"><div className="w-2 h-2 rounded-full bg-slate-400" /><span className="text-[9px] font-bold text-slate-400">Draft</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ PROMPT LIBRARY PANEL ═══ */}
+      {showPromptLibrary && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <LayersIcon className="w-4 h-4 text-amber-500" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prompt Library</p>
+              <span className="text-[9px] bg-amber-50 text-amber-600 font-black px-2 py-0.5 rounded-lg">{customPrompts.length} saved</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              {activeBlock?.body && (
+                <button
+                  onClick={() => {
+                    const label = `${contentType} — ${new Date().toLocaleDateString()}`;
+                    handleSaveCustomPrompt(label);
+                  }}
+                  className="px-3 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-colors flex items-center space-x-1"
+                >
+                  <PlusIcon className="w-3 h-3" />
+                  <span>Save Current</span>
+                </button>
+              )}
+              <button onClick={() => setShowPromptLibrary(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          {customPrompts.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              {customPrompts.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    if (blocks.length > 0 && activeBlock) {
+                      updateBlock('body', p.prompt);
+                    }
+                  }}
+                  className="text-left p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[9px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-100">
+                      {CONTENT_TYPES.find(t => t.id === p.category)?.label || p.category}
+                    </span>
+                    <TagIcon className="w-3 h-3 text-slate-300 group-hover:text-amber-400 transition-colors" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-700 mb-1 truncate">{p.label}</p>
+                  <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed">{p.prompt}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <LayersIcon className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+              <p className="text-xs font-bold text-slate-400 mb-1">No saved prompts yet</p>
+              <p className="text-[10px] text-slate-300">Generate content first, then save your best prompts for reuse</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ═══ STEP 3: GENERATION PROGRESS ═══ */}
       {wizardStep === 3 && isGenerating && (
@@ -1070,7 +1525,9 @@ const ContentGen: React.FC = () => {
           {/* ─── EDITOR (Step 4: Full Width / Steps 1-2: Right 70%) ─── */}
           <div className={wizardStep === 4 ? 'w-full' : 'lg:w-[70%]'}>
             {wizardStep === 4 ? (
-              <div className="space-y-6">
+              <div className="flex flex-col lg:flex-row gap-6">
+              {/* Main Editor Column */}
+              <div className={`space-y-6 ${showWritingAssistant && blocks.length > 0 ? 'lg:w-[70%]' : 'w-full'}`}>
                 {/* Editor Card */}
                 <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
                   {/* Email Tabs */}
@@ -1257,6 +1714,14 @@ const ContentGen: React.FC = () => {
                     </button>
                     <div className="flex items-center space-x-3">
                       <button
+                        onClick={() => { snapshotContent(); }}
+                        className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 text-slate-500 hover:border-violet-200 hover:text-violet-600 transition-all"
+                        title="Save version snapshot"
+                      >
+                        <GridIcon className="w-3.5 h-3.5" />
+                        <span>Snapshot</span>
+                      </button>
+                      <button
                         onClick={runGeneration}
                         className="flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold border border-slate-200 text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
                       >
@@ -1273,6 +1738,179 @@ const ContentGen: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* ═══ WRITING ASSISTANT SIDEBAR ═══ */}
+              {showWritingAssistant && blocks.length > 0 && (
+                <div className="lg:w-[30%] shrink-0 space-y-4 animate-in fade-in duration-300">
+                  {/* Toggle */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center space-x-1.5">
+                      <BrainIcon className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Writing Assistant</span>
+                    </p>
+                    <button onClick={() => setShowWritingAssistant(false)} className="p-1 text-slate-300 hover:text-slate-500 transition-colors">
+                      <XIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Content Quality Score */}
+                  {contentQuality && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quality Score</p>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
+                          contentQuality.overall >= 80 ? 'bg-emerald-50 text-emerald-600' :
+                          contentQuality.overall >= 60 ? 'bg-amber-50 text-amber-600' :
+                          'bg-rose-50 text-rose-600'
+                        }`}>
+                          {contentQuality.overall}
+                        </div>
+                      </div>
+                      <div className="space-y-2.5">
+                        {[
+                          { label: 'Personalization', value: contentQuality.personalization, color: 'indigo' },
+                          { label: 'Engagement', value: contentQuality.engagement, color: 'emerald' },
+                          { label: 'Clarity', value: contentQuality.clarity, color: 'blue' },
+                          { label: 'CTA Strength', value: contentQuality.ctaStrength, color: 'amber' },
+                          { label: 'Readability', value: contentQuality.readability, color: 'violet' },
+                        ].map(s => (
+                          <div key={s.label}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-slate-500">{s.label}</span>
+                              <span className={`text-[10px] font-black text-${s.color}-600`}>{s.value}</span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div className={`bg-${s.color}-500 h-full rounded-full transition-all duration-500`} style={{ width: `${s.value}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Writing Metrics */}
+                  {writingMetrics && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Writing Metrics</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-slate-50 rounded-xl">
+                          <p className="text-lg font-black text-slate-900">{writingMetrics.wordCount}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">Words</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl">
+                          <p className="text-lg font-black text-slate-900">{writingMetrics.readingTime}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">Read Time</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl">
+                          <p className="text-lg font-black text-slate-900">{writingMetrics.sentenceCount}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">Sentences</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl">
+                          <p className="text-lg font-black text-slate-900">{writingMetrics.avgSentenceLength}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">Avg Length</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 p-3 bg-slate-50 rounded-xl">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-bold text-slate-500">Readability</span>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
+                            writingMetrics.readabilityScore >= 75 ? 'bg-emerald-50 text-emerald-600' :
+                            writingMetrics.readabilityScore >= 50 ? 'bg-amber-50 text-amber-600' :
+                            'bg-rose-50 text-rose-600'
+                          }`}>
+                            {writingMetrics.readabilityGrade}
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all duration-500 ${
+                            writingMetrics.readabilityScore >= 75 ? 'bg-emerald-500' :
+                            writingMetrics.readabilityScore >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                          }`} style={{ width: `${writingMetrics.readabilityScore}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tone Analysis */}
+                  {toneAnalysis.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Tone Analysis</p>
+                      <div className="space-y-2.5">
+                        {toneAnalysis.map(t => (
+                          <div key={t.label}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-slate-500">{t.label}</span>
+                              <span className="text-[10px] font-black text-slate-600">{t.value}%</span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div className={`bg-${t.color}-500 h-full rounded-full transition-all duration-500`} style={{ width: `${t.value}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Version History */}
+                  {contentHistory.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Version History</p>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {contentHistory.map(snap => (
+                          <button
+                            key={snap.id}
+                            onClick={() => restoreSnapshot(snap.id)}
+                            className="w-full text-left p-2.5 rounded-xl hover:bg-slate-50 transition-colors group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] font-bold text-slate-700">{snap.label}</p>
+                              <span className="text-[9px] text-indigo-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity">Restore</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400">{snap.blocks.length} blocks</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick Actions */}
+                  <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Quick Actions</p>
+                    <div className="space-y-1.5">
+                      <button
+                        onClick={() => setShowWritingAssistant(false)}
+                        className="w-full text-left px-3 py-2 rounded-xl text-[11px] font-bold text-slate-500 hover:bg-white hover:text-slate-700 transition-all"
+                      >
+                        Hide Assistant <kbd className="ml-1 px-1 py-0.5 bg-white border border-slate-200 rounded text-[8px]">W</kbd>
+                      </button>
+                      <button
+                        onClick={() => { snapshotContent(); }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-[11px] font-bold text-slate-500 hover:bg-white hover:text-slate-700 transition-all"
+                      >
+                        Save Snapshot
+                      </button>
+                      <button
+                        onClick={() => setShowPreview(true)}
+                        className="w-full text-left px-3 py-2 rounded-xl text-[11px] font-bold text-slate-500 hover:bg-white hover:text-slate-700 transition-all"
+                      >
+                        Preview <kbd className="ml-1 px-1 py-0.5 bg-white border border-slate-200 rounded text-[8px]">Ctrl+P</kbd>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Show assistant toggle when hidden */}
+              {!showWritingAssistant && blocks.length > 0 && wizardStep === 4 && (
+                <button
+                  onClick={() => setShowWritingAssistant(true)}
+                  className="fixed bottom-6 right-6 p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all z-30"
+                  title="Show Writing Assistant (W)"
+                >
+                  <BrainIcon className="w-5 h-5" />
+                </button>
+              )}
               </div>
             ) : (
               /* Steps 1-2 Right Panel: Quick Preview / AI Config Preview */
@@ -1752,6 +2390,52 @@ const ContentGen: React.FC = () => {
                   <button className={`text-[10px] font-bold text-${insight.color}-600 hover:text-${insight.color}-700`}>
                     {insight.action} &rarr;
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ KEYBOARD SHORTCUTS MODAL ═══ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 animate-in fade-in duration-200" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <KeyboardIcon className="w-5 h-5 text-indigo-500" />
+                <p className="text-sm font-bold text-slate-900">Keyboard Shortcuts</p>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              {[
+                { category: 'Navigation', shortcuts: [
+                  { keys: '1-5', desc: 'Jump to wizard step' },
+                  { keys: 'P', desc: 'Toggle prompt library' },
+                  { keys: 'C', desc: 'Toggle content calendar' },
+                  { keys: 'W', desc: 'Toggle writing assistant (Step 4)' },
+                  { keys: '?', desc: 'Show this dialog' },
+                  { keys: 'Esc', desc: 'Close panels & modals' },
+                ]},
+                { category: 'Actions', shortcuts: [
+                  { keys: 'Ctrl+S', desc: 'Save draft' },
+                  { keys: 'Ctrl+G', desc: 'Generate content (Step 2)' },
+                  { keys: 'Ctrl+P', desc: 'Toggle preview' },
+                ]},
+              ].map(group => (
+                <div key={group.category}>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{group.category}</p>
+                  <div className="space-y-1">
+                    {group.shortcuts.map(s => (
+                      <div key={s.keys} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-slate-50">
+                        <span className="text-xs text-slate-600">{s.desc}</span>
+                        <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-500">{s.keys}</kbd>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
