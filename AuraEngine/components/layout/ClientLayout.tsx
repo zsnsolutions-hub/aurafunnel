@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { User } from '../../types';
-import { TargetIcon, SparklesIcon, CreditCardIcon, CogIcon, LogoutIcon, BoltIcon, EditIcon, PieChartIcon, GitBranchIcon, HelpCircleIcon, BookOpenIcon, UsersIcon, BrainIcon } from '../Icons';
+import { TargetIcon, SparklesIcon, CreditCardIcon, CogIcon, LogoutIcon, BoltIcon, EditIcon, PieChartIcon, GitBranchIcon, HelpCircleIcon, BookOpenIcon, UsersIcon, BrainIcon, MessageIcon } from '../Icons';
 
 interface ClientLayoutProps {
   user: User;
@@ -16,6 +16,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     { label: 'Main Dashboard', path: '/portal', icon: <TargetIcon className="w-5 h-5" /> },
     { label: 'Lead Management', path: '/portal/leads', icon: <UsersIcon className="w-5 h-5" /> },
     { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <BrainIcon className="w-5 h-5" /> },
+    { label: 'AI Command Center', path: '/portal/ai', icon: <MessageIcon className="w-5 h-5" /> },
     { label: 'Neural Studio', path: '/portal/content', icon: <SparklesIcon className="w-5 h-5" /> },
     { label: 'Strategy Hub', path: '/portal/strategy', icon: <BoltIcon className="w-5 h-5" /> },
     { label: 'Guest Posts', path: '/portal/blog', icon: <EditIcon className="w-5 h-5" /> },
