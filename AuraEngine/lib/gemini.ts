@@ -1,0 +1,426 @@
+import { GoogleGenAI } from "@google/genai";
+import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead } from "../types";
+import { supabase } from "./supabase";
+
+const MAX_RETRIES = 3;
+const TIMEOUT_MS = 15000;
+const MODEL_NAME = 'gemini-3-flash-preview';
+
+export interface AIResponse {
+  text: string;
+  tokens_used: number;
+  model_name: string;
+  prompt_name: string;
+  prompt_version: number;
+}
+
+export const generateLeadContent = async (lead: Lead, type: ContentType): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // 1. Fetch Latest Active Prompt
+  const { data: activePrompt, error: promptError } = await supabase
+    .from('ai_prompts')
+    .select('*')
+    .eq('name', 'sales_outreach')
+    .eq('is_active', true)
+    .single();
+
+  const pName = activePrompt?.name || 'default_sales_outreach';
+  const pVersion = activePrompt?.version || 0;
+  
+  // 2. Prepare Context
+  const systemInstruction = `You are a world-class B2B sales development representative specializing in hyper-personalized outreach. 
+Your goal is to generate high-conversion ${type} content that feels human, researched, and valuable. 
+Avoid generic corporate jargon. Focus on the prospect's pain points and industry context.`;
+
+  // Use dynamic template from DB if available, otherwise fallback to standard prompt
+  const basePromptTemplate = activePrompt?.template || 
+    `TARGET PROSPECT DATA:
+    Name: {{lead_name}}
+    Title/Role: Lead
+    Company: {{company}}
+    Intelligence Score: {{score}}/100
+    AI-Detected Insights: {{insights}}
+    
+    CONTENT TYPE: {{type}}
+    
+    REQUIREMENTS:
+    1. Reference the company name naturally.
+    2. Leverage the intelligence insight to show deep research.
+    3. Include a soft but clear Call to Action (CTA).
+    4. Maintain a {{tone}} tone.
+    5. Do not exceed 150 words.`;
+
+  const finalPrompt = basePromptTemplate
+    .replace('{{lead_name}}', lead.name)
+    .replace('{{company}}', lead.company)
+    .replace('{{score}}', lead.score.toString())
+    .replace('{{insights}}', lead.insights)
+    .replace('{{type}}', type)
+    .replace('{{tone}}', lead.score > 80 ? 'high-priority and urgent' : 'helpful and consultative');
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: finalPrompt,
+        config: {
+          systemInstruction,
+          temperature: 0.8,
+          topP: 0.9,
+          topK: 40,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      
+      const text = response.text;
+      if (!text) throw new Error("Empty response from intelligence engine.");
+      
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: pName,
+        prompt_version: pVersion
+      };
+    } catch (error: any) {
+      attempt++;
+      console.warn(`Gemini Attempt ${attempt} failed:`, error.message);
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `NEURAL TIMEOUT: The intelligence engine is currently overloaded. Please try again in 30 seconds. (Error: ${error.message})`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: pName,
+          prompt_version: pVersion
+        };
+      }
+      // Wait before retry
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return {
+    text: "CRITICAL FAILURE: Neural links disconnected.",
+    tokens_used: 0,
+    model_name: MODEL_NAME,
+    prompt_name: pName,
+    prompt_version: pVersion
+  };
+};
+
+export const generateDashboardInsights = async (leads: Lead[]): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const leadSummary = leads.slice(0, 20).map(l =>
+    `${l.name} (${l.company}) - Score: ${l.score}, Status: ${l.status}`
+  ).join('\n');
+
+  const statusBreakdown: Record<string, number> = {};
+  leads.forEach(l => { statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1; });
+
+  const avgScore = leads.length > 0
+    ? Math.round(leads.reduce((a, b) => a + b.score, 0) / leads.length)
+    : 0;
+
+  const prompt = `You are an AI sales strategist analyzing a B2B lead pipeline. Provide 3-5 actionable insights based on this data.
+
+PIPELINE SUMMARY:
+- Total Leads: ${leads.length}
+- Average Score: ${avgScore}/100
+- Status Breakdown: ${Object.entries(statusBreakdown).map(([k, v]) => `${k}: ${v}`).join(', ')}
+- Hot Leads (score > 80): ${leads.filter(l => l.score > 80).length}
+
+TOP LEADS:
+${leadSummary}
+
+Provide concise, data-driven recommendations. Focus on:
+1. Which leads to prioritize and why
+2. Pipeline health assessment
+3. Suggested next actions
+4. Timing recommendations
+
+Keep response under 300 words. Be specific, not generic.`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: prompt,
+      config: {
+        systemInstruction: 'You are a senior B2B sales analytics AI. Provide actionable, data-driven insights. Be concise and specific.',
+        temperature: 0.7,
+        topP: 0.9,
+      }
+    });
+
+    clearTimeout(timeoutId);
+    return response.text || 'No insights generated.';
+  } catch (error: any) {
+    throw new Error(`Gemini analysis failed: ${error.message}`);
+  }
+};
+
+// === Content Generation Module v2 ===
+
+const CADENCE_DAYS: Record<string, number> = {
+  daily: 1,
+  every_2_days: 2,
+  every_3_days: 3,
+  weekly: 7
+};
+
+const GOAL_LABELS: Record<string, string> = {
+  book_meeting: 'Book a Meeting',
+  product_demo: 'Schedule a Product Demo',
+  nurture: 'Nurture & Build Relationship',
+  re_engage: 'Re-engage Cold Leads',
+  upsell: 'Upsell Existing Customers'
+};
+
+export const generateEmailSequence = async (
+  leads: Lead[],
+  config: EmailSequenceConfig
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const leadContext = leads.slice(0, 5).map(l =>
+    `- ${l.name} at ${l.company} (Score: ${l.score}, Status: ${l.status}, Insights: ${l.insights})`
+  ).join('\n');
+
+  const cadenceDays = CADENCE_DAYS[config.cadence] || 2;
+  const goalLabel = GOAL_LABELS[config.goal] || config.goal;
+
+  const prompt = `Generate a ${config.sequenceLength}-email outreach sequence for B2B sales.
+
+TARGET AUDIENCE (sample leads):
+${leadContext}
+
+SEQUENCE CONFIG:
+- Goal: ${goalLabel}
+- Number of Emails: ${config.sequenceLength}
+- Cadence: Every ${cadenceDays} day(s)
+- Tone: ${config.tone}
+- Total leads in audience: ${config.audienceLeadIds.length}
+
+REQUIREMENTS:
+1. Each email must have a clear subject line and body.
+2. Use personalization placeholders: {{first_name}}, {{company}}, {{industry}}, {{recent_activity}}, {{ai_insight}}
+3. Each email should build on the previous, escalating urgency naturally.
+4. Email 1: Introduction & value proposition
+5. Final email: Break-up email with last chance CTA
+6. Keep each email under 200 words.
+7. Match the ${config.tone} tone consistently.
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS (repeat for each email):
+===EMAIL_START===
+STEP: [number]
+DELAY: Day [number]
+SUBJECT: [subject line]
+BODY:
+[email body]
+===EMAIL_END===`;
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction: `You are an expert email sequence copywriter for B2B sales. Generate high-converting email sequences that feel human and personalized. Tone: ${config.tone}.`,
+          temperature: 0.85,
+          topP: 0.9,
+          topK: 40,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error("Empty sequence response.");
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: 'email_sequence_builder',
+        prompt_version: 1
+      };
+    } catch (error: any) {
+      attempt++;
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `SEQUENCE GENERATION FAILED: ${error.message}`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: 'email_sequence_builder',
+          prompt_version: 1
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'email_sequence_builder', prompt_version: 1 };
+};
+
+export const generateContentByCategory = async (
+  lead: Lead,
+  category: ContentCategory,
+  tone: ToneType,
+  additionalContext?: string
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const categoryPrompts: Record<ContentCategory, { system: string; prompt: string }> = {
+    [ContentCategory.EMAIL_SEQUENCE]: {
+      system: 'You are an expert email copywriter.',
+      prompt: `Write a compelling cold email for ${lead.name} at ${lead.company}. Score: ${lead.score}. Insights: ${lead.insights}. Tone: ${tone}. Include {{first_name}} and {{company}} tags. Under 200 words.`
+    },
+    [ContentCategory.LANDING_PAGE]: {
+      system: 'You are a conversion-focused landing page copywriter.',
+      prompt: `Create landing page copy targeting ${lead.company} in their industry. Include:
+- Hero headline & subheadline (use {{company}} tag)
+- 3 benefit bullets
+- Social proof section placeholder
+- CTA section
+Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
+    },
+    [ContentCategory.SOCIAL_MEDIA]: {
+      system: 'You are a B2B social media strategist.',
+      prompt: `Generate 3 LinkedIn posts targeting professionals like ${lead.name} at ${lead.company}.
+Each post should:
+- Hook in first line
+- Provide value
+- End with engagement question or CTA
+Tone: ${tone}. Industry insights: ${lead.insights}. Use {{first_name}} and {{company}} where appropriate. ${additionalContext || ''}`
+    },
+    [ContentCategory.BLOG_ARTICLE]: {
+      system: 'You are a B2B content marketing expert.',
+      prompt: `Write a blog article outline + intro targeting companies like ${lead.company}.
+- Title (SEO-optimized)
+- 5-section outline with key points
+- Full intro paragraph (150 words)
+- Meta description
+Tone: ${tone}. Industry context: ${lead.insights}. ${additionalContext || ''}`
+    },
+    [ContentCategory.REPORT]: {
+      system: 'You are a B2B research analyst and report writer.',
+      prompt: `Create a whitepaper/report outline for ${lead.company}'s industry:
+- Executive Summary
+- 4-5 key sections with bullet points
+- Data points to include (suggest specific metrics)
+- Conclusion with CTA
+Tone: ${tone}. Context: ${lead.insights}. ${additionalContext || ''}`
+    },
+    [ContentCategory.PROPOSAL]: {
+      system: 'You are a senior sales proposal writer.',
+      prompt: `Draft a business proposal for ${lead.name} at ${lead.company}:
+- Opening (reference {{company}} and their challenges)
+- Problem Statement
+- Proposed Solution (3 key deliverables)
+- Timeline
+- Pricing placeholder
+- Next Steps / CTA
+Tone: ${tone}. Lead score: ${lead.score}. Insights: ${lead.insights}. Use {{first_name}}, {{company}} tags. ${additionalContext || ''}`
+    }
+  };
+
+  const config = categoryPrompts[category];
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: config.prompt,
+        config: {
+          systemInstruction: config.system,
+          temperature: 0.8,
+          topP: 0.9,
+          topK: 40,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error("Empty content response.");
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: `content_${category.toLowerCase().replace(/\s+/g, '_')}`,
+        prompt_version: 1
+      };
+    } catch (error: any) {
+      attempt++;
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `GENERATION FAILED: ${error.message}`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: `content_${category.toLowerCase().replace(/\s+/g, '_')}`,
+          prompt_version: 1
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'content_gen', prompt_version: 1 };
+};
+
+export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
+  const steps: EmailStep[] = [];
+  const emailBlocks = rawText.split('===EMAIL_START===').filter(b => b.trim());
+
+  for (const block of emailBlocks) {
+    const cleaned = block.replace('===EMAIL_END===', '').trim();
+    const stepMatch = cleaned.match(/STEP:\s*(\d+)/);
+    const delayMatch = cleaned.match(/DELAY:\s*(.+)/);
+    const subjectMatch = cleaned.match(/SUBJECT:\s*(.+)/);
+    const bodyMatch = cleaned.match(/BODY:\s*([\s\S]*?)$/);
+
+    if (stepMatch && subjectMatch && bodyMatch) {
+      steps.push({
+        id: `step-${stepMatch[1]}-${Date.now()}`,
+        stepNumber: parseInt(stepMatch[1]),
+        subject: subjectMatch[1].trim(),
+        body: bodyMatch[1].trim(),
+        delay: delayMatch ? delayMatch[1].trim() : `Day ${parseInt(stepMatch[1])}`,
+        tone: config.tone
+      });
+    }
+  }
+
+  // Fallback: if structured parsing fails, create steps from plain text
+  if (steps.length === 0 && rawText.length > 50) {
+    const sections = rawText.split(/(?:Email\s*#?\s*\d|Subject\s*\d)/i).filter(s => s.trim().length > 20);
+    for (let i = 0; i < Math.min(sections.length, config.sequenceLength); i++) {
+      steps.push({
+        id: `step-${i + 1}-${Date.now()}`,
+        stepNumber: i + 1,
+        subject: `Email ${i + 1} - Follow Up`,
+        body: sections[i].trim(),
+        delay: `Day ${1 + i * (CADENCE_DAYS[config.cadence] || 2)}`,
+        tone: config.tone
+      });
+    }
+  }
+
+  return steps;
+};

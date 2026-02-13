@@ -1,0 +1,8 @@
+{
+  "name": "AuraFunnel - AI-Powered B2B SaaS",
+  "description": "A comprehensive B2B SaaS platform for lead scoring, content generation, and sales analytics, featuring a marketing site, admin dashboard, and client portal.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
