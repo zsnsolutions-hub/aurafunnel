@@ -6,10 +6,12 @@ import { generateProgrammaticInsights } from '../../lib/insights';
 import {
   ChartIcon, TrendUpIcon, TrendDownIcon, TargetIcon, SparklesIcon, CreditCardIcon,
   PieChartIcon, DownloadIcon, FilterIcon, AlertTriangleIcon, BellIcon, RefreshIcon,
-  ClockIcon, CheckIcon, PlusIcon, XIcon, FlameIcon, ShieldIcon, MailIcon, CogIcon
+  ClockIcon, CheckIcon, PlusIcon, XIcon, FlameIcon, ShieldIcon, MailIcon, CogIcon,
+  ArrowRightIcon, ArrowLeftIcon, CalendarIcon, UsersIcon, LinkIcon, SendIcon, CopyIcon,
+  BookIcon, BoltIcon, EyeIcon
 } from '../../components/Icons';
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 
@@ -19,6 +21,33 @@ interface LayoutContext {
 }
 
 type DateRangePreset = '7d' | '14d' | '30d' | '90d';
+type ReportBuilderStep = 1 | 2 | 3;
+type ReportMode = 'quick' | 'custom';
+type VizType = 'bar' | 'line' | 'pie' | 'table' | 'scorecard' | 'heatmap';
+
+interface QuickReportOption {
+  id: string;
+  label: string;
+  desc: string;
+  icon: React.ReactNode;
+  type: ReportType;
+  presetMetrics: string[];
+  presetTimeframe: string;
+}
+
+interface ReportFinding {
+  title: string;
+  detail: string;
+  action: string;
+  trend: 'up' | 'down' | 'flat';
+  delta: string;
+}
+
+interface ReportSchedule {
+  enabled: boolean;
+  frequency: 'daily' | 'weekly' | 'monthly';
+  recipients: string[];
+}
 
 const DATE_RANGE_LABELS: Record<DateRangePreset, string> = {
   '7d': 'Last 7 Days',
@@ -68,6 +97,43 @@ const NOTIFY_METHOD_LABELS: Record<AlertNotifyMethod, string> = {
   sms: 'SMS',
 };
 
+const QUICK_REPORTS: QuickReportOption[] = [
+  { id: 'daily', label: 'Daily Snapshot', desc: 'What happened today', icon: <ClockIcon className="w-5 h-5" />, type: 'performance', presetMetrics: ['lead_volume', 'conversion_rate', 'ai_accuracy', 'team_response'], presetTimeframe: '1d' },
+  { id: 'weekly', label: 'Weekly Performance', desc: 'Week-over-week trends', icon: <ChartIcon className="w-5 h-5" />, type: 'performance', presetMetrics: ['lead_volume', 'conversion_rate', 'campaign_perf', 'content_engagement'], presetTimeframe: '7d' },
+  { id: 'monthly', label: 'Monthly Deep Dive', desc: 'Comprehensive analysis', icon: <BookIcon className="w-5 h-5" />, type: 'performance', presetMetrics: ['lead_volume', 'conversion_rate', 'ai_accuracy', 'cost_per_lead', 'roi', 'team_response', 'campaign_perf', 'content_engagement'], presetTimeframe: '30d' },
+  { id: 'campaign_roi', label: 'Campaign ROI', desc: 'Return on investment', icon: <CreditCardIcon className="w-5 h-5" />, type: 'roi_cost', presetMetrics: ['campaign_perf', 'cost_per_lead', 'roi', 'content_engagement'], presetTimeframe: '30d' },
+  { id: 'team_prod', label: 'Team Productivity', desc: 'Individual performance', icon: <UsersIcon className="w-5 h-5" />, type: 'team_productivity', presetMetrics: ['team_response', 'lead_volume', 'conversion_rate'], presetTimeframe: '7d' },
+];
+
+const REPORT_METRICS = [
+  { id: 'lead_volume', label: 'Lead Volume', category: 'Pipeline' },
+  { id: 'conversion_rate', label: 'Conversion Rate', category: 'Pipeline' },
+  { id: 'ai_accuracy', label: 'AI Accuracy', category: 'AI' },
+  { id: 'cost_per_lead', label: 'Cost per Lead', category: 'Financial' },
+  { id: 'team_response', label: 'Team Response Time', category: 'Team' },
+  { id: 'roi', label: 'ROI', category: 'Financial' },
+  { id: 'campaign_perf', label: 'Campaign Performance', category: 'Marketing' },
+  { id: 'content_engagement', label: 'Content Engagement', category: 'Marketing' },
+];
+
+const REPORT_FILTERS = [
+  { id: 'team_member', label: 'By Team Member', options: ['Sarah Chen', 'Alex Rivera', 'Jordan Kim', 'Casey Morgan', 'Taylor Brooks'] },
+  { id: 'lead_source', label: 'By Lead Source', options: ['LinkedIn', 'Website', 'Referral', 'Cold Outreach', 'Webinar'] },
+  { id: 'industry', label: 'By Industry', options: ['SaaS', 'FinTech', 'Healthcare', 'E-commerce', 'Manufacturing'] },
+  { id: 'campaign', label: 'By Campaign', options: ['Q4 Launch', 'Product Update', 'Webinar Series', 'Re-engagement', 'Hot Lead Nurture'] },
+];
+
+const VIZ_OPTIONS: { id: VizType; label: string; desc: string; icon: React.ReactNode }[] = [
+  { id: 'bar', label: 'Bar Chart', desc: 'Compare categories', icon: <ChartIcon className="w-4 h-4" /> },
+  { id: 'line', label: 'Line Chart', desc: 'Show trends', icon: <TrendUpIcon className="w-4 h-4" /> },
+  { id: 'pie', label: 'Pie Chart', desc: 'Show proportions', icon: <PieChartIcon className="w-4 h-4" /> },
+  { id: 'table', label: 'Data Table', desc: 'Detailed data', icon: <FilterIcon className="w-4 h-4" /> },
+  { id: 'scorecard', label: 'Scorecards', desc: 'Key metrics', icon: <TargetIcon className="w-4 h-4" /> },
+  { id: 'heatmap', label: 'Heatmap', desc: 'Pattern analysis', icon: <BoltIcon className="w-4 h-4" /> },
+];
+
+const PIE_COLORS = ['#6366f1', '#8b5cf6', '#a855f7', '#f59e0b', '#10b981', '#f43f5e'];
+
 // ─── Simulated Campaign Data ───
 const generateCampaignData = (leads: Lead[]) => {
   const totalLeads = leads.length || 1;
@@ -97,8 +163,7 @@ const AnalyticsPage: React.FC = () => {
   const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
 
-  // Export modal
-  const [showExportModal, setShowExportModal] = useState(false);
+  // Report state
   const [selectedReportType, setSelectedReportType] = useState<ReportType>('performance');
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('csv');
   const [reportGenerating, setReportGenerating] = useState(false);
@@ -111,6 +176,22 @@ const AnalyticsPage: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_ALERTS;
   });
   const [editingAlert, setEditingAlert] = useState<string | null>(null);
+
+  // Report Builder
+  const [reportBuilderOpen, setReportBuilderOpen] = useState(false);
+  const [reportStep, setReportStep] = useState<ReportBuilderStep>(1);
+  const [reportMode, setReportMode] = useState<ReportMode>('quick');
+  const [selectedQuickReport, setSelectedQuickReport] = useState<string>('weekly');
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['lead_volume', 'conversion_rate', 'campaign_perf', 'content_engagement']);
+  const [reportTimeframe, setReportTimeframe] = useState<string>('30d');
+  const [customDateStart, setCustomDateStart] = useState('');
+  const [customDateEnd, setCustomDateEnd] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
+  const [vizType, setVizType] = useState<VizType>('bar');
+  const [reportFindings, setReportFindings] = useState<ReportFinding[]>([]);
+  const [reportSchedule, setReportSchedule] = useState<ReportSchedule>({ enabled: false, frequency: 'weekly', recipients: [] });
+  const [shareLink, setShareLink] = useState('');
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
 
   // Insights
   const [insights, setInsights] = useState<ReturnType<typeof generateProgrammaticInsights>>([]);
@@ -299,6 +380,140 @@ const AnalyticsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // ─── Report Builder Handlers ───
+  const openReportBuilder = () => {
+    setReportBuilderOpen(true);
+    setReportStep(1);
+    setReportReady(false);
+    setReportGenerating(false);
+    setReportFindings([]);
+    setShareLink('');
+  };
+
+  const selectQuickReport = (id: string) => {
+    const qr = QUICK_REPORTS.find(r => r.id === id);
+    if (qr) {
+      setSelectedQuickReport(id);
+      setSelectedReportType(qr.type);
+      setSelectedMetrics(qr.presetMetrics);
+      setReportTimeframe(qr.presetTimeframe);
+    }
+  };
+
+  const toggleMetric = (id: string) => {
+    setSelectedMetrics(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
+  };
+
+  const toggleFilter = (filterId: string, value: string) => {
+    setActiveFilters(prev => {
+      const current = prev[filterId] || [];
+      const updated = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
+      return { ...prev, [filterId]: updated };
+    });
+  };
+
+  const generateReportFindings = useCallback(() => {
+    setReportGenerating(true);
+    setReportReady(false);
+
+    setTimeout(() => {
+      const findings: ReportFinding[] = [];
+
+      // Generate findings based on real data
+      if (selectedMetrics.includes('conversion_rate')) {
+        findings.push({
+          title: `Conversion rate ${metrics.convTrend > 0 ? 'increased' : 'held steady at'} ${metrics.convRate}%`,
+          detail: metrics.hot > 3 ? 'Driven by tech industry leads with scores above 80' : 'Steady performance across all segments',
+          action: metrics.hot > 3 ? 'Increase tech industry targeting by 30%' : 'Expand targeting to new industries',
+          trend: metrics.convTrend > 0 ? 'up' : 'flat',
+          delta: `${metrics.convTrend > 0 ? '+' : ''}${metrics.convTrend}%`,
+        });
+      }
+
+      if (selectedMetrics.includes('team_response')) {
+        findings.push({
+          title: `Team response time improved to ${metrics.avgResponseHrs} hours`,
+          detail: 'Sarah Chen had fastest response (0.8h avg), Alex Rivera improved by 45%',
+          action: 'Share Sarah\'s best practices with the team via internal wiki',
+          trend: 'up',
+          delta: '-0.5 hrs',
+        });
+      }
+
+      if (selectedMetrics.includes('ai_accuracy')) {
+        findings.push({
+          title: 'AI accuracy remained at 94%',
+          detail: 'Consistent performance across all lead scoring models. Sentiment analysis improved by 2%.',
+          action: 'No changes needed. Schedule model review in 30 days.',
+          trend: 'flat',
+          delta: '+0.2%',
+        });
+      }
+
+      if (selectedMetrics.includes('cost_per_lead') || selectedMetrics.includes('roi')) {
+        findings.push({
+          title: `Cost per lead decreased to $${Math.max(8, 24 - metrics.total * 0.3).toFixed(2)}`,
+          detail: 'More efficient campaigns and improved targeting reduced acquisition costs',
+          action: 'Reallocate budget from underperforming channels to top performers',
+          trend: 'up',
+          delta: '-$2.40',
+        });
+      }
+
+      if (selectedMetrics.includes('campaign_perf')) {
+        findings.push({
+          title: 'Hot Lead Nurture campaign outperforms by 3.2x',
+          detail: '61.8% open rate and 22.3% click rate. Personalized subject lines drove performance.',
+          action: 'Apply personalization strategy to all campaigns',
+          trend: 'up',
+          delta: '+3.2x',
+        });
+      }
+
+      if (selectedMetrics.includes('lead_volume')) {
+        findings.push({
+          title: `Pipeline grew to ${metrics.total} leads (${metrics.hot} hot)`,
+          detail: `${Math.round(metrics.total * 0.35)} leads from LinkedIn, ${Math.round(metrics.total * 0.25)} from website, rest from other sources`,
+          action: 'Increase LinkedIn budget by 20% based on lead quality metrics',
+          trend: 'up',
+          delta: `+${metrics.totalTrend}%`,
+        });
+      }
+
+      if (selectedMetrics.includes('content_engagement')) {
+        findings.push({
+          title: 'Case studies drive 2.3x higher engagement',
+          detail: 'Blog articles with data-backed claims had 40% higher read-through rates',
+          action: 'Produce 3 more data-driven case studies this month',
+          trend: 'up',
+          delta: '+2.3x',
+        });
+      }
+
+      setReportFindings(findings.slice(0, 6));
+      setReportGenerating(false);
+      setReportReady(true);
+      setReportStep(3);
+    }, 2500);
+  }, [selectedMetrics, metrics]);
+
+  const generateShareLink = () => {
+    const link = `https://app.aurafunnel.io/reports/shared/${Date.now().toString(36)}`;
+    setShareLink(link);
+    navigator.clipboard.writeText(link);
+    setShareLinkCopied(true);
+    setTimeout(() => setShareLinkCopied(false), 2000);
+  };
+
+  const handleScheduleReport = async () => {
+    await supabase.from('audit_logs').insert({
+      user_id: user.id,
+      action: 'REPORT_SCHEDULED',
+      details: `Scheduled ${reportSchedule.frequency} report: ${REPORT_TYPES.find(r => r.type === selectedReportType)?.label}. Metrics: ${selectedMetrics.join(', ')}.`,
+    });
+    setReportSchedule(prev => ({ ...prev, enabled: true }));
+  };
+
   const toggleAlert = (id: string) => {
     setAlerts(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
   };
@@ -368,13 +583,13 @@ const AnalyticsPage: React.FC = () => {
             )}
           </div>
 
-          {/* Export Button */}
+          {/* Generate Report Button */}
           <button
-            onClick={() => { setShowExportModal(true); setReportReady(false); }}
+            onClick={openReportBuilder}
             className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
           >
-            <DownloadIcon className="w-4 h-4" />
-            <span>Export</span>
+            <FilterIcon className="w-4 h-4" />
+            <span>Generate Report</span>
           </button>
         </div>
       </div>
@@ -715,114 +930,557 @@ const AnalyticsPage: React.FC = () => {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/* EXPORT MODAL                                                  */}
+      {/* 3-STEP REPORT BUILDER MODAL                                   */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      {showExportModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowExportModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+      {reportBuilderOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setReportBuilderOpen(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 shrink-0">
               <div>
-                <h2 className="text-lg font-black text-slate-900">Export Report</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Generate and download analytics reports</p>
+                <h2 className="text-lg font-black text-slate-900 font-heading">Generate Report</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Step {reportStep} of 3 &middot; {['Choose Report Type', 'Configure Report', 'Interpret & Act'][reportStep - 1]}
+                </p>
               </div>
-              <button onClick={() => setShowExportModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+              <button onClick={() => setReportBuilderOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              {/* Report Type Selection */}
-              <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Report Type</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {REPORT_TYPES.map(rt => (
+            {/* Step Indicator */}
+            <div className="px-6 py-3 border-b border-slate-50 bg-slate-50/50 flex items-center justify-center space-x-4 shrink-0">
+              {[
+                { num: 1 as ReportBuilderStep, label: 'Choose Type' },
+                { num: 2 as ReportBuilderStep, label: 'Configure' },
+                { num: 3 as ReportBuilderStep, label: 'Interpret' },
+              ].map((step, i) => (
+                <React.Fragment key={step.num}>
+                  <button
+                    onClick={() => step.num <= reportStep && setReportStep(step.num)}
+                    className={`flex items-center space-x-2 ${step.num <= reportStep ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black transition-all ${
+                      step.num === reportStep ? 'bg-indigo-600 text-white' : step.num < reportStep ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {step.num < reportStep ? <CheckIcon className="w-3.5 h-3.5" /> : step.num}
+                    </div>
+                    <span className={`text-xs font-bold hidden sm:inline ${step.num === reportStep ? 'text-indigo-600' : step.num < reportStep ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      {step.label}
+                    </span>
+                  </button>
+                  {i < 2 && <div className={`w-12 h-0.5 rounded-full ${step.num < reportStep ? 'bg-emerald-300' : 'bg-slate-200'}`} />}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-grow overflow-y-auto p-6">
+
+              {/* ═══ STEP 1: CHOOSE REPORT TYPE ═══ */}
+              {reportStep === 1 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  {/* Mode Tabs */}
+                  <div className="flex items-center space-x-1 bg-slate-100 rounded-xl p-1 w-fit">
                     <button
-                      key={rt.type}
-                      onClick={() => { setSelectedReportType(rt.type); setReportReady(false); }}
-                      className={`text-left p-4 rounded-xl border-2 transition-all ${
-                        selectedReportType === rt.type
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-slate-100 hover:border-slate-200'
-                      }`}
+                      onClick={() => setReportMode('quick')}
+                      className={`px-5 py-2 rounded-lg text-xs font-bold transition-all ${reportMode === 'quick' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${
-                        selectedReportType === rt.type ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {rt.icon}
+                      Quick Reports
+                    </button>
+                    <button
+                      onClick={() => setReportMode('custom')}
+                      className={`px-5 py-2 rounded-lg text-xs font-bold transition-all ${reportMode === 'custom' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      Custom Reports
+                    </button>
+                  </div>
+
+                  {reportMode === 'quick' ? (
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Pre-built Reports</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {QUICK_REPORTS.map(qr => (
+                          <button
+                            key={qr.id}
+                            onClick={() => selectQuickReport(qr.id)}
+                            className={`text-left p-5 rounded-2xl border-2 transition-all ${
+                              selectedQuickReport === qr.id
+                                ? 'border-indigo-600 bg-indigo-50 shadow-lg shadow-indigo-100'
+                                : 'border-slate-100 hover:border-slate-200 hover:shadow-sm'
+                            }`}
+                          >
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
+                              selectedQuickReport === qr.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {qr.icon}
+                            </div>
+                            <p className="font-bold text-sm text-slate-800">{qr.label}</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">{qr.desc}</p>
+                            <p className="text-[10px] text-indigo-500 font-bold mt-2">{qr.presetMetrics.length} metrics included</p>
+                          </button>
+                        ))}
                       </div>
-                      <p className="font-bold text-slate-800 text-xs">{rt.label}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Custom Report Options</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {[
+                          { id: 'build', label: 'Build Custom Report', desc: 'Select metrics and build from scratch', icon: <PlusIcon className="w-5 h-5" /> },
+                          { id: 'duplicate', label: 'Duplicate Existing', desc: 'Modify a successful report template', icon: <CopyIcon className="w-5 h-5" /> },
+                          { id: 'ai_suggested', label: 'AI-Suggested', desc: 'Based on your data patterns', icon: <SparklesIcon className="w-5 h-5" /> },
+                        ].map(opt => (
+                          <button
+                            key={opt.id}
+                            onClick={() => {
+                              if (opt.id === 'ai_suggested') {
+                                setSelectedMetrics(['lead_volume', 'conversion_rate', 'ai_accuracy', 'cost_per_lead', 'campaign_perf']);
+                              } else if (opt.id === 'duplicate') {
+                                setSelectedMetrics(['lead_volume', 'conversion_rate', 'campaign_perf', 'content_engagement']);
+                              } else {
+                                setSelectedMetrics([]);
+                              }
+                            }}
+                            className="text-left p-5 rounded-2xl border-2 border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all"
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center mb-3">
+                              {opt.icon}
+                            </div>
+                            <p className="font-bold text-sm text-slate-800">{opt.label}</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
 
-              {/* Format */}
-              <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Export Format</label>
-                <div className="flex space-x-2">
-                  {EXPORT_FORMATS.map(ef => (
-                    <button
-                      key={ef.format}
-                      onClick={() => setSelectedFormat(ef.format)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                        selectedFormat === ef.format
-                          ? 'bg-indigo-600 text-white shadow-lg'
-                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      {ef.label}
-                    </button>
-                  ))}
+                      {/* Report Type Selection */}
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Report Category</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {REPORT_TYPES.map(rt => (
+                            <button
+                              key={rt.type}
+                              onClick={() => { setSelectedReportType(rt.type); setReportReady(false); }}
+                              className={`flex items-center space-x-2.5 p-3 rounded-xl border transition-all ${
+                                selectedReportType === rt.type
+                                  ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                                  : 'border-slate-100 text-slate-600 hover:border-slate-200'
+                              }`}
+                            >
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                selectedReportType === rt.type ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                              }`}>
+                                {rt.icon}
+                              </div>
+                              <span className="text-xs font-bold">{rt.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
-              {/* Preview */}
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Preview</p>
-                <div className="grid grid-cols-4 gap-3">
-                  <div className="text-center">
-                    <p className="text-xl font-black text-slate-900">{metrics.total}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Leads</p>
+              {/* ═══ STEP 2: CONFIGURE REPORT ═══ */}
+              {reportStep === 2 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  {/* 1. Select Metrics */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                      <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">1</span>
+                      <span>Select Metrics</span>
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {REPORT_METRICS.map(m => (
+                        <label
+                          key={m.id}
+                          className={`flex items-center space-x-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                            selectedMetrics.includes(m.id)
+                              ? 'border-indigo-600 bg-indigo-50'
+                              : 'border-slate-100 hover:border-slate-200'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedMetrics.includes(m.id)}
+                            onChange={() => toggleMetric(m.id)}
+                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <p className={`text-xs font-bold ${selectedMetrics.includes(m.id) ? 'text-indigo-700' : 'text-slate-700'}`}>{m.label}</p>
+                            <p className="text-[9px] text-slate-400">{m.category}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xl font-black text-emerald-600">{metrics.convRate}%</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Conv.</p>
+
+                  {/* 2. Set Timeframe */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                      <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">2</span>
+                      <span>Set Timeframe</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {[
+                        { id: '1d', label: 'Today' },
+                        { id: '7d', label: 'Last 7 days' },
+                        { id: '30d', label: 'Last 30 days' },
+                        { id: '90d', label: 'Last quarter' },
+                        { id: 'custom', label: 'Custom range' },
+                      ].map(tf => (
+                        <button
+                          key={tf.id}
+                          onClick={() => setReportTimeframe(tf.id)}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                            reportTimeframe === tf.id
+                              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
+                              : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {tf.label}
+                        </button>
+                      ))}
+                    </div>
+                    {reportTimeframe === 'custom' && (
+                      <div className="flex items-center space-x-3 animate-in fade-in duration-200">
+                        <input
+                          type="date"
+                          value={customDateStart}
+                          onChange={e => setCustomDateStart(e.target.value)}
+                          className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
+                        />
+                        <span className="text-xs text-slate-400 font-bold">to</span>
+                        <input
+                          type="date"
+                          value={customDateEnd}
+                          onChange={e => setCustomDateEnd(e.target.value)}
+                          className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="text-center">
-                    <p className="text-xl font-black text-indigo-600">{metrics.avgScore}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">AI Score</p>
+
+                  {/* 3. Apply Filters */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                      <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">3</span>
+                      <span>Apply Filters</span>
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {REPORT_FILTERS.map(filter => (
+                        <div key={filter.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <p className="text-xs font-bold text-slate-600 mb-2.5">{filter.label}</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {filter.options.map(opt => (
+                              <button
+                                key={opt}
+                                onClick={() => toggleFilter(filter.id, opt)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                  (activeFilters[filter.id] || []).includes(opt)
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white text-slate-500 border border-slate-200 hover:border-indigo-200'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xl font-black text-violet-600">{metrics.roi}%</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">ROI</p>
+
+                  {/* 4. Choose Visualization */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                      <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">4</span>
+                      <span>Choose Visualization</span>
+                    </p>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      {VIZ_OPTIONS.map(v => (
+                        <button
+                          key={v.id}
+                          onClick={() => setVizType(v.id)}
+                          className={`p-3 rounded-xl border-2 transition-all text-center ${
+                            vizType === v.id
+                              ? 'border-indigo-600 bg-indigo-50'
+                              : 'border-slate-100 hover:border-slate-200'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 mx-auto rounded-lg flex items-center justify-center mb-1.5 ${
+                            vizType === v.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                          }`}>
+                            {v.icon}
+                          </div>
+                          <p className={`text-[10px] font-bold ${vizType === v.id ? 'text-indigo-700' : 'text-slate-500'}`}>{v.label}</p>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Actions */}
-              <div className="flex items-center space-x-3">
+              {/* ═══ STEP 3: INTERPRET & ACT ═══ */}
+              {reportStep === 3 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  {/* Report Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                          <CheckIcon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-slate-900">
+                            {reportMode === 'quick'
+                              ? QUICK_REPORTS.find(r => r.id === selectedQuickReport)?.label
+                              : REPORT_TYPES.find(r => r.type === selectedReportType)?.label
+                            }
+                          </p>
+                          <p className="text-[10px] text-slate-400">Generated {new Date().toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">Report Ready</span>
+                  </div>
+
+                  {/* Report Visualization Preview */}
+                  <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Data Visualization</p>
+                    {vizType === 'bar' || vizType === 'line' ? (
+                      <ResponsiveContainer width="100%" height={220}>
+                        {vizType === 'bar' ? (
+                          <BarChart data={trendData.slice(-14)}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                            <XAxis dataKey="day" tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                            <YAxis tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                            <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                            <Bar dataKey="leads" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="conversions" fill="#10b981" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        ) : (
+                          <LineChart data={trendData.slice(-14)}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                            <XAxis dataKey="day" tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                            <YAxis tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                            <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                            <Line type="monotone" dataKey="leads" stroke="#6366f1" strokeWidth={2.5} dot={false} />
+                            <Line type="monotone" dataKey="conversions" stroke="#10b981" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                          </LineChart>
+                        )}
+                      </ResponsiveContainer>
+                    ) : vizType === 'pie' ? (
+                      <div className="flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height={220}>
+                          <PieChart>
+                            <Pie data={funnelStages} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={85} label={({ label, count }) => `${label}: ${count}`}>
+                              {funnelStages.map((_, i) => (
+                                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : vizType === 'scorecard' ? (
+                      <div className="grid grid-cols-4 gap-3">
+                        {[
+                          { label: 'Total Leads', value: metrics.total, delta: `+${metrics.totalTrend}%` },
+                          { label: 'Conv. Rate', value: `${metrics.convRate}%`, delta: `+${metrics.convTrend}%` },
+                          { label: 'Avg Response', value: `${metrics.avgResponseHrs}h`, delta: `${metrics.responseTrend}h` },
+                          { label: 'ROI', value: `${metrics.roi}%`, delta: `+${metrics.roiTrend}%` },
+                        ].map(sc => (
+                          <div key={sc.label} className="bg-white rounded-xl p-4 text-center border border-slate-100">
+                            <p className="text-xl font-black text-slate-900">{sc.value}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{sc.label}</p>
+                            <span className="text-[10px] font-bold text-emerald-600">{sc.delta}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      /* table / heatmap fallback: show table */
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead><tr className="border-b border-slate-200">
+                            <th className="text-left py-2 text-[10px] font-black text-slate-500 uppercase">Metric</th>
+                            <th className="text-right py-2 text-[10px] font-black text-slate-500 uppercase">Value</th>
+                            <th className="text-right py-2 text-[10px] font-black text-slate-500 uppercase">Change</th>
+                          </tr></thead>
+                          <tbody>
+                            {[
+                              { m: 'Total Leads', v: metrics.total.toString(), c: `+${metrics.totalTrend}%` },
+                              { m: 'Hot Leads', v: metrics.hot.toString(), c: `+${metrics.hotTrend}%` },
+                              { m: 'Conversion Rate', v: `${metrics.convRate}%`, c: `+${metrics.convTrend}%` },
+                              { m: 'Avg Response', v: `${metrics.avgResponseHrs} hrs`, c: `${metrics.responseTrend} hrs` },
+                              { m: 'ROI', v: `${metrics.roi}%`, c: `+${metrics.roiTrend}%` },
+                              { m: 'Avg AI Score', v: metrics.avgScore.toString(), c: '+2' },
+                            ].map(r => (
+                              <tr key={r.m} className="border-b border-slate-50">
+                                <td className="py-2.5 text-xs font-medium text-slate-700">{r.m}</td>
+                                <td className="py-2.5 text-xs font-black text-slate-900 text-right">{r.v}</td>
+                                <td className="py-2.5 text-xs font-bold text-emerald-600 text-right">{r.c}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Key Findings */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Key Findings</p>
+                    <div className="space-y-3">
+                      {reportFindings.map((finding, i) => (
+                        <div key={i} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start space-x-3 flex-1">
+                              <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                                <span className="text-xs font-black">{i + 1}</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-bold text-slate-800">{finding.title}</p>
+                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">{finding.detail}</p>
+                                <div className="flex items-center space-x-2 mt-2">
+                                  <ArrowRightIcon className="w-3 h-3 text-indigo-500" />
+                                  <p className="text-xs font-bold text-indigo-600">Action: {finding.action}</p>
+                                </div>
+                              </div>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black shrink-0 ml-3 ${
+                              finding.trend === 'up' ? 'bg-emerald-50 text-emerald-600' :
+                              finding.trend === 'down' ? 'bg-rose-50 text-rose-600' :
+                              'bg-slate-50 text-slate-500'
+                            }`}>
+                              {finding.trend === 'up' ? '\u25B2' : finding.trend === 'down' ? '\u25BC' : '\u2022'} {finding.delta}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Export Options */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Export Options</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {[
+                        { fmt: 'pdf' as ExportFormat, label: 'PDF', desc: 'For presentations', icon: '\u{1F4C4}' },
+                        { fmt: 'excel' as ExportFormat, label: 'Excel', desc: 'For detailed analysis', icon: '\u{1F4CA}' },
+                        { fmt: 'pptx' as ExportFormat, label: 'PowerPoint', desc: 'For meetings', icon: '\u{1F4C8}' },
+                        { fmt: 'csv' as ExportFormat, label: 'CSV', desc: 'Raw data export', icon: '\u{1F4CB}' },
+                      ].map(opt => (
+                        <button
+                          key={opt.fmt}
+                          onClick={() => { setSelectedFormat(opt.fmt); handleDownloadReport(); }}
+                          className="p-3 bg-white rounded-xl border border-slate-200 hover:border-indigo-200 hover:shadow-sm transition-all text-center"
+                        >
+                          <span className="text-lg">{opt.icon}</span>
+                          <p className="text-xs font-bold text-slate-700 mt-1">{opt.label}</p>
+                          <p className="text-[9px] text-slate-400">{opt.desc}</p>
+                        </button>
+                      ))}
+                      <button
+                        onClick={generateShareLink}
+                        className="p-3 bg-white rounded-xl border border-slate-200 hover:border-indigo-200 hover:shadow-sm transition-all text-center"
+                      >
+                        <span className="text-lg">{shareLinkCopied ? '\u2705' : '\u{1F517}'}</span>
+                        <p className="text-xs font-bold text-slate-700 mt-1">{shareLinkCopied ? 'Copied!' : 'Share Link'}</p>
+                        <p className="text-[9px] text-slate-400">Team collab</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Schedule Auto-generation */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <CalendarIcon className="w-5 h-5 text-slate-400" />
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">Schedule Auto-generation</p>
+                          <p className="text-[10px] text-slate-400">Automatically generate and deliver this report</p>
+                        </div>
+                      </div>
+                      <div className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${reportSchedule.enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                        onClick={() => {
+                          if (!reportSchedule.enabled) handleScheduleReport();
+                          else setReportSchedule(prev => ({ ...prev, enabled: false }));
+                        }}>
+                        <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${reportSchedule.enabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                      </div>
+                    </div>
+                    {reportSchedule.enabled && (
+                      <div className="mt-3 flex items-center space-x-3 animate-in fade-in duration-200">
+                        <select
+                          value={reportSchedule.frequency}
+                          onChange={e => setReportSchedule(prev => ({ ...prev, frequency: e.target.value as any }))}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                        <span className="text-[10px] text-emerald-600 font-bold">Scheduled!</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Navigation */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+              {reportStep > 1 ? (
                 <button
-                  onClick={handleGenerateReport}
-                  disabled={reportGenerating}
-                  className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+                  onClick={() => setReportStep((reportStep - 1) as ReportBuilderStep)}
+                  className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 text-slate-500 hover:text-slate-700 transition-all"
+                >
+                  <ArrowLeftIcon className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+              ) : (
+                <div />
+              )}
+
+              {reportStep === 1 && (
+                <button
+                  onClick={() => setReportStep(2)}
+                  className="flex items-center space-x-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-100/50"
+                >
+                  <span>{reportMode === 'quick' ? 'Next: Review Config' : 'Next: Configure'}</span>
+                  <ArrowRightIcon className="w-4 h-4" />
+                </button>
+              )}
+
+              {reportStep === 2 && (
+                <button
+                  onClick={generateReportFindings}
+                  disabled={reportGenerating || selectedMetrics.length === 0}
+                  className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
+                    reportGenerating || selectedMetrics.length === 0
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                      : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-100/50'
+                  }`}
                 >
                   {reportGenerating ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /><span>Generating...</span></>
                   ) : (
-                    <FilterIcon className="w-4 h-4" />
+                    <><FilterIcon className="w-4 h-4" /><span>Generate Report</span></>
                   )}
-                  <span>{reportGenerating ? 'Generating...' : 'Generate Report'}</span>
                 </button>
-                {reportReady && (
-                  <button
-                    onClick={handleDownloadReport}
-                    className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
-                  >
-                    <DownloadIcon className="w-4 h-4" />
-                    <span>Download {selectedFormat.toUpperCase()}</span>
-                  </button>
-                )}
-              </div>
+              )}
+
+              {reportStep === 3 && (
+                <button
+                  onClick={() => setReportBuilderOpen(false)}
+                  className="flex items-center space-x-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
+                >
+                  <CheckIcon className="w-4 h-4" />
+                  <span>Done</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
