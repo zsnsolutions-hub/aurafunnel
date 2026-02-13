@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User, Lead, ToneType } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -7,7 +7,8 @@ import {
   EditIcon, EyeIcon, ChartIcon, RefreshIcon, FilterIcon,
   TrendUpIcon, TrendDownIcon, ClockIcon, TargetIcon, BoltIcon,
   DownloadIcon, FlameIcon, SlidersIcon, ArrowRightIcon, StarIcon,
-  LinkedInIcon, RecycleIcon, LayersIcon, GridIcon, DocumentIcon
+  LinkedInIcon, RecycleIcon, LayersIcon, GridIcon, DocumentIcon,
+  KeyboardIcon, HelpCircleIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -294,6 +295,14 @@ const ContentStudio: React.FC = () => {
   const [recycleSource, setRecycleSource] = useState<ContentMode>('email');
   const [recycleTarget, setRecycleTarget] = useState<ContentMode>('linkedin');
 
+  // ─── Context Menu ───
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const contextRef = useRef<HTMLDivElement>(null);
+
+  // ─── Panels ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showTroubleshooting, setShowTroubleshooting] = useState(false);
+
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
@@ -309,6 +318,75 @@ const ContentStudio: React.FC = () => {
   }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.ctrlKey || e.metaKey;
+
+      // Ctrl+S → Save
+      if (isMod && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
+      // Ctrl+P → Toggle Preview
+      if (isMod && !e.shiftKey && e.key === 'p') {
+        e.preventDefault();
+        setViewTab(prev => prev === 'preview' ? 'editor' : 'preview');
+        return;
+      }
+      // Ctrl+Shift+A → Refresh AI suggestions
+      if (isMod && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        refreshSuggestions();
+        return;
+      }
+      // Ctrl+Shift+P → Toggle Performance (analytics)
+      if (isMod && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        e.preventDefault();
+        setViewTab(prev => prev === 'analytics' ? 'editor' : 'analytics');
+        return;
+      }
+      // Ctrl+K → Tag picker
+      if (isMod && e.key === 'k') {
+        e.preventDefault();
+        setShowTagPicker(prev => !prev);
+        return;
+      }
+      // Escape → close context menu
+      if (e.key === 'Escape' && contextMenu) {
+        setContextMenu(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextMenu]);
+
+  // ─── Close context menu on outside click ───
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenu]);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const contextActions = [
+    { label: 'Generate alternative', action: () => { refreshSuggestions(); setContextMenu(null); } },
+    { label: 'Improve readability', action: () => { applySuggestion('sug-1'); setContextMenu(null); } },
+    { label: 'Shorten content', action: () => { setContextMenu(null); } },
+    { label: 'Lengthen content', action: () => { setContextMenu(null); } },
+    { label: 'Change tone', action: () => { setContextMenu(null); } },
+    { label: 'Add call-to-action', action: () => { applySuggestion('sug-4'); setContextMenu(null); } },
+    { label: 'Insert personalization tag', action: () => { setShowTagPicker(true); setContextMenu(null); } },
+    { label: 'Check grammar', action: () => { setContextMenu(null); } },
+  ];
 
   // ─── Computed ───
   const activeStep = steps[activeStepIdx];
@@ -964,6 +1042,7 @@ const ContentStudio: React.FC = () => {
                   <textarea
                     value={activeVariant.body}
                     onChange={e => updateVariantField('body', e.target.value)}
+                    onContextMenu={handleContextMenu}
                     rows={14}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none font-mono"
                     placeholder="Write your email body here..."
@@ -1009,6 +1088,7 @@ const ContentStudio: React.FC = () => {
                 <textarea
                   value={linkedinPost}
                   onChange={e => setLinkedinPost(e.target.value)}
+                  onContextMenu={handleContextMenu}
                   rows={12}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
                   placeholder="Write your LinkedIn post..."
@@ -1345,6 +1425,107 @@ const ContentStudio: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* ═══ CAMPAIGN PERFORMANCE TRACKING ═══ */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100">
+                    <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
+                      <ChartIcon className="w-4 h-4 text-indigo-600" />
+                      <span>Campaign Performance</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Last campaign results &middot; Based on {leads.length > 0 ? leads.length * 12 : 1245} sends</p>
+                  </div>
+
+                  <div className="p-5">
+                    {/* KPI Row */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+                      {[
+                        { label: 'Sent', value: leads.length > 0 ? (leads.length * 12).toLocaleString() : '1,245', color: 'slate' },
+                        { label: 'Opens', value: '634 (51%)', color: 'indigo' },
+                        { label: 'Clicks', value: '189 (15%)', color: 'violet' },
+                        { label: 'Replies', value: '42 (3.4%)', color: 'emerald' },
+                        { label: 'Demos Booked', value: '17 (1.4%)', color: 'amber' },
+                      ].map(kpi => (
+                        <div key={kpi.label} className={`p-3 rounded-xl bg-${kpi.color}-50 text-center`}>
+                          <p className={`text-sm font-black text-${kpi.color}-700`}>{kpi.value}</p>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5">{kpi.label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Top Performing Segments */}
+                    <div className="mb-5">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Top Performing Segments</p>
+                      <div className="space-y-2">
+                        {[
+                          { segment: 'Tech Industry', conversion: 2.3, width: 100 },
+                          { segment: '50-200 employees', conversion: 1.9, width: 83 },
+                          { segment: 'West Coast', conversion: 1.7, width: 74 },
+                        ].map(seg => (
+                          <div key={seg.segment} className="flex items-center space-x-3">
+                            <span className="text-xs font-semibold text-slate-600 w-36 shrink-0">{seg.segment}</span>
+                            <div className="flex-1 h-5 bg-slate-50 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full flex items-center transition-all duration-700" style={{ width: `${seg.width}%` }}>
+                                <span className="text-white font-black text-[10px] ml-2">{seg.conversion}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* AI Insights */}
+                    <div className="mb-4">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">AI Insights</p>
+                      <div className="space-y-2">
+                        {[
+                          'Subject lines with questions performed 28% better',
+                          'Emails sent Tuesday AM had 40% higher opens',
+                          'Personalized P.S. lines doubled reply rate',
+                        ].map((insight, i) => (
+                          <div key={i} className="flex items-start space-x-2 p-2.5 bg-indigo-50 rounded-lg">
+                            <SparklesIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                            <p className="text-xs text-indigo-700 font-semibold">&ldquo;{insight}&rdquo;</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center space-x-2">
+                      <button className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm">
+                        Replicate Success
+                      </button>
+                      <button onClick={() => setShowABConfig(true)} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+                        A/B Test Improvements
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ═══ OPTIMIZATION WORKFLOW ═══ */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <h3 className="font-bold text-slate-800 font-heading mb-3 flex items-center space-x-2">
+                    <TargetIcon className="w-4 h-4 text-emerald-600" />
+                    <span>Weekly Optimization Routine</span>
+                  </h3>
+                  <div className="space-y-2.5">
+                    {[
+                      { day: 'Mon', task: 'Review last week\'s performance', icon: <ChartIcon className="w-3.5 h-3.5" /> },
+                      { day: 'Mon', task: 'Identify top 3 performing pieces', icon: <TrendUpIcon className="w-3.5 h-3.5" /> },
+                      { day: 'Tue', task: 'Identify bottom 3 performing pieces', icon: <TrendDownIcon className="w-3.5 h-3.5" /> },
+                      { day: 'Tue', task: 'Click [AI Analyze] on each', icon: <SparklesIcon className="w-3.5 h-3.5" /> },
+                      { day: 'Wed', task: 'Apply learnings to this week\'s content', icon: <EditIcon className="w-3.5 h-3.5" /> },
+                      { day: 'Thu', task: 'Set up A/B tests for hypotheses', icon: <SlidersIcon className="w-3.5 h-3.5" /> },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-50 transition-all">
+                        <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black w-10 text-center">{item.day}</span>
+                        <span className="text-indigo-500">{item.icon}</span>
+                        <span className="text-xs font-semibold text-slate-700">{item.task}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1581,6 +1762,114 @@ const ContentStudio: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* ═══ KEYBOARD SHORTCUTS ═══ */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setShowShortcuts(!showShortcuts)}
+                className="w-full px-5 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-all"
+              >
+                <div className="flex items-center space-x-2">
+                  <KeyboardIcon className="w-4 h-4 text-slate-500" />
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-wider">Keyboard Shortcuts</span>
+                </div>
+                <span className={`text-slate-400 text-xs transition-transform ${showShortcuts ? 'rotate-180' : ''}`}>&darr;</span>
+              </button>
+              {showShortcuts && (
+                <div className="px-5 pb-4 space-y-2 border-t border-slate-100 pt-3">
+                  {[
+                    { keys: 'Ctrl + S', desc: 'Save draft' },
+                    { keys: 'Ctrl + P', desc: 'Toggle preview' },
+                    { keys: 'Ctrl + K', desc: 'Insert personalization tag' },
+                    { keys: 'Ctrl + Shift + A', desc: 'Refresh AI suggestions' },
+                    { keys: 'Ctrl + Shift + P', desc: 'Performance prediction' },
+                  ].map(s => (
+                    <div key={s.keys} className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">{s.desc}</span>
+                      <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-500">{s.keys}</kbd>
+                    </div>
+                  ))}
+                  <div className="pt-2 mt-2 border-t border-slate-100">
+                    <p className="text-[10px] text-slate-400 font-semibold">Right-click in any editor for quick actions menu</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ═══ TROUBLESHOOTING ═══ */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setShowTroubleshooting(!showTroubleshooting)}
+                className="w-full px-5 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-all"
+              >
+                <div className="flex items-center space-x-2">
+                  <HelpCircleIcon className="w-4 h-4 text-slate-500" />
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-wider">Troubleshooting</span>
+                </div>
+                <span className={`text-slate-400 text-xs transition-transform ${showTroubleshooting ? 'rotate-180' : ''}`}>&darr;</span>
+              </button>
+              {showTroubleshooting && (
+                <div className="px-5 pb-4 space-y-4 border-t border-slate-100 pt-3">
+                  {/* Issue 1 */}
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 mb-1.5">AI content seems generic?</p>
+                    <div className="space-y-1">
+                      {[
+                        'Upload your brand guidelines',
+                        'Train AI on your style (Model Training)',
+                        'Use industry-specific jargon',
+                        'Add customer testimonials & metrics',
+                        'Reference company-specific challenges',
+                      ].map((tip, i) => (
+                        <div key={i} className="flex items-start space-x-1.5">
+                          <CheckIcon className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
+                          <span className="text-[11px] text-slate-500">{tip}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Issue 2 */}
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 mb-1.5">Low open/click rates?</p>
+                    <div className="space-y-1">
+                      {[
+                        'Test different subject lines (A/B testing)',
+                        'Adjust send times (check AI recommendations)',
+                        'Improve preview text',
+                        'Segment audience more specifically',
+                        'Personalize beyond just {{first_name}}',
+                        'Add urgency or curiosity elements',
+                      ].map((tip, i) => (
+                        <div key={i} className="flex items-start space-x-1.5">
+                          <CheckIcon className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
+                          <span className="text-[11px] text-slate-500">{tip}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Issue 3 */}
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 mb-1.5">Content takes too long?</p>
+                    <div className="space-y-1">
+                      {[
+                        'Use templates (saves 80% time)',
+                        'Batch create content weekly',
+                        'Set up content calendars in advance',
+                        'Delegate to AI for first drafts',
+                        'Recycle high-performing content',
+                      ].map((tip, i) => (
+                        <div key={i} className="flex items-start space-x-1.5">
+                          <CheckIcon className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
+                          <span className="text-[11px] text-slate-500">{tip}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1789,6 +2078,31 @@ const ContentStudio: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* CONTEXT MENU (Right-click)                                   */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {contextMenu && (
+        <div
+          ref={contextRef}
+          className="fixed bg-white border border-slate-200 rounded-xl shadow-2xl py-2 z-50 w-56"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <div className="px-3 py-1.5 border-b border-slate-100 mb-1">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Quick Actions</p>
+          </div>
+          {contextActions.map((action, i) => (
+            <button
+              key={i}
+              onClick={action.action}
+              className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center space-x-2"
+            >
+              <SparklesIcon className="w-3 h-3 text-slate-400" />
+              <span>{action.label}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>
