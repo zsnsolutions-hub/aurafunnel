@@ -38,6 +38,7 @@ import LeadIntelligence from './pages/portal/LeadIntelligence';
 import AICommandCenter from './pages/portal/AICommandCenter';
 import ContentStudio from './pages/portal/ContentStudio';
 import ModelTraining from './pages/portal/ModelTraining';
+import IntegrationHub from './pages/portal/IntegrationHub';
 
 // Marketing
 import LandingPage from './pages/marketing/LandingPage';
@@ -167,6 +168,7 @@ const App: React.FC = () => {
         <Route path="content-studio" element={<ContentStudio />} />
         <Route path="mobile" element={<MobileDashboard />} />
         <Route path="model-training" element={<ModelTraining />} />
+        <Route path="integrations" element={<IntegrationHub />} />
       </Route>
 
       <Route 

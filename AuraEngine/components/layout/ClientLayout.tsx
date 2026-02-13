@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { User } from '../../types';
-import { TargetIcon, SparklesIcon, CreditCardIcon, CogIcon, LogoutIcon, BoltIcon, EditIcon, PieChartIcon, GitBranchIcon, HelpCircleIcon, BookOpenIcon, UsersIcon, BrainIcon, MessageIcon, SlidersIcon } from '../Icons';
+import { TargetIcon, SparklesIcon, CreditCardIcon, CogIcon, LogoutIcon, BoltIcon, EditIcon, PieChartIcon, GitBranchIcon, HelpCircleIcon, BookOpenIcon, UsersIcon, BrainIcon, MessageIcon, SlidersIcon, PlugIcon } from '../Icons';
 
 interface ClientLayoutProps {
   user: User;
@@ -24,6 +24,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChartIcon className="w-5 h-5" /> },
     { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranchIcon className="w-5 h-5" /> },
     { label: 'Model Training', path: '/portal/model-training', icon: <SlidersIcon className="w-5 h-5" /> },
+    { label: 'Integration Hub', path: '/portal/integrations', icon: <PlugIcon className="w-5 h-5" /> },
     { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCardIcon className="w-5 h-5" /> },
     { label: 'Help Center', path: '/portal/help', icon: <HelpCircleIcon className="w-5 h-5" /> },
     { label: 'User Manual', path: '/portal/manual', icon: <BookOpenIcon className="w-5 h-5" /> },
