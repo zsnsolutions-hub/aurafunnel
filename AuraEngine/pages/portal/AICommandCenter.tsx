@@ -8,7 +8,9 @@ import {
   SparklesIcon, TargetIcon, FlameIcon, TrendUpIcon, TrendDownIcon,
   BrainIcon, RefreshIcon, BoltIcon, UsersIcon, MailIcon, ChartIcon,
   ArrowRightIcon, ClockIcon, CheckIcon, XIcon, StarIcon, ActivityIcon,
-  PieChartIcon, FilterIcon, CursorClickIcon, EyeIcon
+  PieChartIcon, FilterIcon, CursorClickIcon, EyeIcon, KeyboardIcon,
+  DownloadIcon, CopyIcon, MicIcon, SendIcon, EditIcon, SlidersIcon,
+  GlobeIcon, PhoneIcon, BookOpenIcon, TagIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -35,6 +37,22 @@ interface SuggestionChip {
   color: string;
   category: 'analyze' | 'generate' | 'strategy' | 'report';
 }
+
+type AIMode = 'analyst' | 'strategist' | 'coach' | 'creative';
+
+interface SavedPrompt {
+  id: string;
+  label: string;
+  prompt: string;
+  usedAt: Date;
+}
+
+const AI_MODES: { key: AIMode; label: string; icon: React.ReactNode; description: string; color: string }[] = [
+  { key: 'analyst', label: 'Analyst', icon: <ChartIcon className="w-3.5 h-3.5" />, description: 'Data-driven insights & metrics', color: 'indigo' },
+  { key: 'strategist', label: 'Strategist', icon: <TargetIcon className="w-3.5 h-3.5" />, description: 'Action plans & priorities', color: 'violet' },
+  { key: 'coach', label: 'Coach', icon: <BrainIcon className="w-3.5 h-3.5" />, description: 'Guidance & best practices', color: 'emerald' },
+  { key: 'creative', label: 'Creative', icon: <SparklesIcon className="w-3.5 h-3.5" />, description: 'Content ideas & messaging', color: 'amber' },
+];
 
 // ─── Sparkline Component ───
 const Sparkline: React.FC<{ data: number[]; color?: string; width?: number; height?: number }> = ({
@@ -113,6 +131,16 @@ const AICommandCenter: React.FC = () => {
   const [chipFilter, setChipFilter] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // ── Enhanced State ──
+  const [aiMode, setAiMode] = useState<AIMode>('analyst');
+  const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(new Set());
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
+  const [showContext, setShowContext] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [sessionStartTime] = useState(new Date());
+  const [responseCount, setResponseCount] = useState(0);
 
   // ─── Fetch Data ───
   const fetchData = useCallback(async () => {
@@ -195,6 +223,75 @@ const AICommandCenter: React.FC = () => {
     });
     return { grid, days, blocks, max: Math.max(...grid.map(g => g.value)) };
   }, [leads]);
+
+  // ── Session Stats ──
+  const sessionStats = useMemo(() => {
+    const userMsgs = messages.filter(m => m.role === 'user').length;
+    const aiMsgs = messages.filter(m => m.role === 'ai').length;
+    const avgConfidence = aiMsgs > 0 ? Math.round(messages.filter(m => m.role === 'ai' && m.confidence).reduce((a, m) => a + (m.confidence || 0), 0) / aiMsgs) : 0;
+    const elapsed = Math.round((new Date().getTime() - sessionStartTime.getTime()) / 60000);
+    return { userMsgs, aiMsgs, avgConfidence, elapsed, pinnedCount: pinnedMessageIds.size };
+  }, [messages, sessionStartTime, pinnedMessageIds]);
+
+  // ── Message Actions ──
+  const handleCopyMessage = (msg: ChatMessage) => {
+    navigator.clipboard.writeText(msg.content.replace(/\*\*/g, ''));
+    setCopiedMsgId(msg.id);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
+
+  const handlePinMessage = (msgId: string) => {
+    setPinnedMessageIds(prev => {
+      const next = new Set(prev);
+      next.has(msgId) ? next.delete(msgId) : next.add(msgId);
+      return next;
+    });
+  };
+
+  const handleSavePrompt = (prompt: string) => {
+    const label = prompt.length > 30 ? prompt.slice(0, 30) + '...' : prompt;
+    setSavedPrompts(prev => {
+      if (prev.some(p => p.prompt === prompt)) return prev;
+      return [{ id: `saved-${Date.now()}`, label, prompt, usedAt: new Date() }, ...prev].slice(0, 10);
+    });
+  };
+
+  const handleExportChat = () => {
+    const content = messages.map(m =>
+      `[${m.role.toUpperCase()}] ${m.timestamp.toLocaleTimeString()}\n${m.content.replace(/\*\*/g, '')}\n`
+    ).join('\n---\n\n');
+    const blob = new Blob([`AuraFunnel AI Command Center — Chat Export\nDate: ${new Date().toLocaleDateString()}\nMode: ${aiMode}\n\n${content}`], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai_chat_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Keyboard Shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault(); inputRef.current?.focus(); return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+        e.preventDefault(); clearChat(); return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault(); handleExportChat(); return;
+      }
+      if (isInput || showShortcuts) return;
+      if (e.key === '?') { setShowShortcuts(prev => !prev); return; }
+      if (e.key === 'Escape') { setShowShortcuts(false); setShowContext(false); return; }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showShortcuts]);
 
   // ─── AI Response Generation ───
   const generateResponse = useCallback(async (prompt: string) => {
@@ -480,6 +577,7 @@ Try asking about:
     }
 
     setThinking(false);
+    setResponseCount(prev => prev + 1);
   }, [leads, stats]);
 
   // ─── Handlers ───
@@ -549,14 +647,94 @@ Try asking about:
         </div>
         <div className="flex items-center space-x-2">
           <button
+            onClick={() => setShowContext(!showContext)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <EyeIcon className="w-3.5 h-3.5" />
+            <span>Context</span>
+          </button>
+          <button
+            onClick={handleExportChat}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <DownloadIcon className="w-3.5 h-3.5" />
+            <span>Export</span>
+          </button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-400">?</kbd>
+          </button>
+          <button
             onClick={clearChat}
             className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
           >
             <RefreshIcon className="w-3.5 h-3.5" />
-            <span>Clear Chat</span>
+            <span>Clear</span>
           </button>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* AI MODE SELECTOR                                             */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center space-x-1 p-1 bg-white border border-slate-200 rounded-2xl shadow-sm">
+        {AI_MODES.map(mode => (
+          <button
+            key={mode.key}
+            onClick={() => setAiMode(mode.key)}
+            className={`flex-1 flex items-center justify-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              aiMode === mode.key
+                ? `bg-${mode.color}-600 text-white shadow-sm`
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {mode.icon}
+            <span>{mode.label}</span>
+            {aiMode === mode.key && <span className="text-[9px] opacity-70 hidden md:inline">({mode.description})</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* CONTEXT PANEL (collapsible)                                  */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showContext && (
+        <div className="bg-gradient-to-r from-slate-50 via-white to-indigo-50 rounded-2xl border border-slate-200 p-5 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <GlobeIcon className="w-4 h-4 text-indigo-600" />
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">AI Context Window</p>
+            </div>
+            <button onClick={() => setShowContext(false)} className="text-slate-400 hover:text-slate-600">
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl p-3 border border-slate-100">
+              <p className="text-[9px] font-bold text-slate-400 uppercase">Leads Loaded</p>
+              <p className="text-lg font-black text-slate-900">{leads.length}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 border border-slate-100">
+              <p className="text-[9px] font-bold text-slate-400 uppercase">AI Mode</p>
+              <p className="text-lg font-black text-indigo-600 capitalize">{aiMode}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 border border-slate-100">
+              <p className="text-[9px] font-bold text-slate-400 uppercase">Session Messages</p>
+              <p className="text-lg font-black text-slate-900">{sessionStats.userMsgs + sessionStats.aiMsgs}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 border border-slate-100">
+              <p className="text-[9px] font-bold text-slate-400 uppercase">Avg Confidence</p>
+              <p className="text-lg font-black text-emerald-600">{sessionStats.avgConfidence}%</p>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-3">
+            The AI has access to all {leads.length} leads with scores, statuses, companies, and activity data. Responses are generated using real pipeline data.
+          </p>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* MAIN LAYOUT: Sidebar + Chat                                  */}
@@ -623,6 +801,59 @@ Try asking about:
               <span className="text-[9px] text-slate-400">More</span>
             </div>
           </div>
+
+          {/* Session Stats */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Session Stats</h3>
+            <div className="space-y-2">
+              {[
+                { label: 'Responses', value: sessionStats.aiMsgs.toString(), color: 'indigo' },
+                { label: 'Questions', value: sessionStats.userMsgs.toString(), color: 'violet' },
+                { label: 'Avg Confidence', value: `${sessionStats.avgConfidence}%`, color: 'emerald' },
+                { label: 'Pinned', value: sessionStats.pinnedCount.toString(), color: 'amber' },
+              ].map(s => (
+                <div key={s.label} className="flex items-center justify-between py-1.5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{s.label}</span>
+                  <span className={`text-sm font-black text-${s.color}-600`}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Saved Prompts */}
+          {savedPrompts.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+              <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Saved Prompts</h3>
+              <div className="space-y-1.5">
+                {savedPrompts.slice(0, 5).map(sp => (
+                  <button
+                    key={sp.id}
+                    onClick={() => generateResponse(sp.prompt)}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-indigo-50 transition-colors text-xs text-slate-600 font-semibold truncate hover:text-indigo-700"
+                  >
+                    {sp.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pinned Messages */}
+          {pinnedMessageIds.size > 0 && (
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
+              <h3 className="text-xs font-black text-amber-600 uppercase tracking-wider mb-3 flex items-center space-x-1">
+                <StarIcon className="w-3 h-3" />
+                <span>Pinned ({pinnedMessageIds.size})</span>
+              </h3>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {messages.filter(m => pinnedMessageIds.has(m.id)).map(m => (
+                  <div key={m.id} className="p-2 rounded-lg bg-amber-50 text-[10px] text-slate-600 leading-relaxed truncate">
+                    {m.content.replace(/\*\*/g, '').slice(0, 80)}...
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Top Hot Leads */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
@@ -738,10 +969,53 @@ Try asking about:
                       </div>
                     </div>
 
-                    {/* Confidence meter for AI messages */}
+                    {/* Confidence meter + Actions for AI messages */}
                     {msg.role === 'ai' && msg.confidence && (
-                      <div className="mt-1.5 ml-1">
+                      <div className="mt-1.5 ml-1 flex items-center justify-between">
                         <ConfidenceMeter confidence={msg.confidence} />
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => handleCopyMessage(msg)}
+                            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Copy"
+                          >
+                            {copiedMsgId === msg.id ? <CheckIcon className="w-3 h-3 text-emerald-500" /> : <CopyIcon className="w-3 h-3" />}
+                          </button>
+                          <button
+                            onClick={() => handlePinMessage(msg.id)}
+                            className={`p-1 rounded-lg transition-all ${
+                              pinnedMessageIds.has(msg.id)
+                                ? 'text-amber-500 bg-amber-50'
+                                : 'text-slate-300 hover:text-amber-500 hover:bg-amber-50'
+                            }`}
+                            title="Pin"
+                          >
+                            <StarIcon className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleExportChat()}
+                            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Export"
+                          >
+                            <DownloadIcon className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Save prompt for user messages */}
+                    {msg.role === 'user' && (
+                      <div className="mt-1 flex justify-end">
+                        <button
+                          onClick={() => handleSavePrompt(msg.content)}
+                          className={`text-[9px] font-bold transition-all ${
+                            savedPrompts.some(p => p.prompt === msg.content)
+                              ? 'text-indigo-500'
+                              : 'text-slate-300 hover:text-indigo-500'
+                          }`}
+                        >
+                          {savedPrompts.some(p => p.prompt === msg.content) ? 'Saved' : 'Save prompt'}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -777,7 +1051,7 @@ Try asking about:
 
             {/* Input Area */}
             <div className="p-4 border-t border-slate-100">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
                 <div className="flex-1 relative">
                   <input
                     ref={inputRef}
@@ -785,12 +1059,15 @@ Try asking about:
                     value={inputValue}
                     onChange={e => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask about your pipeline, leads, scores, or strategy..."
-                    className="w-full px-4 py-3 pr-12 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none placeholder:text-slate-400"
+                    placeholder={`Ask your ${aiMode} about pipeline, leads, or strategy...`}
+                    className="w-full px-4 py-3 pr-20 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none placeholder:text-slate-400"
                     disabled={thinking}
                   />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <SparklesIcon className="w-4 h-4 text-slate-300" />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-1.5">
+                    <button className="p-1 text-slate-300 hover:text-indigo-500 transition-colors" title="Voice input (coming soon)">
+                      <MicIcon className="w-4 h-4" />
+                    </button>
+                    <div className={`w-1.5 h-1.5 rounded-full ${thinking ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></div>
                   </div>
                 </div>
                 <button
@@ -801,17 +1078,58 @@ Try asking about:
                   {thinking ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   ) : (
-                    <ArrowRightIcon className="w-4 h-4" />
+                    <SendIcon className="w-4 h-4" />
                   )}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 mt-2 ml-1">
-                Press Enter to send &middot; AI responses use real pipeline data &middot; Try &ldquo;Deep Analysis&rdquo; for Gemini insights
-              </p>
+              <div className="flex items-center justify-between mt-2 ml-1">
+                <p className="text-[10px] text-slate-400">
+                  <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold">Enter</kbd> send &middot;
+                  <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold ml-1">Ctrl+/</kbd> focus &middot;
+                  <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold ml-1">Ctrl+L</kbd> clear
+                </p>
+                <span className="text-[9px] text-slate-400">
+                  Mode: <span className="font-bold text-indigo-500 capitalize">{aiMode}</span> &middot; {responseCount} responses
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KEYBOARD SHORTCUTS MODAL                                     */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <KeyboardIcon className="w-5 h-5 text-indigo-600" />
+                <h2 className="font-bold text-slate-900">Keyboard Shortcuts</h2>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-2">
+              {[
+                ['Enter', 'Send message'],
+                ['Ctrl + /', 'Focus input'],
+                ['Ctrl + L', 'Clear chat'],
+                ['Ctrl + E', 'Export chat'],
+                ['?', 'Toggle shortcuts'],
+                ['Esc', 'Close panels'],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center justify-between py-1.5">
+                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 min-w-[80px] text-center">{key}</kbd>
+                  <span className="text-xs text-slate-500">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
