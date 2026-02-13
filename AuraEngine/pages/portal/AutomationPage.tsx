@@ -9,7 +9,8 @@ import {
   PlayIcon, PauseIcon, GitBranchIcon, ZapIcon, TargetIcon, TagIcon,
   MailIcon, RefreshIcon, EditIcon, FlameIcon, TrendUpIcon, CogIcon, TrendDownIcon,
   ArrowRightIcon, ArrowLeftIcon, BellIcon, CalendarIcon, UsersIcon, AlertTriangleIcon,
-  EyeIcon, BrainIcon, ShieldIcon, ActivityIcon
+  EyeIcon, BrainIcon, ShieldIcon, ActivityIcon, KeyboardIcon, FilterIcon, LayersIcon,
+  StarIcon, PieChartIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -69,6 +70,25 @@ interface ValidationItem {
   message: string;
 }
 
+interface ExecutionLogEntry {
+  id: string;
+  timestamp: string;
+  workflowName: string;
+  leadName: string;
+  step: string;
+  status: 'success' | 'failed' | 'skipped' | 'running';
+  duration: number;
+}
+
+interface NodePerformanceMetric {
+  nodeTitle: string;
+  nodeType: NodeType;
+  executions: number;
+  successRate: number;
+  avgDuration: number;
+  lastRun: string;
+}
+
 // ─── Email Templates ───
 const EMAIL_TEMPLATES = [
   { id: 'welcome', label: 'Welcome Email', desc: 'First-touch introduction' },
@@ -111,6 +131,24 @@ const OPERATOR_OPTIONS = [
   { value: 'lt', label: 'Less than' },
   { value: 'eq', label: 'Equals' },
 ];
+
+const MOCK_EXECUTION_LOG: ExecutionLogEntry[] = [
+  { id: 'ex1', timestamp: new Date(Date.now() - 120000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Sarah Chen', step: 'Send welcome email', status: 'success', duration: 1.2 },
+  { id: 'ex2', timestamp: new Date(Date.now() - 300000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Marcus Johnson', step: 'AI scores lead', status: 'success', duration: 3.4 },
+  { id: 'ex3', timestamp: new Date(Date.now() - 600000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Emily Zhang', step: 'Score > 50?', status: 'skipped', duration: 0.1 },
+  { id: 'ex4', timestamp: new Date(Date.now() - 900000).toISOString(), workflowName: 'Hot Lead Alert', leadName: 'David Park', step: 'Notify sales team', status: 'success', duration: 0.8 },
+  { id: 'ex5', timestamp: new Date(Date.now() - 1500000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Priya Patel', step: 'Send follow-up', status: 'failed', duration: 5.0 },
+  { id: 'ex6', timestamp: new Date(Date.now() - 1800000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Alex Rivera', step: 'Add to nurture campaign', status: 'success', duration: 0.5 },
+  { id: 'ex7', timestamp: new Date(Date.now() - 2400000).toISOString(), workflowName: 'Hot Lead Alert', leadName: 'Jordan Lee', step: 'Check engagement', status: 'running', duration: 0 },
+  { id: 'ex8', timestamp: new Date(Date.now() - 3600000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Lisa Wang', step: 'Wait 2 days', status: 'success', duration: 0.1 },
+];
+
+const EXECUTION_STATUS_STYLES: Record<ExecutionLogEntry['status'], { bg: string; text: string; label: string }> = {
+  success: { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Success' },
+  failed: { bg: 'bg-rose-50', text: 'text-rose-700', label: 'Failed' },
+  skipped: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Skipped' },
+  running: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Running' },
+};
 
 const DEFAULT_WORKFLOW: Workflow = {
   id: 'wf-default',
@@ -175,6 +213,12 @@ const AutomationPage: React.FC = () => {
   // ─── Test lead selection ───
   const [testLeadIds, setTestLeadIds] = useState<Set<string>>(new Set());
 
+  // ─── Enhanced Wireframe State ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showExecutionLog, setShowExecutionLog] = useState(false);
+  const [showNodeAnalytics, setShowNodeAnalytics] = useState(false);
+  const [showHealthPanel, setShowHealthPanel] = useState(false);
+
   useEffect(() => {
     const fetchLeads = async () => {
       if (!user?.id) return;
@@ -195,9 +239,91 @@ const AutomationPage: React.FC = () => {
     localStorage.setItem(`aura_workflows_list_${user?.id}`, JSON.stringify(workflows));
   }, [workflows, user?.id]);
 
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowShortcuts(s => !s); return; }
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); startWizard(); return; }
+      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setShowExecutionLog(s => !s); return; }
+      if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHealthPanel(s => !s); return; }
+      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setShowNodeAnalytics(s => !s); return; }
+      if (e.key === 't' || e.key === 'T') { e.preventDefault(); handleTest(); return; }
+      if (e.key === 'o' || e.key === 'O') { e.preventDefault(); handleAiOptimize(); return; }
+      if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSave(); return; }
+      if (e.key === 'Escape') {
+        setShowShortcuts(false);
+        setShowExecutionLog(false);
+        setShowNodeAnalytics(false);
+        setShowHealthPanel(false);
+        setShowWorkflowList(false);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [startWizard, handleTest, handleAiOptimize, handleSave]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const selectedNode = useMemo(() => {
     return workflow.nodes.find(n => n.id === selectedNodeId) || null;
   }, [workflow.nodes, selectedNodeId]);
+
+  // ─── KPI Stats ───
+  const kpiStats = useMemo(() => {
+    const totalNodes = workflow.nodes.length;
+    const actionNodes = workflow.nodes.filter(n => n.type === 'action').length;
+    const conditionNodes = workflow.nodes.filter(n => n.type === 'condition').length;
+    const aiNodes = workflow.nodes.filter(n => n.config.aiPersonalization).length;
+    const activeWorkflows = workflows.filter(w => w.status === 'active').length;
+    const totalProcessed = workflows.reduce((sum, w) => sum + w.stats.leadsProcessed, 0);
+    const avgConversion = workflows.length > 0 ? workflows.reduce((sum, w) => sum + w.stats.conversionRate, 0) / workflows.length : 0;
+    const totalTimeSaved = workflows.reduce((sum, w) => sum + w.stats.timeSavedHrs, 0);
+    const successRate = MOCK_EXECUTION_LOG.filter(e => e.status === 'success').length / MOCK_EXECUTION_LOG.length * 100;
+
+    return [
+      { label: 'Active Workflows', value: activeWorkflows.toString(), icon: <BoltIcon className="w-5 h-5" />, color: 'indigo', trend: '+2 this week', up: true },
+      { label: 'Leads Processed', value: totalProcessed.toLocaleString(), icon: <UsersIcon className="w-5 h-5" />, color: 'emerald', trend: '+18% vs last month', up: true },
+      { label: 'Avg Conversion', value: `${avgConversion.toFixed(1)}%`, icon: <TargetIcon className="w-5 h-5" />, color: 'blue', trend: '+2.1% vs manual', up: true },
+      { label: 'Time Saved', value: `${totalTimeSaved}h`, icon: <ClockIcon className="w-5 h-5" />, color: 'violet', trend: `${Math.round(totalTimeSaved / 4)}h/week avg`, up: true },
+      { label: 'AI-Enabled Nodes', value: `${aiNodes}/${totalNodes}`, icon: <BrainIcon className="w-5 h-5" />, color: 'fuchsia', trend: `${actionNodes} actions, ${conditionNodes} conditions`, up: null },
+      { label: 'Success Rate', value: `${successRate.toFixed(0)}%`, icon: <ShieldIcon className="w-5 h-5" />, color: 'amber', trend: successRate >= 80 ? 'Healthy' : 'Needs attention', up: successRate >= 80 },
+    ];
+  }, [workflow.nodes, workflows]);
+
+  // ─── Node Performance Metrics ───
+  const nodePerformance = useMemo((): NodePerformanceMetric[] => {
+    return workflow.nodes.map(node => ({
+      nodeTitle: node.title,
+      nodeType: node.type,
+      executions: Math.floor(Math.random() * 500) + 100,
+      successRate: 75 + Math.floor(Math.random() * 25),
+      avgDuration: parseFloat((Math.random() * 4 + 0.5).toFixed(1)),
+      lastRun: new Date(Date.now() - Math.floor(Math.random() * 86400000)).toISOString(),
+    }));
+  }, [workflow.nodes]);
+
+  // ─── Workflow Health Score ───
+  const workflowHealth = useMemo(() => {
+    const hasTrigger = workflow.nodes.some(n => n.type === 'trigger') ? 20 : 0;
+    const hasActions = workflow.nodes.filter(n => n.type === 'action').length > 0 ? 20 : 0;
+    const hasConditions = workflow.nodes.filter(n => n.type === 'condition').length > 0 ? 15 : 0;
+    const hasAI = workflow.nodes.some(n => n.config.aiPersonalization) ? 15 : 0;
+    const hasFallbacks = workflow.nodes.some(n => n.config.fallbackEnabled) ? 15 : 0;
+    const complexity = Math.min(workflow.nodes.length * 3, 15);
+    const score = hasTrigger + hasActions + hasConditions + hasAI + hasFallbacks + complexity;
+    const metrics = [
+      { label: 'Trigger Setup', score: hasTrigger, max: 20, status: hasTrigger > 0 ? 'pass' as const : 'fail' as const },
+      { label: 'Action Steps', score: hasActions, max: 20, status: hasActions > 0 ? 'pass' as const : 'fail' as const },
+      { label: 'Branching Logic', score: hasConditions, max: 15, status: hasConditions > 0 ? 'pass' as const : 'warn' as const },
+      { label: 'AI Features', score: hasAI, max: 15, status: hasAI > 0 ? 'pass' as const : 'warn' as const },
+      { label: 'Error Handling', score: hasFallbacks, max: 15, status: hasFallbacks > 0 ? 'pass' as const : 'warn' as const },
+      { label: 'Complexity', score: complexity, max: 15, status: complexity >= 9 ? 'pass' as const : 'warn' as const },
+    ];
+    return { score, metrics };
+  }, [workflow.nodes]);
 
   // ─── Node Handlers ───
   const updateNodeConfig = useCallback((nodeId: string, key: string, value: string | number | boolean) => {
@@ -466,12 +592,41 @@ const AutomationPage: React.FC = () => {
             </span>
           )}
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setShowExecutionLog(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showExecutionLog ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <ActivityIcon className="w-3.5 h-3.5" />
+            <span>Execution Log</span>
+          </button>
+          <button
+            onClick={() => setShowHealthPanel(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showHealthPanel ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <ShieldIcon className="w-3.5 h-3.5" />
+            <span>Health</span>
+          </button>
+          <button
+            onClick={() => setShowNodeAnalytics(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showNodeAnalytics ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <PieChartIcon className="w-3.5 h-3.5" />
+            <span>Analytics</span>
+          </button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <span>Shortcuts</span>
+          </button>
+
           {/* Workflow Switcher */}
           <div className="relative">
             <button
               onClick={() => setShowWorkflowList(!showWorkflowList)}
-              className="flex items-center space-x-2 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              className="flex items-center space-x-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
             >
               <GitBranchIcon className="w-3.5 h-3.5" />
               <span>{workflows.length} Workflows</span>
@@ -515,6 +670,27 @@ const AutomationPage: React.FC = () => {
             </button>
           )}
         </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KPI STATS BANNER                                               */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {kpiStats.map((stat, i) => (
+          <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-all group">
+            <div className="flex items-center justify-between mb-2">
+              <div className={`w-9 h-9 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                {stat.icon}
+              </div>
+              {stat.up !== null && (
+                stat.up ? <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" /> : <TrendDownIcon className="w-3.5 h-3.5 text-rose-500" />
+              )}
+            </div>
+            <p className="text-xl font-black text-slate-900">{stat.value}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{stat.label}</p>
+            <p className="text-[10px] text-slate-400 mt-1 truncate">{stat.trend}</p>
+          </div>
+        ))}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
@@ -1389,6 +1565,297 @@ const AutomationPage: React.FC = () => {
             </div>
             <div className="flex justify-between text-[10px] text-slate-600 mt-1">
               <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* EXECUTION LOG SIDEBAR                                          */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showExecutionLog && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowExecutionLog(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Execution Log</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Real-time workflow execution history</p>
+              </div>
+              <button onClick={() => setShowExecutionLog(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                {[
+                  { label: 'Total', value: MOCK_EXECUTION_LOG.length, color: 'slate' },
+                  { label: 'Success', value: MOCK_EXECUTION_LOG.filter(e => e.status === 'success').length, color: 'emerald' },
+                  { label: 'Failed', value: MOCK_EXECUTION_LOG.filter(e => e.status === 'failed').length, color: 'rose' },
+                  { label: 'Running', value: MOCK_EXECUTION_LOG.filter(e => e.status === 'running').length, color: 'blue' },
+                ].map((s, i) => (
+                  <div key={i} className={`p-2.5 bg-${s.color}-50 rounded-xl text-center`}>
+                    <p className={`text-lg font-black text-${s.color}-700`}>{s.value}</p>
+                    <p className={`text-[9px] font-bold text-${s.color}-500 uppercase`}>{s.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Log Entries */}
+              {MOCK_EXECUTION_LOG.map(entry => {
+                const style = EXECUTION_STATUS_STYLES[entry.status];
+                const ago = Math.round((Date.now() - new Date(entry.timestamp).getTime()) / 60000);
+                const agoText = ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                return (
+                  <div key={entry.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white transition-all">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${style.bg} ${style.text}`}>
+                        {style.label}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">{agoText}</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-800">{entry.step}</p>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-xs text-slate-500">
+                        <span className="font-semibold">{entry.leadName}</span> &middot; {entry.workflowName}
+                      </span>
+                      {entry.duration > 0 && (
+                        <span className="text-[10px] text-slate-400 font-medium">{entry.duration}s</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* NODE ANALYTICS SIDEBAR                                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showNodeAnalytics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowNodeAnalytics(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Node Performance Analytics</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Per-node execution metrics for "{workflow.name}"</p>
+              </div>
+              <button onClick={() => setShowNodeAnalytics(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              {/* Overall Summary */}
+              <div className="p-4 bg-gradient-to-r from-indigo-50 to-violet-50 rounded-xl border border-indigo-100">
+                <p className="text-xs font-black text-indigo-700 uppercase tracking-wider mb-2">Pipeline Summary</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-2xl font-black text-indigo-900">{workflow.nodes.length}</p>
+                    <p className="text-[10px] text-indigo-500 font-bold">Total Nodes</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-emerald-700">
+                      {nodePerformance.length > 0 ? Math.round(nodePerformance.reduce((s, n) => s + n.successRate, 0) / nodePerformance.length) : 0}%
+                    </p>
+                    <p className="text-[10px] text-emerald-600 font-bold">Avg Success</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-violet-700">
+                      {nodePerformance.length > 0 ? (nodePerformance.reduce((s, n) => s + n.avgDuration, 0) / nodePerformance.length).toFixed(1) : 0}s
+                    </p>
+                    <p className="text-[10px] text-violet-500 font-bold">Avg Duration</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Per-Node Cards */}
+              {nodePerformance.map((node, i) => {
+                const meta = NODE_TYPE_META[node.nodeType];
+                return (
+                  <div key={i} className="p-4 bg-white rounded-xl border border-slate-200 hover:shadow-sm transition-all">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${meta.bgClass}`}>
+                        {getNodeIcon(node.nodeType)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{node.nodeTitle}</p>
+                        <p className={`text-[10px] font-black uppercase tracking-wider text-${meta.color}-600`}>{meta.label}</p>
+                      </div>
+                      <span className={`text-xs font-black ${node.successRate >= 90 ? 'text-emerald-600' : node.successRate >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
+                        {node.successRate}%
+                      </span>
+                    </div>
+
+                    {/* Success Rate Bar */}
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2">
+                      <div
+                        className={`h-full rounded-full transition-all ${node.successRate >= 90 ? 'bg-emerald-500' : node.successRate >= 70 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                        style={{ width: `${node.successRate}%` }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">{node.executions}</p>
+                        <p className="text-[9px] text-slate-400 font-medium">Executions</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">{node.avgDuration}s</p>
+                        <p className="text-[9px] text-slate-400 font-medium">Avg Duration</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">
+                          {Math.round((Date.now() - new Date(node.lastRun).getTime()) / 3600000)}h ago
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-medium">Last Run</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* WORKFLOW HEALTH PANEL                                         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showHealthPanel && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowHealthPanel(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Workflow Health</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Quality score for "{workflow.name}"</p>
+              </div>
+              <button onClick={() => setShowHealthPanel(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+              {/* Score Circle */}
+              <div className="flex flex-col items-center">
+                <div className="relative w-32 h-32">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="52" fill="none" stroke="#f1f5f9" strokeWidth="8" />
+                    <circle
+                      cx="60" cy="60" r="52" fill="none"
+                      stroke={workflowHealth.score >= 80 ? '#10b981' : workflowHealth.score >= 50 ? '#f59e0b' : '#ef4444'}
+                      strokeWidth="8" strokeLinecap="round"
+                      strokeDasharray={`${(workflowHealth.score / 100) * 327} 327`}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={`text-3xl font-black ${workflowHealth.score >= 80 ? 'text-emerald-600' : workflowHealth.score >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {workflowHealth.score}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">/ 100</span>
+                  </div>
+                </div>
+                <p className={`mt-3 text-sm font-black ${workflowHealth.score >= 80 ? 'text-emerald-600' : workflowHealth.score >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                  {workflowHealth.score >= 80 ? 'Excellent' : workflowHealth.score >= 50 ? 'Good' : 'Needs Work'}
+                </p>
+              </div>
+
+              {/* Metric Breakdown */}
+              <div className="space-y-3">
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Score Breakdown</p>
+                {workflowHealth.metrics.map((metric, i) => (
+                  <div key={i} className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">
+                      {metric.status === 'pass' && <CheckIcon className="w-4 h-4 text-emerald-500" />}
+                      {metric.status === 'fail' && <XIcon className="w-4 h-4 text-rose-500" />}
+                      {metric.status === 'warn' && <AlertTriangleIcon className="w-4 h-4 text-amber-500" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-slate-700">{metric.label}</span>
+                        <span className="text-xs font-bold text-slate-500">{metric.score}/{metric.max}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5">
+                        <div
+                          className={`h-full rounded-full transition-all ${metric.status === 'pass' ? 'bg-emerald-500' : metric.status === 'warn' ? 'bg-amber-500' : 'bg-rose-500'}`}
+                          style={{ width: `${(metric.score / metric.max) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Recommendations */}
+              <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4 text-indigo-600" />
+                  <p className="text-xs font-black text-indigo-700 uppercase tracking-wider">Recommendations</p>
+                </div>
+                <div className="space-y-1.5">
+                  {workflowHealth.metrics.filter(m => m.status !== 'pass').map((m, i) => (
+                    <div key={i} className="flex items-start space-x-2">
+                      <ArrowRightIcon className="w-3 h-3 text-indigo-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-indigo-700">
+                        {m.label === 'Branching Logic' && 'Add condition nodes for smarter lead routing.'}
+                        {m.label === 'AI Features' && 'Enable AI personalization on action nodes for better engagement.'}
+                        {m.label === 'Error Handling' && 'Add fallback actions to protect against step failures.'}
+                        {m.label === 'Complexity' && 'Consider adding more steps for a more robust workflow.'}
+                        {m.label === 'Trigger Setup' && 'Add a trigger node to start your workflow.'}
+                        {m.label === 'Action Steps' && 'Add at least one action step to perform operations.'}
+                      </p>
+                    </div>
+                  ))}
+                  {workflowHealth.metrics.every(m => m.status === 'pass') && (
+                    <p className="text-xs text-indigo-700 font-medium">Your workflow is well-configured. Great job!</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KEYBOARD SHORTCUTS MODAL                                      */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center space-x-2">
+                <KeyboardIcon className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-black text-slate-900 font-heading">Keyboard Shortcuts</h3>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {[
+                { key: 'N', label: 'Create new workflow' },
+                { key: 'T', label: 'Run test simulation' },
+                { key: 'O', label: 'AI optimize workflow' },
+                { key: 'Ctrl+S', label: 'Save current workflow' },
+                { key: 'E', label: 'Toggle execution log' },
+                { key: 'H', label: 'Toggle health panel' },
+                { key: 'A', label: 'Toggle node analytics' },
+                { key: '?', label: 'Toggle this shortcuts panel' },
+                { key: 'Esc', label: 'Close all panels' },
+              ].map((shortcut, i) => (
+                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                  <span className="text-sm text-slate-600">{shortcut.label}</span>
+                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">
+                    {shortcut.key}
+                  </kbd>
+                </div>
+              ))}
             </div>
           </div>
         </div>
