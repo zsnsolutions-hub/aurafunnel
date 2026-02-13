@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Lead, ContentType, User, DashboardQuickStats, AIInsight, ManualList, FunnelStage } from '../../types';
-import { FlameIcon, BoltIcon, CheckIcon, SparklesIcon, TargetIcon, ChartIcon, ClockIcon, TrendUpIcon, TrendDownIcon } from '../../components/Icons';
-import { generateLeadContent } from '../../lib/gemini';
-import { generateDashboardInsights } from '../../lib/gemini';
+import { FlameIcon, BoltIcon, SparklesIcon, TargetIcon, ChartIcon, TrendUpIcon, CreditCardIcon } from '../../components/Icons';
+import { generateLeadContent, generateDashboardInsights } from '../../lib/gemini';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import QuickStatsRow from '../../components/dashboard/QuickStatsRow';
 import QuickActionsBar from '../../components/dashboard/QuickActionsBar';
+import AIInsightsPanel from '../../components/dashboard/AIInsightsPanel';
 import LiveActivityFeed from '../../components/dashboard/LiveActivityFeed';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
@@ -28,7 +29,6 @@ const generateTrendData = (leads: Lead[]) => {
     date.setDate(date.getDate() - i);
     const dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-    // Simulated metrics based on lead data with some variance
     const baseAccuracy = leads.length > 0
       ? Math.min(95, 60 + leads.filter(l => l.score > 70).length * 2)
       : 72;
@@ -74,7 +74,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   // Quick Stats
   const [quickStats, setQuickStats] = useState<DashboardQuickStats>({
     leadsToday: 0, hotLeads: 0, contentCreated: 0, avgAiScore: 0,
-    predictedConversions: 0, recommendations: 0
+    predictedConversions: 0, recommendations: 0, leadsYesterday: 0, hotLeadsYesterday: 0
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -99,6 +99,13 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   // Trend data
   const trendData = useMemo(() => generateTrendData(leads), [leads]);
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   useEffect(() => {
     fetchLeads();
     fetchQuickStats();
@@ -106,7 +113,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
   const fetchLeads = async () => {
     setLoadingLeads(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('leads')
       .select('*')
       .eq('client_id', user.id)
@@ -141,19 +148,27 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     try {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
 
       const [
         { data: allLeads },
         { count: leadsToday },
+        { count: leadsYesterday },
         { count: contentCreated }
       ] = await Promise.all([
         supabase.from('leads').select('*').eq('client_id', user.id),
         supabase.from('leads').select('*', { count: 'exact', head: true }).eq('client_id', user.id).gte('created_at', todayStart),
+        supabase.from('leads').select('*', { count: 'exact', head: true }).eq('client_id', user.id).gte('created_at', yesterdayStart).lt('created_at', todayStart),
         supabase.from('ai_usage_logs').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
       ]);
 
       const lds = allLeads || [];
       const hotLeads = lds.filter(l => l.score > 80).length;
+      const hotLeadsYesterdayCount = lds.filter(l => {
+        if (!l.created_at) return false;
+        const d = new Date(l.created_at);
+        return d < new Date(todayStart) && l.score > 80;
+      }).length;
       const avgScore = lds.length > 0
         ? Math.round(lds.reduce((a, b) => a + b.score, 0) / lds.length)
         : 0;
@@ -166,7 +181,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         contentCreated: contentCreated || 0,
         avgAiScore: avgScore,
         predictedConversions,
-        recommendations: programmaticInsights.length
+        recommendations: programmaticInsights.length,
+        leadsYesterday: leadsYesterday || 0,
+        hotLeadsYesterday: hotLeadsYesterdayCount
       });
     } catch (err) {
       console.error("Stats fetch error:", err);
@@ -237,7 +254,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     e.preventDefault();
     const mockScore = Math.floor(Math.random() * 40) + 60;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('leads')
       .insert([{
         ...newLead,
@@ -320,40 +337,103 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     ? Math.round((leads.filter(l => l.status === 'Qualified').length / leads.length) * 100)
     : 0;
   const topPredictions = leads.slice(0, 3);
-  const leadsPerMin = leads.length > 0 ? Math.max(1, Math.round(leads.length / 12)) : 0;
+  const creditsRemaining = (user.credits_total || 500) - (user.credits_used || 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-heading">Main Dashboard</h1>
-          <p className="text-slate-500 mt-1">AI-powered growth intelligence at a glance.</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <QuickActionsBar
-            onImportCSV={() => setIsCSVOpen(true)}
-            onGenerateContent={() => {
-              if (leads.length > 0) openGenModal(leads[0]);
-            }}
-          />
-          <button
-            onClick={() => setIsAddLeadOpen(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
-          >
-            Add Lead
-          </button>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  HERO BANNER                                                  */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 md:p-10 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
+        <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-500/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/4"></div>
+
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+          {/* Left: Greeting */}
+          <div>
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-11 h-11 rounded-xl bg-indigo-500/20 flex items-center justify-center text-lg font-black text-indigo-300">
+                {user.name?.charAt(0) || 'U'}
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight font-heading">{getGreeting()}, {user.name?.split(' ')[0] || 'there'}</h1>
+                <div className="flex items-center space-x-3 mt-1">
+                  <span className="px-2 py-0.5 bg-indigo-500/20 rounded-md text-[9px] font-bold text-indigo-300 uppercase tracking-widest">
+                    {user.plan || 'Free'} Plan
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Key Metrics */}
+          <div className="flex items-center space-x-3 md:space-x-4">
+            <div className="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-center min-w-[90px]">
+              <div className="flex items-center justify-center space-x-1.5 mb-1.5">
+                <TargetIcon className="w-3.5 h-3.5 text-blue-300" />
+                <span className="text-[9px] font-bold text-blue-300 uppercase tracking-widest">Leads</span>
+              </div>
+              {statsLoading ? (
+                <div className="h-7 w-10 bg-white/10 animate-pulse rounded-lg mx-auto"></div>
+              ) : (
+                <p className="text-2xl font-bold font-heading">{leads.length}</p>
+              )}
+            </div>
+            <div className="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-center min-w-[90px]">
+              <div className="flex items-center justify-center space-x-1.5 mb-1.5">
+                <ChartIcon className="w-3.5 h-3.5 text-emerald-300" />
+                <span className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Conv.</span>
+              </div>
+              {statsLoading ? (
+                <div className="h-7 w-10 bg-white/10 animate-pulse rounded-lg mx-auto"></div>
+              ) : (
+                <p className="text-2xl font-bold font-heading">{conversionRate}%</p>
+              )}
+            </div>
+            <div className="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-center min-w-[90px]">
+              <div className="flex items-center justify-center space-x-1.5 mb-1.5">
+                <CreditCardIcon className="w-3.5 h-3.5 text-amber-300" />
+                <span className="text-[9px] font-bold text-amber-300 uppercase tracking-widest">Credits</span>
+              </div>
+              <p className="text-2xl font-bold font-heading">{creditsRemaining}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/*  TWO-PANEL LAYOUT: Left (30%) + Center (70%)                 */}
-      {/* ============================================================ */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  QUICK ACTIONS ROW                                            */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between">
+        <QuickActionsBar
+          onImportCSV={() => setIsCSVOpen(true)}
+          onGenerateContent={() => { if (leads.length > 0) openGenModal(leads[0]); }}
+        />
+        <button
+          onClick={() => setIsAddLeadOpen(true)}
+          className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
+        >
+          + Add Lead
+        </button>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  QUICK STATS ROW (6 cards with trends)                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <QuickStatsRow stats={quickStats} loading={statsLoading} />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  TWO-PANEL LAYOUT: Left (30%) + Right (70%)                   */}
+      {/* ══════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col lg:flex-row gap-6">
 
-        {/* ── LEFT PANEL (30%) ── Live AI Insights ── */}
+        {/* ── LEFT PANEL (30%) ── */}
         <div className="w-full lg:w-[30%] space-y-6">
-          {/* Live AI Insights Header */}
+          {/* Live AI Stats (dark card) */}
           <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl"></div>
             <div className="flex items-center space-x-3 mb-5">
@@ -361,7 +441,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <SparklesIcon className="w-5 h-5 text-indigo-300" />
               </div>
               <div>
-                <h2 className="font-bold font-heading text-lg">Live AI Insights</h2>
+                <h2 className="font-bold font-heading text-lg">Live AI Stats</h2>
                 <div className="flex items-center space-x-2 mt-0.5">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -371,12 +451,10 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 </div>
               </div>
             </div>
-
-            {/* Real-time Processing Stats */}
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                <span className="text-xs text-slate-300">Leads Analyzed/min</span>
-                <span className="text-sm font-bold text-indigo-300">{leadsPerMin}</span>
+                <span className="text-xs text-slate-300">Pipeline Size</span>
+                <span className="text-sm font-bold text-indigo-300">{leads.length} leads</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
                 <span className="text-xs text-slate-300">AI Accuracy</span>
@@ -385,6 +463,10 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
               <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
                 <span className="text-xs text-slate-300">Content Generated</span>
                 <span className="text-sm font-bold text-amber-300">{quickStats.contentCreated}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                <span className="text-xs text-slate-300">Predicted Conv.</span>
+                <span className="text-sm font-bold text-purple-300">{quickStats.predictedConversions}</span>
               </div>
             </div>
           </div>
@@ -400,7 +482,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <p className="text-xs text-slate-400">Highest conversion potential</p>
               </div>
             </div>
-
             {statsLoading || loadingLeads ? (
               <div className="space-y-4">
                 {[1, 2, 3].map(i => <div key={i} className="h-14 bg-slate-50 animate-pulse rounded-xl"></div>)}
@@ -453,142 +534,27 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <span>Generate Content</span>
               </button>
               <button
-                onClick={() => navigate('/portal/content')}
+                onClick={() => setIsCSVOpen(true)}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors font-semibold text-sm"
               >
                 <ChartIcon className="w-4 h-4" />
-                <span>Run Report</span>
+                <span>Import CSV</span>
               </button>
-            </div>
-          </div>
-
-          {/* AI Insights List */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-                  <BoltIcon className="w-4 h-4" />
-                </div>
-                <h3 className="font-bold text-slate-800 text-sm font-heading">AI Recommendations</h3>
-              </div>
-              <button onClick={handleRefreshInsights} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
-                Refresh
-              </button>
-            </div>
-            <div className="p-4 max-h-64 overflow-y-auto custom-scrollbar">
-              {insightsLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map(i => <div key={i} className="h-10 bg-slate-50 animate-pulse rounded-lg"></div>)}
-                </div>
-              ) : insights.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-4">No insights yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {insights.slice(0, 5).map(insight => (
-                    <div key={insight.id} className="p-3 rounded-lg border border-slate-100 hover:border-indigo-100 transition-colors">
-                      <div className="flex items-start justify-between">
-                        <p className="text-xs font-bold text-slate-700 leading-relaxed">{insight.title}</p>
-                        <span className="text-[9px] font-bold text-indigo-500 ml-2 flex-shrink-0">{insight.confidence}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-0.5 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${insight.confidence}%` }}></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {insights.length > 0 && (
-                <button
-                  onClick={handleDeepAnalysis}
-                  disabled={deepAnalysisLoading}
-                  className="mt-3 w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-indigo-600 transition-colors disabled:opacity-50"
-                >
-                  {deepAnalysisLoading ? 'Analyzing...' : 'Deep AI Analysis'}
-                </button>
-              )}
-              {deepAnalysisResult && (
-                <div className="mt-3 p-3 bg-slate-950 rounded-xl">
-                  <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest mb-1">Gemini Analysis</p>
-                  <p className="text-[11px] text-indigo-100 leading-relaxed whitespace-pre-wrap font-mono">{deepAnalysisResult}</p>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        {/* ── CENTER PANEL (70%) ── Performance Overview ── */}
+        {/* ── RIGHT PANEL (70%) ── */}
         <div className="w-full lg:w-[70%] space-y-6">
-          {/* Performance Overview - 4 Stat Cards */}
-          <div>
-            <h2 className="font-bold text-slate-800 font-heading text-lg mb-4">Performance Overview</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Leads Today */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm group relative overflow-hidden">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
-                    <TargetIcon className="w-5 h-5" />
-                  </div>
-                </div>
-                <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Leads Today</h3>
-                {statsLoading ? (
-                  <div className="h-8 w-16 bg-slate-100 animate-pulse rounded-lg mt-1"></div>
-                ) : (
-                  <p className="text-3xl font-bold text-slate-900 mt-1 font-heading tracking-tight">{quickStats.leadsToday}</p>
-                )}
-              </div>
-
-              {/* Hot Leads */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm group relative overflow-hidden">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-2.5 bg-orange-50 text-orange-600 rounded-xl group-hover:bg-orange-600 group-hover:text-white transition-colors duration-300">
-                    <FlameIcon className="w-5 h-5" />
-                  </div>
-                  {!statsLoading && quickStats.hotLeads > 0 && (
-                    <span className="inline-flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">
-                      <TrendUpIcon className="w-3 h-3" />
-                      <span>Active</span>
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Hot Leads</h3>
-                {statsLoading ? (
-                  <div className="h-8 w-16 bg-slate-100 animate-pulse rounded-lg mt-1"></div>
-                ) : (
-                  <p className="text-3xl font-bold text-slate-900 mt-1 font-heading tracking-tight">{quickStats.hotLeads}</p>
-                )}
-              </div>
-
-              {/* Conversion Rate */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm group relative overflow-hidden">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
-                    <ChartIcon className="w-5 h-5" />
-                  </div>
-                </div>
-                <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Conv. Rate</h3>
-                {statsLoading ? (
-                  <div className="h-8 w-16 bg-slate-100 animate-pulse rounded-lg mt-1"></div>
-                ) : (
-                  <p className="text-3xl font-bold text-slate-900 mt-1 font-heading tracking-tight">{conversionRate}%</p>
-                )}
-              </div>
-
-              {/* AI Accuracy */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm group relative overflow-hidden">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
-                    <BoltIcon className="w-5 h-5" />
-                  </div>
-                </div>
-                <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">AI Accuracy</h3>
-                {statsLoading ? (
-                  <div className="h-8 w-16 bg-slate-100 animate-pulse rounded-lg mt-1"></div>
-                ) : (
-                  <p className="text-3xl font-bold text-slate-900 mt-1 font-heading tracking-tight">{quickStats.avgAiScore}%</p>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* AI Insights Panel (shared component) */}
+          <AIInsightsPanel
+            insights={insights}
+            loading={insightsLoading}
+            onRefresh={handleRefreshInsights}
+            onDeepAnalysis={handleDeepAnalysis}
+            deepAnalysisLoading={deepAnalysisLoading}
+            deepAnalysisResult={deepAnalysisResult}
+          />
 
           {/* Conversion Funnel */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -612,7 +578,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <p className="text-center text-slate-400 text-sm italic py-8">No funnel data available yet.</p>
               ) : (
                 <div className="space-y-3">
-                  {funnelStages.map((stage, index) => {
+                  {funnelStages.map((stage) => {
                     const maxCount = Math.max(...funnelStages.map(s => s.count), 1);
                     const widthPct = Math.max((stage.count / maxCount) * 100, 8);
                     return (
@@ -639,7 +605,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             </div>
           </div>
 
-          {/* AI Performance Trends - 30 Day Line Chart */}
+          {/* AI Performance Trends - 30 Day Chart */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -694,9 +660,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/*  LEADS TABLE + SEGMENTATION (full width below panels)        */}
-      {/* ============================================================ */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  LEADS TABLE + SEGMENTATION (full width)                      */}
+      {/* ══════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Segmentation Sidebar */}
         <div className="lg:col-span-1">
@@ -803,6 +769,10 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         </div>
       </div>
 
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  MODALS                                                       */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+
       {/* Lead Actions Modal */}
       {selectedLeadForActions && (
         <LeadActionsModal
@@ -817,7 +787,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         />
       )}
 
-      {/* AI CONTENT MODAL */}
+      {/* AI Content Generation Modal */}
       {isGenModalOpen && selectedLeadForGen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => !isGenerating && setIsGenModalOpen(false)}></div>
@@ -884,7 +854,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         </div>
       )}
 
-      {/* ADD LEAD MODAL */}
+      {/* Add Lead Modal */}
       {isAddLeadOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-end">
           <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsAddLeadOpen(false)}></div>
