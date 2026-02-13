@@ -8,7 +8,8 @@ import {
   TrendUpIcon, TrendDownIcon, ClockIcon, TargetIcon, BoltIcon,
   DownloadIcon, FlameIcon, SlidersIcon, ArrowRightIcon, StarIcon,
   LinkedInIcon, RecycleIcon, LayersIcon, GridIcon, DocumentIcon,
-  KeyboardIcon, HelpCircleIcon
+  KeyboardIcon, HelpCircleIcon, BrainIcon, ActivityIcon, CalendarIcon,
+  TagIcon, MessageIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -82,6 +83,31 @@ interface BatchItem {
   label: string;
   tone: string;
   status: 'pending' | 'generating' | 'done';
+}
+
+interface ContentNote {
+  id: string;
+  text: string;
+  variant: string;
+  timestamp: Date;
+}
+
+interface SendHistoryEntry {
+  id: string;
+  label: string;
+  sentAt: Date;
+  recipients: number;
+  openRate: number;
+  status: 'sent' | 'scheduled' | 'failed';
+}
+
+interface ContentHealthScore {
+  overall: number;
+  personalization: number;
+  clarity: number;
+  ctaStrength: number;
+  engagement: number;
+  deliverability: number;
 }
 
 type ViewTab = 'editor' | 'preview' | 'analytics' | 'templates';
@@ -303,6 +329,20 @@ const ContentStudio: React.FC = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showTroubleshooting, setShowTroubleshooting] = useState(false);
 
+  // ─── New Wireframe State ───
+  const [contentNotes, setContentNotes] = useState<ContentNote[]>([]);
+  const [noteInput, setNoteInput] = useState('');
+  const [showNotes, setShowNotes] = useState(false);
+  const [showSendHistory, setShowSendHistory] = useState(false);
+  const [showBenchmarks, setShowBenchmarks] = useState(false);
+  const [sendHistory] = useState<SendHistoryEntry[]>([
+    { id: 'sh-1', label: 'Q1 Cold Outreach v3', sentAt: new Date(Date.now() - 86400000 * 2), recipients: 342, openRate: 47.2, status: 'sent' },
+    { id: 'sh-2', label: 'Product Update Drip', sentAt: new Date(Date.now() - 86400000 * 5), recipients: 128, openRate: 52.1, status: 'sent' },
+    { id: 'sh-3', label: 'Re-engagement Series', sentAt: new Date(Date.now() - 86400000 * 8), recipients: 89, openRate: 31.4, status: 'sent' },
+    { id: 'sh-4', label: 'Webinar Invite Seq', sentAt: new Date(Date.now() - 86400000 * 12), recipients: 256, openRate: 44.8, status: 'sent' },
+    { id: 'sh-5', label: 'Trial Nurture Drip', sentAt: new Date(Date.now() + 86400000), recipients: 185, openRate: 0, status: 'scheduled' },
+  ]);
+
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
@@ -422,7 +462,109 @@ const ContentStudio: React.FC = () => {
     });
   }, [contentMode, templateFilter]);
 
+  // ─── KPI Stats ───
+  const kpiStats = useMemo(() => {
+    const totalVariants = steps.reduce((a, s) => a + s.variants.length, 0);
+    const suggestionsApplied = suggestions.filter(s => s.applied).length;
+    const avgOpen = aggregatePerformance.openRate;
+    const improvement = suggestions.filter(s => s.applied).reduce((a, s) => a + s.impactPercent, 0);
+    return {
+      piecesCreated: steps.length + (contentMode === 'linkedin' ? 1 : 0) + (contentMode === 'proposal' ? 1 : 0),
+      activeVariants: totalVariants,
+      avgOpenRate: avgOpen,
+      rulesActive: rules.length,
+      suggestionsApplied,
+      improvementScore: improvement,
+    };
+  }, [steps, suggestions, aggregatePerformance.openRate, rules.length, contentMode]);
+
+  // ─── Content Health Score ───
+  const contentHealth = useMemo((): ContentHealthScore | null => {
+    let body = '';
+    let subject = '';
+    if (contentMode === 'email' && activeVariant) {
+      body = activeVariant.body;
+      subject = activeVariant.subject;
+    } else if (contentMode === 'linkedin') {
+      body = linkedinPost;
+    } else if (contentMode === 'proposal') {
+      body = Object.values(proposalSections).join('\n');
+    }
+    if (!body || body.length < 20) return null;
+
+    const hasTags = /\{\{.+?\}\}/.test(body);
+    const subjectTags = /\{\{.+?\}\}/.test(subject);
+    const hasCTA = /\b(book|schedule|call|demo|try|start|click|learn|reserve|sign up|register)\b/i.test(body);
+    const hasQuestion = body.includes('?');
+    const hasNumbers = /\d+%?/.test(body);
+    const hasSocialProof = /\b(used by|trusted by|companies|customers|clients|teams)\b/i.test(body);
+    const words = body.split(/\s+/).filter(Boolean).length;
+    const sentences = body.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const avgSentLen = sentences.length > 0 ? words / sentences.length : words;
+
+    let personalization = 25;
+    if (hasTags) personalization += 35;
+    if (subjectTags) personalization += 20;
+    if (rules.length > 0) personalization += Math.min(20, rules.length * 7);
+
+    let clarity = 35;
+    if (avgSentLen < 20) clarity += 30;
+    else if (avgSentLen < 30) clarity += 15;
+    if (body.includes('\n\n')) clarity += 15;
+    if (/[•\-\*]\s/.test(body)) clarity += 20;
+
+    let ctaStrength = 10;
+    if (hasCTA) ctaStrength += 35;
+    if (/\[.+?\]/.test(body)) ctaStrength += 25;
+    if (/\bfree\b|\btoday\b|\bnow\b/i.test(body)) ctaStrength += 15;
+    if (/\b\d+ min(ute)?s?\b/i.test(body)) ctaStrength += 15;
+
+    let engagement = 20;
+    if (hasQuestion) engagement += 20;
+    if (hasSocialProof) engagement += 15;
+    if (hasNumbers) engagement += 15;
+    if (words > 40 && words < 200) engagement += 15;
+    if (/p\.?s\.?/i.test(body)) engagement += 15;
+
+    let deliverability = 60;
+    if (!/[A-Z]{5,}/.test(body)) deliverability += 15;
+    if (!/!{2,}/.test(body)) deliverability += 10;
+    if (!(body.match(/free|guarantee|limited time|act now|congratulations/gi) || []).length) deliverability += 15;
+
+    const scores = {
+      personalization: Math.min(personalization, 100),
+      clarity: Math.min(clarity, 100),
+      ctaStrength: Math.min(ctaStrength, 100),
+      engagement: Math.min(engagement, 100),
+      deliverability: Math.min(deliverability, 100),
+    };
+    const overall = Math.round(Object.values(scores).reduce((a, v) => a + v, 0) / 5);
+    return { overall, ...scores };
+  }, [contentMode, activeVariant, linkedinPost, proposalSections, rules.length]);
+
+  // ─── Industry Benchmarks ───
+  const industryBenchmarks = useMemo(() => {
+    return {
+      openRate: { yours: aggregatePerformance.openRate, industry: 28.5, top10: 52.3 },
+      clickRate: { yours: aggregatePerformance.clickRate, industry: 4.2, top10: 12.8 },
+      replyRate: { yours: aggregatePerformance.replyRate, industry: 2.1, top10: 7.4 },
+      conversionRate: { yours: aggregatePerformance.conversion, industry: 1.8, top10: 5.2 },
+    };
+  }, [aggregatePerformance]);
+
   // ─── Handlers ───
+  const addNote = () => {
+    if (!noteInput.trim()) return;
+    const note: ContentNote = {
+      id: `note-${Date.now()}`,
+      text: noteInput.trim(),
+      variant: contentMode === 'email' ? (activeVariant?.name || 'Email') : contentMode,
+      timestamp: new Date(),
+    };
+    setContentNotes(prev => [note, ...prev].slice(0, 20));
+    setNoteInput('');
+  };
+
   const updateVariantField = (field: 'subject' | 'body', value: string) => {
     setSteps(prev => prev.map((step, i) => {
       if (i !== activeStepIdx) return step;
@@ -616,8 +758,27 @@ const ContentStudio: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <button onClick={() => setShowRecycleModal(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm" title="Recycle Content">
+        <div className="flex items-center space-x-1.5">
+          <button
+            onClick={() => setShowNotes(!showNotes)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
+              showNotes ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <MessageIcon className="w-3.5 h-3.5" />
+            <span>Notes</span>
+            {contentNotes.length > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black">{contentNotes.length}</span>}
+          </button>
+          <button
+            onClick={() => setShowSendHistory(!showSendHistory)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
+              showSendHistory ? 'bg-violet-50 border-violet-200 text-violet-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <ClockIcon className="w-3.5 h-3.5" />
+            <span>History</span>
+          </button>
+          <button onClick={() => setShowRecycleModal(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
             <RecycleIcon className="w-3.5 h-3.5" />
             <span>Recycle</span>
           </button>
@@ -627,7 +788,6 @@ const ContentStudio: React.FC = () => {
           </button>
           <button onClick={handleExport} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
             <DownloadIcon className="w-3.5 h-3.5" />
-            <span>Export</span>
           </button>
           <button onClick={handleSave} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
             {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
@@ -659,6 +819,176 @@ const ContentStudio: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KPI STATS BANNER                                             */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        {[
+          { label: 'Pieces Created', value: kpiStats.piecesCreated, icon: <EditIcon className="w-4 h-4" />, color: 'indigo' },
+          { label: 'Active Variants', value: kpiStats.activeVariants, icon: <LayersIcon className="w-4 h-4" />, color: 'violet' },
+          { label: 'Avg Open Rate', value: `${kpiStats.avgOpenRate}%`, icon: <EyeIcon className="w-4 h-4" />, color: 'emerald', trend: kpiStats.avgOpenRate > 35 ? 'up' : kpiStats.avgOpenRate > 0 ? 'down' : null },
+          { label: 'Rules Active', value: kpiStats.rulesActive, icon: <SlidersIcon className="w-4 h-4" />, color: 'amber' },
+          { label: 'AI Applied', value: kpiStats.suggestionsApplied, icon: <SparklesIcon className="w-4 h-4" />, color: 'blue' },
+          { label: 'Improvement', value: kpiStats.improvementScore > 0 ? `+${kpiStats.improvementScore}%` : '0%', icon: <TrendUpIcon className="w-4 h-4" />, color: 'rose', trend: kpiStats.improvementScore > 0 ? 'up' : null },
+        ].map(stat => (
+          <div key={stat.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className={`w-8 h-8 rounded-lg bg-${stat.color}-50 flex items-center justify-center text-${stat.color}-500`}>
+                {stat.icon}
+              </div>
+              {stat.trend === 'up' && <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" />}
+              {stat.trend === 'down' && <TrendDownIcon className="w-3.5 h-3.5 text-rose-400" />}
+            </div>
+            <p className="text-lg font-black text-slate-900">{stat.value}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* CONTENT HEALTH SCORE                                         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {contentHealth && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <BrainIcon className="w-4 h-4 text-indigo-600" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Content Health Score</p>
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${
+                contentHealth.overall >= 75 ? 'bg-emerald-50 text-emerald-600' :
+                contentHealth.overall >= 50 ? 'bg-amber-50 text-amber-600' :
+                'bg-rose-50 text-rose-600'
+              }`}>
+                {contentHealth.overall >= 75 ? 'Excellent' : contentHealth.overall >= 50 ? 'Good' : 'Needs Work'}
+              </span>
+            </div>
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-black text-xl ${
+              contentHealth.overall >= 75 ? 'bg-emerald-50 text-emerald-600' :
+              contentHealth.overall >= 50 ? 'bg-amber-50 text-amber-600' :
+              'bg-rose-50 text-rose-600'
+            }`}>
+              {contentHealth.overall}
+            </div>
+          </div>
+          <div className="grid grid-cols-5 gap-4">
+            {[
+              { label: 'Personalization', value: contentHealth.personalization, color: 'indigo' },
+              { label: 'Clarity', value: contentHealth.clarity, color: 'blue' },
+              { label: 'CTA Strength', value: contentHealth.ctaStrength, color: 'amber' },
+              { label: 'Engagement', value: contentHealth.engagement, color: 'emerald' },
+              { label: 'Deliverability', value: contentHealth.deliverability, color: 'violet' },
+            ].map(metric => (
+              <div key={metric.label}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold text-slate-500">{metric.label}</span>
+                  <span className={`text-[10px] font-black text-${metric.color}-600`}>{metric.value}</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className={`bg-${metric.color}-500 h-full rounded-full transition-all duration-500`} style={{ width: `${metric.value}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* SEND HISTORY TIMELINE                                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showSendHistory && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <ClockIcon className="w-4 h-4 text-violet-500" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Send History</p>
+            </div>
+            <button onClick={() => setShowSendHistory(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="relative">
+            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-100" />
+            <div className="space-y-4">
+              {sendHistory.map(entry => {
+                const daysAgo = Math.round((Date.now() - entry.sentAt.getTime()) / 86400000);
+                const timeLabel = daysAgo < 0 ? `in ${Math.abs(daysAgo)} days` : daysAgo === 0 ? 'today' : `${daysAgo}d ago`;
+                return (
+                  <div key={entry.id} className="flex items-start space-x-4 relative pl-8">
+                    <div className={`absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
+                      entry.status === 'sent' ? 'bg-emerald-400' : entry.status === 'scheduled' ? 'bg-amber-400' : 'bg-rose-400'
+                    }`} />
+                    <div className="flex-1 flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100/70 transition-colors">
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">{entry.label}</p>
+                        <p className="text-[10px] text-slate-400">{timeLabel} &middot; {entry.recipients} recipients</p>
+                      </div>
+                      <div className="text-right">
+                        {entry.status === 'sent' ? (
+                          <p className={`text-xs font-black ${entry.openRate > 40 ? 'text-emerald-600' : 'text-slate-600'}`}>
+                            {entry.openRate}% opens
+                          </p>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-lg text-[9px] font-bold">Scheduled</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* COLLABORATION NOTES                                          */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showNotes && (
+        <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <MessageIcon className="w-4 h-4 text-amber-500" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Content Notes</p>
+            </div>
+            <button onClick={() => setShowNotes(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center space-x-2 mb-3">
+            <input
+              value={noteInput}
+              onChange={e => setNoteInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addNote(); }}
+              placeholder="Add a note about this content..."
+              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-200 focus:border-amber-400 outline-none"
+            />
+            <button onClick={addNote} disabled={!noteInput.trim()} className="px-3 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50">
+              Add
+            </button>
+          </div>
+          {contentNotes.length > 0 ? (
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {contentNotes.map(note => (
+                <div key={note.id} className="flex items-start justify-between p-2.5 bg-amber-50/50 rounded-xl group">
+                  <div>
+                    <p className="text-xs text-slate-700">{note.text}</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">
+                      {note.variant} &middot; {note.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <button onClick={() => setContentNotes(prev => prev.filter(n => n.id !== note.id))}
+                    className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
+                    <XIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[10px] text-slate-400 text-center py-3">No notes yet. Add context, ideas, or feedback.</p>
+          )}
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* VARIANT MANAGER / TOP BAR                                    */}
@@ -1762,6 +2092,86 @@ const ContentStudio: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* ═══ INDUSTRY BENCHMARKS ═══ */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center space-x-1.5">
+                  <TargetIcon className="w-4 h-4 text-rose-500" />
+                  <span>Industry Benchmarks</span>
+                </h3>
+                <span className="text-[9px] bg-rose-50 text-rose-600 font-black px-2 py-0.5 rounded-lg">B2B SaaS</span>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { label: 'Open Rate', yours: industryBenchmarks.openRate.yours, industry: industryBenchmarks.openRate.industry, top10: industryBenchmarks.openRate.top10 },
+                  { label: 'Click Rate', yours: industryBenchmarks.clickRate.yours, industry: industryBenchmarks.clickRate.industry, top10: industryBenchmarks.clickRate.top10 },
+                  { label: 'Reply Rate', yours: industryBenchmarks.replyRate.yours, industry: industryBenchmarks.replyRate.industry, top10: industryBenchmarks.replyRate.top10 },
+                  { label: 'Conversion', yours: industryBenchmarks.conversionRate.yours, industry: industryBenchmarks.conversionRate.industry, top10: industryBenchmarks.conversionRate.top10 },
+                ].map(b => (
+                  <div key={b.label}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold text-slate-500">{b.label}</span>
+                      <div className="flex items-center space-x-3 text-[9px]">
+                        <span className="font-bold text-indigo-600">You: {b.yours}%</span>
+                        <span className="text-slate-400">Avg: {b.industry}%</span>
+                        <span className="text-emerald-600 font-bold">Top 10%: {b.top10}%</span>
+                      </div>
+                    </div>
+                    <div className="relative h-2 bg-slate-100 rounded-full overflow-hidden">
+                      {/* Industry average marker */}
+                      <div className="absolute h-full w-0.5 bg-slate-400 z-10" style={{ left: `${Math.min(100, (b.industry / b.top10) * 100)}%` }} />
+                      {/* Top 10% marker */}
+                      <div className="absolute h-full w-full bg-emerald-100 rounded-full" style={{ width: '100%' }} />
+                      {/* Your score */}
+                      <div className={`absolute h-full rounded-full transition-all duration-500 ${
+                        b.yours >= b.top10 ? 'bg-emerald-500' : b.yours >= b.industry ? 'bg-indigo-500' : 'bg-rose-400'
+                      }`} style={{ width: `${Math.min(100, (b.yours / b.top10) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center space-x-4 text-[9px]">
+                <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-indigo-500" /><span className="font-bold text-slate-500">Your Content</span></div>
+                <div className="flex items-center space-x-1"><div className="w-2 h-0.5 bg-slate-400" /><span className="text-slate-400">Industry Avg</span></div>
+                <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-emerald-100 border border-emerald-300" /><span className="text-slate-400">Top 10%</span></div>
+              </div>
+            </div>
+
+            {/* ═══ CONTENT WORD ANALYSIS ═══ */}
+            {(() => {
+              let body = '';
+              if (contentMode === 'email' && activeVariant) body = activeVariant.body;
+              else if (contentMode === 'linkedin') body = linkedinPost;
+              else body = Object.values(proposalSections).join(' ');
+              if (!body || body.length < 30) return null;
+
+              const words = body.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3);
+              const freq: Record<string, number> = {};
+              words.forEach(w => { freq[w] = (freq[w] || 0) + 1; });
+              const topWords = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 8);
+              const maxFreq = topWords[0]?.[1] || 1;
+
+              return (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+                    <TagIcon className="w-4 h-4 text-blue-500" />
+                    <span>Word Frequency</span>
+                  </h3>
+                  <div className="space-y-2">
+                    {topWords.map(([word, count]) => (
+                      <div key={word} className="flex items-center space-x-2">
+                        <span className="text-[10px] font-bold text-slate-600 w-20 truncate">{word}</span>
+                        <div className="flex-1 h-2 bg-slate-50 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-400 rounded-full transition-all duration-500" style={{ width: `${(count / maxFreq) * 100}%` }} />
+                        </div>
+                        <span className="text-[9px] font-black text-slate-400 w-6 text-right">{count}x</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ═══ KEYBOARD SHORTCUTS ═══ */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
