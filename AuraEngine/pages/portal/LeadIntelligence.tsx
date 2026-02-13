@@ -1,0 +1,861 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useOutletContext, useNavigate } from 'react-router-dom';
+import { User, Lead } from '../../types';
+import { supabase } from '../../lib/supabase';
+import {
+  BrainIcon, TargetIcon, FlameIcon, SparklesIcon, TrendUpIcon, TrendDownIcon,
+  RefreshIcon, FilterIcon, DownloadIcon, SlidersIcon, MailIcon, GlobeIcon,
+  BriefcaseIcon, ClockIcon, ActivityIcon, CursorClickIcon, StarIcon, StarOutlineIcon,
+  CheckIcon, XIcon, ArrowRightIcon, ChartIcon, EyeIcon
+} from '../../components/Icons';
+import {
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine, Cell
+} from 'recharts';
+
+interface LayoutContext {
+  user: User;
+  refreshProfile: () => Promise<void>;
+}
+
+type ScoreBucket = 'hot' | 'warm' | 'cool' | 'cold';
+
+interface ScoringFactor {
+  id: string;
+  name: string;
+  weight: number;
+  impact: 'High' | 'Medium' | 'Low';
+  icon: React.ReactNode;
+  color: string;
+  enabled: boolean;
+}
+
+interface ScoreEvent {
+  date: string;
+  score: number;
+  event?: string;
+  delta?: number;
+}
+
+const DEFAULT_SCORING_FACTORS: ScoringFactor[] = [
+  { id: 'email', name: 'Email Engagement', weight: 25, impact: 'High', icon: <MailIcon className="w-4 h-4" />, color: 'indigo', enabled: true },
+  { id: 'website', name: 'Website Activity', weight: 20, impact: 'High', icon: <GlobeIcon className="w-4 h-4" />, color: 'violet', enabled: true },
+  { id: 'company', name: 'Company Fit', weight: 18, impact: 'High', icon: <BriefcaseIcon className="w-4 h-4" />, color: 'emerald', enabled: true },
+  { id: 'social', name: 'Social Signals', weight: 15, impact: 'Medium', icon: <CursorClickIcon className="w-4 h-4" />, color: 'amber', enabled: true },
+  { id: 'content', name: 'Content Consumption', weight: 12, impact: 'Medium', icon: <EyeIcon className="w-4 h-4" />, color: 'rose', enabled: true },
+  { id: 'timing', name: 'Timing Patterns', weight: 10, impact: 'Low', icon: <ClockIcon className="w-4 h-4" />, color: 'slate', enabled: true },
+];
+
+const IMPACT_COLORS: Record<string, string> = {
+  High: 'emerald',
+  Medium: 'amber',
+  Low: 'slate',
+};
+
+// Generate simulated score history for a lead
+const generateScoreHistory = (lead: Lead): ScoreEvent[] => {
+  const events: ScoreEvent[] = [];
+  const now = new Date();
+  let score = Math.max(10, lead.score - 60 - Math.floor(Math.random() * 20));
+
+  for (let i = 55; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+
+    // Add some variation
+    const change = Math.floor(Math.random() * 8) - 2;
+    score = Math.min(100, Math.max(0, score + change));
+
+    let event: string | undefined;
+    let delta: number | undefined;
+
+    // Add meaningful events at certain intervals
+    if (i === 45) { event = 'First website visit'; delta = 8; score += 8; }
+    if (i === 35) { event = 'Downloaded whitepaper'; delta = 24; score = Math.min(100, score + 24); }
+    if (i === 25) { event = 'Viewed pricing page'; delta = 18; score = Math.min(100, score + 18); }
+    if (i === 18) { event = 'No activity for 7 days'; delta = -12; score = Math.max(0, score - 12); }
+    if (i === 10) { event = 'Attended webinar'; delta = 32; score = Math.min(100, score + 32); }
+    if (i === 5) { event = 'Replied to email'; delta = 15; score = Math.min(100, score + 15); }
+
+    // On the last day, clamp to lead's actual score
+    if (i === 0) score = lead.score;
+
+    events.push({
+      date: `${d.getMonth() + 1}/${d.getDate()}`,
+      score,
+      event,
+      delta,
+    });
+  }
+
+  return events;
+};
+
+// Simulate per-lead factor breakdown
+const generateLeadFactors = (lead: Lead) => {
+  const base = lead.score;
+  return {
+    emailEngagement: Math.min(100, base + Math.floor(Math.random() * 20) - 5),
+    emailOpens: `${Math.max(3, Math.floor(base / 7))}/15`,
+    emailClicks: `${Math.max(1, Math.floor(base / 12))}/15`,
+    emailReplies: Math.max(0, Math.floor(base / 35)),
+    websiteActivity: Math.min(100, base - 5 + Math.floor(Math.random() * 15)),
+    topPages: base > 70 ? ['Pricing (3x)', 'Case Studies (2x)', 'Demo'] : ['Blog (2x)', 'Features', 'About'],
+    visitDuration: `${Math.max(2, Math.floor(base / 6))} minutes`,
+    weeklyVisits: Math.max(1, Math.floor(base / 25)),
+    companyFit: Math.min(100, base + Math.floor(Math.random() * 10)),
+    conversionProbability: Math.min(99, Math.max(15, base + Math.floor(Math.random() * 12))),
+    expectedTimeline: base > 80 ? '3-7 days' : base > 60 ? '7-14 days' : '14-30 days',
+    recommendedAction: base > 80 ? 'Send technical demo invite' : base > 60 ? 'Share case study' : 'Continue nurture sequence',
+  };
+};
+
+const renderStars = (score: number) => {
+  const starCount = score > 90 ? 5 : score > 75 ? 4 : score > 55 ? 3 : score > 35 ? 2 : 1;
+  return (
+    <div className="flex items-center space-x-0.5">
+      {Array.from({ length: 5 }).map((_, i) => (
+        i < starCount
+          ? <StarIcon key={i} className="w-3.5 h-3.5 text-amber-400" />
+          : <StarOutlineIcon key={i} className="w-3.5 h-3.5 text-slate-200" />
+      ))}
+    </div>
+  );
+};
+
+const LeadIntelligence: React.FC = () => {
+  const { user } = useOutletContext<LayoutContext>();
+  const navigate = useNavigate();
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [factors, setFactors] = useState<ScoringFactor[]>(DEFAULT_SCORING_FACTORS);
+  const [showModelPanel, setShowModelPanel] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filterBucket, setFilterBucket] = useState<ScoreBucket | 'all'>('all');
+  const [aiConfidence, setAiConfidence] = useState(94.2);
+
+  // ─── Fetch ───
+  const fetchData = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('client_id', user.id)
+        .order('score', { ascending: false });
+      const fetchedLeads = (data || []) as Lead[];
+      setLeads(fetchedLeads);
+      if (fetchedLeads.length > 0 && !selectedLeadId) {
+        setSelectedLeadId(fetchedLeads[0].id);
+      }
+    } catch (err) {
+      console.error('Intelligence fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id, selectedLeadId]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ─── Computed ───
+  const buckets = useMemo(() => {
+    const total = leads.length || 1;
+    const hot = leads.filter(l => l.score > 75);
+    const warm = leads.filter(l => l.score > 50 && l.score <= 75);
+    const cool = leads.filter(l => l.score > 25 && l.score <= 50);
+    const cold = leads.filter(l => l.score <= 25);
+    return {
+      hot: { count: hot.length, pct: Math.round((hot.length / total) * 100), leads: hot },
+      warm: { count: warm.length, pct: Math.round((warm.length / total) * 100), leads: warm },
+      cool: { count: cool.length, pct: Math.round((cool.length / total) * 100), leads: cool },
+      cold: { count: cold.length, pct: Math.round((cold.length / total) * 100), leads: cold },
+    };
+  }, [leads]);
+
+  const filteredLeads = useMemo(() => {
+    if (filterBucket === 'all') return leads;
+    return buckets[filterBucket].leads;
+  }, [leads, filterBucket, buckets]);
+
+  const selectedLead = useMemo(
+    () => leads.find(l => l.id === selectedLeadId) || null,
+    [leads, selectedLeadId]
+  );
+
+  const leadFactors = useMemo(
+    () => selectedLead ? generateLeadFactors(selectedLead) : null,
+    [selectedLead]
+  );
+
+  const scoreHistory = useMemo(
+    () => selectedLead ? generateScoreHistory(selectedLead) : [],
+    [selectedLead]
+  );
+
+  const scoreEvents = useMemo(
+    () => scoreHistory.filter(e => e.event),
+    [scoreHistory]
+  );
+
+  // ─── Handlers ───
+  const handleRefreshScores = () => {
+    setRefreshing(true);
+    setAiConfidence(+(92 + Math.random() * 5).toFixed(1));
+    setTimeout(() => setRefreshing(false), 1200);
+  };
+
+  const handleWeightChange = (id: string, newWeight: number) => {
+    setFactors(prev => {
+      const updated = prev.map(f => f.id === id ? { ...f, weight: newWeight } : f);
+      // Normalize to 100%
+      const total = updated.reduce((a, b) => a + b.weight, 0);
+      if (total > 0 && total !== 100) {
+        const scale = 100 / total;
+        return updated.map(f => ({ ...f, weight: Math.round(f.weight * scale) }));
+      }
+      return updated;
+    });
+  };
+
+  const handleToggleFactor = (id: string) => {
+    setFactors(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
+  };
+
+  const handleExportAnalysis = () => {
+    if (!selectedLead || !leadFactors) return;
+    const content = `AuraFunnel Lead Intelligence Report
+Generated: ${new Date().toLocaleDateString()}
+Lead: ${selectedLead.name}
+Company: ${selectedLead.company}
+Score: ${selectedLead.score}
+Status: ${selectedLead.status}
+
+Factor Breakdown:
+- Email Engagement: ${leadFactors.emailEngagement}%
+- Website Activity: ${leadFactors.websiteActivity}%
+- Company Fit: ${leadFactors.companyFit}%
+
+AI Prediction:
+- Conversion Probability: ${leadFactors.conversionProbability}%
+- Expected Timeline: ${leadFactors.expectedTimeline}
+- Recommended Action: ${leadFactors.recommendedAction}
+
+Score History Events:
+${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}${e.delta})`).join('\n')}`;
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lead_intelligence_${selectedLead.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ─── Loading ───
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* HEADER                                                       */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
+            <BrainIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
+              Lead Intelligence Dashboard
+            </h1>
+            <p className="text-slate-400 text-xs mt-0.5">
+              AI-powered lead scoring, analysis &amp; predictions &middot; {leads.length} leads tracked
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setFilterBucket(filterBucket === 'all' ? 'hot' : 'all')}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <FilterIcon className="w-4 h-4 text-slate-400" />
+            <span>{filterBucket === 'all' ? 'All Leads' : `${filterBucket.charAt(0).toUpperCase() + filterBucket.slice(1)} Only`}</span>
+          </button>
+          <button
+            onClick={handleExportAnalysis}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+          >
+            <DownloadIcon className="w-4 h-4" />
+            <span>Export</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* SCORE DISTRIBUTION                                           */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
+              <TargetIcon className="w-5 h-5 text-indigo-600" />
+              <span>Lead Scoring Breakdown</span>
+              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase">Real-time</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">Distribution across score buckets</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="text-right">
+              <p className="text-xs text-slate-400">AI Confidence</p>
+              <p className="text-sm font-black text-indigo-600">{aiConfidence}%</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleRefreshScores}
+                disabled={refreshing}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                <RefreshIcon className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              <button
+                onClick={() => setShowModelPanel(!showModelPanel)}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                <SlidersIcon className="w-3.5 h-3.5" />
+                <span>Adjust Model</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Distribution Bars */}
+        <div className="space-y-3">
+          {([
+            { key: 'hot' as ScoreBucket, label: 'Hot (76-100)', color: '#ef4444', bgColor: 'bg-rose-50', textColor: 'text-rose-700', icon: <FlameIcon className="w-4 h-4" /> },
+            { key: 'warm' as ScoreBucket, label: 'Warm (51-75)', color: '#f59e0b', bgColor: 'bg-amber-50', textColor: 'text-amber-700', icon: <TrendUpIcon className="w-4 h-4" /> },
+            { key: 'cool' as ScoreBucket, label: 'Cool (26-50)', color: '#6366f1', bgColor: 'bg-indigo-50', textColor: 'text-indigo-700', icon: <ActivityIcon className="w-4 h-4" /> },
+            { key: 'cold' as ScoreBucket, label: 'Cold (0-25)', color: '#94a3b8', bgColor: 'bg-slate-50', textColor: 'text-slate-600', icon: <ClockIcon className="w-4 h-4" /> },
+          ]).map(bucket => (
+            <button
+              key={bucket.key}
+              onClick={() => setFilterBucket(filterBucket === bucket.key ? 'all' : bucket.key)}
+              className={`w-full flex items-center space-x-4 p-3 rounded-xl transition-all ${
+                filterBucket === bucket.key ? 'bg-slate-50 ring-2 ring-indigo-200' : 'hover:bg-slate-50/50'
+              }`}
+            >
+              <div className={`w-8 h-8 rounded-lg ${bucket.bgColor} flex items-center justify-center ${bucket.textColor}`}>
+                {bucket.icon}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-slate-700">{bucket.label}</span>
+                  <span className="text-xs font-black text-slate-600">
+                    {buckets[bucket.key].count} leads &middot; {buckets[bucket.key].pct}%
+                  </span>
+                </div>
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${Math.max(2, buckets[bucket.key].pct)}%`, backgroundColor: bucket.color }}
+                  ></div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+          <p className="text-xs text-slate-400">
+            Last Updated: <span className="font-bold text-slate-500">Just now</span>
+          </p>
+          <p className="text-xs text-slate-400">
+            Total: <span className="font-bold text-slate-500">{leads.length} leads</span>
+          </p>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* SCORING FACTORS TABLE                                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
+            <ChartIcon className="w-5 h-5 text-violet-600" />
+            <span>Scoring Factors</span>
+            <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full uppercase">Interactive</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">Click weights to edit &middot; Toggle factors on/off</p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider w-10">On</th>
+                <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Factor</th>
+                <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Weight</th>
+                <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Impact</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {factors.map(factor => (
+                <tr
+                  key={factor.id}
+                  className={`transition-colors ${factor.enabled ? 'hover:bg-slate-50/50' : 'opacity-40'}`}
+                >
+                  <td className="px-6 py-3.5">
+                    <button
+                      onClick={() => handleToggleFactor(factor.id)}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                        factor.enabled
+                          ? 'bg-indigo-600 border-indigo-600 text-white'
+                          : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      {factor.enabled && <CheckIcon className="w-3 h-3" />}
+                    </button>
+                  </td>
+                  <td className="px-6 py-3.5">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-lg bg-${factor.color}-50 flex items-center justify-center text-${factor.color}-600`}>
+                        {factor.icon}
+                      </div>
+                      <span className="font-semibold text-sm text-slate-800">{factor.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-3.5 text-right">
+                    <div className="flex items-center justify-end space-x-2">
+                      <input
+                        type="range"
+                        min={0}
+                        max={50}
+                        value={factor.weight}
+                        onChange={e => handleWeightChange(factor.id, parseInt(e.target.value))}
+                        className="w-20 h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                        disabled={!factor.enabled}
+                      />
+                      <span className="text-sm font-black text-indigo-600 w-10 text-right">{factor.weight}%</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-3.5 text-right">
+                    <div className="flex items-center justify-end space-x-2">
+                      <div className="flex space-x-0.5">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <div
+                            key={i}
+                            className={`w-4 h-1.5 rounded-full ${
+                              (factor.impact === 'High' && i < 5) ||
+                              (factor.impact === 'Medium' && i < 3) ||
+                              (factor.impact === 'Low' && i < 1)
+                                ? `bg-${IMPACT_COLORS[factor.impact]}-500`
+                                : 'bg-slate-100'
+                            }`}
+                          ></div>
+                        ))}
+                      </div>
+                      <span className={`text-xs font-bold text-${IMPACT_COLORS[factor.impact]}-600`}>
+                        {factor.impact}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MAIN AREA: Lead Selector + Analysis                          */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="flex flex-col lg:flex-row gap-6">
+
+        {/* Lead Selector (Left - 30%) */}
+        <div className="lg:w-[30%] space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 text-sm font-heading">Select Lead</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''} &middot; Sorted by score
+              </p>
+            </div>
+            <div className="max-h-[500px] overflow-y-auto divide-y divide-slate-50">
+              {filteredLeads.length === 0 ? (
+                <div className="p-8 text-center">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                    <TargetIcon className="w-6 h-6 text-slate-300" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-500">No leads in this bucket</p>
+                </div>
+              ) : (
+                filteredLeads.map(lead => (
+                  <button
+                    key={lead.id}
+                    onClick={() => setSelectedLeadId(lead.id)}
+                    className={`w-full flex items-center space-x-3 px-5 py-3.5 text-left transition-all ${
+                      selectedLeadId === lead.id
+                        ? 'bg-indigo-50 border-l-4 border-indigo-600'
+                        : 'hover:bg-slate-50 border-l-4 border-transparent'
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ${
+                      lead.score > 80 ? 'bg-rose-100 text-rose-700' :
+                      lead.score > 60 ? 'bg-amber-100 text-amber-700' :
+                      lead.score > 40 ? 'bg-indigo-100 text-indigo-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {lead.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{lead.name}</p>
+                      <p className="text-xs text-slate-400 truncate">{lead.company}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg text-xs font-black ${
+                        lead.score > 80 ? 'bg-rose-50 text-rose-700' :
+                        lead.score > 60 ? 'bg-amber-50 text-amber-700' :
+                        lead.score > 40 ? 'bg-indigo-50 text-indigo-700' :
+                        'bg-slate-50 text-slate-600'
+                      }`}>
+                        <span>{lead.score}</span>
+                      </span>
+                      <div className="mt-1">{renderStars(lead.score)}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Individual Lead Analysis (Right - 70%) */}
+        <div className="lg:w-[70%] space-y-6">
+
+          {selectedLead && leadFactors ? (
+            <>
+              {/* Lead Header */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center space-x-4">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black ${
+                      selectedLead.score > 80 ? 'bg-rose-100 text-rose-700' :
+                      selectedLead.score > 60 ? 'bg-amber-100 text-amber-700' :
+                      'bg-indigo-100 text-indigo-700'
+                    }`}>
+                      {selectedLead.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">{selectedLead.name}</h3>
+                      <p className="text-sm text-slate-400">{selectedLead.company} &middot; {selectedLead.email}</p>
+                      <div className="flex items-center space-x-3 mt-1">
+                        <span className="text-xs font-bold text-slate-500">Score: <span className="text-indigo-600">{selectedLead.score}</span></span>
+                        {renderStars(selectedLead.score)}
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${
+                          selectedLead.status === 'Qualified' ? 'bg-emerald-50 text-emerald-700' :
+                          selectedLead.status === 'Contacted' ? 'bg-blue-50 text-blue-700' :
+                          selectedLead.status === 'Lost' ? 'bg-slate-50 text-slate-500' :
+                          'bg-amber-50 text-amber-700'
+                        }`}>
+                          {selectedLead.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => navigate(`/portal/leads/${selectedLead.id}`)}
+                      className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+                    >
+                      <EyeIcon className="w-3.5 h-3.5" />
+                      <span>View Timeline</span>
+                    </button>
+                    <button className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+                      <SlidersIcon className="w-3.5 h-3.5" />
+                      <span>Override Score</span>
+                    </button>
+                    <button
+                      onClick={handleExportAnalysis}
+                      className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+                    >
+                      <DownloadIcon className="w-3.5 h-3.5" />
+                      <span>Export</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Factor Breakdowns */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Email Engagement */}
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <MailIcon className="w-4 h-4 text-indigo-600" />
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Email Engagement</span>
+                    </div>
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-slate-400">Score</span>
+                        <span className="text-xs font-black text-indigo-600">{leadFactors.emailEngagement}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${leadFactors.emailEngagement}%` }}></div>
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-xs text-slate-500">
+                      <p>&bull; Opens: {leadFactors.emailOpens} emails ({Math.round(parseInt(leadFactors.emailOpens) / 15 * 100)}%)</p>
+                      <p>&bull; Clicks: {leadFactors.emailClicks} emails ({Math.round(parseInt(leadFactors.emailClicks) / 15 * 100)}%)</p>
+                      <p>&bull; Replies: {leadFactors.emailReplies} emails</p>
+                    </div>
+                  </div>
+
+                  {/* Website Activity */}
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <GlobeIcon className="w-4 h-4 text-violet-600" />
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Website Activity</span>
+                    </div>
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-slate-400">Score</span>
+                        <span className="text-xs font-black text-violet-600">{leadFactors.websiteActivity}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-violet-500 rounded-full transition-all duration-500" style={{ width: `${leadFactors.websiteActivity}%` }}></div>
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-xs text-slate-500">
+                      <p>&bull; Pages: {leadFactors.topPages.join(', ')}</p>
+                      <p>&bull; Duration: {leadFactors.visitDuration} total</p>
+                      <p>&bull; Frequency: {leadFactors.weeklyVisits} visits this week</p>
+                    </div>
+                  </div>
+
+                  {/* Company Fit */}
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <BriefcaseIcon className="w-4 h-4 text-emerald-600" />
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Company Fit</span>
+                    </div>
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-slate-400">Score</span>
+                        <span className="text-xs font-black text-emerald-600">{leadFactors.companyFit}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${leadFactors.companyFit}%` }}></div>
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-xs text-slate-500">
+                      <p>&bull; Industry: Technology</p>
+                      <p>&bull; Company Size: 50-200</p>
+                      <p>&bull; Revenue: $5M-$20M</p>
+                    </div>
+                  </div>
+
+                  {/* AI Prediction */}
+                  <div className="p-4 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl text-white">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <SparklesIcon className="w-4 h-4 text-indigo-200" />
+                      <span className="text-xs font-black text-indigo-200 uppercase tracking-wider">AI Prediction</span>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[10px] text-indigo-200">Conversion Probability</p>
+                        <p className="text-2xl font-black">{leadFactors.conversionProbability}%</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-indigo-200">Expected Timeline</p>
+                        <p className="text-sm font-bold">{leadFactors.expectedTimeline}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-indigo-200">Recommended Action</p>
+                        <p className="text-sm font-bold">{leadFactors.recommendedAction}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ═══════════════════════════════════════════════════════ */}
+              {/* SCORE EVOLUTION TIMELINE                               */}
+              {/* ═══════════════════════════════════════════════════════ */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
+                      <ActivityIcon className="w-5 h-5 text-emerald-600" />
+                      <span>Score Evolution Timeline</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">{selectedLead.name}&rsquo;s score over the last 8 weeks</p>
+                  </div>
+                </div>
+
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={scoreHistory}>
+                    <defs>
+                      <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" interval={6} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}
+                      formatter={(value: number) => [`${value}`, 'Score']}
+                      labelFormatter={(label) => `Date: ${label}`}
+                    />
+                    <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Hot', position: 'right', fontSize: 10, fill: '#ef4444' }} />
+                    <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: 'Warm', position: 'right', fontSize: 10, fill: '#f59e0b' }} />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#6366f1"
+                      strokeWidth={2.5}
+                      dot={(props: any) => {
+                        const { cx, cy, payload } = props;
+                        if (payload.event) {
+                          return (
+                            <circle
+                              cx={cx} cy={cy} r={5}
+                              fill={payload.delta && payload.delta > 0 ? '#10b981' : '#ef4444'}
+                              stroke="white" strokeWidth={2}
+                            />
+                          );
+                        }
+                        return <circle cx={cx} cy={cy} r={0} />;
+                      }}
+                      activeDot={{ r: 5, fill: '#6366f1' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+
+                {/* Key Events Legend */}
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Key Events</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {scoreEvents.map((evt, i) => (
+                      <div key={i} className="flex items-center space-x-2">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0 ${
+                          (evt.delta || 0) > 0 ? 'bg-emerald-500' : 'bg-rose-500'
+                        }`}>
+                          {(evt.delta || 0) > 0 ? '\u25B2' : '\u25BC'}
+                        </span>
+                        <p className="text-xs text-slate-600">
+                          <span className={`font-black ${(evt.delta || 0) > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {(evt.delta || 0) > 0 ? '+' : ''}{evt.delta}:
+                          </span>{' '}
+                          {evt.event} <span className="text-slate-400">({evt.date})</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="bg-white rounded-2xl p-16 border border-slate-100 shadow-sm text-center">
+              <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <BrainIcon className="w-8 h-8 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 mb-2">No Lead Selected</h3>
+              <p className="text-sm text-slate-400">
+                {leads.length > 0 ? 'Select a lead from the list to view their intelligence profile.' : 'Add leads to start analyzing their scoring data.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODEL ADJUSTMENT PANEL (Slide-down)                          */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showModelPanel && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowModelPanel(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Scoring Model Configuration</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Adjust factor weights &middot; Changes apply to all leads</p>
+              </div>
+              <button onClick={() => setShowModelPanel(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {factors.map(factor => (
+                <div key={factor.id} className="flex items-center space-x-4">
+                  <div className={`w-8 h-8 rounded-lg bg-${factor.color}-50 flex items-center justify-center text-${factor.color}-600 shrink-0`}>
+                    {factor.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-bold text-slate-700">{factor.name}</span>
+                      <span className="text-sm font-black text-indigo-600">{factor.weight}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={50}
+                      value={factor.weight}
+                      onChange={e => handleWeightChange(factor.id, parseInt(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleToggleFactor(factor.id)}
+                    className={`relative w-10 h-5 rounded-full transition-all shrink-0 ${
+                      factor.enabled ? 'bg-indigo-600' : 'bg-slate-200'
+                    }`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-md transition-transform ${
+                      factor.enabled ? 'translate-x-5' : 'translate-x-0.5'
+                    }`}></div>
+                  </button>
+                </div>
+              ))}
+
+              <div className="pt-4 border-t border-slate-100">
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Total Weight</p>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 rounded-full"
+                        style={{ width: `${factors.reduce((a, b) => a + b.weight, 0)}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm font-black text-slate-900">
+                      {factors.reduce((a, b) => a + b.weight, 0)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => { setShowModelPanel(false); handleRefreshScores(); }}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+              >
+                Apply &amp; Recalculate Scores
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default LeadIntelligence;
