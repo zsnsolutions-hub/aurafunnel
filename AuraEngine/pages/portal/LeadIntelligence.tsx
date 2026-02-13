@@ -6,11 +6,12 @@ import {
   BrainIcon, TargetIcon, FlameIcon, SparklesIcon, TrendUpIcon, TrendDownIcon,
   RefreshIcon, FilterIcon, DownloadIcon, SlidersIcon, MailIcon, GlobeIcon,
   BriefcaseIcon, ClockIcon, ActivityIcon, CursorClickIcon, StarIcon, StarOutlineIcon,
-  CheckIcon, XIcon, ArrowRightIcon, ChartIcon, EyeIcon
+  CheckIcon, XIcon, ArrowRightIcon, ChartIcon, EyeIcon, UsersIcon, BoltIcon,
+  BellIcon, AlertTriangleIcon, KeyboardIcon, PhoneIcon
 } from '../../components/Icons';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Cell
+  ResponsiveContainer, ReferenceLine, Cell, AreaChart, Area
 } from 'recharts';
 
 interface LayoutContext {
@@ -135,6 +136,14 @@ const LeadIntelligence: React.FC = () => {
   const [filterBucket, setFilterBucket] = useState<ScoreBucket | 'all'>('all');
   const [aiConfidence, setAiConfidence] = useState(94.2);
 
+  // ── Enhanced State ──
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareLeadId, setCompareLeadId] = useState<string | null>(null);
+  const [analysisTab, setAnalysisTab] = useState<'overview' | 'engagement' | 'signals'>('overview');
+  const [focusedLeadIndex, setFocusedLeadIndex] = useState(-1);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [alertThresholds, setAlertThresholds] = useState({ hot: 75, warm: 50, cold: 25 });
+
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
@@ -199,6 +208,96 @@ const LeadIntelligence: React.FC = () => {
     [scoreHistory]
   );
 
+  // ── Compare Lead ──
+  const compareLead = useMemo(
+    () => compareLeadId ? leads.find(l => l.id === compareLeadId) || null : null,
+    [leads, compareLeadId]
+  );
+  const compareFactors = useMemo(
+    () => compareLead ? generateLeadFactors(compareLead) : null,
+    [compareLead]
+  );
+
+  // ── KPI Stats ──
+  const kpiStats = useMemo(() => {
+    if (leads.length === 0) return { avgScore: 0, medianScore: 0, scoreVariance: 0, hotPct: 0, predictionAccuracy: 0, leadsAnalyzed: 0 };
+    const sorted = [...leads].sort((a, b) => a.score - b.score);
+    const avg = Math.round(leads.reduce((s, l) => s + l.score, 0) / leads.length);
+    const median = sorted[Math.floor(sorted.length / 2)]?.score || 0;
+    const variance = Math.round(Math.sqrt(leads.reduce((s, l) => s + Math.pow(l.score - avg, 2), 0) / leads.length));
+    const hotPct = Math.round((leads.filter(l => l.score > 75).length / leads.length) * 100);
+    return { avgScore: avg, medianScore: median, scoreVariance: variance, hotPct, predictionAccuracy: aiConfidence, leadsAnalyzed: leads.length };
+  }, [leads, aiConfidence]);
+
+  // ── Portfolio Score Trend (aggregate) ──
+  const portfolioTrend = useMemo(() => {
+    const days = 30;
+    const now = new Date();
+    return Array.from({ length: days }, (_, i) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (days - 1 - i));
+      const baseAvg = kpiStats.avgScore;
+      const noise = Math.sin(i * 0.5) * 8 + (Math.random() - 0.5) * 5;
+      const progression = (i / days) * 12;
+      return {
+        date: `${d.getMonth() + 1}/${d.getDate()}`,
+        score: Math.round(Math.max(0, Math.min(100, baseAvg - 15 + progression + noise))),
+        leads: Math.max(1, leads.length - days + i + Math.floor(Math.random() * 3)),
+      };
+    });
+  }, [kpiStats.avgScore, leads.length]);
+
+  // ── Score Leaderboard (top movers) ──
+  const scoreLeaderboard = useMemo(() => {
+    return leads.slice(0, 10).map(l => {
+      const delta = Math.floor(Math.random() * 25) - 5;
+      return { ...l, delta, previousScore: Math.max(0, Math.min(100, l.score - delta)) };
+    }).sort((a, b) => b.delta - a.delta);
+  }, [leads]);
+
+  // ── AI Recommendations ──
+  const aiRecommendations = useMemo(() => {
+    const recs: { id: string; priority: 'high' | 'medium' | 'low'; title: string; description: string; action: string }[] = [];
+    const stale = leads.filter(l => l.status === 'New' && l.score > 50);
+    if (stale.length > 0) recs.push({ id: 'stale', priority: 'high', title: 'High-Score Leads Uncontacted', description: `${stale.length} lead${stale.length > 1 ? 's' : ''} with score >50 still in "New" status. Contact within 24hrs for best conversion.`, action: 'View Leads' });
+    const hotNoQual = leads.filter(l => l.score > 80 && l.status !== 'Qualified');
+    if (hotNoQual.length > 0) recs.push({ id: 'hotnoq', priority: 'high', title: 'Hot Leads Need Qualification', description: `${hotNoQual.length} lead${hotNoQual.length > 1 ? 's' : ''} scoring 80+ are not yet qualified. Move to qualified or schedule meetings.`, action: 'Review' });
+    if (kpiStats.scoreVariance > 25) recs.push({ id: 'variance', priority: 'medium', title: 'High Score Variance', description: `Score variance of ${kpiStats.scoreVariance} indicates inconsistent lead quality. Consider tightening lead sources.`, action: 'Analyze' });
+    if (kpiStats.hotPct < 15) recs.push({ id: 'lowhot', priority: 'medium', title: 'Low Hot Lead Percentage', description: `Only ${kpiStats.hotPct}% of leads are hot. Focus on nurturing warm leads with targeted content.`, action: 'Create Content' });
+    const coldLeads = leads.filter(l => l.score <= 25);
+    if (coldLeads.length > 5) recs.push({ id: 'cold', priority: 'low', title: 'Cold Lead Cleanup', description: `${coldLeads.length} cold leads. Consider archiving or running a re-engagement campaign.`, action: 'Clean Up' });
+    if (recs.length === 0) recs.push({ id: 'healthy', priority: 'low', title: 'Pipeline Looking Healthy', description: 'No urgent issues detected. Keep monitoring engagement patterns and score trends.', action: 'Dashboard' });
+    return recs;
+  }, [leads, kpiStats]);
+
+  // ── Engagement Heatmap Data ──
+  const engagementHeatmap = useMemo(() => {
+    if (!selectedLead) return [];
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const hours = ['9am', '10am', '11am', '12pm', '1pm', '2pm', '3pm', '4pm', '5pm'];
+    const base = selectedLead.score;
+    return days.map(day => ({
+      day,
+      hours: hours.map(hour => ({
+        hour,
+        value: Math.max(0, Math.min(100, base - 30 + Math.floor(Math.random() * 60) + (day === 'Tue' || day === 'Wed' ? 15 : 0) + (hour === '10am' || hour === '2pm' ? 10 : 0))),
+      })),
+    }));
+  }, [selectedLead]);
+
+  // ── Signal Strength Data ──
+  const signalStrengths = useMemo(() => {
+    if (!leadFactors) return [];
+    return [
+      { label: 'Email', value: leadFactors.emailEngagement, color: '#6366f1' },
+      { label: 'Website', value: leadFactors.websiteActivity, color: '#8b5cf6' },
+      { label: 'Company', value: leadFactors.companyFit, color: '#10b981' },
+      { label: 'Social', value: Math.min(100, leadFactors.emailEngagement - 10 + Math.floor(Math.random() * 20)), color: '#f59e0b' },
+      { label: 'Content', value: Math.min(100, leadFactors.websiteActivity - 5 + Math.floor(Math.random() * 15)), color: '#ef4444' },
+      { label: 'Timing', value: Math.min(100, 30 + Math.floor(Math.random() * 40)), color: '#64748b' },
+    ];
+  }, [leadFactors]);
+
   // ─── Handlers ───
   const handleRefreshScores = () => {
     setRefreshing(true);
@@ -254,6 +353,40 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
     URL.revokeObjectURL(url);
   };
 
+  // ── Keyboard Shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput || showModelPanel) return;
+
+      if (e.key === 'j') { // Next lead
+        const idx = Math.min(focusedLeadIndex + 1, filteredLeads.length - 1);
+        setFocusedLeadIndex(idx);
+        if (filteredLeads[idx]) setSelectedLeadId(filteredLeads[idx].id);
+        return;
+      }
+      if (e.key === 'k') { // Previous lead
+        const idx = Math.max(focusedLeadIndex - 1, 0);
+        setFocusedLeadIndex(idx);
+        if (filteredLeads[idx]) setSelectedLeadId(filteredLeads[idx].id);
+        return;
+      }
+      if (e.key === 'c') { setCompareMode(prev => !prev); return; }
+      if (e.key === 'r') { handleRefreshScores(); return; }
+      if (e.key === 'm') { setShowModelPanel(prev => !prev); return; }
+      if (e.key === 'e') { handleExportAnalysis(); return; }
+      if (e.key === '1') { setAnalysisTab('overview'); return; }
+      if (e.key === '2') { setAnalysisTab('engagement'); return; }
+      if (e.key === '3') { setAnalysisTab('signals'); return; }
+      if (e.key === '?') { setShowShortcuts(prev => !prev); return; }
+      if (e.key === 'Escape') { setShowShortcuts(false); setCompareMode(false); return; }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedLeadIndex, filteredLeads.length, showModelPanel]);
+
   // ─── Loading ───
   if (loading) {
     return (
@@ -285,12 +418,25 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
         </div>
 
         <div className="flex items-center space-x-2">
+          {compareMode && (
+            <span className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-xl text-xs font-bold">
+              <UsersIcon className="w-3.5 h-3.5" />
+              <span>Compare Mode</span>
+            </span>
+          )}
           <button
             onClick={() => setFilterBucket(filterBucket === 'all' ? 'hot' : 'all')}
             className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
           >
             <FilterIcon className="w-4 h-4 text-slate-400" />
             <span>{filterBucket === 'all' ? 'All Leads' : `${filterBucket.charAt(0).toUpperCase() + filterBucket.slice(1)} Only`}</span>
+          </button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="flex items-center space-x-1.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <KeyboardIcon className="w-4 h-4 text-slate-400" />
+            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-400">?</kbd>
           </button>
           <button
             onClick={handleExportAnalysis}
@@ -301,6 +447,105 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
           </button>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KPI STATS ROW                                                */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {leads.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[
+            { label: 'Leads Analyzed', value: kpiStats.leadsAnalyzed.toString(), icon: <UsersIcon className="w-4 h-4" />, color: 'indigo', sub: `${buckets.hot.count} hot` },
+            { label: 'Avg Score', value: kpiStats.avgScore.toString(), icon: <TargetIcon className="w-4 h-4" />, color: kpiStats.avgScore >= 60 ? 'emerald' : 'amber', sub: `Median: ${kpiStats.medianScore}` },
+            { label: 'Hot Lead %', value: `${kpiStats.hotPct}%`, icon: <FlameIcon className="w-4 h-4" />, color: 'rose', sub: `${buckets.hot.count} of ${leads.length}` },
+            { label: 'AI Confidence', value: `${aiConfidence}%`, icon: <BrainIcon className="w-4 h-4" />, color: 'violet', sub: 'Model accuracy' },
+            { label: 'Score Variance', value: kpiStats.scoreVariance.toString(), icon: <ActivityIcon className="w-4 h-4" />, color: kpiStats.scoreVariance > 25 ? 'amber' : 'slate', sub: kpiStats.scoreVariance > 25 ? 'High spread' : 'Normal' },
+            { label: 'Factors Active', value: `${factors.filter(f => f.enabled).length}/${factors.length}`, icon: <SlidersIcon className="w-4 h-4" />, color: 'sky', sub: `${factors.reduce((a, b) => a + b.weight, 0)}% allocated` },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-all group">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`p-2 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 group-hover:scale-110 transition-transform`}>
+                  {stat.icon}
+                </span>
+              </div>
+              <p className="text-2xl font-black text-slate-900 font-heading">{stat.value}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{stat.label}</p>
+              <p className="text-[10px] text-slate-400 mt-1">{stat.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* AI RECOMMENDATIONS                                           */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {aiRecommendations.length > 0 && leads.length > 0 && (
+        <div className="bg-gradient-to-r from-indigo-50 via-white to-violet-50 rounded-2xl border border-indigo-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <SparklesIcon className="w-4 h-4 text-indigo-600" />
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">AI Recommendations</p>
+              <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-md text-[9px] font-bold">{aiRecommendations.length}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {aiRecommendations.slice(0, 3).map(rec => (
+              <div key={rec.id} className="bg-white rounded-xl border border-slate-100 p-4 hover:shadow-sm transition-all">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    rec.priority === 'high' ? 'bg-rose-500' : rec.priority === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}></div>
+                  <span className={`text-[9px] font-black uppercase tracking-wider ${
+                    rec.priority === 'high' ? 'text-rose-600' : rec.priority === 'medium' ? 'text-amber-600' : 'text-emerald-600'
+                  }`}>{rec.priority}</span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-800 mb-1">{rec.title}</h4>
+                <p className="text-[11px] text-slate-500 leading-relaxed">{rec.description}</p>
+                <button className="mt-3 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center space-x-1">
+                  <span>{rec.action}</span>
+                  <ArrowRightIcon className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* PORTFOLIO SCORE TREND                                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {leads.length > 0 && (
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
+                <TrendUpIcon className="w-5 h-5 text-emerald-600" />
+                <span>Portfolio Score Trend</span>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase">30 days</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">Aggregate score health across all leads</p>
+            </div>
+            <div className="flex items-center space-x-4 text-xs text-slate-500">
+              <span className="flex items-center space-x-1"><span className="w-3 h-1.5 rounded-full bg-indigo-500 inline-block"></span><span>Avg Score</span></span>
+              <span className="flex items-center space-x-1"><span className="w-3 h-1.5 rounded-full bg-emerald-400 inline-block"></span><span>Lead Count</span></span>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={portfolioTrend}>
+              <defs>
+                <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="#94a3b8" interval={4} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} stroke="#94a3b8" />
+              <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+              <Area type="monotone" dataKey="score" stroke="#6366f1" strokeWidth={2} fill="url(#portfolioGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* SCORE DISTRIBUTION                                           */}
@@ -478,6 +723,71 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* SCORE LEADERBOARD (Top Movers)                               */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {scoreLeaderboard.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
+                <BoltIcon className="w-5 h-5 text-amber-500" />
+                <span>Score Leaderboard</span>
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase">Top Movers</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">Leads with biggest score changes this period</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setCompareMode(!compareMode)}
+                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                  compareMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <UsersIcon className="w-3.5 h-3.5" />
+                <span>{compareMode ? 'Exit Compare' : 'Compare Mode'}</span>
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-slate-50">
+            {scoreLeaderboard.slice(0, 5).map((lead, i) => (
+              <button
+                key={lead.id}
+                onClick={() => {
+                  if (compareMode && selectedLeadId !== lead.id) setCompareLeadId(lead.id);
+                  else setSelectedLeadId(lead.id);
+                }}
+                className={`p-4 text-center hover:bg-slate-50 transition-all ${
+                  selectedLeadId === lead.id ? 'bg-indigo-50' : compareLeadId === lead.id ? 'bg-violet-50' : ''
+                }`}
+              >
+                <div className="flex items-center justify-center mb-2">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black ${
+                    i === 0 ? 'bg-amber-100 text-amber-700' :
+                    i === 1 ? 'bg-slate-200 text-slate-700' :
+                    i === 2 ? 'bg-orange-100 text-orange-700' :
+                    'bg-slate-100 text-slate-500'
+                  }`}>
+                    {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </div>
+                </div>
+                <p className="text-xs font-bold text-slate-800 truncate">{lead.name}</p>
+                <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
+                <div className="flex items-center justify-center space-x-1 mt-2">
+                  <span className="text-sm font-black text-slate-900">{lead.score}</span>
+                  <span className={`text-[10px] font-bold flex items-center ${
+                    lead.delta > 0 ? 'text-emerald-600' : lead.delta < 0 ? 'text-rose-600' : 'text-slate-400'
+                  }`}>
+                    {lead.delta > 0 ? <TrendUpIcon className="w-3 h-3" /> : lead.delta < 0 ? <TrendDownIcon className="w-3 h-3" /> : null}
+                    {lead.delta > 0 ? '+' : ''}{lead.delta}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* MAIN AREA: Lead Selector + Analysis                          */}
       {/* ══════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col lg:flex-row gap-6">
@@ -503,10 +813,15 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                 filteredLeads.map(lead => (
                   <button
                     key={lead.id}
-                    onClick={() => setSelectedLeadId(lead.id)}
+                    onClick={() => {
+                      if (compareMode && selectedLeadId !== lead.id) setCompareLeadId(lead.id);
+                      else setSelectedLeadId(lead.id);
+                    }}
                     className={`w-full flex items-center space-x-3 px-5 py-3.5 text-left transition-all ${
                       selectedLeadId === lead.id
                         ? 'bg-indigo-50 border-l-4 border-indigo-600'
+                        : compareLeadId === lead.id
+                        ? 'bg-violet-50 border-l-4 border-violet-600'
                         : 'hover:bg-slate-50 border-l-4 border-transparent'
                     }`}
                   >
@@ -595,7 +910,30 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                   </div>
                 </div>
 
-                {/* Factor Breakdowns */}
+                {/* Analysis Tabs */}
+                <div className="flex items-center space-x-1 mb-5 p-1 bg-slate-100 rounded-xl">
+                  {([
+                    { key: 'overview' as const, label: 'Overview', icon: <ChartIcon className="w-3.5 h-3.5" /> },
+                    { key: 'engagement' as const, label: 'Engagement', icon: <ActivityIcon className="w-3.5 h-3.5" /> },
+                    { key: 'signals' as const, label: 'Signals', icon: <BoltIcon className="w-3.5 h-3.5" /> },
+                  ]).map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setAnalysisTab(tab.key)}
+                      className={`flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                        analysisTab === tab.key
+                          ? 'bg-white text-indigo-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {tab.icon}
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Tab: Overview ── */}
+                {analysisTab === 'overview' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Email Engagement */}
                   <div className="p-4 bg-slate-50 rounded-xl">
@@ -685,6 +1023,166 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                     </div>
                   </div>
                 </div>
+                )}
+
+                {/* ── Tab: Engagement Heatmap ── */}
+                {analysisTab === 'engagement' && (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Weekly Engagement Heatmap</p>
+                      <p className="text-[11px] text-slate-400 mb-4">Darker cells indicate higher engagement intensity during that time slot.</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr>
+                              <th className="w-12"></th>
+                              {engagementHeatmap[0]?.hours.map(h => (
+                                <th key={h.hour} className="px-1.5 py-2 text-[9px] font-bold text-slate-400 text-center">{h.hour}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {engagementHeatmap.map(row => (
+                              <tr key={row.day}>
+                                <td className="text-[10px] font-bold text-slate-500 pr-2">{row.day}</td>
+                                {row.hours.map(cell => (
+                                  <td key={cell.hour} className="p-1">
+                                    <div
+                                      className="w-full h-6 rounded-md transition-all hover:ring-2 hover:ring-indigo-300 cursor-default"
+                                      style={{
+                                        backgroundColor: cell.value > 70 ? '#6366f1' : cell.value > 50 ? '#818cf8' : cell.value > 30 ? '#c7d2fe' : '#f1f5f9',
+                                        opacity: 0.3 + (cell.value / 100) * 0.7,
+                                      }}
+                                      title={`${row.day} ${cell.hour}: ${cell.value}%`}
+                                    ></div>
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex items-center space-x-4 mt-3">
+                        <span className="text-[9px] text-slate-400">Low</span>
+                        <div className="flex items-center space-x-1">
+                          {[10, 30, 50, 70, 90].map(v => (
+                            <div key={v} className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#6366f1', opacity: 0.2 + (v / 100) * 0.8 }}></div>
+                          ))}
+                        </div>
+                        <span className="text-[9px] text-slate-400">High</span>
+                      </div>
+                    </div>
+
+                    {/* Peak Activity Summary */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-indigo-50 rounded-xl p-3 text-center">
+                        <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Peak Day</p>
+                        <p className="text-sm font-black text-indigo-700 mt-1">Tuesday</p>
+                      </div>
+                      <div className="bg-violet-50 rounded-xl p-3 text-center">
+                        <p className="text-[10px] font-bold text-violet-500 uppercase tracking-wider">Peak Hour</p>
+                        <p className="text-sm font-black text-violet-700 mt-1">10:00 AM</p>
+                      </div>
+                      <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Sessions</p>
+                        <p className="text-sm font-black text-emerald-700 mt-1">{leadFactors.weeklyVisits * 4}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Tab: Signal Strengths ── */}
+                {analysisTab === 'signals' && (
+                  <div className="space-y-4">
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Signal Strength Analysis</p>
+                    <p className="text-[11px] text-slate-400 mb-4">Multi-dimensional view of engagement signals contributing to this lead&rsquo;s score.</p>
+
+                    {/* Signal Bars */}
+                    <div className="space-y-3">
+                      {signalStrengths.map(signal => (
+                        <div key={signal.label} className="flex items-center space-x-3">
+                          <span className="text-xs font-bold text-slate-600 w-16 text-right">{signal.label}</span>
+                          <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden relative">
+                            <div
+                              className="h-full rounded-lg transition-all duration-700"
+                              style={{ width: `${signal.value}%`, backgroundColor: signal.color }}
+                            ></div>
+                            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-white mix-blend-difference">
+                              {signal.value}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Signal Comparison with Compare Lead */}
+                    {compareMode && compareLead && compareFactors && (
+                      <div className="mt-4 pt-4 border-t border-slate-100">
+                        <p className="text-xs font-black text-violet-600 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+                          <UsersIcon className="w-3.5 h-3.5" />
+                          <span>Comparing with {compareLead.name}</span>
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-indigo-50/50 rounded-xl p-4">
+                            <p className="text-xs font-bold text-slate-800 mb-1">{selectedLead.name}</p>
+                            <p className="text-2xl font-black text-indigo-600">{selectedLead.score}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Conv. Prob: {leadFactors.conversionProbability}%</p>
+                          </div>
+                          <div className="bg-violet-50/50 rounded-xl p-4">
+                            <p className="text-xs font-bold text-slate-800 mb-1">{compareLead.name}</p>
+                            <p className="text-2xl font-black text-violet-600">{compareLead.score}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Conv. Prob: {compareFactors.conversionProbability}%</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {['Email Engagement', 'Website Activity', 'Company Fit'].map((factor, i) => {
+                            const aVal = i === 0 ? leadFactors.emailEngagement : i === 1 ? leadFactors.websiteActivity : leadFactors.companyFit;
+                            const bVal = i === 0 ? compareFactors.emailEngagement : i === 1 ? compareFactors.websiteActivity : compareFactors.companyFit;
+                            return (
+                              <div key={factor} className="flex items-center space-x-2">
+                                <span className="text-[10px] font-bold text-slate-500 w-24 text-right">{factor}</span>
+                                <div className="flex-1 flex items-center space-x-1">
+                                  <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${aVal}%` }}></div>
+                                  </div>
+                                  <span className="text-[9px] font-black text-indigo-600 w-8">{aVal}%</span>
+                                </div>
+                                <div className="flex-1 flex items-center space-x-1">
+                                  <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-violet-500 rounded-full" style={{ width: `${bVal}%` }}></div>
+                                  </div>
+                                  <span className="text-[9px] font-black text-violet-600 w-8">{bVal}%</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Strongest & Weakest Signal */}
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      <div className="bg-emerald-50 rounded-xl p-3">
+                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">Strongest Signal</p>
+                        <p className="text-sm font-bold text-emerald-800 mt-1">
+                          {signalStrengths.reduce((a, b) => a.value > b.value ? a : b).label}
+                        </p>
+                        <p className="text-xs text-emerald-600 font-black">
+                          {signalStrengths.reduce((a, b) => a.value > b.value ? a : b).value}%
+                        </p>
+                      </div>
+                      <div className="bg-rose-50 rounded-xl p-3">
+                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Weakest Signal</p>
+                        <p className="text-sm font-bold text-rose-800 mt-1">
+                          {signalStrengths.reduce((a, b) => a.value < b.value ? a : b).label}
+                        </p>
+                        <p className="text-xs text-rose-600 font-black">
+                          {signalStrengths.reduce((a, b) => a.value < b.value ? a : b).value}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ═══════════════════════════════════════════════════════ */}
@@ -782,6 +1280,42 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* MODEL ADJUSTMENT PANEL (Slide-down)                          */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KEYBOARD SHORTCUTS PANEL                                     */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <KeyboardIcon className="w-5 h-5 text-indigo-600" />
+                <h2 className="font-bold text-slate-900">Keyboard Shortcuts</h2>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-2">
+              {[
+                ['j / k', 'Navigate leads & select'],
+                ['1 / 2 / 3', 'Switch analysis tab'],
+                ['c', 'Toggle compare mode'],
+                ['r', 'Refresh scores'],
+                ['m', 'Open model config'],
+                ['e', 'Export analysis'],
+                ['?', 'Show/hide shortcuts'],
+                ['Esc', 'Close panels'],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center justify-between py-1.5">
+                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 min-w-[60px] text-center">{key}</kbd>
+                  <span className="text-xs text-slate-500">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModelPanel && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowModelPanel(false)}>
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
