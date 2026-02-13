@@ -33,6 +33,7 @@ import HelpCenterPage from './pages/portal/HelpCenterPage';
 import UserManualPage from './pages/portal/UserManualPage';
 import LeadManagement from './pages/portal/LeadManagement';
 import LeadProfile from './pages/portal/LeadProfile';
+import MobileDashboard from './pages/portal/MobileDashboard';
 
 // Marketing
 import LandingPage from './pages/marketing/LandingPage';
@@ -157,6 +158,7 @@ const App: React.FC = () => {
         <Route path="help" element={<HelpCenterPage />} />
         <Route path="manual" element={<UserManualPage />} />
         <Route path="settings" element={<ProfilePage />} />
+        <Route path="mobile" element={<MobileDashboard />} />
       </Route>
 
       <Route 
