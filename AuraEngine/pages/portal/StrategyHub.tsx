@@ -6,7 +6,8 @@ import {
   BoltIcon, SparklesIcon, CheckIcon, ShieldIcon, UsersIcon, MailIcon,
   ClockIcon, PlusIcon, XIcon, EditIcon, TagIcon, TargetIcon, FlameIcon,
   BellIcon, CalendarIcon, MessageIcon, ArrowRightIcon, RefreshIcon,
-  CogIcon, EyeIcon, TrendUpIcon, ActivityIcon, AlertTriangleIcon, BrainIcon
+  CogIcon, EyeIcon, TrendUpIcon, TrendDownIcon, ActivityIcon, AlertTriangleIcon, BrainIcon,
+  KeyboardIcon, StarIcon, FilterIcon, LayersIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -62,6 +63,25 @@ interface ConflictAlert {
   status: 'active' | 'resolved';
   message: string;
   createdAt: string;
+}
+
+interface SprintGoal {
+  id: string;
+  title: string;
+  target: number;
+  current: number;
+  unit: string;
+  deadline: string;
+  owner: string;
+}
+
+interface TeamActivity {
+  id: string;
+  actor: string;
+  action: string;
+  target: string;
+  timestamp: string;
+  type: 'task' | 'lead' | 'note' | 'conflict' | 'status';
 }
 
 // ─── Constants ───
@@ -163,6 +183,32 @@ const MOCK_CONFLICTS: ConflictAlert[] = [
   { id: 'cf3', type: 'overlap', leadName: 'James Kim (CloudScale)', members: ['Elena Kovic', 'Marcus Lee'], status: 'resolved', message: 'Overlap resolved - Elena assigned as primary owner.', createdAt: '2026-02-12T16:00:00Z' },
 ];
 
+const MOCK_SPRINT_GOALS: SprintGoal[] = [
+  { id: 'sg1', title: 'Close Enterprise Deals', target: 5, current: 2, unit: 'deals', deadline: '2026-02-28', owner: 'Sarah Chen' },
+  { id: 'sg2', title: 'Qualify Inbound Leads', target: 50, current: 34, unit: 'leads', deadline: '2026-02-28', owner: 'Elena Kovic' },
+  { id: 'sg3', title: 'Send Case Studies', target: 30, current: 22, unit: 'emails', deadline: '2026-02-28', owner: 'John Rivera' },
+  { id: 'sg4', title: 'Book Product Demos', target: 15, current: 11, unit: 'demos', deadline: '2026-02-28', owner: 'Aisha Patel' },
+];
+
+const MOCK_ACTIVITIES: TeamActivity[] = [
+  { id: 'ta1', actor: 'Sarah Chen', action: 'completed task', target: 'Follow up with Acme Corp', timestamp: '2026-02-13T14:30:00Z', type: 'task' },
+  { id: 'ta2', actor: 'Aisha Patel', action: 'qualified lead', target: 'Lisa Park (TechStart)', timestamp: '2026-02-13T14:15:00Z', type: 'lead' },
+  { id: 'ta3', actor: 'John Rivera', action: 'posted note', target: 'API docs preparation update', timestamp: '2026-02-13T13:45:00Z', type: 'note' },
+  { id: 'ta4', actor: 'Marcus Lee', action: 'resolved conflict', target: 'CloudScale overlap', timestamp: '2026-02-13T13:00:00Z', type: 'conflict' },
+  { id: 'ta5', actor: 'Elena Kovic', action: 'changed status', target: 'Available → Busy', timestamp: '2026-02-13T12:30:00Z', type: 'status' },
+  { id: 'ta6', actor: 'Sarah Chen', action: 'assigned lead', target: 'New webinar batch', timestamp: '2026-02-13T11:45:00Z', type: 'lead' },
+  { id: 'ta7', actor: 'John Rivera', action: 'created task', target: 'Send case studies to warm leads', timestamp: '2026-02-13T10:30:00Z', type: 'task' },
+  { id: 'ta8', actor: 'Aisha Patel', action: 'booked demo', target: 'TechStart Enterprise demo', timestamp: '2026-02-13T09:45:00Z', type: 'lead' },
+];
+
+const ACTIVITY_ICONS: Record<TeamActivity['type'], { icon: React.ReactNode; color: string }> = {
+  task: { icon: <CheckIcon className="w-3 h-3" />, color: 'bg-emerald-100 text-emerald-600' },
+  lead: { icon: <TargetIcon className="w-3 h-3" />, color: 'bg-indigo-100 text-indigo-600' },
+  note: { icon: <MessageIcon className="w-3 h-3" />, color: 'bg-violet-100 text-violet-600' },
+  conflict: { icon: <AlertTriangleIcon className="w-3 h-3" />, color: 'bg-amber-100 text-amber-600' },
+  status: { icon: <ActivityIcon className="w-3 h-3" />, color: 'bg-cyan-100 text-cyan-600' },
+};
+
 const StrategyHub: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const [activeTab, setActiveTab] = useState<TabView>('dashboard');
@@ -185,6 +231,12 @@ const StrategyHub: React.FC = () => {
   // ─── Reply state ───
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState('');
+
+  // ─── Enhanced UI state ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showPerformance, setShowPerformance] = useState(false);
+  const [showWorkload, setShowWorkload] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<'all' | 'my' | 'urgent' | 'overdue'>('all');
 
   // ─── Routine checklist ───
   const [checkedItems, setCheckedItems] = useState<Set<string>>(() => {
@@ -269,6 +321,103 @@ const StrategyHub: React.FC = () => {
   const currentHour = new Date().getHours();
   const currentRoutine = currentHour < 12 ? 0 : currentHour < 16 ? 1 : 2;
 
+  // ─── Enhanced KPI Stats ───
+  const kpiStats = useMemo(() => {
+    const completionRate = tasks.length > 0 ? Math.round((tasks.filter(t => t.completed).length / tasks.length) * 100) : 0;
+    const urgentCount = tasks.filter(t => !t.completed && t.priority === 'urgent').length;
+    const avgLeadsPerMember = team.length > 0 ? Math.round(totalLeads / team.length) : 0;
+    const sprintPct = Math.round((MOCK_SPRINT_GOALS.reduce((s, g) => s + g.current, 0) / MOCK_SPRINT_GOALS.reduce((s, g) => s + g.target, 0)) * 100);
+    return [
+      { label: 'Team Online', value: `${onlineMembers}/${team.length}`, icon: <UsersIcon className="w-4 h-4" />, color: 'emerald', trend: '+1 since yesterday', up: true },
+      { label: 'Total Leads', value: totalLeads, icon: <TargetIcon className="w-4 h-4" />, color: 'indigo', trend: `~${avgLeadsPerMember}/member`, up: true },
+      { label: 'Tasks Pending', value: pendingTasks, icon: <ClockIcon className="w-4 h-4" />, color: 'amber', trend: `${urgentCount} urgent`, up: false },
+      { label: 'Completion Rate', value: `${completionRate}%`, icon: <CheckIcon className="w-4 h-4" />, color: 'violet', trend: '+8% this week', up: true },
+      { label: 'Active Conflicts', value: activeConflicts, icon: <AlertTriangleIcon className="w-4 h-4" />, color: activeConflicts > 0 ? 'rose' : 'emerald', trend: activeConflicts > 0 ? 'Needs attention' : 'All clear', up: activeConflicts === 0 },
+      { label: 'Sprint Progress', value: `${sprintPct}%`, icon: <BoltIcon className="w-4 h-4" />, color: 'cyan', trend: '15 days left', up: true },
+    ];
+  }, [onlineMembers, team, totalLeads, pendingTasks, activeConflicts, tasks]);
+
+  // ─── Workload Distribution ───
+  const workloadDistribution = useMemo(() => {
+    const maxLeads = Math.max(...team.map(t => t.leadsAssigned), 1);
+    return team.map(member => {
+      const memberTasks = tasks.filter(t => t.assigneeId === member.id);
+      const memberPending = memberTasks.filter(t => !t.completed).length;
+      const loadScore = Math.round(((member.leadsAssigned / maxLeads) * 50) + ((memberPending / Math.max(tasks.length, 1)) * 50));
+      return {
+        ...member,
+        pendingTasks: memberPending,
+        loadScore: Math.min(loadScore, 100),
+        loadStatus: loadScore > 75 ? 'overloaded' as const : loadScore > 40 ? 'balanced' as const : 'light' as const,
+      };
+    }).sort((a, b) => b.loadScore - a.loadScore);
+  }, [team, tasks]);
+
+  // ─── Performance Rankings ───
+  const performanceRankings = useMemo(() => {
+    return [...team].sort((a, b) => b.tasksCompleted - a.tasksCompleted).map((member, index) => ({
+      ...member,
+      rank: index + 1,
+      completionRate: Math.round((member.tasksCompleted / Math.max(member.tasksCompleted + tasks.filter(t => t.assigneeId === member.id && !t.completed).length, 1)) * 100),
+    }));
+  }, [team, tasks]);
+
+  // ─── Filtered Tasks ───
+  const filteredTasks = useMemo(() => {
+    let filtered = [...tasks];
+    switch (taskFilter) {
+      case 'urgent':
+        filtered = filtered.filter(t => !t.completed && (t.priority === 'urgent' || t.priority === 'high'));
+        break;
+      case 'overdue':
+        filtered = filtered.filter(t => !t.completed && new Date(t.deadline) < new Date());
+        break;
+      case 'my':
+        filtered = filtered.filter(t => !t.completed);
+        break;
+    }
+    return filtered.sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    });
+  }, [tasks, taskFilter]);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput || showNewTask) return;
+
+      if (e.key === 'Escape') {
+        if (showShortcuts) { setShowShortcuts(false); return; }
+        if (showPerformance) { setShowPerformance(false); return; }
+        if (showWorkload) { setShowWorkload(false); return; }
+        return;
+      }
+
+      const shortcuts: Record<string, () => void> = {
+        '1': () => setActiveTab('dashboard'),
+        '2': () => setActiveTab('tasks'),
+        '3': () => setActiveTab('notes'),
+        '4': () => setActiveTab('conflicts'),
+        'n': () => setShowNewTask(true),
+        'p': () => setShowPerformance(prev => !prev),
+        'w': () => setShowWorkload(prev => !prev),
+        '?': () => setShowShortcuts(prev => !prev),
+      };
+
+      if (shortcuts[e.key]) {
+        e.preventDefault();
+        shortcuts[e.key]();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showNewTask, showShortcuts, showPerformance, showWorkload]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const tabs: { id: TabView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'dashboard', label: 'Team Dashboard', icon: <UsersIcon className="w-4 h-4" /> },
     { id: 'tasks', label: 'Team Tasks', icon: <CheckIcon className="w-4 h-4" />, badge: pendingTasks },
@@ -287,7 +436,7 @@ const StrategyHub: React.FC = () => {
           <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">Strategy Hub</h1>
           <p className="text-sm text-slate-400 mt-0.5">Team collaboration, task coordination, and conflict resolution.</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           {/* My Status */}
           <div className="flex items-center space-x-2 px-3 py-2 bg-white border border-slate-200 rounded-xl shadow-sm">
             <span className={`w-2 h-2 rounded-full ${STATUS_META[myStatus].dot} ${myStatus === 'available' ? 'animate-pulse' : ''}`}></span>
@@ -302,6 +451,27 @@ const StrategyHub: React.FC = () => {
             </select>
           </div>
           <button
+            onClick={() => setShowPerformance(prev => !prev)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPerformance ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <StarIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Leaderboard</span>
+          </button>
+          <button
+            onClick={() => setShowWorkload(prev => !prev)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showWorkload ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <LayersIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Workload</span>
+          </button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+          >
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
+          </button>
+          <button
             onClick={() => setShowNewTask(true)}
             className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
           >
@@ -314,20 +484,22 @@ const StrategyHub: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* QUICK STATS                                                   */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: 'Team Online', value: `${onlineMembers}/${team.length}`, icon: <UsersIcon className="w-4 h-4" />, color: 'emerald' },
-          { label: 'Leads Assigned', value: totalLeads, icon: <TargetIcon className="w-4 h-4" />, color: 'indigo' },
-          { label: 'Tasks Pending', value: pendingTasks, icon: <ClockIcon className="w-4 h-4" />, color: 'amber' },
-          { label: 'Tasks Completed', value: totalCompleted, icon: <CheckIcon className="w-4 h-4" />, color: 'violet' },
-          { label: 'Active Conflicts', value: activeConflicts, icon: <AlertTriangleIcon className="w-4 h-4" />, color: activeConflicts > 0 ? 'rose' : 'slate' },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-            <div className={`w-8 h-8 rounded-lg bg-${s.color}-100 flex items-center justify-center text-${s.color}-600 mb-2`}>
-              {s.icon}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {kpiStats.map(s => (
+          <div key={s.label} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <div className={`w-8 h-8 rounded-lg bg-${s.color}-100 flex items-center justify-center text-${s.color}-600`}>
+                {s.icon}
+              </div>
+              {s.up ? (
+                <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" />
+              ) : (
+                <TrendDownIcon className="w-3.5 h-3.5 text-rose-500" />
+              )}
             </div>
             <p className="text-xl font-black text-slate-800">{s.value}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{s.label}</p>
+            <p className={`text-[10px] mt-1 font-semibold ${s.up ? 'text-emerald-500' : 'text-rose-500'}`}>{s.trend}</p>
           </div>
         ))}
       </div>
@@ -450,6 +622,81 @@ const StrategyHub: React.FC = () => {
             </div>
           </div>
 
+          {/* ─── Sprint Goals ─── */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 font-heading text-sm">Sprint Goals</h3>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Feb 2026</span>
+            </div>
+            <div className="p-4 space-y-3">
+              {MOCK_SPRINT_GOALS.map(goal => {
+                const pct = Math.round((goal.current / goal.target) * 100);
+                const isOnTrack = pct >= 60;
+                return (
+                  <div key={goal.id} className="p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-bold text-slate-800">{goal.title}</p>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isOnTrack ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                        {isOnTrack ? 'On Track' : 'At Risk'}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${isOnTrack ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-black text-slate-600 w-12 text-right">{goal.current}/{goal.target}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[10px] text-slate-400">Owner: <span className="font-bold text-slate-500">{goal.owner}</span></span>
+                      <span className="text-[10px] text-slate-400">{goal.unit}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ─── Activity Timeline ─── */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 font-heading text-sm">Activity Timeline</h3>
+              <div className="flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-bold text-emerald-600">Live</span>
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-px bg-slate-100" />
+                <div className="space-y-3">
+                  {MOCK_ACTIVITIES.map(activity => {
+                    const meta = ACTIVITY_ICONS[activity.type];
+                    return (
+                      <div key={activity.id} className="flex items-start space-x-3 relative">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 z-10 ${meta.color}`}>
+                          {meta.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-slate-700">
+                            <span className="font-bold">{activity.actor}</span>{' '}
+                            <span className="text-slate-400">{activity.action}</span>{' '}
+                            <span className="font-semibold text-slate-600">{activity.target}</span>
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {new Date(activity.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ─── Collaboration Features Overview ─── */}
           <div className="lg:col-span-3">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -476,7 +723,40 @@ const StrategyHub: React.FC = () => {
       {/* TAB: TEAM TASKS                                              */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {activeTab === 'tasks' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="space-y-4">
+          {/* Task Filter Bar */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1">
+              {([
+                { id: 'all' as const, label: 'All Tasks', count: tasks.length },
+                { id: 'urgent' as const, label: 'Urgent/High', count: tasks.filter(t => !t.completed && (t.priority === 'urgent' || t.priority === 'high')).length },
+                { id: 'overdue' as const, label: 'Overdue', count: tasks.filter(t => !t.completed && new Date(t.deadline) < new Date()).length },
+                { id: 'my' as const, label: 'My Tasks', count: tasks.filter(t => !t.completed).length },
+              ]).map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setTaskFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    taskFilter === f.id
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {f.label}
+                  {f.count > 0 && (
+                    <span className={`ml-1.5 px-1 py-0.5 rounded-full text-[9px] font-black ${
+                      taskFilter === f.id ? 'bg-white/20' : 'bg-slate-100'
+                    }`}>{f.count}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] font-bold text-slate-400">{filteredTasks.length} results</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <h3 className="font-bold text-slate-800 font-heading text-sm">Team Tasks</h3>
@@ -491,11 +771,7 @@ const StrategyHub: React.FC = () => {
             </button>
           </div>
           <div className="divide-y divide-slate-100">
-            {tasks.sort((a, b) => {
-              if (a.completed !== b.completed) return a.completed ? 1 : -1;
-              const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
-              return priorityOrder[a.priority] - priorityOrder[b.priority];
-            }).map(task => (
+            {filteredTasks.map(task => (
               <div key={task.id} className={`px-6 py-3.5 flex items-center space-x-4 group hover:bg-slate-50 transition-all ${task.completed ? 'opacity-50' : ''}`}>
                 <button onClick={() => toggleTaskComplete(task.id)} className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${task.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 hover:border-indigo-500'}`}>
                   {task.completed && <CheckIcon className="w-3 h-3" />}
@@ -519,6 +795,7 @@ const StrategyHub: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
         </div>
       )}
 
@@ -802,6 +1079,207 @@ const StrategyHub: React.FC = () => {
                 <PlusIcon className="w-4 h-4" />
                 <span>Create Task</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* PERFORMANCE LEADERBOARD SIDEBAR                              */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showPerformance && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowPerformance(false)}>
+          <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-100 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Performance Leaderboard</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Team rankings by task completion</p>
+              </div>
+              <button onClick={() => setShowPerformance(false)} className="p-1 text-slate-400 hover:text-slate-600"><XIcon className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-3">
+              {performanceRankings.map(member => (
+                <div key={member.id} className={`p-4 rounded-xl border transition-all ${member.rank === 1 ? 'border-amber-200 bg-amber-50/30' : member.rank === 2 ? 'border-slate-200 bg-slate-50/30' : member.rank === 3 ? 'border-orange-200 bg-orange-50/30' : 'border-slate-100'}`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm ${
+                      member.rank === 1 ? 'bg-amber-100 text-amber-600' : member.rank === 2 ? 'bg-slate-200 text-slate-600' : member.rank === 3 ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      #{member.rank}
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
+                      {member.avatar}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800">{member.name}</p>
+                      <p className="text-[10px] text-slate-400">{member.role}</p>
+                    </div>
+                    {member.rank === 1 && <StarIcon className="w-5 h-5 text-amber-500" />}
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-3">
+                    <div className="text-center">
+                      <p className="text-lg font-black text-emerald-600">{member.tasksCompleted}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">Completed</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-black text-indigo-600">{member.leadsAssigned}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">Leads</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-black text-violet-600">{member.completionRate}%</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">Rate</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* WORKLOAD DISTRIBUTION SIDEBAR                                */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showWorkload && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowWorkload(false)}>
+          <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-100 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Workload Distribution</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Team capacity and load balance</p>
+              </div>
+              <button onClick={() => setShowWorkload(false)} className="p-1 text-slate-400 hover:text-slate-600"><XIcon className="w-5 h-5" /></button>
+            </div>
+
+            {/* Summary Bar */}
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Overloaded', count: workloadDistribution.filter(w => w.loadStatus === 'overloaded').length, color: 'rose' },
+                  { label: 'Balanced', count: workloadDistribution.filter(w => w.loadStatus === 'balanced').length, color: 'emerald' },
+                  { label: 'Light', count: workloadDistribution.filter(w => w.loadStatus === 'light').length, color: 'cyan' },
+                ].map(s => (
+                  <div key={s.label} className="text-center">
+                    <p className={`text-xl font-black text-${s.color}-600`}>{s.count}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {workloadDistribution.map(member => (
+                <div key={member.id} className="p-4 rounded-xl border border-slate-100">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
+                      {member.avatar}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800">{member.name}</p>
+                      <p className="text-[10px] text-slate-400">{member.role}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      member.loadStatus === 'overloaded' ? 'bg-rose-100 text-rose-600' :
+                      member.loadStatus === 'balanced' ? 'bg-emerald-100 text-emerald-600' :
+                      'bg-cyan-100 text-cyan-600'
+                    }`}>
+                      {member.loadStatus === 'overloaded' ? 'Overloaded' : member.loadStatus === 'balanced' ? 'Balanced' : 'Light'}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Leads ({member.leadsAssigned})</span>
+                        <span className="text-[10px] font-bold text-slate-500">{member.leadsAssigned} assigned</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                          style={{ width: `${Math.min((member.leadsAssigned / 35) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Tasks ({member.pendingTasks} pending)</span>
+                        <span className="text-[10px] font-bold text-slate-500">{member.tasksCompleted} completed</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-violet-500 transition-all duration-500"
+                          style={{ width: `${Math.min((member.pendingTasks / 5) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Overall Load</span>
+                        <span className="text-[10px] font-bold text-slate-500">{member.loadScore}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            member.loadStatus === 'overloaded' ? 'bg-rose-500' :
+                            member.loadStatus === 'balanced' ? 'bg-emerald-500' : 'bg-cyan-500'
+                          }`}
+                          style={{ width: `${member.loadScore}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KEYBOARD SHORTCUTS MODAL                                     */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowShortcuts(false)}>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <KeyboardIcon className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-black text-slate-900 font-heading">Keyboard Shortcuts</h3>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1 text-slate-400 hover:text-slate-600"><XIcon className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-3">
+              {[
+                { category: 'Navigation', shortcuts: [
+                  { keys: '1', desc: 'Team Dashboard' },
+                  { keys: '2', desc: 'Team Tasks' },
+                  { keys: '3', desc: 'Collaborative Notes' },
+                  { keys: '4', desc: 'Conflicts' },
+                ]},
+                { category: 'Actions', shortcuts: [
+                  { keys: 'N', desc: 'New Task' },
+                  { keys: 'P', desc: 'Toggle Leaderboard' },
+                  { keys: 'W', desc: 'Toggle Workload' },
+                  { keys: '?', desc: 'Toggle Shortcuts' },
+                  { keys: 'Esc', desc: 'Close Panels' },
+                ]},
+              ].map(group => (
+                <div key={group.category}>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">{group.category}</p>
+                  <div className="space-y-2">
+                    {group.shortcuts.map(s => (
+                      <div key={s.keys} className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">{s.desc}</span>
+                        <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 min-w-[28px] text-center">{s.keys}</kbd>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/50">
+              <p className="text-[10px] text-slate-400 text-center">Press <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
             </div>
           </div>
         </div>
