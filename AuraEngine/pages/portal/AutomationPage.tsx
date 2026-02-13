@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
-  User, Lead, AutomationRule, AutomationTrigger, AutomationAction,
-  TriggerType, ActionType, Campaign, CampaignStep
+  User, Lead, AutomationRule, TriggerType, ActionType, Campaign, CampaignStep
 } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
   BoltIcon, PlusIcon, XIcon, CheckIcon, SparklesIcon, ClockIcon,
   PlayIcon, PauseIcon, GitBranchIcon, ZapIcon, TargetIcon, TagIcon,
-  MailIcon, RefreshIcon, EditIcon, FlameIcon, TrendUpIcon
+  MailIcon, RefreshIcon, EditIcon, FlameIcon, TrendUpIcon, CogIcon, TrendDownIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -16,114 +15,108 @@ interface LayoutContext {
   refreshProfile: () => Promise<void>;
 }
 
-const TRIGGER_OPTIONS: { type: TriggerType; label: string; desc: string; icon: React.ReactNode }[] = [
-  { type: 'score_change', label: 'Score Changes', desc: 'When a lead score crosses a threshold', icon: <TrendUpIcon className="w-4 h-4" /> },
-  { type: 'status_change', label: 'Status Updates', desc: 'When a lead status changes', icon: <RefreshIcon className="w-4 h-4" /> },
-  { type: 'lead_created', label: 'New Lead Created', desc: 'When a new lead enters the pipeline', icon: <PlusIcon className="w-4 h-4" /> },
-  { type: 'time_elapsed', label: 'Time Elapsed', desc: 'After X days with no activity', icon: <ClockIcon className="w-4 h-4" /> },
-  { type: 'tag_added', label: 'Tag Added', desc: 'When a specific tag is applied', icon: <TagIcon className="w-4 h-4" /> },
-  { type: 'content_generated', label: 'Content Generated', desc: 'When AI content is created for a lead', icon: <SparklesIcon className="w-4 h-4" /> },
-];
+// ─── Workflow Node Types ───
+type NodeType = 'trigger' | 'action' | 'condition' | 'wait';
 
-const ACTION_OPTIONS: { type: ActionType; label: string; icon: React.ReactNode }[] = [
-  { type: 'send_email', label: 'Send Email', icon: <MailIcon className="w-4 h-4" /> },
-  { type: 'update_status', label: 'Update Status', icon: <RefreshIcon className="w-4 h-4" /> },
-  { type: 'add_tag', label: 'Add Tag', icon: <TagIcon className="w-4 h-4" /> },
-  { type: 'assign_user', label: 'Assign to User', icon: <TargetIcon className="w-4 h-4" /> },
-  { type: 'generate_content', label: 'Generate Content', icon: <SparklesIcon className="w-4 h-4" /> },
-  { type: 'create_alert', label: 'Create Alert', icon: <FlameIcon className="w-4 h-4" /> },
-  { type: 'move_to_segment', label: 'Move to Segment', icon: <GitBranchIcon className="w-4 h-4" /> },
-];
+interface WorkflowNode {
+  id: string;
+  type: NodeType;
+  title: string;
+  description: string;
+  config: Record<string, string | number | boolean>;
+}
 
-const DEFAULT_CAMPAIGNS: Campaign[] = [
-  {
-    id: 'camp-1',
-    name: 'New Lead Onboarding',
-    description: 'Automated 14-day nurture sequence for new leads',
-    status: 'draft',
-    steps: [
-      { id: 's1', day: 0, type: 'email', title: 'Welcome Email', description: 'Send personalized welcome with company value proposition' },
-      { id: 's2', day: 1, type: 'wait', title: 'Wait 1 Day', description: 'Allow time for initial email engagement' },
-      { id: 's3', day: 2, type: 'condition', title: 'Check Email Open', description: 'If email opened, proceed. Otherwise, send follow-up.' },
-      { id: 's4', day: 3, type: 'email', title: 'Value Proposition', description: 'Send case study or ROI analysis relevant to their industry' },
-      { id: 's5', day: 7, type: 'action', title: 'Score Check', description: 'Evaluate lead score. If > 70, fast-track to qualified.' },
-      { id: 's6', day: 10, type: 'email', title: 'Social Proof', description: 'Share testimonials and success metrics from similar companies' },
-      { id: 's7', day: 14, type: 'email', title: 'CTA - Book Demo', description: 'Final conversion email with clear call-to-action' },
-    ],
-    enrolledLeads: 0,
-    completedLeads: 0,
-    createdAt: new Date().toISOString(),
-  },
-];
+interface Workflow {
+  id: string;
+  name: string;
+  status: 'active' | 'paused' | 'draft';
+  nodes: WorkflowNode[];
+  createdAt: string;
+  stats: {
+    leadsProcessed: number;
+    conversionRate: number;
+    timeSavedHrs: number;
+    roi: number;
+  };
+}
 
-const AI_SUGGESTIONS = [
-  {
-    id: 'sug-1',
-    title: 'Auto-tag leads from LinkedIn',
-    description: 'Leads coming from LinkedIn source tend to have 23% higher conversion. Auto-tag them as "LinkedIn-Sourced" for segment targeting.',
-    trigger: 'lead_created' as TriggerType,
-    action: 'add_tag' as ActionType,
-    confidence: 89,
-  },
-  {
-    id: 'sug-2',
-    title: 'Re-engage stagnant leads',
-    description: 'Leads inactive for 14+ days with score > 50 have a 40% re-engagement rate when sent a new content piece.',
-    trigger: 'time_elapsed' as TriggerType,
-    action: 'generate_content' as ActionType,
-    confidence: 82,
-  },
-  {
-    id: 'sug-3',
-    title: 'Fast-track hot leads',
-    description: 'When a lead scores above 80, automatically assign to a sales rep and send a personalized outreach email within 1 hour.',
-    trigger: 'score_change' as TriggerType,
-    action: 'send_email' as ActionType,
-    confidence: 94,
-  },
-  {
-    id: 'sug-4',
-    title: 'Content-triggered nurture',
-    description: 'After generating AI content for a lead, wait 3 days and check engagement. If no response, auto-generate follow-up content.',
-    trigger: 'content_generated' as TriggerType,
-    action: 'generate_content' as ActionType,
-    confidence: 76,
-  },
-];
-
-const STEP_TYPE_COLORS: Record<string, string> = {
-  email: 'indigo',
-  wait: 'amber',
-  condition: 'violet',
-  action: 'emerald',
+const NODE_TYPE_META: Record<NodeType, { label: string; color: string; icon: React.ReactNode; bgClass: string }> = {
+  trigger: { label: 'TRIGGER', color: 'indigo', icon: <BoltIcon className="w-4 h-4" />, bgClass: 'bg-indigo-600 text-white' },
+  action: { label: 'ACTION', color: 'emerald', icon: <ZapIcon className="w-4 h-4" />, bgClass: 'bg-emerald-600 text-white' },
+  condition: { label: 'CONDITION', color: 'amber', icon: <GitBranchIcon className="w-4 h-4" />, bgClass: 'bg-amber-500 text-white' },
+  wait: { label: 'WAIT', color: 'violet', icon: <ClockIcon className="w-4 h-4" />, bgClass: 'bg-violet-600 text-white' },
 };
+
+const TRIGGER_OPTIONS: { type: TriggerType; label: string; desc: string }[] = [
+  { type: 'lead_created', label: 'New lead added', desc: 'When a new lead enters the pipeline' },
+  { type: 'score_change', label: 'Score changes', desc: 'When a lead score crosses a threshold' },
+  { type: 'status_change', label: 'Status updates', desc: 'When a lead status changes' },
+  { type: 'time_elapsed', label: 'Time elapsed', desc: 'After X days with no activity' },
+  { type: 'tag_added', label: 'Tag added', desc: 'When a specific tag is applied' },
+  { type: 'content_generated', label: 'Content generated', desc: 'When AI content is created' },
+];
+
+const ACTION_OPTIONS: { type: ActionType; label: string }[] = [
+  { type: 'send_email', label: 'Send Email' },
+  { type: 'update_status', label: 'Update Status' },
+  { type: 'add_tag', label: 'Add Tag' },
+  { type: 'assign_user', label: 'Assign to User' },
+  { type: 'generate_content', label: 'Generate Content' },
+  { type: 'create_alert', label: 'Create Alert' },
+  { type: 'move_to_segment', label: 'Move to Segment' },
+];
+
+const DEFAULT_WORKFLOW: Workflow = {
+  id: 'wf-default',
+  name: 'New Lead Nurturing Sequence',
+  status: 'active',
+  nodes: [
+    { id: 'n1', type: 'trigger', title: 'New lead added', description: 'Triggers when a lead enters the pipeline', config: { triggerType: 'lead_created' } },
+    { id: 'n2', type: 'action', title: 'AI scores lead', description: 'Automatically scores the lead using AI model', config: { model: 'gemini-3-flash', companyData: true, webBehavior: true, socialSignals: false, emailEngagement: true, frequency: 'real_time', threshold: 80 } },
+    { id: 'n3', type: 'condition', title: 'Score > 50?', description: 'Check if lead score exceeds threshold', config: { field: 'score', operator: 'gt', value: 50 } },
+    { id: 'n4', type: 'action', title: 'Send welcome email', description: 'Personalized welcome with value proposition', config: { emailType: 'welcome', template: 'default' } },
+    { id: 'n5', type: 'action', title: 'Add to nurture campaign', description: 'Enroll in drip nurture sequence', config: { campaign: 'nurture_sequence' } },
+    { id: 'n6', type: 'wait', title: 'Wait 2 days', description: 'Allow time for email engagement', config: { days: 2 } },
+    { id: 'n7', type: 'action', title: 'Check engagement', description: 'Evaluate email opens and clicks', config: { checkType: 'email_engagement' } },
+    { id: 'n8', type: 'condition', title: 'Score > 75?', description: 'Check if lead is sales-ready', config: { field: 'score', operator: 'gt', value: 75 } },
+    { id: 'n9', type: 'action', title: 'Notify sales team', description: 'Alert sales rep for immediate follow-up', config: { notifyType: 'sales_alert' } },
+  ],
+  createdAt: new Date().toISOString(),
+  stats: { leadsProcessed: 1242, conversionRate: 8.4, timeSavedHrs: 42, roi: 320 },
+};
+
+// ─── Config panels per node type ───
+const MODEL_OPTIONS = ['gemini-3-flash', 'gemini-3-pro', 'gpt-4o', 'claude-sonnet'];
+const FREQUENCY_OPTIONS = ['real_time', 'hourly', 'daily', 'weekly'];
+const OPERATOR_OPTIONS = [
+  { value: 'gt', label: 'Greater than' },
+  { value: 'lt', label: 'Less than' },
+  { value: 'eq', label: 'Equals' },
+];
 
 const AutomationPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
-  const [activeTab, setActiveTab] = useState<'rules' | 'campaigns' | 'suggestions'>('rules');
   const [leads, setLeads] = useState<Lead[]>([]);
 
-  // Rules
-  const [rules, setRules] = useState<AutomationRule[]>(() => {
-    const saved = localStorage.getItem(`aura_rules_${user?.id}`);
-    return saved ? JSON.parse(saved) : [];
+  // Workflow state
+  const [workflow, setWorkflow] = useState<Workflow>(() => {
+    const saved = localStorage.getItem(`aura_workflow_${user?.id}`);
+    return saved ? JSON.parse(saved) : DEFAULT_WORKFLOW;
   });
-  const [showRuleBuilder, setShowRuleBuilder] = useState(false);
-  const [builderName, setBuilderName] = useState('');
-  const [builderDesc, setBuilderDesc] = useState('');
-  const [builderTrigger, setBuilderTrigger] = useState<TriggerType | null>(null);
-  const [builderTriggerConfig, setBuilderTriggerConfig] = useState<Record<string, string | number>>({});
-  const [builderActions, setBuilderActions] = useState<{ type: ActionType; config: Record<string, string | number> }[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>('n2');
+  const [testRunning, setTestRunning] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
-  // Campaigns
-  const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
-    const saved = localStorage.getItem(`aura_campaigns_${user?.id}`);
-    return saved ? JSON.parse(saved) : DEFAULT_CAMPAIGNS;
+  // Saved workflows list
+  const [workflows, setWorkflows] = useState<Workflow[]>(() => {
+    const saved = localStorage.getItem(`aura_workflows_list_${user?.id}`);
+    return saved ? JSON.parse(saved) : [DEFAULT_WORKFLOW];
   });
-  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
-  const [showNewCampaign, setShowNewCampaign] = useState(false);
-  const [newCampName, setNewCampName] = useState('');
-  const [newCampDesc, setNewCampDesc] = useState('');
+  const [showWorkflowList, setShowWorkflowList] = useState(false);
+
+  // Add step modal
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addNodeType, setAddNodeType] = useState<NodeType>('action');
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -138,683 +131,686 @@ const AutomationPage: React.FC = () => {
   }, [user?.id]);
 
   useEffect(() => {
-    localStorage.setItem(`aura_rules_${user?.id}`, JSON.stringify(rules));
-  }, [rules, user?.id]);
+    localStorage.setItem(`aura_workflow_${user?.id}`, JSON.stringify(workflow));
+  }, [workflow, user?.id]);
 
   useEffect(() => {
-    localStorage.setItem(`aura_campaigns_${user?.id}`, JSON.stringify(campaigns));
-  }, [campaigns, user?.id]);
+    localStorage.setItem(`aura_workflows_list_${user?.id}`, JSON.stringify(workflows));
+  }, [workflows, user?.id]);
 
-  const resetBuilder = () => {
-    setBuilderName('');
-    setBuilderDesc('');
-    setBuilderTrigger(null);
-    setBuilderTriggerConfig({});
-    setBuilderActions([]);
-    setShowRuleBuilder(false);
-  };
+  const selectedNode = useMemo(() => {
+    return workflow.nodes.find(n => n.id === selectedNodeId) || null;
+  }, [workflow.nodes, selectedNodeId]);
 
-  const saveRule = () => {
-    if (!builderName || !builderTrigger || builderActions.length === 0) return;
-    const newRule: AutomationRule = {
-      id: `rule-${Date.now()}`,
-      name: builderName,
-      description: builderDesc,
-      trigger: {
-        type: builderTrigger,
-        label: TRIGGER_OPTIONS.find(t => t.type === builderTrigger)?.label || builderTrigger,
-        config: builderTriggerConfig,
-      },
-      actions: builderActions.map(a => ({
-        type: a.type,
-        label: ACTION_OPTIONS.find(o => o.type === a.type)?.label || a.type,
-        config: a.config,
-      })),
-      enabled: true,
-      createdAt: new Date().toISOString(),
-      runCount: 0,
-    };
-    setRules(prev => [...prev, newRule]);
-    resetBuilder();
-  };
-
-  const deleteRule = (id: string) => {
-    setRules(prev => prev.filter(r => r.id !== id));
-  };
-
-  const toggleRule = (id: string) => {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
-  };
-
-  const addBuilderAction = (type: ActionType) => {
-    setBuilderActions(prev => [...prev, { type, config: {} }]);
-  };
-
-  const removeBuilderAction = (index: number) => {
-    setBuilderActions(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const applySuggestion = (suggestion: typeof AI_SUGGESTIONS[0]) => {
-    setShowRuleBuilder(true);
-    setBuilderName(suggestion.title);
-    setBuilderDesc(suggestion.description);
-    setBuilderTrigger(suggestion.trigger);
-    setBuilderActions([{ type: suggestion.action, config: {} }]);
-  };
-
-  const toggleCampaignStatus = (id: string) => {
-    setCampaigns(prev => prev.map(c => {
-      if (c.id !== id) return c;
-      const newStatus = c.status === 'active' ? 'paused' : c.status === 'paused' ? 'active' : 'active';
-      return { ...c, status: newStatus, startedAt: newStatus === 'active' ? new Date().toISOString() : c.startedAt };
+  // ─── Handlers ───
+  const updateNodeConfig = (nodeId: string, key: string, value: string | number | boolean) => {
+    setWorkflow(prev => ({
+      ...prev,
+      nodes: prev.nodes.map(n => n.id === nodeId ? { ...n, config: { ...n.config, [key]: value } } : n),
     }));
   };
 
-  const createCampaign = () => {
-    if (!newCampName) return;
-    const newCamp: Campaign = {
-      id: `camp-${Date.now()}`,
-      name: newCampName,
-      description: newCampDesc,
+  const updateNodeTitle = (nodeId: string, title: string) => {
+    setWorkflow(prev => ({
+      ...prev,
+      nodes: prev.nodes.map(n => n.id === nodeId ? { ...n, title } : n),
+    }));
+  };
+
+  const updateNodeDescription = (nodeId: string, description: string) => {
+    setWorkflow(prev => ({
+      ...prev,
+      nodes: prev.nodes.map(n => n.id === nodeId ? { ...n, description } : n),
+    }));
+  };
+
+  const addNode = (type: NodeType) => {
+    const titles: Record<NodeType, string> = {
+      trigger: 'New trigger',
+      action: 'New action step',
+      condition: 'New condition',
+      wait: 'Wait period',
+    };
+    const descs: Record<NodeType, string> = {
+      trigger: 'Configure the trigger event',
+      action: 'Configure the action to perform',
+      condition: 'Set the condition criteria',
+      wait: 'Set the wait duration',
+    };
+    const newNode: WorkflowNode = {
+      id: `n-${Date.now()}`,
+      type,
+      title: titles[type],
+      description: descs[type],
+      config: type === 'wait' ? { days: 1 } : type === 'condition' ? { field: 'score', operator: 'gt', value: 50 } : {},
+    };
+    setWorkflow(prev => ({ ...prev, nodes: [...prev.nodes, newNode] }));
+    setSelectedNodeId(newNode.id);
+    setShowAddModal(false);
+  };
+
+  const removeNode = (nodeId: string) => {
+    setWorkflow(prev => ({
+      ...prev,
+      nodes: prev.nodes.filter(n => n.id !== nodeId),
+    }));
+    if (selectedNodeId === nodeId) setSelectedNodeId(null);
+  };
+
+  const moveNode = (nodeId: string, direction: 'up' | 'down') => {
+    setWorkflow(prev => {
+      const idx = prev.nodes.findIndex(n => n.id === nodeId);
+      if (idx < 0) return prev;
+      if (direction === 'up' && idx === 0) return prev;
+      if (direction === 'down' && idx === prev.nodes.length - 1) return prev;
+      const newNodes = [...prev.nodes];
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      [newNodes[idx], newNodes[swapIdx]] = [newNodes[swapIdx], newNodes[idx]];
+      return { ...prev, nodes: newNodes };
+    });
+  };
+
+  const handleSave = () => {
+    setWorkflows(prev => {
+      const exists = prev.findIndex(w => w.id === workflow.id);
+      if (exists >= 0) {
+        const updated = [...prev];
+        updated[exists] = workflow;
+        return updated;
+      }
+      return [...prev, workflow];
+    });
+  };
+
+  const handleTest = () => {
+    setTestRunning(true);
+    setTestResult(null);
+    setTimeout(() => {
+      setTestRunning(false);
+      const sampleLead = leads.length > 0 ? leads[0] : { name: 'Sarah Chen', company: 'Acme Corp', score: 72 };
+      setTestResult(`Test passed. Workflow executed ${workflow.nodes.length} steps for sample lead "${(sampleLead as any).name}" (Score: ${(sampleLead as any).score}). All conditions evaluated successfully.`);
+    }, 2000);
+  };
+
+  const toggleWorkflowStatus = () => {
+    setWorkflow(prev => ({
+      ...prev,
+      status: prev.status === 'active' ? 'paused' : 'active',
+    }));
+  };
+
+  const createNewWorkflow = () => {
+    const newWf: Workflow = {
+      id: `wf-${Date.now()}`,
+      name: 'Untitled Workflow',
       status: 'draft',
-      steps: [
-        { id: `s-${Date.now()}`, day: 0, type: 'email', title: 'Initial Outreach', description: 'First contact email' },
+      nodes: [
+        { id: `n-${Date.now()}`, type: 'trigger', title: 'New trigger', description: 'Configure the trigger event', config: { triggerType: 'lead_created' } },
       ],
-      enrolledLeads: 0,
-      completedLeads: 0,
       createdAt: new Date().toISOString(),
+      stats: { leadsProcessed: 0, conversionRate: 0, timeSavedHrs: 0, roi: 0 },
     };
-    setCampaigns(prev => [...prev, newCamp]);
-    setNewCampName('');
-    setNewCampDesc('');
-    setShowNewCampaign(false);
+    setWorkflow(newWf);
+    setSelectedNodeId(null);
+    setShowWorkflowList(false);
   };
 
-  const addCampaignStep = (campaignId: string) => {
-    setCampaigns(prev => prev.map(c => {
-      if (c.id !== campaignId) return c;
-      const lastDay = c.steps.length > 0 ? c.steps[c.steps.length - 1].day + 1 : 0;
-      return {
-        ...c,
-        steps: [...c.steps, {
-          id: `s-${Date.now()}`,
-          day: lastDay,
-          type: 'email' as const,
-          title: `Step ${c.steps.length + 1}`,
-          description: 'Configure this step',
-        }],
-      };
-    }));
+  const loadWorkflow = (wf: Workflow) => {
+    setWorkflow(wf);
+    setSelectedNodeId(null);
+    setShowWorkflowList(false);
   };
 
-  const removeCampaignStep = (campaignId: string, stepId: string) => {
-    setCampaigns(prev => prev.map(c => {
-      if (c.id !== campaignId) return c;
-      return { ...c, steps: c.steps.filter(s => s.id !== stepId) };
-    }));
+  // ─── Node rendering helpers ───
+  const getNodeIcon = (type: NodeType) => {
+    switch (type) {
+      case 'trigger': return <BoltIcon className="w-4 h-4" />;
+      case 'action': return <ZapIcon className="w-4 h-4" />;
+      case 'condition': return <GitBranchIcon className="w-4 h-4" />;
+      case 'wait': return <ClockIcon className="w-4 h-4" />;
+    }
   };
 
-  const updateStepType = (campaignId: string, stepId: string, type: CampaignStep['type']) => {
-    setCampaigns(prev => prev.map(c => {
-      if (c.id !== campaignId) return c;
-      return { ...c, steps: c.steps.map(s => s.id === stepId ? { ...s, type } : s) };
-    }));
-  };
+  // Condition node renders with Yes/No branches
+  const isCondition = (node: WorkflowNode) => node.type === 'condition';
 
-  const updateStepTitle = (campaignId: string, stepId: string, title: string) => {
-    setCampaigns(prev => prev.map(c => {
-      if (c.id !== campaignId) return c;
-      return { ...c, steps: c.steps.map(s => s.id === stepId ? { ...s, title } : s) };
-    }));
+  const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
+    active: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+    paused: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+    draft: { bg: 'bg-slate-50', text: 'text-slate-600', dot: 'bg-slate-400' },
   };
-
-  const updateStepDay = (campaignId: string, stepId: string, day: number) => {
-    setCampaigns(prev => prev.map(c => {
-      if (c.id !== campaignId) return c;
-      return { ...c, steps: c.steps.map(s => s.id === stepId ? { ...s, day } : s) };
-    }));
-  };
-
-  const tabs = [
-    { key: 'rules' as const, label: 'Automation Rules', icon: <GitBranchIcon className="w-4 h-4" /> },
-    { key: 'campaigns' as const, label: 'Campaign Builder', icon: <ZapIcon className="w-4 h-4" /> },
-    { key: 'suggestions' as const, label: 'AI Suggestions', icon: <SparklesIcon className="w-4 h-4" /> },
-  ];
+  const sc = statusColors[workflow.status];
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-5">
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* HEADER BAR                                                    */}
+      {/* ══════════════════════════════════════════════════════════════ */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">Workflow Automation</h1>
-          <p className="text-slate-500 mt-1 text-sm">Build intelligent IF/THEN rules and multi-step campaigns</p>
+        <div className="flex items-center space-x-2">
+          <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
+            Automation <span className="text-slate-300 mx-0.5">&rsaquo;</span> Workflow Builder <span className="text-slate-300 mx-0.5">&rsaquo;</span>
+            <input
+              type="text"
+              value={workflow.name}
+              onChange={e => setWorkflow(prev => ({ ...prev, name: e.target.value }))}
+              className="bg-transparent border-0 outline-none text-2xl font-black text-slate-900 font-heading w-64 inline-block"
+              placeholder="Workflow name"
+            />
+          </h1>
         </div>
-        <div className="flex items-center space-x-2 text-xs">
-          <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full font-bold">
-            {rules.filter(r => r.enabled).length} active rules
-          </div>
-          <div className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full font-bold">
-            {campaigns.filter(c => c.status === 'active').length} running campaigns
-          </div>
-        </div>
-      </div>
 
-      {/* Tab Navigation */}
-      <div className="flex space-x-1 bg-white rounded-2xl p-1.5 shadow-sm border border-slate-100">
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center space-x-2 px-5 py-3 rounded-xl text-sm font-bold transition-all ${
-              activeTab === tab.key
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* === TAB: Automation Rules === */}
-      {activeTab === 'rules' && (
-        <div className="space-y-6">
-          {/* Create Rule Button */}
-          {!showRuleBuilder && (
+        <div className="flex items-center space-x-3">
+          {/* Workflow Switcher */}
+          <div className="relative">
             <button
-              onClick={() => setShowRuleBuilder(true)}
-              className="flex items-center space-x-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+              onClick={() => setShowWorkflowList(!showWorkflowList)}
+              className="flex items-center space-x-2 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
             >
-              <PlusIcon className="w-4 h-4" />
-              <span>Create New Rule</span>
+              <GitBranchIcon className="w-3.5 h-3.5" />
+              <span>{workflows.length} Workflows</span>
             </button>
-          )}
+            {showWorkflowList && (
+              <div className="absolute right-0 top-12 bg-white border border-slate-200 rounded-xl shadow-xl z-30 w-64 py-2">
+                {workflows.map(wf => (
+                  <button
+                    key={wf.id}
+                    onClick={() => loadWorkflow(wf)}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors ${
+                      wf.id === workflow.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600'
+                    }`}
+                  >
+                    <span className="font-semibold">{wf.name}</span>
+                    <span className={`ml-2 text-[10px] font-bold uppercase ${wf.status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      {wf.status}
+                    </span>
+                  </button>
+                ))}
+                <div className="border-t border-slate-100 mt-1 pt-1">
+                  <button
+                    onClick={createNewWorkflow}
+                    className="w-full text-left px-4 py-2.5 text-sm text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center space-x-2"
+                  >
+                    <PlusIcon className="w-3.5 h-3.5" />
+                    <span>New Workflow</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
-          {/* Rule Builder */}
-          {showRuleBuilder && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="p-5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">New Automation Rule</h3>
-                <button onClick={resetBuilder} className="p-1.5 text-slate-400 hover:text-slate-600">
-                  <XIcon className="w-4 h-4" />
+          <button
+            onClick={handleSave}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <CheckIcon className="w-4 h-4 text-emerald-500" />
+            <span>Save</span>
+          </button>
+          <button
+            onClick={handleTest}
+            disabled={testRunning}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+          >
+            {testRunning ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            ) : (
+              <PlayIcon className="w-4 h-4" />
+            )}
+            <span>{testRunning ? 'Running...' : 'Test'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* CANVAS (70%) + CONFIG PANEL (30%)                             */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="flex flex-col lg:flex-row gap-5">
+
+        {/* ─── Workflow Canvas (70%) ─── */}
+        <div className="lg:w-[70%]">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+            {/* Canvas Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <h3 className="font-bold text-slate-800 font-heading text-sm">{workflow.name}</h3>
+                <button
+                  onClick={toggleWorkflowStatus}
+                  className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${sc.bg} ${sc.text}`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} ${workflow.status === 'active' ? 'animate-pulse' : ''}`}></span>
+                  <span>{workflow.status}</span>
                 </button>
               </div>
+              <span className="text-xs text-slate-400 font-medium">{workflow.nodes.length} steps</span>
+            </div>
 
-              <div className="p-6 space-y-6">
-                {/* Name & Description */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Rule Name</label>
-                    <input
-                      type="text"
-                      value={builderName}
-                      onChange={e => setBuilderName(e.target.value)}
-                      placeholder="e.g., Auto-qualify hot leads"
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                    />
+            {/* Canvas Body - Visual Workflow */}
+            <div className="p-6 min-h-[420px]">
+              <div className="flex flex-col items-center space-y-0">
+                {workflow.nodes.map((node, idx) => {
+                  const meta = NODE_TYPE_META[node.type];
+                  const isSelected = selectedNodeId === node.id;
+                  const isCond = isCondition(node);
+
+                  return (
+                    <React.Fragment key={node.id}>
+                      {/* Node Card */}
+                      <button
+                        onClick={() => setSelectedNodeId(node.id)}
+                        className={`w-full max-w-md relative group transition-all ${
+                          isSelected
+                            ? 'ring-2 ring-indigo-500 ring-offset-2 rounded-xl shadow-lg'
+                            : 'hover:shadow-md rounded-xl'
+                        }`}
+                      >
+                        <div className={`p-4 rounded-xl border transition-all ${
+                          isSelected ? 'border-indigo-200 bg-indigo-50/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}>
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${meta.bgClass}`}>
+                              {getNodeIcon(node.type)}
+                            </div>
+                            <div className="flex-1 text-left min-w-0">
+                              <div className="flex items-center space-x-2">
+                                <span className={`text-[10px] font-black uppercase tracking-wider text-${meta.color}-600`}>
+                                  {meta.label}{idx > 0 && node.type === 'action' ? ` ${workflow.nodes.slice(0, idx).filter(n => n.type === 'action').length + 1}` : ''}
+                                </span>
+                              </div>
+                              <p className="font-bold text-sm text-slate-800 mt-0.5 truncate">{node.title}</p>
+                              <p className="text-xs text-slate-400 mt-0.5 truncate">{node.description}</p>
+                            </div>
+                            {isSelected && (
+                              <div className="shrink-0">
+                                <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Condition branches indicator */}
+                          {isCond && (
+                            <div className="flex items-center justify-center space-x-8 mt-3 pt-3 border-t border-slate-100">
+                              <span className="flex items-center space-x-1.5 text-xs font-bold text-emerald-600">
+                                <CheckIcon className="w-3.5 h-3.5" />
+                                <span>Yes</span>
+                              </span>
+                              <span className="flex items-center space-x-1.5 text-xs font-bold text-rose-500">
+                                <XIcon className="w-3.5 h-3.5" />
+                                <span>No</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Delete button on hover */}
+                        {node.type !== 'trigger' && (
+                          <div className="absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={e => { e.stopPropagation(); removeNode(node.id); }}
+                              className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                            >
+                              <XIcon className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </button>
+
+                      {/* Connector Arrow */}
+                      {idx < workflow.nodes.length - 1 && (
+                        <div className="flex flex-col items-center py-1">
+                          <div className="w-0.5 h-4 bg-slate-200"></div>
+                          <svg className="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 12 12">
+                            <path d="M6 9L1 4h10L6 9z" />
+                          </svg>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+
+              {/* Add Step Buttons */}
+              <div className="flex items-center justify-center space-x-3 mt-6 pt-4 border-t border-dashed border-slate-200">
+                <button
+                  onClick={() => addNode('action')}
+                  className="flex items-center space-x-1.5 px-4 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all border border-emerald-200"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  <span>Add Step</span>
+                </button>
+                <button
+                  onClick={() => addNode('condition')}
+                  className="flex items-center space-x-1.5 px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-xs font-bold hover:bg-amber-100 transition-all border border-amber-200"
+                >
+                  <GitBranchIcon className="w-3.5 h-3.5" />
+                  <span>Add Condition</span>
+                </button>
+                <button
+                  onClick={() => addNode('wait')}
+                  className="flex items-center space-x-1.5 px-4 py-2.5 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all border border-violet-200"
+                >
+                  <ClockIcon className="w-3.5 h-3.5" />
+                  <span>Add Wait</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Step Configuration (30%) ─── */}
+        <div className="lg:w-[30%] space-y-5">
+          {selectedNode ? (
+            <>
+              {/* Config Panel */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${NODE_TYPE_META[selectedNode.type].bgClass}`}>
+                      {getNodeIcon(selectedNode.type)}
+                    </div>
+                    <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                      {NODE_TYPE_META[selectedNode.type].label} Config
+                    </span>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Description</label>
-                    <input
-                      type="text"
-                      value={builderDesc}
-                      onChange={e => setBuilderDesc(e.target.value)}
-                      placeholder="What does this rule do?"
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                    />
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => moveNode(selectedNode.id, 'up')}
+                      className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                      title="Move up"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                    </button>
+                    <button
+                      onClick={() => moveNode(selectedNode.id, 'down')}
+                      className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                      title="Move down"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
                   </div>
                 </div>
 
-                {/* IF - Trigger */}
-                <div>
-                  <label className="block text-xs font-black text-indigo-600 mb-3 uppercase tracking-wider">IF (Trigger)</label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {TRIGGER_OPTIONS.map(trigger => (
-                      <button
-                        key={trigger.type}
-                        onClick={() => setBuilderTrigger(trigger.type)}
-                        className={`text-left p-4 rounded-xl border-2 transition-all ${
-                          builderTrigger === trigger.type
-                            ? 'border-indigo-600 bg-indigo-50 shadow-md'
-                            : 'border-slate-100 bg-white hover:border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2 mb-1.5">
-                          <span className={builderTrigger === trigger.type ? 'text-indigo-600' : 'text-slate-400'}>
-                            {trigger.icon}
-                          </span>
-                          <span className="text-sm font-bold text-slate-900">{trigger.label}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500">{trigger.desc}</p>
-                      </button>
-                    ))}
-                  </div>
+                {/* Selected node title */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Step Name</label>
+                  <input
+                    type="text"
+                    value={selectedNode.title}
+                    onChange={e => updateNodeTitle(selectedNode.id, e.target.value)}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Description</label>
+                  <textarea
+                    value={selectedNode.description}
+                    onChange={e => updateNodeDescription(selectedNode.id, e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none"
+                  />
+                </div>
+
+                {/* Type-specific settings */}
+                <div className="space-y-3">
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Settings</p>
 
                   {/* Trigger Config */}
-                  {builderTrigger === 'score_change' && (
-                    <div className="mt-3 flex items-center space-x-3">
-                      <span className="text-xs font-bold text-slate-600">Score exceeds:</span>
-                      <input
-                        type="number"
-                        value={builderTriggerConfig.threshold as number || 80}
-                        onChange={e => setBuilderTriggerConfig(prev => ({ ...prev, threshold: parseInt(e.target.value) || 0 }))}
-                        className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                    </div>
-                  )}
-                  {builderTrigger === 'time_elapsed' && (
-                    <div className="mt-3 flex items-center space-x-3">
-                      <span className="text-xs font-bold text-slate-600">Days inactive:</span>
-                      <input
-                        type="number"
-                        value={builderTriggerConfig.days as number || 14}
-                        onChange={e => setBuilderTriggerConfig(prev => ({ ...prev, days: parseInt(e.target.value) || 0 }))}
-                        className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                    </div>
-                  )}
-                  {builderTrigger === 'status_change' && (
-                    <div className="mt-3 flex items-center space-x-3">
-                      <span className="text-xs font-bold text-slate-600">New status:</span>
+                  {selectedNode.type === 'trigger' && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">Trigger Event</label>
                       <select
-                        value={builderTriggerConfig.status as string || ''}
-                        onChange={e => setBuilderTriggerConfig(prev => ({ ...prev, status: e.target.value }))}
-                        className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        value={selectedNode.config.triggerType as string || 'lead_created'}
+                        onChange={e => updateNodeConfig(selectedNode.id, 'triggerType', e.target.value)}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
-                        <option value="">Any</option>
-                        <option value="Contacted">Contacted</option>
-                        <option value="Qualified">Qualified</option>
-                        <option value="Lost">Lost</option>
+                        {TRIGGER_OPTIONS.map(t => (
+                          <option key={t.type} value={t.type}>{t.label}</option>
+                        ))}
                       </select>
                     </div>
                   )}
-                </div>
 
-                {/* THEN - Actions */}
-                <div>
-                  <label className="block text-xs font-black text-emerald-600 mb-3 uppercase tracking-wider">THEN (Actions)</label>
+                  {/* Action Config - AI Scoring specific */}
+                  {selectedNode.type === 'action' && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Use model</label>
+                        <select
+                          value={selectedNode.config.model as string || 'gemini-3-flash'}
+                          onChange={e => updateNodeConfig(selectedNode.id, 'model', e.target.value)}
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          {MODEL_OPTIONS.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
 
-                  {/* Selected actions */}
-                  {builderActions.length > 0 && (
-                    <div className="space-y-2 mb-4">
-                      {builderActions.map((action, idx) => {
-                        const opt = ACTION_OPTIONS.find(a => a.type === action.type);
-                        return (
-                          <div key={idx} className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-emerald-600">{opt?.icon}</span>
-                              <span className="text-sm font-bold text-slate-900">{opt?.label}</span>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase">Action {idx + 1}</span>
-                            </div>
-                            <button onClick={() => removeBuilderAction(idx)} className="p-1 text-slate-400 hover:text-red-500">
-                              <XIcon className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-2">Include</label>
+                        <div className="space-y-2">
+                          {[
+                            { key: 'companyData', label: 'Company data' },
+                            { key: 'webBehavior', label: 'Web behavior' },
+                            { key: 'socialSignals', label: 'Social signals' },
+                            { key: 'emailEngagement', label: 'Email engagement' },
+                          ].map(opt => (
+                            <label key={opt.key} className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!!selectedNode.config[opt.key]}
+                                onChange={e => updateNodeConfig(selectedNode.id, opt.key, e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span className="text-sm text-slate-700">{opt.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Update frequency</label>
+                        <select
+                          value={selectedNode.config.frequency as string || 'real_time'}
+                          onChange={e => updateNodeConfig(selectedNode.id, 'frequency', e.target.value)}
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          {FREQUENCY_OPTIONS.map(f => (
+                            <option key={f} value={f}>{f.replace('_', '-').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Confidence threshold</label>
+                        <select
+                          value={selectedNode.config.threshold as number || 80}
+                          onChange={e => updateNodeConfig(selectedNode.id, 'threshold', parseInt(e.target.value))}
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          {[60, 70, 80, 90, 95].map(v => (
+                            <option key={v} value={v}>{v}%</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
                   )}
 
-                  <div className="flex flex-wrap gap-2">
-                    {ACTION_OPTIONS.map(action => (
-                      <button
-                        key={action.type}
-                        onClick={() => addBuilderAction(action.type)}
-                        className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-700 transition-all"
-                      >
-                        {action.icon}
-                        <span>{action.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Save */}
-                <div className="flex items-center space-x-3 pt-2">
-                  <button
-                    onClick={saveRule}
-                    disabled={!builderName || !builderTrigger || builderActions.length === 0}
-                    className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <CheckIcon className="w-4 h-4" />
-                    <span>Save Rule</span>
-                  </button>
-                  <button onClick={resetBuilder} className="px-4 py-3 text-sm font-bold text-slate-500 hover:text-slate-700">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Existing Rules */}
-          {rules.length === 0 && !showRuleBuilder ? (
-            <div className="bg-white rounded-2xl p-12 text-center border border-slate-100 shadow-sm">
-              <GitBranchIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 font-semibold">No automation rules yet</p>
-              <p className="text-xs text-slate-400 mt-1">Create IF/THEN rules to automate your workflow</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {rules.map(rule => (
-                <div
-                  key={rule.id}
-                  className={`bg-white rounded-2xl border p-5 transition-all ${
-                    rule.enabled ? 'border-slate-100 shadow-sm' : 'border-slate-50 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        rule.enabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'
-                      }`}>
-                        <BoltIcon className="w-5 h-5" />
-                      </div>
+                  {/* Condition Config */}
+                  {selectedNode.type === 'condition' && (
+                    <>
                       <div>
-                        <p className="font-bold text-slate-900 text-sm">{rule.name}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{rule.description}</p>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Field</label>
+                        <select
+                          value={selectedNode.config.field as string || 'score'}
+                          onChange={e => updateNodeConfig(selectedNode.id, 'field', e.target.value)}
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="score">Lead Score</option>
+                          <option value="status">Lead Status</option>
+                          <option value="company">Company Size</option>
+                          <option value="engagement">Engagement Level</option>
+                        </select>
                       </div>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      {/* Trigger & Actions summary */}
-                      <div className="hidden md:flex items-center space-x-2">
-                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase">
-                          IF: {rule.trigger.label}
-                        </span>
-                        <span className="text-slate-300">→</span>
-                        {rule.actions.map((a, i) => (
-                          <span key={i} className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">
-                            {a.label}
-                          </span>
-                        ))}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Operator</label>
+                          <select
+                            value={selectedNode.config.operator as string || 'gt'}
+                            onChange={e => updateNodeConfig(selectedNode.id, 'operator', e.target.value)}
+                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                          >
+                            {OPERATOR_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Value</label>
+                          <input
+                            type="number"
+                            value={selectedNode.config.value as number || 50}
+                            onChange={e => updateNodeConfig(selectedNode.id, 'value', parseInt(e.target.value) || 0)}
+                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                          />
+                        </div>
                       </div>
+                    </>
+                  )}
 
-                      <span className="text-[10px] font-bold text-slate-400">
-                        {rule.runCount} runs
-                      </span>
-
-                      <button
-                        onClick={() => toggleRule(rule.id)}
-                        className={`relative w-12 h-6 rounded-full transition-all ${
-                          rule.enabled ? 'bg-indigo-600' : 'bg-slate-200'
-                        }`}
-                      >
-                        <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                          rule.enabled ? 'translate-x-6' : 'translate-x-0.5'
-                        }`}></div>
-                      </button>
-
-                      <button
-                        onClick={() => deleteRule(rule.id)}
-                        className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
-                      >
-                        <XIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* === TAB: Campaign Automation === */}
-      {activeTab === 'campaigns' && (
-        <div className="space-y-6">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setShowNewCampaign(true)}
-              className="flex items-center space-x-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-            >
-              <PlusIcon className="w-4 h-4" />
-              <span>New Campaign</span>
-            </button>
-          </div>
-
-          {/* New Campaign Form */}
-          {showNewCampaign && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Create Campaign</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Campaign Name</label>
-                  <input
-                    type="text"
-                    value={newCampName}
-                    onChange={e => setNewCampName(e.target.value)}
-                    placeholder="e.g., Q1 Lead Nurture"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Description</label>
-                  <input
-                    type="text"
-                    value={newCampDesc}
-                    onChange={e => setNewCampDesc(e.target.value)}
-                    placeholder="Campaign objective"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={createCampaign}
-                  disabled={!newCampName}
-                  className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
-                >
-                  <CheckIcon className="w-4 h-4" />
-                  <span>Create</span>
-                </button>
-                <button onClick={() => setShowNewCampaign(false)} className="text-sm font-bold text-slate-500 hover:text-slate-700">Cancel</button>
-              </div>
-            </div>
-          )}
-
-          {/* Campaign List */}
-          {campaigns.map(campaign => {
-            const isExpanded = expandedCampaign === campaign.id;
-            const statusColors: Record<string, string> = {
-              draft: 'slate',
-              active: 'emerald',
-              paused: 'amber',
-              completed: 'indigo',
-            };
-            const sColor = statusColors[campaign.status] || 'slate';
-
-            return (
-              <div key={campaign.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                {/* Campaign Header */}
-                <div
-                  className="p-5 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors"
-                  onClick={() => setExpandedCampaign(isExpanded ? null : campaign.id)}
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-10 h-10 rounded-xl bg-${sColor}-50 text-${sColor}-600 flex items-center justify-center`}>
-                      <ZapIcon className="w-5 h-5" />
-                    </div>
+                  {/* Wait Config */}
+                  {selectedNode.type === 'wait' && (
                     <div>
-                      <div className="flex items-center space-x-2">
-                        <p className="font-bold text-slate-900 text-sm">{campaign.name}</p>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-${sColor}-50 text-${sColor}-600`}>
-                          {campaign.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{campaign.description}</p>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">Wait duration (days)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={selectedNode.config.days as number || 1}
+                        onChange={e => updateNodeConfig(selectedNode.id, 'days', parseInt(e.target.value) || 1)}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
                     </div>
-                  </div>
+                  )}
+                </div>
+              </div>
 
-                  <div className="flex items-center space-x-4">
-                    <div className="hidden md:flex items-center space-x-4 text-xs text-slate-500">
-                      <span><span className="font-bold text-slate-900">{campaign.steps.length}</span> steps</span>
-                      <span><span className="font-bold text-slate-900">{campaign.enrolledLeads}</span> enrolled</span>
-                    </div>
-
-                    {campaign.status !== 'completed' && (
-                      <button
-                        onClick={e => { e.stopPropagation(); toggleCampaignStatus(campaign.id); }}
-                        className={`p-2.5 rounded-xl transition-all ${
-                          campaign.status === 'active'
-                            ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
-                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                        }`}
-                      >
-                        {campaign.status === 'active' ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
-                      </button>
-                    )}
-                  </div>
+              {/* Test Parameters */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Test Parameters</p>
+                <div className="space-y-2.5">
+                  <button
+                    onClick={handleTest}
+                    disabled={testRunning}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-all border border-indigo-200 disabled:opacity-50"
+                  >
+                    <PlayIcon className="w-4 h-4" />
+                    <span>Test with sample lead</span>
+                  </button>
+                  <button className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-slate-50 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-all border border-slate-200">
+                    <CogIcon className="w-4 h-4" />
+                    <span>View scoring logic</span>
+                  </button>
                 </div>
 
-                {/* Campaign Steps (Expanded) */}
-                {isExpanded && (
-                  <div className="px-5 pb-5 border-t border-slate-50">
-                    <div className="pt-4 space-y-0">
-                      {campaign.steps.map((step, idx) => {
-                        const stepColor = STEP_TYPE_COLORS[step.type] || 'slate';
-                        return (
-                          <div key={step.id} className="flex items-start">
-                            {/* Timeline */}
-                            <div className="flex flex-col items-center mr-4 shrink-0">
-                              <div className={`w-8 h-8 rounded-full bg-${stepColor}-100 text-${stepColor}-600 flex items-center justify-center text-xs font-black border-2 border-white shadow-sm`}>
-                                {step.day}
-                              </div>
-                              {idx < campaign.steps.length - 1 && (
-                                <div className={`w-0.5 h-8 bg-${stepColor}-100`}></div>
-                              )}
-                            </div>
-
-                            {/* Step Content */}
-                            <div className="flex-1 pb-4">
-                              <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
-                                <div className="flex items-center space-x-3">
-                                  <select
-                                    value={step.type}
-                                    onChange={e => updateStepType(campaign.id, step.id, e.target.value as CampaignStep['type'])}
-                                    className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase bg-${stepColor}-50 text-${stepColor}-600 border-0 outline-none cursor-pointer`}
-                                  >
-                                    <option value="email">Email</option>
-                                    <option value="wait">Wait</option>
-                                    <option value="condition">Condition</option>
-                                    <option value="action">Action</option>
-                                  </select>
-                                  <input
-                                    type="text"
-                                    value={step.title}
-                                    onChange={e => updateStepTitle(campaign.id, step.id, e.target.value)}
-                                    className="text-sm font-bold text-slate-900 bg-transparent border-0 outline-none w-40"
-                                  />
-                                  <span className="text-xs text-slate-400 hidden md:inline">{step.description}</span>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <div className="flex items-center space-x-1">
-                                    <span className="text-[10px] font-bold text-slate-400">Day</span>
-                                    <input
-                                      type="number"
-                                      value={step.day}
-                                      onChange={e => updateStepDay(campaign.id, step.id, parseInt(e.target.value) || 0)}
-                                      className="w-12 px-1.5 py-1 text-xs text-center border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500"
-                                    />
-                                  </div>
-                                  <button
-                                    onClick={() => removeCampaignStep(campaign.id, step.id)}
-                                    className="p-1 text-slate-300 hover:text-red-500 transition-colors"
-                                  >
-                                    <XIcon className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                {testResult && (
+                  <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                    <div className="flex items-start space-x-2">
+                      <CheckIcon className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-emerald-700 leading-relaxed">{testResult}</p>
                     </div>
-
-                    <button
-                      onClick={() => addCampaignStep(campaign.id)}
-                      className="flex items-center space-x-1.5 px-4 py-2 bg-slate-50 text-slate-500 rounded-xl text-xs font-bold hover:bg-slate-100 transition-all mt-2"
-                    >
-                      <PlusIcon className="w-3.5 h-3.5" />
-                      <span>Add Step</span>
-                    </button>
                   </div>
                 )}
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* === TAB: AI Suggestions === */}
-      {activeTab === 'suggestions' && (
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-black text-slate-900">AI-Powered Automation Ideas</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Based on your pipeline data ({leads.length} leads), here are recommended automations
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {AI_SUGGESTIONS.map(suggestion => (
-              <div key={suggestion.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white shrink-0">
-                      <SparklesIcon className="w-5 h-5" />
+              {/* Performance */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Performance</p>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Avg. accuracy', value: '94.2%', color: 'emerald' },
+                    { label: 'Avg. time', value: '1.2 seconds', color: 'indigo' },
+                    { label: 'Cost per score', value: '$0.08', color: 'amber' },
+                  ].map((perf, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">{perf.label}</span>
+                      <span className={`text-sm font-bold text-${perf.color}-600`}>{perf.value}</span>
                     </div>
-                    <div>
-                      <p className="font-bold text-slate-900">{suggestion.title}</p>
-                      <p className="text-sm text-slate-500 mt-1">{suggestion.description}</p>
-
-                      <div className="flex items-center space-x-2 mt-3">
-                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase">
-                          IF: {TRIGGER_OPTIONS.find(t => t.type === suggestion.trigger)?.label}
-                        </span>
-                        <span className="text-slate-300">→</span>
-                        <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase">
-                          THEN: {ACTION_OPTIONS.find(a => a.type === suggestion.action)?.label}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-right shrink-0 ml-4">
-                    <div className="flex items-center space-x-1.5 mb-3">
-                      <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${suggestion.confidence}%` }}></div>
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-400">{suggestion.confidence}%</span>
-                    </div>
-                    <button
-                      onClick={() => applySuggestion(suggestion)}
-                      className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-                    >
-                      <PlusIcon className="w-3.5 h-3.5" />
-                      <span>Apply Rule</span>
-                    </button>
-                  </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Pro Tip */}
-          <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-xl">
-            <div className="flex items-center space-x-3 mb-3">
-              <SparklesIcon className="w-5 h-5 text-indigo-400" />
-              <span className="text-xs font-black text-indigo-400 uppercase tracking-wider">Automation Tip</span>
+            </>
+          ) : (
+            /* Empty state - no node selected */
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-4">
+                <CogIcon className="w-7 h-7 text-slate-300" />
+              </div>
+              <h3 className="font-bold text-slate-700 text-sm">Step Configuration</h3>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                Select a step in the workflow canvas to configure its settings, test parameters, and view performance metrics.
+              </p>
             </div>
-            <p className="text-sm text-slate-300">
-              Start with 2-3 simple rules and monitor their effectiveness for a week before adding more.
-              The best automations are ones that handle repetitive tasks you'd normally do manually,
-              like tagging leads from specific sources or following up after content generation.
+          )}
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* WORKFLOW ANALYTICS (Bottom Panel)                              */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Workflow Analytics</h3>
+          <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${sc.bg} ${sc.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`}></span>
+            <span>{workflow.status}</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div>
+            <p className="text-3xl font-black text-white">{workflow.stats.leadsProcessed.toLocaleString()}</p>
+            <p className="text-xs text-slate-400 font-semibold mt-1">Leads Processed</p>
+          </div>
+          <div>
+            <p className="text-3xl font-black text-white">
+              {workflow.stats.conversionRate}%
+              <span className="text-emerald-400 text-sm font-bold ml-1.5">
+                <TrendUpIcon className="w-3.5 h-3.5 inline" /> 2.1% from manual
+              </span>
             </p>
+            <p className="text-xs text-slate-400 font-semibold mt-1">Conversion Rate</p>
+          </div>
+          <div>
+            <p className="text-3xl font-black text-white">{workflow.stats.timeSavedHrs} hrs</p>
+            <p className="text-xs text-slate-400 font-semibold mt-1">Time Saved This Month</p>
+          </div>
+          <div>
+            <p className="text-3xl font-black text-emerald-400">{workflow.stats.roi}%</p>
+            <p className="text-xs text-slate-400 font-semibold mt-1">ROI</p>
           </div>
         </div>
-      )}
+
+        {/* Mini activity bar */}
+        <div className="mt-5 pt-4 border-t border-slate-700">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <span className="font-semibold">Processing activity (last 7 days)</span>
+            <span className="font-bold text-slate-400">{Math.round(workflow.stats.leadsProcessed / 30)} avg/day</span>
+          </div>
+          <div className="flex items-end space-x-1 h-10">
+            {[35, 42, 28, 55, 48, 62, 38].map((v, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-t bg-indigo-500/40 hover:bg-indigo-500/70 transition-colors"
+                style={{ height: `${(v / 62) * 100}%` }}
+              ></div>
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-slate-600 mt-1">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
