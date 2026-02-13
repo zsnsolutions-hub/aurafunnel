@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
 
@@ -72,6 +72,8 @@ const PER_PAGE = 50;
 
 const LeadManagement: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
+
+  const navigate = useNavigate();
 
   // ── Data State ──
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
@@ -540,7 +542,7 @@ const LeadManagement: React.FC = () => {
                         </td>
                         <td className="px-4 py-3.5">
                           <button
-                            onClick={() => { setSelectedLead(lead); setIsActionsOpen(true); }}
+                            onClick={() => navigate(`/portal/leads/${lead.id}`)}
                             className="flex items-center space-x-3 text-left"
                           >
                             <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-[11px] text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors flex-shrink-0">
@@ -570,7 +572,7 @@ const LeadManagement: React.FC = () => {
                         <td className="px-4 py-3.5 text-right">
                           <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={() => { setSelectedLead(lead); setIsActionsOpen(true); }}
+                              onClick={() => navigate(`/portal/leads/${lead.id}`)}
                               title="View"
                               className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                             >
