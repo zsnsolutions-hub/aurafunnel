@@ -333,6 +333,14 @@ Tone: ${tone}. Context: ${lead.insights}. ${additionalContext || ''}`
 - Pricing placeholder
 - Next Steps / CTA
 Tone: ${tone}. Lead score: ${lead.score}. Insights: ${lead.insights}. Use {{first_name}}, {{company}} tags. ${additionalContext || ''}`
+    },
+    [ContentCategory.AD_COPY]: {
+      system: 'You are a performance marketing copywriter specializing in high-converting B2B ad copy.',
+      prompt: `Create compelling ad copy targeting ${lead.company}'s industry:
+- Google Search Ad: 3 headlines (max 30 chars each) + 2 descriptions (max 90 chars each)
+- LinkedIn Sponsored Ad: Headline + body (max 150 words) + CTA
+- A/B variant with a different angle
+Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
     }
   };
 

@@ -1,169 +1,373 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useOutletContext } from 'react-router-dom';
-import { Lead, ContentCategory, ToneType, EmailStep, User } from '../../types';
-import { generateContentByCategory, AIResponse } from '../../lib/gemini';
-import { SparklesIcon, MailIcon, GlobeIcon, HashIcon, BookIcon, FileTextIcon, BriefcaseIcon, CopyIcon, CheckIcon, ClockIcon, BoltIcon, DownloadIcon } from '../../components/Icons';
+import { Lead, ContentCategory, ToneType, EmailStep, User, EmailSequenceConfig } from '../../types';
+import { generateContentByCategory, generateEmailSequence, parseEmailSequenceResponse, AIResponse } from '../../lib/gemini';
+import {
+  SparklesIcon, MailIcon, GlobeIcon, HashIcon, BookIcon, BriefcaseIcon, BoltIcon,
+  CopyIcon, CheckIcon, ClockIcon, EyeIcon, XIcon, PlusIcon, DownloadIcon
+} from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import EmailSequenceBuilder from '../../components/dashboard/EmailSequenceBuilder';
 
-const PERSONALIZATION_TAGS = [
-  { key: '{{first_name}}', label: 'First Name' },
-  { key: '{{company}}', label: 'Company' },
-  { key: '{{industry}}', label: 'Industry' },
-  { key: '{{city}}', label: 'City' },
-  { key: '{{recent_activity}}', label: 'Recent Activity' },
-  { key: '{{ai_insight}}', label: 'AI Insight' },
+// ═══════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════
+type ContentLength = 'Short' | 'Medium' | 'Long';
+type ContentFocus = 'Problem → Solution' | 'Features → Benefits' | 'Story → CTA' | 'Data → Insight';
+
+interface ContentBlock {
+  id: string;
+  title: string;
+  subject: string;
+  body: string;
+}
+
+interface TemplateOption {
+  id: string;
+  name: string;
+  blocks: ContentBlock[];
+}
+
+// ═══════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════
+const CONTENT_TYPES: { id: ContentCategory; label: string; icon: React.FC<{ className?: string }> }[] = [
+  { id: ContentCategory.EMAIL_SEQUENCE, label: 'Email Sequence', icon: MailIcon },
+  { id: ContentCategory.LANDING_PAGE, label: 'Landing Page', icon: GlobeIcon },
+  { id: ContentCategory.SOCIAL_MEDIA, label: 'Social Post', icon: HashIcon },
+  { id: ContentCategory.BLOG_ARTICLE, label: 'Blog Article', icon: BookIcon },
+  { id: ContentCategory.AD_COPY, label: 'Ad Copy', icon: BoltIcon },
+  { id: ContentCategory.PROPOSAL, label: 'Proposal', icon: BriefcaseIcon },
 ];
 
-const CONTENT_TYPES: { category: ContentCategory; icon: React.FC<{ className?: string }>; color: string; desc: string; badge?: string }[] = [
-  { category: ContentCategory.EMAIL_SEQUENCE, icon: MailIcon, color: 'text-indigo-600 bg-indigo-50', desc: 'Multi-step campaigns', badge: 'Wizard' },
-  { category: ContentCategory.LANDING_PAGE, icon: GlobeIcon, color: 'text-emerald-600 bg-emerald-50', desc: 'High-converting copy' },
-  { category: ContentCategory.SOCIAL_MEDIA, icon: HashIcon, color: 'text-blue-600 bg-blue-50', desc: 'LinkedIn & social' },
-  { category: ContentCategory.BLOG_ARTICLE, icon: BookIcon, color: 'text-amber-600 bg-amber-50', desc: 'SEO-optimized articles' },
-  { category: ContentCategory.REPORT, icon: FileTextIcon, color: 'text-purple-600 bg-purple-50', desc: 'Whitepapers & reports' },
-  { category: ContentCategory.PROPOSAL, icon: BriefcaseIcon, color: 'text-rose-600 bg-rose-50', desc: 'Proposals & pitches' },
+const LENGTH_OPTIONS: ContentLength[] = ['Short', 'Medium', 'Long'];
+const FOCUS_OPTIONS: ContentFocus[] = ['Problem → Solution', 'Features → Benefits', 'Story → CTA', 'Data → Insight'];
+
+const PERSONALIZATION_OPTIONS = [
+  { id: 'names', label: 'Use lead names' },
+  { id: 'company', label: 'Company details' },
+  { id: 'insights', label: 'AI insights' },
+  { id: 'behavioral', label: 'Behavioral data' },
 ];
 
-const TEMPLATES: Record<string, { id: string; name: string; prompt: string }[]> = {
+const SUBJECT_LABEL: Record<string, string> = {
+  [ContentCategory.EMAIL_SEQUENCE]: 'Subject Line',
+  [ContentCategory.LANDING_PAGE]: 'Headline',
+  [ContentCategory.SOCIAL_MEDIA]: 'Post Title',
+  [ContentCategory.BLOG_ARTICLE]: 'Article Title',
+  [ContentCategory.AD_COPY]: 'Ad Headline',
+  [ContentCategory.PROPOSAL]: 'Proposal Title',
+};
+
+const FOCUS_TO_GOAL: Record<ContentFocus, EmailSequenceConfig['goal']> = {
+  'Problem → Solution': 'book_meeting',
+  'Features → Benefits': 'product_demo',
+  'Story → CTA': 'nurture',
+  'Data → Insight': 're_engage',
+};
+
+const LENGTH_TO_COUNT: Record<ContentLength, number> = { Short: 3, Medium: 5, Long: 7 };
+
+const TEMPLATES: Record<string, TemplateOption[]> = {
+  [ContentCategory.EMAIL_SEQUENCE]: [
+    { id: 'cold', name: 'Cold Outreach', blocks: [
+      { id: 'e1', title: 'Initial Outreach', subject: 'Helping {{company}} with {{pain_point}}', body: 'Hi {{first_name}},\n\nI noticed {{company}} has been focusing on {{insight_1}}. We help companies like yours achieve {{benefit}} by {{solution}}.\n\nWould you be open to a brief chat?\n\n[Book a time]\n\nBest,\n[Your Name]' },
+      { id: 'e2', title: 'Follow Up', subject: 'Quick follow up, {{first_name}}', body: 'Hi {{first_name}},\n\nI wanted to circle back on my previous note about {{pain_point}}. I believe we could help {{company}} see meaningful results.\n\nWould a 15-minute call this week work?\n\nBest,\n[Your Name]' },
+      { id: 'e3', title: 'Break Up', subject: 'Closing the loop', body: 'Hi {{first_name}},\n\nI understand timing is everything. I\'ll assume {{pain_point}} isn\'t a priority for {{company}} right now.\n\nIf that changes, I\'d love to reconnect. Here\'s a resource that might help in the meantime: [link]\n\nAll the best,\n[Your Name]' },
+    ]},
+    { id: 'nurture', name: 'Nurture Sequence', blocks: [
+      { id: 'n1', title: 'Value Share', subject: '{{industry}} insights for {{company}}', body: 'Hi {{first_name}},\n\nI came across this {{industry}} report that I thought {{company}} would find valuable. It covers {{insight_1}} and how top companies are approaching it.\n\n[Link to resource]\n\nHappy to discuss how this applies to your team.\n\nBest,\n[Your Name]' },
+      { id: 'n2', title: 'Case Study', subject: 'How companies like {{company}} achieved {{benefit}}', body: 'Hi {{first_name}},\n\nI wanted to share how a company similar to {{company}} tackled {{pain_point}} and saw a 40% improvement in just 90 days.\n\nWould you like me to send over the full case study?\n\nBest,\n[Your Name]' },
+      { id: 'n3', title: 'Soft Ask', subject: 'Quick question, {{first_name}}', body: 'Hi {{first_name}},\n\nI\'ve been sharing some resources around {{insight_1}} — curious if any of these resonated with your team at {{company}}?\n\nNo pressure at all, just want to make sure I\'m sending relevant info.\n\nBest,\n[Your Name]' },
+    ]},
+  ],
   [ContentCategory.LANDING_PAGE]: [
-    { id: 'hero', name: 'Hero Section', prompt: 'Focus on a compelling hero headline with subheadline and primary CTA. Include social proof elements.' },
-    { id: 'features', name: 'Features Overview', prompt: 'Create a features section with 4-6 benefit cards. Each needs icon placeholder, bold title, and description.' },
-    { id: 'pricing', name: 'Pricing Page', prompt: 'Design a 3-tier pricing comparison. Include a feature checklist for each tier and annual discount.' },
+    { id: 'launch', name: 'Product Launch', blocks: [{ id: 'lp1', title: 'Product Launch Page', subject: 'Transform Your {{industry}} Results Today', body: 'Stop losing {{pain_point}} to outdated tools.\n\n{{company}} deserves better.\n\nOur platform helps teams like yours:\n• Increase efficiency by 40%\n• Reduce manual work by 60%\n• Get results in under 30 days\n\nTrusted by 500+ companies worldwide.\n\n[Start Free Trial] [Watch Demo]' }] },
+    { id: 'webinar', name: 'Webinar Registration', blocks: [{ id: 'wp1', title: 'Webinar Page', subject: 'Free Webinar: Solving {{pain_point}} in {{industry}}', body: 'Join us for an exclusive session on how leading companies are tackling {{pain_point}}.\n\nWhat you\'ll learn:\n• The #1 mistake {{industry}} companies make\n• A proven framework for {{benefit}}\n• Live Q&A with industry experts\n\nDate: [Date] | Time: [Time]\nSpots limited to 100 attendees.\n\n[Reserve My Spot]' }] },
   ],
   [ContentCategory.SOCIAL_MEDIA]: [
-    { id: 'thought', name: 'Thought Leadership', prompt: 'Write a thought leadership post with a bold opening hook and industry data points. End with a question.' },
-    { id: 'case', name: 'Mini Case Study', prompt: 'Structure as: Problem faced → Solution applied → Results achieved. Include specific numbers.' },
-    { id: 'engage', name: 'Engagement Post', prompt: 'Write a question-based post that drives comments and shares. Include a poll suggestion.' },
+    { id: 'thought', name: 'Thought Leadership', blocks: [{ id: 'sp1', title: 'LinkedIn Post', subject: 'Thought Leadership Post', body: 'Most {{industry}} companies are still doing {{pain_point}} the hard way.\n\nHere\'s what the top 1% do differently:\n\n1. They automate {{insight_1}}\n2. They focus on {{benefit}} over vanity metrics\n3. They invest in {{solution}} early\n\nThe result? 3x faster growth with half the effort.\n\nWhich of these resonates most with your experience? 👇' }] },
   ],
   [ContentCategory.BLOG_ARTICLE]: [
-    { id: 'howto', name: 'How-To Guide', prompt: 'Create a step-by-step tutorial with numbered steps, pro tips, and a summary checklist.' },
-    { id: 'listicle', name: 'Top 10 Listicle', prompt: 'Write a top 10 list with SEO-optimized title, engaging intro, and detailed entries.' },
-    { id: 'comparison', name: 'Comparison Article', prompt: 'Write a detailed comparison with pros/cons table, scoring criteria, and final recommendation.' },
+    { id: 'howto', name: 'How-To Guide', blocks: [{ id: 'ba1', title: 'How-To Article', subject: 'How to Solve {{pain_point}}: A Step-by-Step Guide', body: 'Introduction:\n{{pain_point}} is one of the biggest challenges facing {{industry}} companies today. In this guide, we\'ll walk through a proven framework for {{benefit}}.\n\nStep 1: Audit Your Current Process\nBefore making changes, understand where you stand...\n\nStep 2: Identify Quick Wins\nLook for areas where {{solution}} can have immediate impact...\n\nStep 3: Implement and Measure\nTrack key metrics like {{insight_1}} to ensure progress...\n\nConclusion:\nBy following these steps, companies like {{company}} can expect to see measurable improvements within 30 days.' }] },
   ],
-  [ContentCategory.REPORT]: [
-    { id: 'exec', name: 'Executive Summary', prompt: 'Write a concise executive summary: key findings, analysis highlights, and strategic recommendations.' },
-    { id: 'industry', name: 'Industry Analysis', prompt: 'Produce an industry analysis: market trends, competitive landscape, growth projections, and risk factors.' },
-    { id: 'roi', name: 'ROI Framework', prompt: 'Generate an ROI analysis with cost breakdown, projected returns, payback period, and sensitivity analysis.' },
+  [ContentCategory.AD_COPY]: [
+    { id: 'google', name: 'Google Ads Set', blocks: [{ id: 'ad1', title: 'Google Search Ads', subject: 'Solve {{pain_point}} Fast | {{benefit}}', body: 'Headline 1: Solve {{pain_point}} in Days\nHeadline 2: {{benefit}} for {{industry}}\nHeadline 3: Trusted by 500+ Companies\n\nDescription 1: Stop wasting time on {{pain_point}}. Our {{solution}} helps {{industry}} companies achieve {{benefit}} 3x faster. Start free today.\n\nDescription 2: Join leading {{industry}} companies using our platform. Get {{benefit}} with proven {{solution}}. No credit card required.\n\nDisplay URL: yoursite.com/{{industry}}-solutions' }] },
   ],
   [ContentCategory.PROPOSAL]: [
-    { id: 'saas', name: 'SaaS Proposal', prompt: 'Write a SaaS product proposal: implementation roadmap, pricing tiers, SLA terms, and success metrics.' },
-    { id: 'consulting', name: 'Consulting Pitch', prompt: 'Create a consulting proposal: project scope, methodology, team bios, deliverables, and investment.' },
-    { id: 'partner', name: 'Partnership Pitch', prompt: 'Draft a strategic partnership proposal: mutual benefits, revenue model, joint GTM strategy.' },
+    { id: 'saas', name: 'SaaS Proposal', blocks: [{ id: 'pr1', title: 'SaaS Proposal', subject: 'Proposal: {{solution}} for {{company}}', body: 'Dear {{first_name}},\n\nThank you for your interest in our platform. This proposal outlines how we can help {{company}} address {{pain_point}} and achieve {{benefit}}.\n\nThe Challenge:\n{{company}} currently faces {{pain_point}}, which impacts {{insight_1}}.\n\nOur Solution:\nWe propose implementing {{solution}} with the following deliverables:\n1. Full platform setup and integration\n2. Custom configuration for {{industry}}\n3. Team training and onboarding\n4. Dedicated success manager\n\nTimeline: 4-6 weeks\nInvestment: [Pricing tiers]\n\nNext Steps:\nWe\'d love to schedule a walkthrough. Please select a time at [link].\n\nBest regards,\n[Your Name]' }] },
   ],
 };
 
-interface HistoryItem {
-  id: string;
-  category: ContentCategory;
-  leadName: string;
-  tone: ToneType;
-  preview: string;
-  fullContent: string;
-  createdAt: Date;
-  wordCount: number;
+// ═══════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════
+function deriveAISuggestions(body: string): { icon: string; text: string }[] {
+  if (!body || body.length < 20) return [];
+  const suggestions: { icon: string; text: string }[] = [];
+
+  if (/\bachieve\b/i.test(body))
+    suggestions.push({ icon: '💡', text: 'Try "scale {{goal}}" instead of "achieve" for stronger action' });
+  if (!/\d+%?/.test(body))
+    suggestions.push({ icon: '📊', text: 'Add specific metric: "increase efficiency by 40%"' });
+  if (!/\b(used by|trusted by|join|companies|customers|clients)\b/i.test(body))
+    suggestions.push({ icon: '🏆', text: 'Include social proof: "Used by 500+ companies"' });
+  if (!body.includes('?'))
+    suggestions.push({ icon: '❓', text: 'End with a question to boost response rates' });
+  if (!/\{\{.+?\}\}/.test(body))
+    suggestions.push({ icon: '🎯', text: 'Add personalization tags like {{first_name}} to increase engagement' });
+  if (body.split(/\s+/).length > 200)
+    suggestions.push({ icon: '✂️', text: 'Consider shortening — emails under 125 words have 50% higher response rates' });
+  if (!/p\.?s\.?/i.test(body) && body.split(/\s+/).length > 60)
+    suggestions.push({ icon: '📝', text: 'Add a P.S. line — it\'s the second most-read part of any email' });
+  if (/\bhelp\b/i.test(body) && !/\bhelped\b/i.test(body))
+    suggestions.push({ icon: '💡', text: 'Replace "help" with a specific verb like "enable", "empower", or "streamline"' });
+
+  return suggestions.slice(0, 3);
 }
 
+function derivePredictions(subject: string, body: string): { openRate: number; openVar: number; clickRate: number; clickVar: number; responseRate: number; responseVar: number; sendTime: string } | null {
+  if (!body || body.length < 20) return null;
+  const hasPersonalization = /\{\{.+?\}\}/.test(body);
+  const subjectHasPersonalization = /\{\{.+?\}\}/.test(subject);
+  const hasCTA = /\b(book|schedule|call|chat|demo|try|start|click|learn|reserve|sign up)\b/i.test(body);
+  const hasQuestion = body.includes('?');
+  const hasNumbers = /\d+%?/.test(body);
+  const words = body.split(/\s+/).filter(Boolean).length;
+  const subjectLen = subject.length;
+
+  let openRate = 35;
+  if (hasPersonalization) openRate += 4;
+  if (subjectHasPersonalization) openRate += 5;
+  if (subjectLen > 5 && subjectLen < 50) openRate += 3;
+  if (subject.includes('?')) openRate += 2;
+
+  let clickRate = 5;
+  if (hasCTA) clickRate += 2;
+  if (hasPersonalization) clickRate += 1.5;
+  if (hasNumbers) clickRate += 1;
+
+  let responseRate = 3;
+  if (hasQuestion) responseRate += 1.5;
+  if (hasPersonalization) responseRate += 1;
+  if (words < 150) responseRate += 0.5;
+
+  const times = ['Tue 10:30 AM', 'Wed 9:00 AM', 'Thu 2:00 PM', 'Tue 8:30 AM'];
+  const timeIdx = (subject.length + body.length) % times.length;
+
+  return {
+    openRate: Math.round(openRate),
+    openVar: 8,
+    clickRate: Math.round(clickRate * 10) / 10,
+    clickVar: 3,
+    responseRate: Math.round(responseRate * 10) / 10,
+    responseVar: 2,
+    sendTime: times[timeIdx],
+  };
+}
+
+const PREVIEW_REPLACEMENTS: Record<string, string> = {
+  '{{first_name}}': 'Sarah',
+  '{{last_name}}': 'Chen',
+  '{{company}}': 'Acme Corp',
+  '{{industry}}': 'SaaS',
+  '{{pain_point}}': 'lead conversion bottlenecks',
+  '{{insight_1}}': 'scaling outbound sales operations',
+  '{{benefit}}': '3x pipeline growth',
+  '{{solution}}': 'AI-powered sales automation',
+  '{{goal}}': 'revenue targets',
+  '{{recent_activity}}': 'viewed pricing page twice',
+  '{{ai_insight}}': 'high purchase intent detected',
+  '{{city}}': 'San Francisco',
+};
+
+function replaceTagsForPreview(text: string): string {
+  let out = text;
+  for (const [tag, val] of Object.entries(PREVIEW_REPLACEMENTS)) {
+    out = out.replace(new RegExp(tag.replace(/[{}]/g, '\\$&'), 'g'), val);
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════
+// COMPONENT
+// ═══════════════════════════════════════════════
 const ContentGen: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
   const query = new URLSearchParams(useLocation().search);
   const initialLeadId = query.get('leadId');
 
+  // ── State ──
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<ContentCategory | null>(null);
-  const [selectedLeadId, setSelectedLeadId] = useState(initialLeadId || '');
+  const [contentType, setContentType] = useState<ContentCategory>(ContentCategory.EMAIL_SEQUENCE);
+  const [selectedSegments, setSelectedSegments] = useState<string[]>(['hot']);
   const [tone, setTone] = useState<ToneType>(ToneType.PROFESSIONAL);
-  const [additionalContext, setAdditionalContext] = useState('');
+  const [length, setLength] = useState<ContentLength>('Medium');
+  const [focus, setFocus] = useState<ContentFocus>('Problem → Solution');
+  const [personalization, setPersonalization] = useState<Record<string, boolean>>({ names: true, company: true, insights: true, behavioral: false });
+  const [blocks, setBlocks] = useState<ContentBlock[]>([]);
+  const [activeBlockIdx, setActiveBlockIdx] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [sequenceSteps, setSequenceSteps] = useState<EmailStep[]>([]);
-  const [showSequenceResult, setShowSequenceResult] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const creditsTotal = user.credits_total ?? 500;
   const creditsUsed = user.credits_used ?? 0;
-  const creditsRemaining = creditsTotal - creditsUsed;
-  const usagePercentage = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
 
+  // ── Effects ──
   useEffect(() => {
     const fetchLeads = async () => {
       setLoadingLeads(true);
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('client_id', user.id)
-        .order('score', { ascending: false });
+      const { data } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
       if (data) setLeads(data);
-      if (error) console.error('Error fetching leads:', error);
       setLoadingLeads(false);
     };
     if (user) fetchLeads();
   }, [user]);
 
-  const selectedLead = leads.find(l => l.id === selectedLeadId);
+  // ── Derived ──
+  const segments = useMemo(() => [
+    { id: 'hot', name: 'Hot Leads', count: leads.filter(l => l.score > 80).length },
+    { id: 'enterprise', name: 'Enterprise', count: leads.filter(l => l.company && l.company.length > 8).length },
+    { id: 'nurturing', name: 'Nurturing', count: leads.filter(l => l.status === 'Contacted').length },
+    { id: 'new', name: 'New Leads', count: leads.filter(l => l.status === 'New').length },
+    { id: 'qualified', name: 'Qualified', count: leads.filter(l => l.status === 'Qualified').length },
+  ], [leads]);
 
-  const contentStats = useMemo(() => {
-    if (!result) return null;
-    const words = result.split(/\s+/).filter(Boolean).length;
-    const sentences = result.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
-    const readingTime = Math.max(1, Math.ceil(words / 200));
-    const avgSentenceLen = sentences > 0 ? Math.round(words / sentences) : 0;
-    const score = Math.min(98, Math.max(45,
-      85 - Math.abs(avgSentenceLen - 16) * 1.5 + (words > 100 ? 5 : 0) + (words < 500 ? 3 : -2)
-    ));
-    return { words, sentences, readingTime, score: Math.round(score) };
-  }, [result]);
+  const targetLeads = useMemo(() => {
+    const ids = new Set<string>();
+    selectedSegments.forEach(seg => {
+      const filter: Record<string, (l: Lead) => boolean> = {
+        hot: l => l.score > 80,
+        enterprise: l => l.company?.length > 8,
+        nurturing: l => l.status === 'Contacted',
+        new: l => l.status === 'New',
+        qualified: l => l.status === 'Qualified',
+      };
+      leads.filter(filter[seg] || (() => false)).forEach(l => ids.add(l.id));
+    });
+    return leads.filter(l => ids.has(l.id));
+  }, [leads, selectedSegments]);
+
+  const activeBlock = blocks[activeBlockIdx] || null;
+
+  const aiSuggestions = useMemo(() => deriveAISuggestions(activeBlock?.body || ''), [activeBlock?.body]);
+  const predictions = useMemo(() => derivePredictions(activeBlock?.subject || '', activeBlock?.body || ''), [activeBlock?.subject, activeBlock?.body]);
+
+  const currentTemplates = TEMPLATES[contentType] || [];
+
+  // ── Handlers ──
+  const toggleSegment = (id: string) => {
+    setSelectedSegments(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  };
+
+  const togglePersonalization = (id: string) => {
+    setPersonalization(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const updateBlock = (field: 'subject' | 'body', value: string) => {
+    setBlocks(prev => prev.map((b, i) => i === activeBlockIdx ? { ...b, [field]: value } : b));
+  };
+
+  const addEmailBlock = () => {
+    const num = blocks.length + 1;
+    setBlocks(prev => [...prev, { id: `email-${num}-${Date.now()}`, title: `Email ${num}`, subject: '', body: '' }]);
+    setActiveBlockIdx(blocks.length);
+  };
+
+  const applyTemplate = (template: TemplateOption) => {
+    setBlocks(template.blocks.map((b, i) => ({ ...b, id: `tmpl-${i}-${Date.now()}` })));
+    setActiveBlockIdx(0);
+    setShowTemplates(false);
+  };
 
   const handleGenerate = async () => {
-    if (!selectedLead || !selectedCategory) return;
+    if (targetLeads.length === 0 && leads.length === 0) {
+      setError('No leads available. Add leads first.');
+      return;
+    }
     if (creditsUsed >= creditsTotal) {
       setError('Credit limit reached. Please upgrade your plan.');
       return;
     }
+
     setIsGenerating(true);
     setError('');
-    setResult('');
+
+    const representative = targetLeads[0] || leads[0];
+    const enabledTags = Object.entries(personalization).filter(([, v]) => v).map(([k]) => k);
+    const contextParts = [
+      `Focus: ${focus}`,
+      `Length: ${length}`,
+      `Personalization: ${enabledTags.join(', ')}`,
+      `Target audience: ${selectedSegments.join(', ')} (${targetLeads.length} leads)`,
+    ];
 
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('consume_credits', { amount: 1 });
-      if (rpcError) throw new Error(rpcError.message);
-      if (!rpcData.success) {
-        setError(rpcData.message || 'Credit consumption failed.');
-        setIsGenerating(false);
-        return;
+      const { error: rpcError } = await supabase.rpc('consume_credits', { amount: 1 });
+      if (rpcError) console.error('Credit error:', rpcError);
+
+      if (contentType === ContentCategory.EMAIL_SEQUENCE) {
+        const config: EmailSequenceConfig = {
+          audienceLeadIds: targetLeads.map(l => l.id),
+          goal: FOCUS_TO_GOAL[focus],
+          sequenceLength: LENGTH_TO_COUNT[length],
+          cadence: 'every_2_days',
+          tone,
+        };
+        const response = await generateEmailSequence(targetLeads.length > 0 ? targetLeads : leads.slice(0, 5), config);
+        const parsed = parseEmailSequenceResponse(response.text, config);
+
+        if (parsed.length > 0) {
+          setBlocks(parsed.map((s, i) => ({
+            id: `gen-${i}-${Date.now()}`,
+            title: s.delay,
+            subject: s.subject,
+            body: s.body,
+          })));
+        } else {
+          setBlocks([{ id: `raw-${Date.now()}`, title: 'Generated Sequence', subject: 'Email Sequence', body: response.text }]);
+        }
+        setActiveBlockIdx(0);
+
+        await supabase.from('ai_usage_logs').insert({
+          user_id: user.id,
+          action_type: 'email_sequence_generation',
+          tokens_used: response.tokens_used,
+          model_name: response.model_name,
+          prompt_name: response.prompt_name,
+          prompt_version: response.prompt_version,
+        });
+      } else {
+        const aiResponse = await generateContentByCategory(representative, contentType, tone, contextParts.join('. '));
+        const lines = aiResponse.text.split('\n');
+        const firstLine = lines[0]?.replace(/^#+\s*/, '').replace(/^\*+/, '').trim() || contentType;
+        setBlocks([{
+          id: `gen-${Date.now()}`,
+          title: contentType,
+          subject: firstLine.length > 80 ? firstLine.slice(0, 80) : firstLine,
+          body: aiResponse.text,
+        }]);
+        setActiveBlockIdx(0);
+
+        await supabase.from('ai_usage_logs').insert({
+          user_id: user.id,
+          lead_id: representative.id,
+          action_type: `${contentType.toLowerCase().replace(/\s+/g, '_')}_generation`,
+          tokens_used: aiResponse.tokens_used,
+          model_name: aiResponse.model_name,
+          prompt_name: aiResponse.prompt_name,
+          prompt_version: aiResponse.prompt_version,
+        });
       }
 
-      const aiResponse = await generateContentByCategory(selectedLead, selectedCategory, tone, additionalContext);
-      setResult(aiResponse.text);
-
-      const words = aiResponse.text.split(/\s+/).filter(Boolean).length;
-      setHistory(prev => [{
-        id: `gen-${Date.now()}`,
-        category: selectedCategory,
-        leadName: selectedLead.name,
-        tone,
-        preview: aiResponse.text.slice(0, 80) + '...',
-        fullContent: aiResponse.text,
-        createdAt: new Date(),
-        wordCount: words,
-      }, ...prev].slice(0, 20));
-
-      await supabase.from('ai_usage_logs').insert({
-        user_id: user.id,
-        lead_id: selectedLead.id,
-        action_type: `${selectedCategory.toLowerCase().replace(/\s+/g, '_')}_generation`,
-        tokens_used: aiResponse.tokens_used,
-        model_name: aiResponse.model_name,
-        prompt_name: aiResponse.prompt_name,
-        prompt_version: aiResponse.prompt_version,
-      });
       await supabase.from('audit_logs').insert({
         user_id: user.id,
         action: 'AI_CONTENT_GENERATED',
-        details: `Generated ${selectedCategory} for ${selectedLead.name} (${selectedLead.company}). Tone: ${tone}.`,
+        details: `Generated ${contentType} for ${targetLeads.length} leads. Tone: ${tone}, Focus: ${focus}.`,
       });
       if (refreshProfile) await refreshProfile();
     } catch (err: any) {
@@ -173,29 +377,10 @@ const ContentGen: React.FC = () => {
     }
   };
 
-  const handleSequenceComplete = async (steps: EmailStep[], response: AIResponse) => {
-    setSequenceSteps(steps);
-    setShowSequenceResult(true);
-    try {
-      const { error: rpcError } = await supabase.rpc('consume_credits', { amount: 1 });
-      if (rpcError) console.error('Credit error:', rpcError);
-      await supabase.from('ai_usage_logs').insert({
-        user_id: user.id,
-        action_type: 'email_sequence_generation',
-        tokens_used: response.tokens_used,
-        model_name: response.model_name,
-        prompt_name: response.prompt_name,
-        prompt_version: response.prompt_version,
-      });
-      await supabase.from('audit_logs').insert({
-        user_id: user.id,
-        action: 'AI_CONTENT_GENERATED',
-        details: `Generated email sequence with ${steps.length} steps.`,
-      });
-      if (refreshProfile) await refreshProfile();
-    } catch (err) {
-      console.error('Post-sequence error:', err);
-    }
+  const handleSave = () => {
+    localStorage.setItem('aura_studio_draft', JSON.stringify({ contentType, blocks, tone, focus, length }));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   const copyToClipboard = (text: string) => {
@@ -204,534 +389,453 @@ const ContentGen: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const copyFullSequence = () => {
-    const full = sequenceSteps.map(s =>
-      `--- ${s.delay} ---\nSubject: ${s.subject}\n\n${s.body}`
-    ).join('\n\n');
-    copyToClipboard(full);
-  };
-
-  const insertTagIntoContext = (tag: string) => {
-    setAdditionalContext(prev => prev + ' ' + tag);
-  };
-
-  const selectCategory = (cat: ContentCategory) => {
-    if (cat === selectedCategory) return;
-    setSelectedCategory(cat);
-    setResult('');
-    setError('');
-    setSequenceSteps([]);
-    setShowSequenceResult(false);
-    setActiveTemplate(null);
-    setAdditionalContext('');
-  };
-
-  const applyTemplate = (template: { id: string; name: string; prompt: string }) => {
-    setActiveTemplate(template.id);
-    setAdditionalContext(template.prompt);
-  };
-
-  const loadFromHistory = (item: HistoryItem) => {
-    setSelectedCategory(item.category);
-    setResult(item.fullContent);
-    setShowSequenceResult(false);
-    setSequenceSteps([]);
-  };
-
-  const downloadContent = () => {
-    if (!result) return;
-    const blob = new Blob([result], { type: 'text/plain' });
+  const downloadAll = () => {
+    const full = blocks.map(b => `--- ${b.title} ---\nSubject: ${b.subject}\n\n${b.body}`).join('\n\n');
+    const blob = new Blob([full], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${selectedCategory?.toLowerCase().replace(/\s+/g, '-') || 'content'}-${Date.now()}.txt`;
+    a.download = `${contentType.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const currentTemplates = selectedCategory && selectedCategory !== ContentCategory.EMAIL_SEQUENCE
-    ? TEMPLATES[selectedCategory] || []
-    : [];
+  // ── Load saved draft on mount ──
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('aura_studio_draft');
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft.blocks?.length > 0) {
+          setBlocks(draft.blocks);
+          if (draft.contentType) setContentType(draft.contentType);
+          if (draft.tone) setTone(draft.tone);
+          if (draft.focus) setFocus(draft.focus);
+          if (draft.length) setLength(draft.length);
+        }
+      }
+    } catch {}
+  }, []);
 
-  const isEmailMode = selectedCategory === ContentCategory.EMAIL_SEQUENCE;
+  // ═══════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════
+  const typeInfo = CONTENT_TYPES.find(t => t.id === contentType);
+  const TypeIcon = typeInfo?.icon || SparklesIcon;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* ═══ HEADER ═══ */}
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-heading">AI Content Generation Studio</h1>
-          <p className="text-slate-500 mt-1">Neural-powered content engine with templates, history, and real-time analysis.</p>
+      {/* ═══ HEADER BAR ═══ */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+            <TypeIcon className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2 text-sm">
+              <span className="font-bold text-slate-900 font-heading">Content Studio</span>
+              <span className="text-slate-300">&rsaquo;</span>
+              <span className="text-indigo-600 font-bold">New {typeInfo?.label}</span>
+            </div>
+            <p className="text-[10px] text-slate-400">{targetLeads.length} leads targeted &middot; {(creditsTotal - creditsUsed).toLocaleString()} credits left</p>
+          </div>
         </div>
-        <div className="text-right hidden sm:block">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Compute Budget</p>
-          <p className="text-sm font-bold text-indigo-600">{creditsRemaining.toLocaleString()} Generations Left</p>
+        <div className="flex items-center space-x-3">
+          {blocks.length > 0 && (
+            <button onClick={downloadAll} className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" title="Download">
+              <DownloadIcon className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            onClick={handleSave}
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all border ${
+              saved ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-200'
+            }`}
+          >
+            {saved ? 'Saved!' : 'Save'}
+          </button>
+          <button
+            onClick={() => blocks.length > 0 && setShowPreview(true)}
+            disabled={blocks.length === 0}
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 ${
+              blocks.length > 0 ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <EyeIcon className="w-4 h-4" />
+            <span>Preview</span>
+          </button>
         </div>
       </div>
 
       {/* ═══ TWO-PANEL LAYOUT ═══ */}
       <div className="flex flex-col lg:flex-row gap-6">
 
-        {/* ─── LEFT PANEL (28%) ─── */}
-        <div className="lg:w-[28%] space-y-4 shrink-0">
-          {/* Content Types */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Content Types</p>
-            <div className="space-y-1.5">
-              {CONTENT_TYPES.map(({ category, icon: Icon, color, desc, badge }) => {
-                const isActive = selectedCategory === category;
-                return (
+        {/* ─── SETUP PANEL (Left 30%) ─── */}
+        <div className="lg:w-[30%] shrink-0">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-6">
+            {/* 1. CONTENT TYPE */}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">1</span>
+                <span>Content Type</span>
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {CONTENT_TYPES.map(({ id, label, icon: Icon }) => (
                   <button
-                    key={category}
-                    onClick={() => selectCategory(category)}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition-all text-left group ${
-                      isActive
-                        ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20'
-                        : 'hover:bg-slate-50 text-slate-600'
+                    key={id}
+                    onClick={() => { setContentType(id); setBlocks([]); setActiveBlockIdx(0); }}
+                    className={`flex items-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                      contentType === id
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200'
                     }`}
                   >
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                      isActive ? 'bg-white/15' : color
-                    }`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0 flex-grow">
-                      <div className="flex items-center space-x-2">
-                        <p className={`text-xs font-bold truncate ${isActive ? 'text-white' : 'text-slate-700'}`}>{category}</p>
-                        {badge && (
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shrink-0 ${
-                            isActive ? 'bg-indigo-500 text-white' : 'bg-indigo-100 text-indigo-600'
-                          }`}>{badge}</span>
-                        )}
-                      </div>
-                      <p className={`text-[10px] truncate ${isActive ? 'text-white/60' : 'text-slate-400'}`}>{desc}</p>
-                    </div>
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{label}</span>
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Quick Templates */}
-          {currentTemplates.length > 0 && (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 animate-in fade-in duration-300">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Quick Templates</p>
-              <div className="space-y-2">
+            {/* 2. TARGET AUDIENCE */}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">2</span>
+                <span>Target Audience</span>
+              </p>
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value && !selectedSegments.includes(e.target.value)) toggleSegment(e.target.value); }}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none mb-3"
+              >
+                <option value="">Select Segment...</option>
+                {segments.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.count})</option>
+                ))}
+              </select>
+              <div className="flex flex-wrap gap-2">
+                {segments.slice(0, 3).map(seg => (
+                  <label key={seg.id} className="flex items-center space-x-1.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={selectedSegments.includes(seg.id)}
+                      onChange={() => toggleSegment(seg.id)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className={`text-[11px] font-bold ${selectedSegments.includes(seg.id) ? 'text-indigo-600' : 'text-slate-500'}`}>
+                      {seg.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {targetLeads.length > 0 && (
+                <p className="text-[10px] text-slate-400 mt-2">{targetLeads.length} leads in selected segments</p>
+              )}
+            </div>
+
+            {/* 3. AI PARAMETERS */}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">3</span>
+                <span>AI Parameters</span>
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Tone</label>
+                  <select value={tone} onChange={e => setTone(e.target.value as ToneType)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 outline-none">
+                    {Object.values(ToneType).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Length</label>
+                  <select value={length} onChange={e => setLength(e.target.value as ContentLength)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 outline-none">
+                    {LENGTH_OPTIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Focus</label>
+                  <select value={focus} onChange={e => setFocus(e.target.value as ContentFocus)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 outline-none">
+                    {FOCUS_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. PERSONALIZATION */}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">4</span>
+                <span>Personalization</span>
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {PERSONALIZATION_OPTIONS.map(opt => (
+                  <label key={opt.id} className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!personalization[opt.id]}
+                      onChange={() => togglePersonalization(opt.id)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className={`text-[11px] font-bold ${personalization[opt.id] ? 'text-indigo-600' : 'text-slate-500'}`}>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div className="flex space-x-3 pt-2">
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating || creditsUsed >= creditsTotal}
+                className={`flex-grow py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center space-x-2 ${
+                  isGenerating || creditsUsed >= creditsTotal
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg shadow-indigo-100/50 active:scale-95'
+                }`}
+              >
+                {isGenerating ? (
+                  <><div className="w-4 h-4 border-2 border-indigo-400 border-t-white rounded-full animate-spin" /><span>Generating...</span></>
+                ) : (
+                  <><SparklesIcon className="w-4 h-4" /><span>Generate with AI</span></>
+                )}
+              </button>
+              <button
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="px-4 py-3 rounded-xl text-xs font-bold border border-slate-200 text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+              >
+                Use Template
+              </button>
+            </div>
+
+            {/* Template Dropdown */}
+            {showTemplates && currentTemplates.length > 0 && (
+              <div className="bg-slate-50 rounded-2xl border border-slate-200 p-3 space-y-2 animate-in fade-in duration-200">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Templates</p>
                 {currentTemplates.map(tmpl => (
                   <button
                     key={tmpl.id}
                     onClick={() => applyTemplate(tmpl)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
-                      activeTemplate === tmpl.id
-                        ? 'bg-indigo-50 border-indigo-200'
-                        : 'border-slate-100 hover:border-slate-200'
-                    }`}
+                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all"
                   >
-                    <div className="flex items-center space-x-2">
-                      <BoltIcon className={`w-3.5 h-3.5 shrink-0 ${activeTemplate === tmpl.id ? 'text-indigo-500' : 'text-slate-300'}`} />
-                      <span className={`text-xs font-bold ${activeTemplate === tmpl.id ? 'text-indigo-700' : 'text-slate-600'}`}>{tmpl.name}</span>
-                    </div>
+                    <p className="text-xs font-bold text-slate-700">{tmpl.name}</p>
+                    <p className="text-[10px] text-slate-400">{tmpl.blocks.length} {tmpl.blocks.length === 1 ? 'block' : 'emails'}</p>
                   </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Generation History */}
-          {history.length > 0 && (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Recent Generations</p>
-                <span className="text-[9px] font-bold text-slate-300">{history.length}</span>
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 font-bold text-center">
+                {error}
               </div>
-              <div className="space-y-1.5 max-h-[260px] overflow-y-auto">
-                {history.slice(0, 10).map(item => {
-                  const typeInfo = CONTENT_TYPES.find(t => t.category === item.category);
-                  const TypeIcon = typeInfo?.icon || SparklesIcon;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => loadFromHistory(item)}
-                      className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors group"
-                    >
-                      <div className="flex items-center space-x-2 mb-1">
-                        <TypeIcon className="w-3 h-3 text-slate-300 shrink-0" />
-                        <span className="text-[10px] font-bold text-slate-600 truncate">{item.leadName}</span>
-                        <span className="text-[9px] text-slate-300 shrink-0 ml-auto">{item.wordCount}w</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 truncate pl-5">{item.preview}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Credit Gauge */}
-          <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-2xl">
-            <p className="text-[9px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3">Neural Compute</p>
-            <div className="flex items-end justify-between mb-2">
-              <span className="text-2xl font-black">{creditsRemaining.toLocaleString()}</span>
-              <span className="text-[10px] text-slate-500">/ {creditsTotal.toLocaleString()}</span>
-            </div>
-            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-indigo-500 to-indigo-300 h-full rounded-full transition-all duration-1000"
-                style={{ width: `${100 - usagePercentage}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-slate-500 mt-2">{usagePercentage}% consumed this cycle</p>
+            )}
           </div>
         </div>
 
-        {/* ─── RIGHT PANEL (72%) ─── */}
-        <div className="lg:w-[72%] space-y-6">
-
-          {/* ── Welcome Panel (no selection) ── */}
-          {!selectedCategory && (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-12 text-center animate-in fade-in duration-500">
-              <div className="w-20 h-20 mx-auto bg-gradient-to-br from-indigo-50 to-purple-50 rounded-3xl flex items-center justify-center mb-6">
-                <SparklesIcon className="w-10 h-10 text-indigo-400" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-900 font-heading mb-2">Welcome to the Studio</h2>
-              <p className="text-sm text-slate-500 max-w-md mx-auto mb-8">
-                Select a content type from the left panel to start generating AI-powered content.
-                Use templates for quick results or customize every detail.
-              </p>
-              <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto mb-8">
-                {[
-                  { label: 'Content Types', value: '6', sub: 'Available' },
-                  { label: 'Templates', value: String(Object.values(TEMPLATES).flat().length), sub: 'Pre-built' },
-                  { label: 'Credits', value: String(creditsRemaining), sub: 'Remaining' },
-                ].map(stat => (
-                  <div key={stat.label} className="p-4 bg-slate-50 rounded-2xl">
-                    <p className="text-lg font-black text-slate-900">{stat.value}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stat.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Quick Launch Tiles */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-2xl mx-auto">
-                {CONTENT_TYPES.map(({ category, icon: Icon, color, desc }) => (
+        {/* ─── EDITOR (Right 70%) ─── */}
+        <div className="lg:w-[70%] space-y-6">
+          {/* Editor Card */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Email Tabs (for sequences with multiple blocks) */}
+            {blocks.length > 1 && (
+              <div className="px-6 pt-4 pb-0 flex items-center space-x-1 border-b border-slate-100 overflow-x-auto">
+                {blocks.map((b, i) => (
                   <button
-                    key={category}
-                    onClick={() => selectCategory(category)}
-                    className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all text-left"
+                    key={b.id}
+                    onClick={() => setActiveBlockIdx(i)}
+                    className={`px-4 py-2.5 text-xs font-bold rounded-t-xl border border-b-0 transition-all whitespace-nowrap ${
+                      i === activeBlockIdx
+                        ? 'bg-white border-slate-200 text-indigo-600 -mb-px'
+                        : 'bg-slate-50 border-transparent text-slate-400 hover:text-slate-600'
+                    }`}
                   >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color} group-hover:scale-110 transition-transform mb-3`}>
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{category}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{desc}</p>
+                    {b.title || `Email ${i + 1}`}
                   </button>
                 ))}
-              </div>
-
-              {/* Quick Generate Banner (if arrived with leadId) */}
-              {initialLeadId && selectedLead && (
-                <div className="mt-8 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 max-w-lg mx-auto">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0">
-                      <SparklesIcon className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div className="flex-grow text-left">
-                      <p className="text-sm font-bold text-slate-800">Quick Generate for {selectedLead.name}</p>
-                      <p className="text-xs text-slate-500">{selectedLead.company} &middot; Score: {selectedLead.score}</p>
-                    </div>
-                    <button
-                      onClick={() => selectCategory(ContentCategory.EMAIL_SEQUENCE)}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shrink-0"
-                    >
-                      Start
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Email Sequence Builder ── */}
-          {isEmailMode && !showSequenceResult && (
-            <div className="animate-in fade-in duration-300">
-              <EmailSequenceBuilder
-                leads={leads}
-                onComplete={handleSequenceComplete}
-                onCancel={() => setSelectedCategory(null)}
-                isGenerating={isGenerating}
-                setIsGenerating={setIsGenerating}
-              />
-            </div>
-          )}
-
-          {/* ── Email Sequence Results ── */}
-          {isEmailMode && showSequenceResult && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900 font-heading">Sequence Complete</h2>
-                  <p className="text-sm text-slate-500">{sequenceSteps.length} emails generated and ready to deploy.</p>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <button
-                    onClick={copyFullSequence}
-                    className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-indigo-600 flex items-center space-x-2 transition-colors"
-                  >
-                    <CopyIcon className="w-4 h-4" />
-                    <span>{copied ? 'Copied!' : 'Copy All'}</span>
+                {contentType === ContentCategory.EMAIL_SEQUENCE && (
+                  <button onClick={addEmailBlock} className="px-3 py-2.5 text-slate-300 hover:text-indigo-600 transition-colors" title="Add email">
+                    <PlusIcon className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => { setShowSequenceResult(false); setSequenceSteps([]); }}
-                    className="px-4 py-2.5 text-indigo-600 bg-indigo-50 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
-                  >
-                    New Sequence
-                  </button>
-                </div>
-              </div>
-
-              {sequenceSteps.map(emailStep => (
-                <div key={emailStep.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center text-xs font-black">
-                        {emailStep.stepNumber}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-700">{emailStep.delay}</p>
-                        <p className="text-[10px] text-slate-400">{emailStep.tone}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(`Subject: ${emailStep.subject}\n\n${emailStep.body}`)}
-                      className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                    >
-                      <CopyIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="p-6 space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <MailIcon className="w-4 h-4 text-slate-300" />
-                      <p className="text-sm font-bold text-slate-800">{emailStep.subject}</p>
-                    </div>
-                    <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{emailStep.body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── General Content Generator (non-email) ── */}
-          {selectedCategory && !isEmailMode && (
-            <>
-              {/* Configuration Card */}
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5 animate-in fade-in duration-300">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800 font-heading text-lg">{selectedCategory}</h3>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configuration</p>
-                </div>
-
-                {/* Lead + Tone (side by side on desktop) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Target Lead</label>
-                    <select
-                      value={selectedLeadId}
-                      onChange={(e) => setSelectedLeadId(e.target.value)}
-                      disabled={loadingLeads}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all text-sm font-medium"
-                    >
-                      <option value="">{loadingLeads ? 'Loading leads...' : 'Choose a prospect...'}</option>
-                      {leads.map(l => (
-                        <option key={l.id} value={l.id}>{l.name} — {l.company} ({l.score})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Content Tone</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.values(ToneType).map(t => (
-                        <button
-                          key={t}
-                          onClick={() => setTone(t)}
-                          className={`px-3 py-2.5 text-xs rounded-xl font-bold transition-all border ${
-                            tone === t
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100'
-                              : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200'
-                          }`}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Lead Intelligence */}
-                {selectedLead && (
-                  <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl animate-in zoom-in-95 duration-300">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] font-black text-indigo-700 uppercase tracking-[0.2em]">Lead Intelligence</p>
-                      <span className="text-[10px] font-black bg-white px-2 py-0.5 rounded-full text-indigo-600 border border-indigo-100">{selectedLead.score}% Score</span>
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed italic">&ldquo;{selectedLead.insights}&rdquo;</p>
-                  </div>
                 )}
+              </div>
+            )}
 
-                {/* Personalization Tags + Context */}
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Personalization Tags</label>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {PERSONALIZATION_TAGS.map(tag => (
-                      <button
-                        key={tag.key}
-                        onClick={() => insertTagIntoContext(tag.key)}
-                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-colors border border-indigo-100"
-                      >
-                        {tag.key}
-                      </button>
-                    ))}
+            {/* Editor Body */}
+            {blocks.length > 0 && activeBlock ? (
+              <div className="p-6 space-y-4">
+                {/* Block Title */}
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center">
+                    <MailIcon className="w-4 h-4" />
                   </div>
-                  <textarea
-                    value={additionalContext}
-                    onChange={(e) => setAdditionalContext(e.target.value)}
-                    placeholder="Add context, instructions, or apply a template from the left panel..."
-                    rows={3}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition-all resize-none"
+                  <div className="flex-grow">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      {contentType === ContentCategory.EMAIL_SEQUENCE ? `EMAIL ${activeBlockIdx + 1}` : contentType.toUpperCase()}
+                    </p>
+                    <input
+                      value={activeBlock.title}
+                      onChange={e => setBlocks(prev => prev.map((b, i) => i === activeBlockIdx ? { ...b, title: e.target.value } : b))}
+                      className="text-sm font-bold text-slate-800 bg-transparent outline-none w-full"
+                      placeholder="Enter title..."
+                    />
+                  </div>
+                  <button onClick={() => copyToClipboard(`Subject: ${activeBlock.subject}\n\n${activeBlock.body}`)}
+                    className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    {copied ? <CheckIcon className="w-4 h-4 text-emerald-500" /> : <CopyIcon className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Subject Line */}
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">{SUBJECT_LABEL[contentType] || 'Subject'}</label>
+                  <input
+                    value={activeBlock.subject}
+                    onChange={e => updateBlock('subject', e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
+                    placeholder={`Enter ${(SUBJECT_LABEL[contentType] || 'subject').toLowerCase()}...`}
                   />
                 </div>
 
-                {/* Generate Button */}
-                <button
-                  onClick={handleGenerate}
-                  disabled={!selectedLead || isGenerating || creditsUsed >= creditsTotal}
-                  className={`w-full py-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center space-x-2 ${
-                    !selectedLead || isGenerating || creditsUsed >= creditsTotal
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-xl shadow-indigo-100/50 hover:scale-[1.01] active:scale-95'
-                  }`}
-                >
-                  {isGenerating ? (
-                    <span className="flex items-center space-x-3">
-                      <div className="w-5 h-5 border-2 border-indigo-400 border-t-white rounded-full animate-spin" />
-                      <span>Generating {selectedCategory}...</span>
-                    </span>
-                  ) : (
-                    <>
-                      <SparklesIcon className="w-5 h-5" />
-                      <span>Generate Content</span>
-                    </>
-                  )}
-                </button>
-                {creditsUsed >= creditsTotal && (
-                  <p className="text-center text-[10px] text-red-500 font-bold uppercase tracking-widest animate-pulse">
-                    Limit reached. Upgrade your plan to continue.
-                  </p>
-                )}
-              </div>
-
-              {/* Neural Output Panel */}
-              <div className="bg-slate-950 rounded-[2rem] shadow-3xl min-h-[400px] flex flex-col overflow-hidden border border-white/5 group">
-                {/* Output Header */}
-                <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-                    <span className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] font-heading">Neural Output</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {result && (
-                      <>
-                        <span className="text-[10px] text-white/20 font-bold">{tone}</span>
-                        <button
-                          onClick={downloadContent}
-                          className="p-2 bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60 rounded-lg transition-all"
-                          title="Download"
-                        >
-                          <DownloadIcon className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => copyToClipboard(result)}
-                          className="px-4 py-1.5 bg-white/10 text-white hover:bg-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-90"
-                        >
-                          {copied ? 'Copied!' : 'Copy'}
-                        </button>
-                      </>
-                    )}
-                  </div>
+                {/* Body Editor */}
+                <div>
+                  <textarea
+                    value={activeBlock.body}
+                    onChange={e => updateBlock('body', e.target.value)}
+                    rows={14}
+                    className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all resize-none font-mono"
+                    placeholder="Start writing or generate content with AI..."
+                  />
                 </div>
 
-                {/* Output Body */}
-                <div className="flex-grow p-8 overflow-y-auto custom-scrollbar">
-                  {isGenerating ? (
-                    <div className="space-y-5">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="h-3.5 bg-white/5 rounded-full animate-pulse"
-                          style={{ width: `${55 + Math.random() * 35}%`, animationDelay: `${i * 150}ms` }} />
+                {/* AI Suggestions */}
+                {aiSuggestions.length > 0 && (
+                  <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl">
+                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3 flex items-center space-x-1.5">
+                      <span>🎯</span>
+                      <span>AI Suggestions</span>
+                    </p>
+                    <div className="space-y-2">
+                      {aiSuggestions.map((s, i) => (
+                        <div key={i} className="flex items-start space-x-2">
+                          <span className="text-sm shrink-0">{s.icon}</span>
+                          <p className="text-xs text-slate-600 leading-relaxed">{s.text}</p>
+                        </div>
                       ))}
                     </div>
-                  ) : result ? (
-                    <div className="text-indigo-100/90 leading-relaxed font-mono text-sm whitespace-pre-wrap animate-in fade-in slide-in-from-bottom-2 duration-700">
-                      {result}
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
-                      <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-500">
-                        <SparklesIcon className="w-7 h-7 text-white/20" />
-                      </div>
-                      <p className="text-white/20 text-sm font-medium leading-relaxed max-w-[280px]">
-                        Select a lead, set your tone, and generate {selectedCategory?.toLowerCase()}.
-                      </p>
-                    </div>
-                  )}
-                  {error && (
-                    <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl text-xs font-bold text-center">
-                      {error}
-                    </div>
-                  )}
-                </div>
-
-                {/* Content Stats Bar */}
-                {contentStats && (
-                  <div className="px-6 py-3 bg-white/[0.02] border-t border-white/5 flex items-center justify-between">
-                    <div className="flex items-center space-x-5">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-[9px] font-bold text-white/20 uppercase">Words</span>
-                        <span className="text-[10px] font-black text-white/50">{contentStats.words}</span>
-                      </div>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-[9px] font-bold text-white/20 uppercase">Sentences</span>
-                        <span className="text-[10px] font-black text-white/50">{contentStats.sentences}</span>
-                      </div>
-                      <div className="flex items-center space-x-1.5">
-                        <ClockIcon className="w-3 h-3 text-white/20" />
-                        <span className="text-[10px] font-black text-white/50">{contentStats.readingTime}m read</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[9px] font-bold text-white/20 uppercase">Quality</span>
-                      <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            contentStats.score >= 80 ? 'bg-emerald-400' : contentStats.score >= 60 ? 'bg-amber-400' : 'bg-red-400'
-                          }`}
-                          style={{ width: `${contentStats.score}%` }}
-                        />
-                      </div>
-                      <span className={`text-[10px] font-black ${
-                        contentStats.score >= 80 ? 'text-emerald-400' : contentStats.score >= 60 ? 'text-amber-400' : 'text-red-400'
-                      }`}>{contentStats.score}</span>
-                    </div>
                   </div>
                 )}
+              </div>
+            ) : (
+              /* Empty State */
+              <div className="p-12 text-center">
+                <div className="w-16 h-16 mx-auto bg-slate-50 rounded-3xl flex items-center justify-center mb-4">
+                  <SparklesIcon className="w-8 h-8 text-slate-200" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-400 mb-1">No Content Yet</h3>
+                <p className="text-xs text-slate-300 max-w-xs mx-auto">
+                  Click &ldquo;Generate with AI&rdquo; to create content or select a template to get started.
+                </p>
+              </div>
+            )}
+          </div>
 
-                {/* Footer */}
-                <div className="px-4 py-3 bg-white/[0.01] border-t border-white/5 text-[9px] text-white/15 font-black uppercase tracking-[0.5em] text-center">
-                  Aura Content Engine v5.0
+          {/* ─── PREDICTIVE ANALYTICS ─── */}
+          {predictions && blocks.length > 0 && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 animate-in fade-in duration-300">
+              <div className="flex items-center space-x-2 mb-5">
+                <span className="text-sm">📊</span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Predictive Analytics</p>
+                <span className="text-[9px] bg-indigo-50 text-indigo-600 font-black px-2 py-0.5 rounded-lg uppercase tracking-wider">Expected Performance</span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Open Rate */}
+                <div className="p-4 bg-slate-50 rounded-2xl">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Open Rate</p>
+                  <div className="flex items-baseline space-x-1">
+                    <span className="text-2xl font-black text-slate-900">{predictions.openRate}%</span>
+                    <span className="text-[10px] text-slate-400">(±{predictions.openVar}%)</span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div className="bg-indigo-500 h-full rounded-full transition-all duration-700" style={{ width: `${predictions.openRate}%` }} />
+                  </div>
+                </div>
+
+                {/* Click Rate */}
+                <div className="p-4 bg-slate-50 rounded-2xl">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Click Rate</p>
+                  <div className="flex items-baseline space-x-1">
+                    <span className="text-2xl font-black text-slate-900">{predictions.clickRate}%</span>
+                    <span className="text-[10px] text-slate-400">(±{predictions.clickVar}%)</span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div className="bg-emerald-500 h-full rounded-full transition-all duration-700" style={{ width: `${predictions.clickRate * 5}%` }} />
+                  </div>
+                </div>
+
+                {/* Response Rate */}
+                <div className="p-4 bg-slate-50 rounded-2xl">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Response Rate</p>
+                  <div className="flex items-baseline space-x-1">
+                    <span className="text-2xl font-black text-slate-900">{predictions.responseRate}%</span>
+                    <span className="text-[10px] text-slate-400">(±{predictions.responseVar}%)</span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div className="bg-amber-500 h-full rounded-full transition-all duration-700" style={{ width: `${predictions.responseRate * 8}%` }} />
+                  </div>
+                </div>
+
+                {/* Optimal Send Time */}
+                <div className="p-4 bg-slate-50 rounded-2xl">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Optimal Send Time</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <ClockIcon className="w-5 h-5 text-indigo-500" />
+                    <span className="text-lg font-black text-slate-900">{predictions.sendTime}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Based on audience patterns</p>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
+
+      {/* ═══ PREVIEW MODAL ═══ */}
+      {showPreview && activeBlock && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Content Preview</p>
+                <p className="text-[10px] text-slate-400">Personalization tags replaced with sample data</p>
+              </div>
+              <button onClick={() => setShowPreview(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-grow overflow-y-auto p-6 space-y-6">
+              {blocks.map((block, i) => (
+                <div key={block.id} className={`${i > 0 ? 'pt-6 border-t border-slate-100' : ''}`}>
+                  <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2">{block.title}</p>
+                  <p className="text-sm font-bold text-slate-800 mb-3">{replaceTagsForPreview(block.subject)}</p>
+                  <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{replaceTagsForPreview(block.body)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end space-x-3 shrink-0">
+              <button onClick={() => {
+                const full = blocks.map(b => `Subject: ${replaceTagsForPreview(b.subject)}\n\n${replaceTagsForPreview(b.body)}`).join('\n\n---\n\n');
+                copyToClipboard(full);
+              }} className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-indigo-600 flex items-center space-x-2 transition-colors">
+                <CopyIcon className="w-4 h-4" />
+                <span>{copied ? 'Copied!' : 'Copy Preview'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

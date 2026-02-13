@@ -123,7 +123,8 @@ export enum ContentCategory {
   SOCIAL_MEDIA = 'Social Media Posts',
   BLOG_ARTICLE = 'Blog Articles',
   REPORT = 'Reports & Whitepapers',
-  PROPOSAL = 'Proposals & Pitches'
+  PROPOSAL = 'Proposals & Pitches',
+  AD_COPY = 'Ad Copy'
 }
 
 export enum ToneType {
