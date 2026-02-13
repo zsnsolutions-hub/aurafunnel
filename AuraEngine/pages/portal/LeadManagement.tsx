@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Lead, User, ContentType } from '../../types';
-import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, AlertTriangleIcon } from '../../components/Icons';
+import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
@@ -150,6 +150,9 @@ const LeadManagement: React.FC = () => {
   const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Inline Status Edit ──
+  const [inlineStatusId, setInlineStatusId] = useState<string | null>(null);
+
   // ── Activity Log ──
   const [activityLogOpen, setActivityLogOpen] = useState(false);
   const [activityLogLead, setActivityLogLead] = useState<Lead | null>(null);
@@ -160,6 +163,12 @@ const LeadManagement: React.FC = () => {
 
   // ── Quick Insight Panel ──
   const [quickInsightLead, setQuickInsightLead] = useState<Lead | null>(null);
+
+  // ── View & Sort State ──
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
+  const [sortBy, setSortBy] = useState<'name' | 'score' | 'company' | 'activity'>('score');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [focusedIndex, setFocusedIndex] = useState(-1);
 
   // ── Fetch ──
   useEffect(() => {
@@ -206,8 +215,56 @@ const LeadManagement: React.FC = () => {
       });
     }
     if (tagFilter.size > 0) result = result.filter(l => tagFilter.has(getLeadTag(l)));
+
+    // Sort
+    result.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      switch (sortBy) {
+        case 'name': return dir * a.name.localeCompare(b.name);
+        case 'score': return dir * (a.score - b.score);
+        case 'company': return dir * a.company.localeCompare(b.company);
+        case 'activity': return dir * ((new Date(a.created_at || '0')).getTime() - (new Date(b.created_at || '0')).getTime());
+        default: return 0;
+      }
+    });
+
     return result;
-  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter]);
+  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, sortBy, sortDir]);
+
+  // ── KPI Stats ──
+  const kpiStats = useMemo(() => {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const hotLeads = allLeads.filter(l => l.score >= 75).length;
+    const newThisWeek = allLeads.filter(l => l.created_at && new Date(l.created_at) >= weekAgo).length;
+    const avgScore = allLeads.length > 0 ? Math.round(allLeads.reduce((s, l) => s + l.score, 0) / allLeads.length) : 0;
+    const qualifiedRate = allLeads.length > 0 ? Math.round((allLeads.filter(l => l.status === 'Qualified').length / allLeads.length) * 100) : 0;
+    const contactedRate = allLeads.length > 0 ? Math.round((allLeads.filter(l => l.status !== 'New').length / allLeads.length) * 100) : 0;
+    return { total: allLeads.length, hotLeads, newThisWeek, avgScore, qualifiedRate, contactedRate };
+  }, [allLeads]);
+
+  // ── Score Distribution ──
+  const scoreDistribution = useMemo(() => {
+    const buckets = [
+      { label: '0-25', range: [0, 25] as [number, number], count: 0, color: 'bg-blue-400' },
+      { label: '26-50', range: [26, 50] as [number, number], count: 0, color: 'bg-amber-400' },
+      { label: '51-75', range: [51, 75] as [number, number], count: 0, color: 'bg-orange-400' },
+      { label: '76-100', range: [76, 100] as [number, number], count: 0, color: 'bg-rose-500' },
+    ];
+    allLeads.forEach(l => {
+      const b = buckets.find(b => l.score >= b.range[0] && l.score <= b.range[1]);
+      if (b) b.count++;
+    });
+    const max = Math.max(...buckets.map(b => b.count), 1);
+    return buckets.map(b => ({ ...b, pct: Math.round((b.count / max) * 100) }));
+  }, [allLeads]);
+
+  // ── Kanban Grouped Leads ──
+  const kanbanColumns = useMemo(() => {
+    const columns: Record<Lead['status'], Lead[]> = { New: [], Contacted: [], Qualified: [], Lost: [] };
+    filteredLeads.forEach(l => { if (columns[l.status]) columns[l.status].push(l); });
+    return columns;
+  }, [filteredLeads]);
 
   // ── Pagination ──
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / PER_PAGE));
@@ -216,7 +273,7 @@ const LeadManagement: React.FC = () => {
     return filteredLeads.slice(start, start + PER_PAGE);
   }, [filteredLeads, currentPage]);
 
-  useEffect(() => { setCurrentPage(1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, searchQuery]);
 
   // ── Selection Helpers ──
   const allOnPageSelected = paginatedLeads.length > 0 && paginatedLeads.every(l => selectedIds.has(l.id));
@@ -243,6 +300,15 @@ const LeadManagement: React.FC = () => {
   }, [allLeads]);
 
   // ── Actions ──
+  const handleSort = (column: 'name' | 'score' | 'company' | 'activity') => {
+    if (sortBy === column) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDir(column === 'score' ? 'desc' : 'asc');
+    }
+  };
+
   const clearFilters = () => {
     setStatusFilter('All');
     setScoreFilter('all');
@@ -252,13 +318,14 @@ const LeadManagement: React.FC = () => {
     setSearchQuery('');
   };
 
-  const handleStatusUpdate = (leadId: string, newStatus: Lead['status']) => {
+  const handleStatusUpdate = async (leadId: string, newStatus: Lead['status']) => {
     setAllLeads(prev => prev.map(l =>
       l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
     ));
     if (selectedLead?.id === leadId) {
       setSelectedLead({ ...selectedLead, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
     }
+    await supabase.from('leads').update({ status: newStatus }).eq('id', leadId);
   };
 
   const handleExportSelected = () => {
@@ -383,6 +450,31 @@ const LeadManagement: React.FC = () => {
     return () => { if (progressRef.current) clearInterval(progressRef.current); };
   }, []);
 
+  // ── Keyboard Shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput || isActionsOpen || isCSVOpen || isAddLeadOpen || activityLogOpen) return;
+
+      if (e.key === 'j') { setFocusedIndex(prev => Math.min(prev + 1, paginatedLeads.length - 1)); return; }
+      if (e.key === 'k') { setFocusedIndex(prev => Math.max(prev - 1, 0)); return; }
+      if (e.key === 'Enter' && focusedIndex >= 0 && focusedIndex < paginatedLeads.length) {
+        e.preventDefault(); navigate(`/portal/leads/${paginatedLeads[focusedIndex].id}`); return;
+      }
+      if (e.key === 'v') { setViewMode(prev => prev === 'table' ? 'kanban' : 'table'); return; }
+      if (e.key === 'n') { e.preventDefault(); setIsAddLeadOpen(true); return; }
+      if (e.key === 'i') { e.preventDefault(); setIsCSVOpen(true); return; }
+      if (e.key === 'x' && focusedIndex >= 0 && focusedIndex < paginatedLeads.length) {
+        toggleSelect(paginatedLeads[focusedIndex].id); return;
+      }
+      if (e.key === 'Escape') { setQuickInsightLead(null); setBulkActionOpen(null); setInlineStatusId(null); return; }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, paginatedLeads.length, focusedIndex, isActionsOpen, isCSVOpen, isAddLeadOpen, activityLogOpen]);
+
   const activeFilterCount = [
     statusFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
     companySizeFilter.size > 0, tagFilter.size > 0,
@@ -435,6 +527,79 @@ const LeadManagement: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* ── KPI Stats Banner ── */}
+      {!loading && allLeads.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[
+            { label: 'Total Leads', value: kpiStats.total.toLocaleString(), icon: <UsersIcon className="w-4 h-4" />, color: 'indigo', sub: `${filteredLeads.length} shown` },
+            { label: 'Hot Leads', value: kpiStats.hotLeads.toString(), icon: <FlameIcon className="w-4 h-4" />, color: 'rose', sub: `${kpiStats.total > 0 ? Math.round((kpiStats.hotLeads / kpiStats.total) * 100) : 0}% of total` },
+            { label: 'New This Week', value: kpiStats.newThisWeek.toString(), icon: <BoltIcon className="w-4 h-4" />, color: 'emerald', sub: 'last 7 days' },
+            { label: 'Avg Score', value: kpiStats.avgScore.toString(), icon: <TargetIcon className="w-4 h-4" />, color: kpiStats.avgScore >= 60 ? 'amber' : 'slate', sub: kpiStats.avgScore >= 70 ? 'Excellent' : kpiStats.avgScore >= 50 ? 'Good' : 'Needs work' },
+            { label: 'Qualified Rate', value: `${kpiStats.qualifiedRate}%`, icon: <CheckIcon className="w-4 h-4" />, color: 'violet', sub: `${allLeads.filter(l => l.status === 'Qualified').length} qualified` },
+            { label: 'Contact Rate', value: `${kpiStats.contactedRate}%`, icon: <PhoneIcon className="w-4 h-4" />, color: 'sky', sub: `${allLeads.filter(l => l.status !== 'New').length} reached` },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-all group">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`p-2 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 group-hover:scale-110 transition-transform`}>
+                  {stat.icon}
+                </span>
+              </div>
+              <p className="text-2xl font-black text-slate-900 font-heading">{stat.value}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{stat.label}</p>
+              <p className="text-[10px] text-slate-400 mt-1">{stat.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── AI Lead Health Summary ── */}
+      {!loading && allLeads.length >= 5 && (
+        <div className="bg-gradient-to-r from-indigo-50 via-white to-violet-50 rounded-2xl border border-indigo-100 p-5">
+          <div className="flex items-center space-x-2 mb-3">
+            <BrainIcon className="w-4 h-4 text-indigo-600" />
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">AI Lead Health Summary</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-start space-x-2.5">
+              <div className="p-1.5 bg-emerald-100 rounded-lg mt-0.5"><TrendUpIcon className="w-3.5 h-3.5 text-emerald-600" /></div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Pipeline Velocity</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {kpiStats.contactedRate >= 50
+                    ? `Strong engagement — ${kpiStats.contactedRate}% of leads have been contacted.`
+                    : `${100 - kpiStats.contactedRate}% of leads are still untouched. Consider outreach campaigns.`
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <div className="p-1.5 bg-amber-100 rounded-lg mt-0.5"><FlameIcon className="w-3.5 h-3.5 text-amber-600" /></div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Hot Lead Alert</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {kpiStats.hotLeads > 0
+                    ? `${kpiStats.hotLeads} high-priority lead${kpiStats.hotLeads > 1 ? 's' : ''} need${kpiStats.hotLeads === 1 ? 's' : ''} immediate attention (score 75+).`
+                    : 'No urgent leads right now. Focus on nurturing existing pipeline.'
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <div className="p-1.5 bg-violet-100 rounded-lg mt-0.5"><TargetIcon className="w-3.5 h-3.5 text-violet-600" /></div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Conversion Potential</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {kpiStats.qualifiedRate >= 20
+                    ? `${kpiStats.qualifiedRate}% qualification rate — above average performance.`
+                    : `${kpiStats.qualifiedRate}% qualification rate — focus on lead scoring and follow-ups.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Quick Insight Panel (after adding lead) ── */}
       {quickInsightLead && (
@@ -685,6 +850,27 @@ const LeadManagement: React.FC = () => {
               </div>
             </div>
 
+            {/* Score Distribution */}
+            {allLeads.length > 0 && (
+              <div className="mb-5">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Score Distribution</label>
+                <div className="space-y-2">
+                  {scoreDistribution.map((bucket) => (
+                    <div key={bucket.label} className="flex items-center space-x-2">
+                      <span className="text-[10px] font-bold text-slate-500 w-10 text-right">{bucket.label}</span>
+                      <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${bucket.color} rounded-full transition-all duration-700`}
+                          style={{ width: `${bucket.pct}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-[10px] font-black text-slate-600 w-6">{bucket.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Quick Select by Filter */}
             <div className="mb-6">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Quick Select</label>
@@ -713,10 +899,65 @@ const LeadManagement: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Keyboard Shortcuts */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Keyboard Shortcuts</p>
+            <div className="space-y-1.5">
+              {[
+                ['j / k', 'Navigate leads'],
+                ['Enter', 'Open lead'],
+                ['x', 'Toggle select'],
+                ['v', 'Toggle view'],
+                ['n', 'New lead'],
+                ['i', 'Import CSV'],
+                ['Esc', 'Close panels'],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center justify-between">
+                  <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-500">{key}</kbd>
+                  <span className="text-[10px] text-slate-400">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* ── LEAD LIST (75%) ── */}
         <div className="w-full lg:w-[75%] space-y-4">
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-slate-500">{filteredLeads.length} leads</span>
+              {selectedIds.size > 0 && (
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-md text-[10px] font-bold">
+                  {selectedIds.size} selected
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-bold transition-all ${
+                    viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <ListIcon className="w-3.5 h-3.5" />
+                  <span>Table</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('kanban')}
+                  className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-bold transition-all ${
+                    viewMode === 'kanban' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <GridIcon className="w-3.5 h-3.5" />
+                  <span>Pipeline</span>
+                </button>
+              </div>
+            </div>
+          </div>
 
           {/* Enhanced Bulk Actions Bar */}
           {selectedIds.size > 0 && (
@@ -850,7 +1091,69 @@ const LeadManagement: React.FC = () => {
             </div>
           )}
 
+          {/* Kanban / Pipeline View */}
+          {viewMode === 'kanban' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {(STATUS_OPTIONS as readonly Lead['status'][]).map(status => {
+                const statusColors: Record<string, { bg: string; border: string; badge: string; dot: string }> = {
+                  New: { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+                  Contacted: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
+                  Qualified: { bg: 'bg-violet-50', border: 'border-violet-200', badge: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
+                  Lost: { bg: 'bg-slate-50', border: 'border-slate-200', badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
+                };
+                const sc = statusColors[status] || statusColors.New;
+                const leads = kanbanColumns[status] || [];
+                return (
+                  <div key={status} className={`${sc.bg} rounded-2xl border ${sc.border} p-4`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${sc.dot}`}></div>
+                        <h3 className="text-sm font-bold text-slate-800">{status}</h3>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${sc.badge}`}>
+                        {leads.length}
+                      </span>
+                    </div>
+                    <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+                      {leads.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center py-8">No leads</p>
+                      ) : leads.map(lead => {
+                        const tag = getLeadTag(lead);
+                        return (
+                          <button
+                            key={lead.id}
+                            onClick={() => navigate(`/portal/leads/${lead.id}`)}
+                            className="w-full text-left bg-white rounded-xl border border-slate-100 p-3.5 hover:shadow-md hover:border-indigo-200 transition-all group"
+                          >
+                            <div className="flex items-center space-x-2.5 mb-2">
+                              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-[10px] text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors flex-shrink-0">
+                                {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
+                                <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <StarRating score={lead.score} />
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${TAG_COLORS[tag]}`}>{tag}</span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className="text-[10px] text-slate-400">{formatRelativeTime(lead.created_at || lead.lastActivity)}</span>
+                              <span className="text-[10px] font-black text-slate-600">{lead.score}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* Lead Table */}
+          {viewMode === 'table' && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -864,10 +1167,30 @@ const LeadManagement: React.FC = () => {
                         className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                       />
                     </th>
-                    <th className="px-4 py-4">Name</th>
-                    <th className="px-4 py-4">Company</th>
-                    <th className="px-4 py-4 text-center">Score</th>
-                    <th className="px-4 py-4">Last Activity</th>
+                    <th className="px-4 py-4 cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => handleSort('name')}>
+                      <div className="flex items-center space-x-1">
+                        <span>Name</span>
+                        {sortBy === 'name' && <span className="text-indigo-600">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                      </div>
+                    </th>
+                    <th className="px-4 py-4 cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => handleSort('company')}>
+                      <div className="flex items-center space-x-1">
+                        <span>Company</span>
+                        {sortBy === 'company' && <span className="text-indigo-600">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                      </div>
+                    </th>
+                    <th className="px-4 py-4 text-center cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => handleSort('score')}>
+                      <div className="flex items-center justify-center space-x-1">
+                        <span>Score</span>
+                        {sortBy === 'score' && <span className="text-indigo-600">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                      </div>
+                    </th>
+                    <th className="px-4 py-4 cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => handleSort('activity')}>
+                      <div className="flex items-center space-x-1">
+                        <span>Last Activity</span>
+                        {sortBy === 'activity' && <span className="text-indigo-600">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                      </div>
+                    </th>
                     <th className="px-4 py-4">Tags</th>
                     <th className="px-4 py-4 text-right">Actions</th>
                   </tr>
@@ -887,10 +1210,11 @@ const LeadManagement: React.FC = () => {
                         {allLeads.length === 0 ? 'No leads yet. Add your first lead to get started.' : 'No leads match your current filters.'}
                       </td>
                     </tr>
-                  ) : paginatedLeads.map(lead => {
+                  ) : paginatedLeads.map((lead, idx) => {
                     const tag = getLeadTag(lead);
+                    const isFocused = idx === focusedIndex;
                     return (
-                      <tr key={lead.id} className="hover:bg-slate-50/80 transition-colors group">
+                      <tr key={lead.id} className={`hover:bg-slate-50/80 transition-colors group ${isFocused ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200' : ''}`}>
                         <td className="px-4 py-3.5">
                           <input
                             type="checkbox"
@@ -915,18 +1239,59 @@ const LeadManagement: React.FC = () => {
                         </td>
                         <td className="px-4 py-3.5 text-sm text-slate-600 font-medium">{lead.company}</td>
                         <td className="px-4 py-3.5">
-                          <div className="flex flex-col items-center space-y-1">
+                          <div className="flex flex-col items-center space-y-1.5">
                             <StarRating score={lead.score} />
-                            <span className="text-[10px] font-black text-slate-700">{lead.score}</span>
+                            <div className="flex items-center space-x-1.5">
+                              <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    lead.score >= 76 ? 'bg-rose-500' : lead.score >= 51 ? 'bg-amber-500' : lead.score >= 26 ? 'bg-emerald-500' : 'bg-blue-400'
+                                  }`}
+                                  style={{ width: `${lead.score}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-[10px] font-black text-slate-700">{lead.score}</span>
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <span className="text-xs text-slate-500 font-medium">{formatRelativeTime(lead.created_at || lead.lastActivity)}</span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border ${TAG_COLORS[tag]}`}>
-                            {tag}
-                          </span>
+                          <div className="flex items-center space-x-1.5">
+                            <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border ${TAG_COLORS[tag]}`}>
+                              {tag}
+                            </span>
+                            {/* Inline Status */}
+                            <div className="relative">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setInlineStatusId(inlineStatusId === lead.id ? null : lead.id); }}
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all ${
+                                  lead.status === 'New' ? 'bg-emerald-50 text-emerald-600' :
+                                  lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
+                                  lead.status === 'Qualified' ? 'bg-violet-50 text-violet-600' :
+                                  'bg-slate-50 text-slate-500'
+                                } hover:ring-1 hover:ring-indigo-200`}
+                              >
+                                {lead.status}
+                              </button>
+                              {inlineStatusId === lead.id && (
+                                <div className="absolute top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden min-w-[120px]">
+                                  {STATUS_OPTIONS.map(s => (
+                                    <button
+                                      key={s}
+                                      onClick={(e) => { e.stopPropagation(); handleStatusUpdate(lead.id, s); setInlineStatusId(null); }}
+                                      className={`w-full text-left px-3 py-2 text-xs font-semibold transition-colors ${
+                                        lead.status === s ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      {s}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1021,6 +1386,7 @@ const LeadManagement: React.FC = () => {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
