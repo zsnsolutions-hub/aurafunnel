@@ -31,6 +31,7 @@ import AnalyticsPage from './pages/portal/AnalyticsPage';
 import AutomationPage from './pages/portal/AutomationPage';
 import HelpCenterPage from './pages/portal/HelpCenterPage';
 import UserManualPage from './pages/portal/UserManualPage';
+import LeadManagement from './pages/portal/LeadManagement';
 
 // Marketing
 import LandingPage from './pages/marketing/LandingPage';
@@ -144,6 +145,7 @@ const App: React.FC = () => {
         }
       >
         <Route index element={<ClientDashboard user={user!} />} />
+        <Route path="leads" element={<LeadManagement />} />
         <Route path="content" element={<ContentGen />} />
         <Route path="strategy" element={<StrategyHub />} />
         <Route path="blog" element={<BlogDrafts />} />
