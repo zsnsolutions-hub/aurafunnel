@@ -18,6 +18,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <BrainIcon className="w-5 h-5" /> },
     { label: 'AI Command Center', path: '/portal/ai', icon: <MessageIcon className="w-5 h-5" /> },
     { label: 'Neural Studio', path: '/portal/content', icon: <SparklesIcon className="w-5 h-5" /> },
+    { label: 'Content Studio', path: '/portal/content-studio', icon: <EditIcon className="w-5 h-5" /> },
     { label: 'Strategy Hub', path: '/portal/strategy', icon: <BoltIcon className="w-5 h-5" /> },
     { label: 'Guest Posts', path: '/portal/blog', icon: <EditIcon className="w-5 h-5" /> },
     { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChartIcon className="w-5 h-5" /> },

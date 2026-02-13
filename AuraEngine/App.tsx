@@ -36,6 +36,7 @@ import LeadProfile from './pages/portal/LeadProfile';
 import MobileDashboard from './pages/portal/MobileDashboard';
 import LeadIntelligence from './pages/portal/LeadIntelligence';
 import AICommandCenter from './pages/portal/AICommandCenter';
+import ContentStudio from './pages/portal/ContentStudio';
 
 // Marketing
 import LandingPage from './pages/marketing/LandingPage';
@@ -162,6 +163,7 @@ const App: React.FC = () => {
         <Route path="settings" element={<ProfilePage />} />
         <Route path="intelligence" element={<LeadIntelligence />} />
         <Route path="ai" element={<AICommandCenter />} />
+        <Route path="content-studio" element={<ContentStudio />} />
         <Route path="mobile" element={<MobileDashboard />} />
       </Route>
 
