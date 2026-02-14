@@ -183,6 +183,9 @@ const IntegrationHub: React.FC = () => {
   const [showHealthDashboard, setShowHealthDashboard] = useState(false);
   const [showSyncHistory, setShowSyncHistory] = useState(false);
   const [showSecurityPanel, setShowSecurityPanel] = useState(false);
+  const [showPipelineAnalytics, setShowPipelineAnalytics] = useState(false);
+  const [showErrorDiagnostics, setShowErrorDiagnostics] = useState(false);
+  const [showCostOptimization, setShowCostOptimization] = useState(false);
 
   // ─── Filtered integrations ───
   const filteredIntegrations = useMemo(() => {
@@ -226,6 +229,93 @@ const IntegrationHub: React.FC = () => {
       lastIncident: integ.status === 'connected' ? '14 days ago' : integ.status === 'partial' ? '2 hours ago' : 'Now',
       status: integ.status === 'connected' ? 'healthy' : integ.status === 'partial' ? 'degraded' : 'down',
     }));
+  }, [integrations]);
+
+  // ─── Data Pipeline Analytics ───
+  const pipelineAnalytics = useMemo(() => {
+    const throughput = integrations.map(integ => ({
+      name: integ.name,
+      recordsPerHour: Math.round(integ.dataVolume * 28 + Math.random() * 50),
+      avgLatency: Math.round(80 + Math.random() * 180),
+      peakLoad: Math.round(60 + Math.random() * 38),
+      queueDepth: Math.floor(Math.random() * 15),
+      status: integ.status,
+    }));
+
+    const hourlyFlow = Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
+      inbound: Math.round(Math.sin((h - 9) * 0.4) * 120 + 150 + (Math.random() - 0.5) * 40),
+      outbound: Math.round(Math.sin((h - 10) * 0.35) * 80 + 100 + (Math.random() - 0.5) * 30),
+    }));
+    const peakHour = hourlyFlow.reduce((best, h) => (h.inbound + h.outbound) > (best.inbound + best.outbound) ? h : best, hourlyFlow[0]);
+
+    const totalThroughput = throughput.reduce((s, t) => s + t.recordsPerHour, 0);
+    const avgLatency = throughput.length > 0 ? Math.round(throughput.reduce((s, t) => s + t.avgLatency, 0) / throughput.length) : 0;
+    const bottleneck = throughput.reduce((worst, t) => t.avgLatency > worst.avgLatency ? t : worst, throughput[0]);
+
+    return { throughput, hourlyFlow, peakHour, totalThroughput, avgLatency, bottleneck };
+  }, [integrations]);
+
+  // ─── Error Diagnostics ───
+  const errorDiagnostics = useMemo(() => {
+    const errorCategories = [
+      { type: 'Authentication', count: 3, severity: 'low' as const, trend: -12, lastSeen: '2h ago', resolution: 'Auto-refreshed OAuth tokens' },
+      { type: 'Rate Limiting', count: 8, severity: 'medium' as const, trend: 5, lastSeen: '15m ago', resolution: 'Implement exponential backoff' },
+      { type: 'Schema Mismatch', count: 2, severity: 'high' as const, trend: -50, lastSeen: '1d ago', resolution: 'Update field mappings' },
+      { type: 'Timeout', count: 5, severity: 'medium' as const, trend: -8, lastSeen: '45m ago', resolution: 'Increase timeout threshold' },
+      { type: 'Network Error', count: 1, severity: 'low' as const, trend: -75, lastSeen: '3d ago', resolution: 'Retry with circuit breaker' },
+      { type: 'Data Validation', count: 4, severity: 'medium' as const, trend: 15, lastSeen: '30m ago', resolution: 'Add input sanitization' },
+    ];
+
+    const weeklyTrend = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6 - i));
+      return {
+        day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        errors: Math.floor(Math.random() * 12) + 2,
+        resolved: Math.floor(Math.random() * 10) + 1,
+      };
+    });
+
+    const totalErrors = errorCategories.reduce((s, e) => s + e.count, 0);
+    const criticalCount = errorCategories.filter(e => e.severity === 'high').length;
+    const retrySuccessRate = 94.2;
+    const mttr = 4.8; // minutes mean time to resolve
+
+    return { errorCategories, weeklyTrend, totalErrors, criticalCount, retrySuccessRate, mttr };
+  }, []);
+
+  // ─── Cost Optimization ───
+  const costOptimization = useMemo(() => {
+    const perIntegration = integrations.map(integ => ({
+      name: integ.name,
+      monthlyCost: Math.round(integ.dataVolume * 2.8 + Math.random() * 20),
+      callsPerDay: Math.round(integ.dataVolume * 180 + Math.random() * 500),
+      costPerRecord: (0.001 + Math.random() * 0.008).toFixed(4),
+      optimizable: Math.round(Math.random() * 25 + 5),
+    }));
+
+    const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(); d.setMonth(d.getMonth() - (5 - i));
+      return {
+        month: d.toLocaleDateString('en-US', { month: 'short' }),
+        actual: Math.round(85 + i * 8 + (Math.random() - 0.5) * 15),
+        optimized: Math.round(65 + i * 5 + (Math.random() - 0.5) * 10),
+      };
+    });
+
+    const totalMonthlyCost = perIntegration.reduce((s, p) => s + p.monthlyCost, 0);
+    const potentialSavings = perIntegration.reduce((s, p) => s + Math.round(p.monthlyCost * p.optimizable / 100), 0);
+    const savingsPct = totalMonthlyCost > 0 ? Math.round((potentialSavings / totalMonthlyCost) * 100) : 0;
+
+    const recommendations = [
+      { action: 'Batch Salesforce syncs to reduce API calls', savings: '$12/mo', impact: 'high' as const },
+      { action: 'Cache Google Analytics responses for 15min', savings: '$8/mo', impact: 'medium' as const },
+      { action: 'Reduce Slack notification frequency', savings: '$3/mo', impact: 'low' as const },
+      { action: 'Use webhook instead of polling for HubSpot', savings: '$15/mo', impact: 'high' as const },
+    ];
+
+    return { perIntegration, monthlyTrend, totalMonthlyCost, potentialSavings, savingsPct, recommendations };
   }, [integrations]);
 
   // ─── Handlers ───
@@ -349,6 +439,9 @@ const IntegrationHub: React.FC = () => {
       if (e.key === 'w' || e.key === 'W') { e.preventDefault(); setShowAddWebhook(s => !s); return; }
       if (e.key === 'l' || e.key === 'L') { e.preventDefault(); setShowSyncLogs(s => !s); return; }
       if (e.key === 'e' || e.key === 'E') { e.preventDefault(); handleExportConfig(); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setShowPipelineAnalytics(s => !s); return; }
+      if (e.key === 'd' || e.key === 'D') { e.preventDefault(); setShowErrorDiagnostics(s => !s); return; }
+      if (e.key === 'o' || e.key === 'O') { e.preventDefault(); setShowCostOptimization(s => !s); return; }
       if (e.key === 'Escape') {
         setShowShortcuts(false);
         setShowHealthDashboard(false);
@@ -356,6 +449,9 @@ const IntegrationHub: React.FC = () => {
         setShowSecurityPanel(false);
         setShowAddIntegration(false);
         setShowAddWebhook(false);
+        setShowPipelineAnalytics(false);
+        setShowErrorDiagnostics(false);
+        setShowCostOptimization(false);
         return;
       }
     };
@@ -404,6 +500,27 @@ const IntegrationHub: React.FC = () => {
           >
             <ShieldIcon className="w-3.5 h-3.5" />
             <span>Security</span>
+          </button>
+          <button
+            onClick={() => setShowPipelineAnalytics(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPipelineAnalytics ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <BoltIcon className="w-3.5 h-3.5" />
+            <span>Pipeline</span>
+          </button>
+          <button
+            onClick={() => setShowErrorDiagnostics(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showErrorDiagnostics ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <AlertTriangleIcon className="w-3.5 h-3.5" />
+            <span>Errors</span>
+          </button>
+          <button
+            onClick={() => setShowCostOptimization(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCostOptimization ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <TargetIcon className="w-3.5 h-3.5" />
+            <span>Costs</span>
           </button>
           <button
             onClick={() => setShowShortcuts(true)}
@@ -1287,12 +1404,448 @@ const IntegrationHub: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* DATA PIPELINE ANALYTICS SIDEBAR                                */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showPipelineAnalytics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowPipelineAnalytics(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Data Pipeline Analytics</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Throughput, latency &amp; flow metrics</p>
+              </div>
+              <button onClick={() => setShowPipelineAnalytics(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Pipeline Gauge */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 96 96">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#06b6d4" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(pipelineAnalytics.totalThroughput / (pipelineAnalytics.totalThroughput + 500)) * 251} 251`} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-black text-cyan-700">{pipelineAnalytics.totalThroughput}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">rec/hr</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 bg-cyan-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-cyan-700">{pipelineAnalytics.totalThroughput}</p>
+                  <p className="text-[9px] font-bold text-cyan-500 uppercase">Total rec/hr</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-slate-700">{pipelineAnalytics.avgLatency}ms</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Avg Latency</p>
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{pipelineAnalytics.bottleneck.name}</p>
+                  <p className="text-[9px] font-bold text-rose-400 uppercase">Bottleneck</p>
+                </div>
+              </div>
+
+              {/* Per-Integration Throughput */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Throughput by Integration</p>
+                <div className="space-y-2">
+                  {pipelineAnalytics.throughput.map((t, i) => (
+                    <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-sm transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-bold text-slate-800">{t.name}</h4>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                          t.status === 'connected' ? 'bg-emerald-50 text-emerald-700' : t.status === 'partial' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'
+                        }`}>{t.status}</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <div>
+                          <p className="text-xs font-bold text-cyan-600">{t.recordsPerHour}</p>
+                          <p className="text-[9px] text-slate-400">rec/hr</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-600">{t.avgLatency}ms</p>
+                          <p className="text-[9px] text-slate-400">Latency</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-violet-600">{t.peakLoad}%</p>
+                          <p className="text-[9px] text-slate-400">Peak Load</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-amber-600">{t.queueDepth}</p>
+                          <p className="text-[9px] text-slate-400">Queue</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hourly Flow Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-wider">24h Data Flow</p>
+                  <span className="text-[10px] text-cyan-400 font-bold">Peak: {pipelineAnalytics.peakHour.label}</span>
+                </div>
+                <div className="flex items-end space-x-1 h-28">
+                  {pipelineAnalytics.hourlyFlow.map((h, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center space-y-0.5">
+                      <div
+                        className="w-full rounded-t bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all"
+                        style={{ height: `${(h.inbound / 300) * 100}%`, minHeight: '2px' }}
+                      />
+                      <div
+                        className="w-full rounded-t bg-gradient-to-t from-violet-600 to-violet-400 transition-all"
+                        style={{ height: `${(h.outbound / 300) * 80}%`, minHeight: '2px' }}
+                      />
+                      {i % 6 === 0 && (
+                        <span className="text-[8px] text-slate-500 mt-0.5">{h.label}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center space-x-4 mt-2">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span className="text-[9px] text-slate-500">Inbound</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-violet-400" />
+                    <span className="text-[9px] text-slate-500">Outbound</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-cyan-600 to-teal-600 rounded-2xl p-4 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-xs font-black uppercase tracking-wider">Pipeline Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {pipelineAnalytics.bottleneck.name} is your slowest connector at {pipelineAnalytics.bottleneck.avgLatency}ms.
+                  Consider batching requests during off-peak hours ({pipelineAnalytics.peakHour.label} is peak)
+                  to reduce latency by ~30%.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ERROR DIAGNOSTICS SIDEBAR                                     */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showErrorDiagnostics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowErrorDiagnostics(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Error Diagnostics</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Error patterns, root causes &amp; resolution</p>
+              </div>
+              <button onClick={() => setShowErrorDiagnostics(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Error Gauge */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 96 96">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f43f5e" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(errorDiagnostics.retrySuccessRate / 100) * 251} 251`} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-black text-rose-700">{errorDiagnostics.retrySuccessRate}%</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Retry Rate</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-4 gap-2">
+                <div className="p-2.5 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{errorDiagnostics.totalErrors}</p>
+                  <p className="text-[9px] font-bold text-rose-400 uppercase">Total</p>
+                </div>
+                <div className="p-2.5 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">{errorDiagnostics.criticalCount}</p>
+                  <p className="text-[9px] font-bold text-amber-400 uppercase">Critical</p>
+                </div>
+                <div className="p-2.5 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{errorDiagnostics.retrySuccessRate}%</p>
+                  <p className="text-[9px] font-bold text-emerald-400 uppercase">Retry</p>
+                </div>
+                <div className="p-2.5 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{errorDiagnostics.mttr}m</p>
+                  <p className="text-[9px] font-bold text-indigo-400 uppercase">MTTR</p>
+                </div>
+              </div>
+
+              {/* Error Categories */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Error Breakdown</p>
+                <div className="space-y-2">
+                  {errorDiagnostics.errorCategories.map((err, i) => {
+                    const sevStyles = {
+                      low: { bg: 'bg-blue-50', text: 'text-blue-700' },
+                      medium: { bg: 'bg-amber-50', text: 'text-amber-700' },
+                      high: { bg: 'bg-rose-50', text: 'text-rose-700' },
+                    }[err.severity];
+                    return (
+                      <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="text-sm font-bold text-slate-800">{err.type}</h4>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${sevStyles.bg} ${sevStyles.text}`}>
+                              {err.severity}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <span className="text-xs font-black text-slate-700">{err.count}</span>
+                            {err.trend < 0 ? (
+                              <TrendDownIcon className="w-3 h-3 text-emerald-500" />
+                            ) : (
+                              <TrendUpIcon className="w-3 h-3 text-rose-500" />
+                            )}
+                            <span className={`text-[10px] font-bold ${err.trend < 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {err.trend > 0 ? '+' : ''}{err.trend}%
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mb-1">Last seen: {err.lastSeen}</p>
+                        <p className="text-[10px] text-indigo-600 font-semibold flex items-center space-x-1">
+                          <BrainIcon className="w-3 h-3" />
+                          <span>{err.resolution}</span>
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Weekly Error Trend Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">7-Day Error Trend</p>
+                <div className="flex items-end space-x-2 h-24">
+                  {errorDiagnostics.weeklyTrend.map((d, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center">
+                      <div className="w-full flex flex-col items-center space-y-0.5">
+                        <div
+                          className="w-full rounded-t bg-gradient-to-t from-rose-600 to-rose-400"
+                          style={{ height: `${(d.errors / 15) * 80}px`, minHeight: '3px' }}
+                        />
+                        <div
+                          className="w-full rounded-t bg-gradient-to-t from-emerald-600 to-emerald-400"
+                          style={{ height: `${(d.resolved / 15) * 80}px`, minHeight: '3px' }}
+                        />
+                      </div>
+                      <span className="text-[9px] text-slate-500 mt-1">{d.day}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center space-x-4 mt-2">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-rose-400" />
+                    <span className="text-[9px] text-slate-500">Errors</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-[9px] text-slate-500">Resolved</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-rose-600 to-pink-600 rounded-2xl p-4 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-xs font-black uppercase tracking-wider">Error Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  Rate limiting accounts for {Math.round((errorDiagnostics.errorCategories.find(e => e.type === 'Rate Limiting')?.count || 0) / errorDiagnostics.totalErrors * 100)}%
+                  of errors. Implementing exponential backoff with jitter could reduce these by ~85%.
+                  Your MTTR of {errorDiagnostics.mttr}m is well below the 15m industry benchmark.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* COST OPTIMIZATION SIDEBAR                                     */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showCostOptimization && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowCostOptimization(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Cost Optimization</h3>
+                <p className="text-xs text-slate-400 mt-0.5">API costs, savings &amp; optimization opportunities</p>
+              </div>
+              <button onClick={() => setShowCostOptimization(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Cost Gauge */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 96 96">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f59e0b" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(costOptimization.savingsPct / 100) * 251} 251`} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-black text-amber-700">{costOptimization.savingsPct}%</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Savings</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 bg-slate-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-slate-700">${costOptimization.totalMonthlyCost}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Monthly Cost</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">${costOptimization.potentialSavings}</p>
+                  <p className="text-[9px] font-bold text-emerald-400 uppercase">Can Save</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">{costOptimization.savingsPct}%</p>
+                  <p className="text-[9px] font-bold text-amber-400 uppercase">Reduction</p>
+                </div>
+              </div>
+
+              {/* Per-Integration Costs */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Cost by Integration</p>
+                <div className="space-y-2">
+                  {costOptimization.perIntegration.map((p, i) => (
+                    <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-sm transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-bold text-slate-800">{p.name}</h4>
+                        <span className="text-sm font-black text-slate-700">${p.monthlyCost}/mo</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                        <div>
+                          <p className="text-xs font-bold text-indigo-600">{p.callsPerDay.toLocaleString()}</p>
+                          <p className="text-[9px] text-slate-400">Calls/day</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-600">${p.costPerRecord}</p>
+                          <p className="text-[9px] text-slate-400">Per record</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-emerald-600">{p.optimizable}%</p>
+                          <p className="text-[9px] text-slate-400">Optimizable</p>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5">
+                        <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500"
+                          style={{ width: `${p.optimizable}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Monthly Cost Trend */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">6-Month Cost Trend</p>
+                <div className="flex items-end space-x-3 h-24">
+                  {costOptimization.monthlyTrend.map((m, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center">
+                      <div className="w-full flex space-x-0.5 items-end" style={{ height: '80px' }}>
+                        <div
+                          className="flex-1 rounded-t bg-gradient-to-t from-amber-600 to-amber-400"
+                          style={{ height: `${(m.actual / 150) * 100}%`, minHeight: '3px' }}
+                        />
+                        <div
+                          className="flex-1 rounded-t bg-gradient-to-t from-emerald-600 to-emerald-400"
+                          style={{ height: `${(m.optimized / 150) * 100}%`, minHeight: '3px' }}
+                        />
+                      </div>
+                      <span className="text-[9px] text-slate-500 mt-1">{m.month}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center space-x-4 mt-2">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span className="text-[9px] text-slate-500">Actual</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-[9px] text-slate-500">Optimized</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Optimization Recommendations */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Recommendations</p>
+                <div className="space-y-2">
+                  {costOptimization.recommendations.map((rec, i) => {
+                    const impactStyles = {
+                      high: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+                      medium: { bg: 'bg-amber-50', text: 'text-amber-700' },
+                      low: { bg: 'bg-slate-50', text: 'text-slate-600' },
+                    }[rec.impact];
+                    return (
+                      <div key={i} className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-slate-200">
+                        <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase shrink-0 ${impactStyles.bg} ${impactStyles.text}`}>
+                          {rec.impact}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{rec.action}</p>
+                        </div>
+                        <span className="text-xs font-black text-emerald-600 shrink-0">{rec.savings}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl p-4 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-xs font-black uppercase tracking-wider">Cost Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  You could save ${costOptimization.potentialSavings}/mo ({costOptimization.savingsPct}%) by implementing
+                  the top recommendations. Switching HubSpot from polling to webhooks alone
+                  would save $15/mo and reduce API calls by 60%.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEYBOARD SHORTCUTS MODAL                                      */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {showShortcuts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center space-x-2">
                 <KeyboardIcon className="w-5 h-5 text-indigo-600" />
@@ -1302,25 +1855,55 @@ const IntegrationHub: React.FC = () => {
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
-            <div className="space-y-2">
-              {[
-                { key: 'N', label: 'Toggle add integration panel' },
-                { key: 'W', label: 'Toggle add webhook form' },
-                { key: 'H', label: 'Toggle health dashboard' },
-                { key: 'S', label: 'Toggle sync history' },
-                { key: 'C', label: 'Toggle security panel' },
-                { key: 'L', label: 'Toggle sync logs' },
-                { key: 'E', label: 'Export configuration' },
-                { key: '?', label: 'Toggle this shortcuts panel' },
-                { key: 'Esc', label: 'Close all panels' },
-              ].map((shortcut, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                  <span className="text-sm text-slate-600">{shortcut.label}</span>
-                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">
-                    {shortcut.key}
-                  </kbd>
+            <div className="grid grid-cols-3 gap-6">
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Actions</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: 'N', label: 'Add integration' },
+                    { key: 'W', label: 'Add webhook' },
+                    { key: 'L', label: 'Sync logs' },
+                    { key: 'E', label: 'Export config' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Panels</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: 'H', label: 'Health dashboard' },
+                    { key: 'S', label: 'Sync history' },
+                    { key: 'C', label: 'Security' },
+                    { key: 'P', label: 'Pipeline analytics' },
+                    { key: 'D', label: 'Error diagnostics' },
+                    { key: 'O', label: 'Cost optimization' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">System</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: '?', label: 'Shortcuts' },
+                    { key: 'Esc', label: 'Close all panels' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
