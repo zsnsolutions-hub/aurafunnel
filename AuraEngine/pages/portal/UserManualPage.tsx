@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
 import {
@@ -6,7 +6,8 @@ import {
   TrendUpIcon, ClockIcon, MailIcon, RefreshIcon, FlameIcon, CogIcon,
   BookOpenIcon, LightBulbIcon, AcademicCapIcon, MessageIcon, EyeIcon,
   DocumentIcon, GitBranchIcon, ZapIcon, XIcon, LockIcon, BellIcon,
-  KeyboardIcon, PieChartIcon, UsersIcon, EditIcon, HelpCircleIcon, GlobeIcon
+  KeyboardIcon, PieChartIcon, UsersIcon, EditIcon, HelpCircleIcon, GlobeIcon,
+  TrendDownIcon, ActivityIcon, FilterIcon, LayersIcon, StarIcon, BrainIcon, ArrowRightIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -1285,6 +1286,128 @@ const UserManualPage: React.FC = () => {
   const [activeSection, setActiveSection] = useState<SectionKey>('welcome');
   const [expandedAdvantage, setExpandedAdvantage] = useState<number | null>(1);
 
+  // ─── Enhanced Wireframe State ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showContentCoverage, setShowContentCoverage] = useState(false);
+  const [showReadingProgress, setShowReadingProgress] = useState(false);
+  const [showPlatformIndex, setShowPlatformIndex] = useState(false);
+  const [visitedSections, setVisitedSections] = useState<Set<SectionKey>>(new Set(['welcome']));
+
+  // Track visited sections
+  useEffect(() => {
+    setVisitedSections(prev => {
+      const next = new Set(prev);
+      next.add(activeSection);
+      return next;
+    });
+  }, [activeSection]);
+
+  // ─── Content Coverage Analytics ───
+  const contentCoverage = useMemo(() => {
+    const totalSections = 18;
+    const visited = visitedSections.size;
+    const coveragePct = Math.round((visited / totalSections) * 100);
+
+    const categoryBreakdown = [
+      { category: 'Getting Started', sections: ['welcome', 'getting-started'] as SectionKey[], color: 'indigo', articles: 7, readTime: '15 min' },
+      { category: 'Core Features', sections: ['lead-management', 'content-creation', 'analytics-reporting'] as SectionKey[], color: 'violet', articles: 18, readTime: '45 min' },
+      { category: 'Automation & Team', sections: ['automation-workflows', 'team-collaboration', 'integrations'] as SectionKey[], color: 'emerald', articles: 12, readTime: '30 min' },
+      { category: 'Advanced', sections: ['advanced-features', 'troubleshooting', 'training'] as SectionKey[], color: 'amber', articles: 14, readTime: '35 min' },
+      { category: 'Templates & Strategy', sections: ['outreach-templates', 'whats-next'] as SectionKey[], color: 'rose', articles: 8, readTime: '20 min' },
+      { category: 'Competitive Intel', sections: ['advantages', 'features', 'impact', 'future', 'comparison'] as SectionKey[], color: 'cyan', articles: 15, readTime: '25 min' },
+    ];
+
+    const enriched = categoryBreakdown.map(cat => ({
+      ...cat,
+      visited: cat.sections.filter(s => visitedSections.has(s)).length,
+      total: cat.sections.length,
+      pct: Math.round((cat.sections.filter(s => visitedSections.has(s)).length / cat.sections.length) * 100),
+    }));
+
+    const totalArticles = categoryBreakdown.reduce((s, c) => s + c.articles, 0);
+    const totalReadTime = '2.8 hrs';
+
+    return { totalSections, visited, coveragePct, categories: enriched, totalArticles, totalReadTime };
+  }, [visitedSections]);
+
+  // ─── Reading Progress ───
+  const readingProgress = useMemo(() => {
+    const allSections: SectionKey[] = ['welcome', 'getting-started', 'lead-management', 'content-creation', 'analytics-reporting', 'automation-workflows', 'team-collaboration', 'integrations', 'troubleshooting', 'advanced-features', 'training', 'outreach-templates', 'whats-next', 'advantages', 'features', 'impact', 'future', 'comparison'];
+
+    const sectionDetails = allSections.map((key, idx) => {
+      const labels: Record<SectionKey, string> = {
+        'welcome': 'Welcome', 'getting-started': 'Getting Started', 'lead-management': 'Lead Management',
+        'content-creation': 'Content Creation', 'analytics-reporting': 'Analytics', 'automation-workflows': 'Automation',
+        'team-collaboration': 'Team', 'integrations': 'Integrations', 'troubleshooting': 'Troubleshooting',
+        'advanced-features': 'Advanced', 'training': 'Training', 'outreach-templates': 'Outreach',
+        'whats-next': "What's Next", 'advantages': 'Competitive Edge', 'features': 'Exclusive Features',
+        'impact': 'Business Impact', 'future': 'Future-Ready', 'comparison': 'Why AuraFunnel',
+      };
+      return {
+        key,
+        label: labels[key],
+        order: idx + 1,
+        visited: visitedSections.has(key),
+        current: activeSection === key,
+      };
+    });
+
+    const completedCount = sectionDetails.filter(s => s.visited).length;
+    const pct = Math.round((completedCount / sectionDetails.length) * 100);
+    const nextUnvisited = sectionDetails.find(s => !s.visited);
+    const estimatedTimeLeft = Math.round((sectionDetails.length - completedCount) * 2.5);
+
+    return { sections: sectionDetails, completedCount, total: sectionDetails.length, pct, nextUnvisited, estimatedTimeLeft };
+  }, [visitedSections, activeSection]);
+
+  // ─── Platform Feature Index ───
+  const platformIndex = useMemo(() => {
+    const featureGroups = [
+      { group: 'AI & Intelligence', features: ['Lead Scoring AI', 'Content Generation', 'Predictive Analytics', 'Intent Detection', 'Auto-Optimization', 'Smart Segmentation'], icon: '🧠', relevantSections: ['lead-management', 'content-creation', 'advanced-features'] as SectionKey[] },
+      { group: 'Lead Management', features: ['CSV Import', 'Chrome Extension', 'API Integration', 'Dynamic Segments', 'Score Tiers', 'Lead Actions'], icon: '🎯', relevantSections: ['lead-management', 'getting-started'] as SectionKey[] },
+      { group: 'Content & Outreach', features: ['Email Sequences', 'Multi-Channel Output', 'A/B Testing', 'Template Library', 'Personalization Engine', 'Social Publishing'], icon: '✍️', relevantSections: ['content-creation', 'outreach-templates'] as SectionKey[] },
+      { group: 'Analytics & Reporting', features: ['Executive Dashboard', 'Custom Reports', 'AI Insights', 'Conversion Tracking', 'ROI Calculator', 'Predictive Forecasting'], icon: '📊', relevantSections: ['analytics-reporting', 'impact'] as SectionKey[] },
+      { group: 'Automation', features: ['Workflow Builder', 'Conditional Logic', 'Predictive Timing', 'Dynamic Content', 'Self-Optimizing Sequences', 'Alert System'], icon: '⚡', relevantSections: ['automation-workflows', 'advanced-features'] as SectionKey[] },
+      { group: 'Collaboration & Security', features: ['Team Roles', 'Lead Assignment', 'Shared Notes', 'Activity Feed', 'SSO/2FA', 'Audit Logs'], icon: '👥', relevantSections: ['team-collaboration', 'integrations'] as SectionKey[] },
+    ];
+
+    const totalFeatures = featureGroups.reduce((s, g) => s + g.features.length, 0);
+    const coveredGroups = featureGroups.filter(g => g.relevantSections.some(s => visitedSections.has(s))).length;
+
+    return { featureGroups, totalFeatures, coveredGroups, totalGroups: featureGroups.length };
+  }, [visitedSections]);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      const overlayOpen = showShortcuts || showContentCoverage || showReadingProgress || showPlatformIndex;
+
+      if (e.key === 'Escape') {
+        if (showShortcuts) setShowShortcuts(false);
+        if (showContentCoverage) setShowContentCoverage(false);
+        if (showReadingProgress) setShowReadingProgress(false);
+        if (showPlatformIndex) setShowPlatformIndex(false);
+        return;
+      }
+
+      if (overlayOpen) return;
+
+      switch (e.key) {
+        case 'c': case 'C': e.preventDefault(); setShowContentCoverage(true); break;
+        case 'r': case 'R': e.preventDefault(); setShowReadingProgress(true); break;
+        case 'i': case 'I': e.preventDefault(); setShowPlatformIndex(true); break;
+        case '?': e.preventDefault(); setShowShortcuts(true); break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showShortcuts, showContentCoverage, showReadingProgress, showPlatformIndex]);
+
   const sections: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
     { key: 'welcome', label: 'Welcome', icon: <BookOpenIcon className="w-4 h-4" /> },
     { key: 'getting-started', label: 'Getting Started', icon: <ZapIcon className="w-4 h-4" /> },
@@ -1309,8 +1432,8 @@ const UserManualPage: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <div className="flex items-center space-x-3 mb-2">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
             <BookOpenIcon className="w-5 h-5" />
           </div>
@@ -1318,6 +1441,24 @@ const UserManualPage: React.FC = () => {
             <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">User Manual</h1>
             <p className="text-slate-500 text-sm">AuraFunnel AI Platform \u2014 Complete Reference Guide</p>
           </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button onClick={() => setShowContentCoverage(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showContentCoverage ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+            <PieChartIcon className="w-3.5 h-3.5" />
+            <span>Coverage</span>
+          </button>
+          <button onClick={() => setShowReadingProgress(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showReadingProgress ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
+            <ActivityIcon className="w-3.5 h-3.5" />
+            <span>Progress</span>
+          </button>
+          <button onClick={() => setShowPlatformIndex(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showPlatformIndex ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+            <LayersIcon className="w-3.5 h-3.5" />
+            <span>Feature Index</span>
+          </button>
+          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <span>?</span>
+          </button>
         </div>
       </div>
 
@@ -4359,6 +4500,415 @@ const UserManualPage: React.FC = () => {
             <p className="text-[10px] text-slate-400 font-semibold">
               AuraFunnel User Manual v3.1 \u2022 Last Updated January 2024 \u2022 Document ID: AURA-USER-MANUAL-2024
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Content Coverage Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showContentCoverage && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowContentCoverage(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-cyan-100 text-cyan-600 flex items-center justify-center">
+                  <PieChartIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Content Coverage</h2>
+                  <p className="text-[10px] text-slate-400">Manual completeness analytics</p>
+                </div>
+              </div>
+              <button onClick={() => setShowContentCoverage(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#06b6d4" strokeWidth="7"
+                    strokeDasharray={`${(contentCoverage.coveragePct / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{contentCoverage.coveragePct}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-cyan-600 uppercase">Explored</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-cyan-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-cyan-700">{contentCoverage.visited}/{contentCoverage.totalSections}</p>
+                  <p className="text-[10px] font-bold text-cyan-500">Sections Visited</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{contentCoverage.totalArticles}</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Total Articles</p>
+                </div>
+                <div className="p-3 bg-violet-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-violet-700">{contentCoverage.totalReadTime}</p>
+                  <p className="text-[10px] font-bold text-violet-500">Est. Read Time</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{contentCoverage.categories.length}</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Categories</p>
+                </div>
+              </div>
+
+              {/* Category Breakdown */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Category Breakdown</p>
+                <div className="space-y-2.5">
+                  {contentCoverage.categories.map((cat, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-700">{cat.category}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{cat.visited}/{cat.total} sections</span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-1.5">
+                        <div className="bg-cyan-500 h-full rounded-full transition-all" style={{ width: `${cat.pct}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span>{cat.articles} articles &bull; {cat.readTime}</span>
+                        <span className={`font-bold ${cat.pct === 100 ? 'text-emerald-600' : cat.pct > 0 ? 'text-cyan-600' : 'text-slate-400'}`}>
+                          {cat.pct === 100 ? 'Complete' : cat.pct > 0 ? 'In Progress' : 'Not Started'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Coverage Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-cyan-400 uppercase tracking-wider mb-4">Coverage by Category</p>
+                <div className="space-y-3">
+                  {contentCoverage.categories.map((cat, idx) => (
+                    <div key={idx} className="flex items-center space-x-3">
+                      <span className="text-[9px] text-slate-400 w-24 truncate">{cat.category}</span>
+                      <div className="flex-1 bg-slate-800 h-3 rounded-full overflow-hidden">
+                        <div className="bg-gradient-to-r from-cyan-600 to-cyan-400 h-full rounded-full transition-all" style={{ width: `${cat.pct}%`, minWidth: cat.pct > 0 ? '8px' : '0' }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-white w-8 text-right">{cat.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-cyan-600 to-cyan-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-cyan-200" />
+                  <p className="text-[10px] font-black text-cyan-200 uppercase tracking-wider">AI Coverage Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {contentCoverage.coveragePct > 70
+                    ? `Excellent coverage at ${contentCoverage.coveragePct}%! You've explored ${contentCoverage.visited} of ${contentCoverage.totalSections} sections. Focus on the remaining ${contentCoverage.totalSections - contentCoverage.visited} sections to achieve full manual mastery and unlock the complete AuraFunnel potential.`
+                    : contentCoverage.coveragePct > 30
+                    ? `Good progress at ${contentCoverage.coveragePct}%. The Core Features and Automation categories are critical for daily use. Prioritize completing those sections next to maximize your platform efficiency.`
+                    : `You've explored ${contentCoverage.visited} sections so far. Start with "Getting Started" and "Lead Management" for the quickest path to productivity. Each section takes 2-5 minutes to review.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Reading Progress Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showReadingProgress && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowReadingProgress(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
+                  <ActivityIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Reading Progress</h2>
+                  <p className="text-[10px] text-slate-400">Track your journey through the manual</p>
+                </div>
+              </div>
+              <button onClick={() => setShowReadingProgress(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e11d48" strokeWidth="7"
+                    strokeDasharray={`${(readingProgress.pct / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{readingProgress.pct}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-rose-600 uppercase">Read</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{readingProgress.completedCount}/{readingProgress.total}</p>
+                  <p className="text-[10px] font-bold text-rose-500">Sections Read</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">~{readingProgress.estimatedTimeLeft}m</p>
+                  <p className="text-[10px] font-bold text-amber-500">Time Remaining</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{readingProgress.total - readingProgress.completedCount}</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Sections Left</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{readingProgress.pct === 100 ? 'Done!' : 'Active'}</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Status</p>
+                </div>
+              </div>
+
+              {/* Section Checklist */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">All Sections</p>
+                <div className="space-y-1.5">
+                  {readingProgress.sections.map((sec, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => { setActiveSection(sec.key); setShowReadingProgress(false); }}
+                      className={`w-full flex items-center space-x-3 p-2.5 rounded-xl text-left transition-all ${
+                        sec.current ? 'bg-rose-50 border border-rose-200' :
+                        sec.visited ? 'bg-emerald-50/50 hover:bg-emerald-50' :
+                        'bg-slate-50 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black ${
+                        sec.current ? 'bg-rose-500 text-white' :
+                        sec.visited ? 'bg-emerald-500 text-white' :
+                        'bg-slate-200 text-slate-500'
+                      }`}>
+                        {sec.visited ? <CheckIcon className="w-3 h-3" /> : sec.order}
+                      </div>
+                      <span className={`text-xs font-bold ${sec.current ? 'text-rose-700' : sec.visited ? 'text-emerald-700' : 'text-slate-600'}`}>
+                        {sec.label}
+                      </span>
+                      {sec.current && (
+                        <span className="ml-auto px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full text-[9px] font-black">Current</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Next Up */}
+              {readingProgress.nextUnvisited && (
+                <div className="bg-slate-900 rounded-xl p-5">
+                  <p className="text-[10px] font-black text-rose-400 uppercase tracking-wider mb-3">Recommended Next</p>
+                  <button
+                    onClick={() => { setActiveSection(readingProgress.nextUnvisited!.key); setShowReadingProgress(false); }}
+                    className="w-full p-4 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors text-left group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-white">{readingProgress.nextUnvisited.label}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Section {readingProgress.nextUnvisited.order} of {readingProgress.total}</p>
+                      </div>
+                      <ArrowRightIcon className="w-4 h-4 text-slate-500 group-hover:text-rose-400 transition-colors" />
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-rose-600 to-rose-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-rose-200" />
+                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-wider">AI Reading Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {readingProgress.pct === 100
+                    ? "Congratulations! You've read the entire manual. You now have comprehensive knowledge of the AuraFunnel platform. Consider bookmarking the Advanced Features and Automation sections for quick reference during daily use."
+                    : readingProgress.pct > 50
+                    ? `Great progress at ${readingProgress.pct}%! About ${readingProgress.estimatedTimeLeft} minutes to complete. The "${readingProgress.nextUnvisited?.label}" section is the most impactful to read next based on common user workflows.`
+                    : `You've started your journey through the manual. The quickest path to productivity: read Getting Started, Lead Management, and Content Creation first. These 3 sections cover 80% of daily platform usage.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Platform Feature Index Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showPlatformIndex && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowPlatformIndex(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <LayersIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Feature Index</h2>
+                  <p className="text-[10px] text-slate-400">Complete platform feature directory</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPlatformIndex(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#f59e0b" strokeWidth="7"
+                    strokeDasharray={`${(platformIndex.coveredGroups / platformIndex.totalGroups) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{platformIndex.totalFeatures}</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-amber-600 uppercase">Features</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">{platformIndex.totalFeatures}</p>
+                  <p className="text-[10px] font-bold text-amber-500">Total Features</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{platformIndex.coveredGroups}/{platformIndex.totalGroups}</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Groups Explored</p>
+                </div>
+              </div>
+
+              {/* Feature Groups */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Feature Directory</p>
+                <div className="space-y-3">
+                  {platformIndex.featureGroups.map((group, idx) => {
+                    const explored = group.relevantSections.some(s => visitedSections.has(s));
+                    return (
+                      <div key={idx} className={`p-4 rounded-xl border transition-all ${explored ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-lg">{group.icon}</span>
+                            <span className="text-xs font-black text-slate-900">{group.group}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${explored ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
+                            {explored ? 'Explored' : 'Not yet'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {group.features.map((feat, fi) => (
+                            <div key={fi} className="flex items-center space-x-1.5">
+                              <CheckIcon className={`w-3 h-3 shrink-0 ${explored ? 'text-amber-500' : 'text-slate-300'}`} />
+                              <span className="text-[11px] text-slate-600">{feat}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Feature Density Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-4">Features per Group</p>
+                <div className="space-y-3">
+                  {platformIndex.featureGroups.map((group, idx) => (
+                    <div key={idx} className="flex items-center space-x-3">
+                      <span className="text-sm w-6 text-center">{group.icon}</span>
+                      <div className="flex-1 bg-slate-800 h-3 rounded-full overflow-hidden">
+                        <div className="bg-gradient-to-r from-amber-600 to-amber-400 h-full rounded-full" style={{ width: `${(group.features.length / 6) * 100}%` }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-white w-5 text-right">{group.features.length}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-amber-600 to-amber-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-amber-200" />
+                  <p className="text-[10px] font-black text-amber-200 uppercase tracking-wider">AI Feature Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {platformIndex.coveredGroups === platformIndex.totalGroups
+                    ? `You've explored all ${platformIndex.totalGroups} feature groups covering ${platformIndex.totalFeatures} features. You have a comprehensive understanding of the platform. Consider deep-diving into AI & Intelligence and Automation for the highest ROI.`
+                    : `You've explored ${platformIndex.coveredGroups} of ${platformIndex.totalGroups} feature groups. The AI & Intelligence group (Lead Scoring, Content Generation, Predictive Analytics) delivers the highest value. The Automation group saves an average of 15 hours/week for power users.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Keyboard Shortcuts Modal ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                  <KeyboardIcon className="w-4 h-4" />
+                </div>
+                <h2 className="text-sm font-black text-slate-900">User Manual Shortcuts</h2>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 grid grid-cols-3 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
+              {/* Panels Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Panels</p>
+                {[
+                  { key: 'C', action: 'Content Coverage' },
+                  { key: 'R', action: 'Reading Progress' },
+                  { key: 'I', action: 'Feature Index' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              {/* Navigation Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Navigation</p>
+                {[
+                  { key: 'Click', action: 'Switch sections' },
+                  { key: 'Tab Nav', action: 'Section tabs' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              {/* System Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">System</p>
+                {[
+                  { key: '?', action: 'Shortcuts panel' },
+                  { key: 'Esc', action: 'Close panels' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
+              <p className="text-[10px] text-slate-400">Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
+            </div>
           </div>
         </div>
       )}
