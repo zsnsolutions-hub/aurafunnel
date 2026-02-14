@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { BoltIcon, CreditCardIcon, CheckIcon, SparklesIcon, ShieldIcon, RefreshIcon, DatabaseIcon, MailIcon, TargetIcon } from '../../components/Icons';
+import {
+  BoltIcon, CreditCardIcon, CheckIcon, SparklesIcon, ShieldIcon, RefreshIcon, DatabaseIcon,
+  MailIcon, TargetIcon, KeyboardIcon, TrendUpIcon, TrendDownIcon, XIcon, ClockIcon,
+  ActivityIcon, AlertTriangleIcon, PieChartIcon, BrainIcon, LayersIcon, DownloadIcon,
+  EyeIcon, UsersIcon, ArrowRightIcon
+} from '../../components/Icons';
 import { User, Plan, UsageMetrics } from '../../types';
 import { supabase } from '../../lib/supabase';
 import StripeCheckoutModal from '../../components/portal/StripeCheckoutModal';
@@ -98,6 +103,91 @@ const BillingPage: React.FC = () => {
     return history;
   }, [currentPlanName, user.subscription, user.createdAt]);
 
+  // ─── Enhanced Wireframe State ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showCostAnalysis, setShowCostAnalysis] = useState(false);
+  const [showUsageTrends, setShowUsageTrends] = useState(false);
+  const [showROICalculator, setShowROICalculator] = useState(false);
+
+  // ─── KPI Stats ───
+  const kpiStats = useMemo(() => {
+    const creditsRemaining = creditsTotal - creditsUsed;
+    const usagePct = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
+    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const dayOfMonth = new Date().getDate();
+    const daysRemaining = daysInMonth - dayOfMonth;
+    const costPerLead = usage.leadsProcessed > 0 ? (monthlyPrice / usage.leadsProcessed).toFixed(2) : '—';
+    const costPerGeneration = creditsUsed > 0 ? (monthlyPrice / creditsUsed).toFixed(2) : '—';
+
+    return [
+      { label: 'Current Plan', value: currentPlanName, icon: <LayersIcon className="w-5 h-5" />, color: 'indigo', trend: `$${monthlyPrice}/mo`, up: null },
+      { label: 'Credits Used', value: `${usagePct}%`, icon: <BoltIcon className="w-5 h-5" />, color: 'emerald', trend: `${creditsRemaining.toLocaleString()} remaining`, up: usagePct < 80 },
+      { label: 'Monthly Cost', value: `$${monthlyPrice}`, icon: <CreditCardIcon className="w-5 h-5" />, color: 'blue', trend: `$${(monthlyPrice / daysInMonth).toFixed(2)}/day`, up: true },
+      { label: 'Cost per Lead', value: `$${costPerLead}`, icon: <UsersIcon className="w-5 h-5" />, color: 'violet', trend: `${usage.leadsProcessed} leads processed`, up: true },
+      { label: 'AI Tokens', value: `${(usage.aiTokensUsed / 1000).toFixed(1)}K`, icon: <BrainIcon className="w-5 h-5" />, color: 'amber', trend: `of ${(usage.aiTokensLimit / 1000).toFixed(0)}K limit`, up: usage.aiTokensUsed < usage.aiTokensLimit * 0.8 },
+      { label: 'Days Left', value: daysRemaining.toString(), icon: <ClockIcon className="w-5 h-5" />, color: 'fuchsia', trend: `of ${daysInMonth} day cycle`, up: daysRemaining > 7 },
+    ];
+  }, [creditsTotal, creditsUsed, currentPlanName, usage]);
+
+  // ─── Cost Breakdown ───
+  const costBreakdown = useMemo(() => {
+    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
+    return {
+      monthlyPrice,
+      aiCompute: Math.round(monthlyPrice * 0.45),
+      leadProcessing: Math.round(monthlyPrice * 0.25),
+      storage: Math.round(monthlyPrice * 0.15),
+      support: Math.round(monthlyPrice * 0.15),
+      projectedNext: Math.round(monthlyPrice * (1 + (Math.random() * 0.1 - 0.05))),
+      savingsVsManual: Math.round(monthlyPrice * 3.2),
+    };
+  }, [currentPlanName]);
+
+  // ─── ROI Metrics ───
+  const roiMetrics = useMemo(() => {
+    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
+    const leadsValue = usage.leadsProcessed * 42; // avg $42 per lead
+    const timeSavedHrs = Math.round(usage.leadsProcessed * 0.15 + (usage.aiTokensUsed / 10000) * 0.5);
+    const timeSavedValue = timeSavedHrs * 50; // $50/hr
+    const totalValue = leadsValue + timeSavedValue;
+    const roi = monthlyPrice > 0 ? Math.round(((totalValue - monthlyPrice) / monthlyPrice) * 100) : 0;
+
+    return {
+      leadsValue,
+      timeSavedHrs,
+      timeSavedValue,
+      totalValue,
+      roi,
+      monthlyPrice,
+      paybackDays: Math.round(30 / Math.max(roi / 100, 0.1)),
+    };
+  }, [currentPlanName, usage]);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowShortcuts(s => !s); return; }
+      if (e.key === 'c' || e.key === 'C') { e.preventDefault(); setShowCostAnalysis(s => !s); return; }
+      if (e.key === 't' || e.key === 'T') { e.preventDefault(); setShowUsageTrends(s => !s); return; }
+      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setShowROICalculator(s => !s); return; }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); fetchUsage(); return; }
+      if (e.key === 'Escape') {
+        setShowShortcuts(false);
+        setShowCostAnalysis(false);
+        setShowUsageTrends(false);
+        setShowROICalculator(false);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleUpgradeClick = (plan: Plan) => {
     setSelectedPlan(plan);
     setIsCheckoutOpen(true);
@@ -110,16 +200,65 @@ const BillingPage: React.FC = () => {
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-heading">Billing & Subscription</h1>
           <p className="text-slate-500 mt-1">Manage your enterprise compute allocation and payment methods.</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-slate-600 flex items-center space-x-2 shadow-sm">
-             <span className={`w-2.5 h-2.5 rounded-full ${user.subscription?.status === 'active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'} animate-pulse`}></span>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setShowCostAnalysis(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCostAnalysis ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <PieChartIcon className="w-3.5 h-3.5" />
+            <span>Cost Analysis</span>
+          </button>
+          <button
+            onClick={() => setShowUsageTrends(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showUsageTrends ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <ActivityIcon className="w-3.5 h-3.5" />
+            <span>Usage Trends</span>
+          </button>
+          <button
+            onClick={() => setShowROICalculator(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showROICalculator ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <TrendUpIcon className="w-3.5 h-3.5" />
+            <span>ROI</span>
+          </button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <KeyboardIcon className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="bg-white border border-slate-200 px-3 py-2 rounded-xl text-slate-600 flex items-center space-x-2 shadow-sm">
+             <span className={`w-2 h-2 rounded-full ${user.subscription?.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}></span>
              <span className="text-[10px] font-black uppercase tracking-widest">{user.subscription?.status ?? 'active'}</span>
           </div>
-          <div className="bg-indigo-600 px-5 py-2.5 rounded-xl text-white flex items-center space-x-2 shadow-xl shadow-indigo-100 transition-transform hover:scale-105 active:scale-95">
-            <BoltIcon className="w-4 h-4" />
-            <span className="text-sm font-bold">{(creditsTotal - creditsUsed).toLocaleString()} Gen Remaining</span>
+          <div className="bg-indigo-600 px-4 py-2 rounded-xl text-white flex items-center space-x-2 shadow-xl shadow-indigo-100">
+            <BoltIcon className="w-3.5 h-3.5" />
+            <span className="text-xs font-bold">{(creditsTotal - creditsUsed).toLocaleString()} Gen</span>
           </div>
         </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KPI STATS BANNER                                               */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {kpiStats.map((stat, i) => (
+          <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-all group">
+            <div className="flex items-center justify-between mb-2">
+              <div className={`w-9 h-9 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                {stat.icon}
+              </div>
+              {stat.up !== null && (
+                stat.up ? <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" /> : <TrendDownIcon className="w-3.5 h-3.5 text-rose-500" />
+              )}
+            </div>
+            <p className="text-xl font-black text-slate-900">{stat.value}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{stat.label}</p>
+            <p className="text-[10px] text-slate-400 mt-1 truncate">{stat.trend}</p>
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -372,12 +511,330 @@ const BillingPage: React.FC = () => {
       </div>
 
       {isCheckoutOpen && selectedPlan && (
-        <StripeCheckoutModal 
+        <StripeCheckoutModal
           plan={selectedPlan}
           user={user}
           onClose={() => setIsCheckoutOpen(false)}
           onSuccess={refreshProfile}
         />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* COST ANALYSIS SIDEBAR                                         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showCostAnalysis && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowCostAnalysis(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Cost Analysis</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Monthly cost breakdown and projections</p>
+              </div>
+              <button onClick={() => setShowCostAnalysis(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Current Monthly Cost */}
+              <div className="p-5 bg-gradient-to-r from-indigo-50 to-violet-50 rounded-xl border border-indigo-100 text-center">
+                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-wider mb-1">Current Monthly Cost</p>
+                <p className="text-4xl font-black text-indigo-700">${costBreakdown.monthlyPrice}</p>
+                <p className="text-xs text-indigo-500 mt-1">{currentPlanName} Plan</p>
+              </div>
+
+              {/* Cost Breakdown */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Cost Breakdown</p>
+                <div className="space-y-2">
+                  {[
+                    { label: 'AI Compute', value: costBreakdown.aiCompute, pct: 45, color: 'indigo' },
+                    { label: 'Lead Processing', value: costBreakdown.leadProcessing, pct: 25, color: 'emerald' },
+                    { label: 'Data Storage', value: costBreakdown.storage, pct: 15, color: 'violet' },
+                    { label: 'Priority Support', value: costBreakdown.support, pct: 15, color: 'amber' },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-slate-100">
+                      <div className={`w-8 h-8 rounded-lg bg-${item.color}-50 text-${item.color}-600 flex items-center justify-center`}>
+                        <span className="text-xs font-black">{item.pct}%</span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-slate-700">{item.label}</span>
+                          <span className="text-xs font-black text-slate-800">${item.value}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1">
+                          <div className={`h-full rounded-full bg-${item.color}-500`} style={{ width: `${item.pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Projected Next Month */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Projected Next Month</p>
+                    <p className="text-2xl font-black text-slate-800 mt-1">${costBreakdown.projectedNext}</p>
+                  </div>
+                  <div className={`flex items-center space-x-1 ${costBreakdown.projectedNext > costBreakdown.monthlyPrice ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {costBreakdown.projectedNext > costBreakdown.monthlyPrice ? <TrendUpIcon className="w-4 h-4" /> : <TrendDownIcon className="w-4 h-4" />}
+                    <span className="text-xs font-bold">
+                      {Math.abs(Math.round(((costBreakdown.projectedNext - costBreakdown.monthlyPrice) / costBreakdown.monthlyPrice) * 100))}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Savings */}
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4 text-emerald-600" />
+                  <p className="text-xs font-black text-emerald-700 uppercase tracking-wider">Savings vs Manual</p>
+                </div>
+                <p className="text-2xl font-black text-emerald-700">${costBreakdown.savingsVsManual.toLocaleString()}<span className="text-sm font-bold text-emerald-500">/mo</span></p>
+                <p className="text-xs text-emerald-600 mt-1">
+                  That's {Math.round(costBreakdown.savingsVsManual / costBreakdown.monthlyPrice)}x your subscription cost
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* USAGE TRENDS SIDEBAR                                          */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showUsageTrends && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowUsageTrends(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Usage Trends</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Resource consumption over time</p>
+              </div>
+              <button onClick={() => setShowUsageTrends(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Daily Usage Sparkline */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Credits Used (Last 14 Days)</p>
+                <div className="flex items-end space-x-1 h-20">
+                  {[22, 18, 35, 28, 42, 38, 52, 45, 30, 55, 48, 62, 40, 35].map((v, i) => (
+                    <div key={i} className="flex-1 rounded-t bg-indigo-400 hover:bg-indigo-600 transition-colors cursor-default" style={{ height: `${(v / 62) * 100}%` }} title={`${v} credits`}></div>
+                  ))}
+                </div>
+                <div className="flex justify-between text-[9px] text-slate-400 mt-1.5">
+                  <span>14d ago</span><span>7d ago</span><span>Today</span>
+                </div>
+              </div>
+
+              {/* Per-Resource Usage */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Resource Utilization</p>
+                {[
+                  { label: 'AI Tokens', used: usage.aiTokensUsed, limit: usage.aiTokensLimit, color: 'indigo', icon: <SparklesIcon className="w-4 h-4" /> },
+                  { label: 'Leads Processed', used: usage.leadsProcessed, limit: usage.leadsLimit, color: 'emerald', icon: <UsersIcon className="w-4 h-4" /> },
+                  { label: 'Storage', used: usage.storageUsedMb, limit: usage.storageLimitMb, color: 'violet', icon: <DatabaseIcon className="w-4 h-4" />, unit: 'MB' },
+                  { label: 'Email Credits', used: usage.emailCreditsUsed, limit: usage.emailCreditsLimit, color: 'amber', icon: <MailIcon className="w-4 h-4" /> },
+                ].map((resource, i) => {
+                  const pct = Math.min(Math.round((resource.used / resource.limit) * 100), 100);
+                  const isHigh = pct > 80;
+                  return (
+                    <div key={i} className="p-3 bg-white rounded-xl border border-slate-100 mb-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-7 h-7 rounded-lg bg-${resource.color}-50 text-${resource.color}-600 flex items-center justify-center`}>
+                            {resource.icon}
+                          </div>
+                          <span className="text-xs font-bold text-slate-700">{resource.label}</span>
+                        </div>
+                        <span className={`text-xs font-black ${isHigh ? 'text-rose-600' : 'text-slate-600'}`}>
+                          {pct}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2">
+                        <div
+                          className={`h-full rounded-full transition-all ${isHigh ? 'bg-rose-500' : `bg-${resource.color}-500`}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className="text-[10px] text-slate-400">{resource.used.toLocaleString()}{resource.unit ? ` ${resource.unit}` : ''} used</span>
+                        <span className="text-[10px] text-slate-400">{resource.limit.toLocaleString()}{resource.unit ? ` ${resource.unit}` : ''} limit</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Usage Forecast */}
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-blue-600" />
+                  <p className="text-xs font-black text-blue-700 uppercase tracking-wider">AI Forecast</p>
+                </div>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  Based on your current usage pattern, you'll use approximately <strong>{Math.round(creditsUsed * (30 / Math.max(new Date().getDate(), 1))).toLocaleString()}</strong> credits this month.
+                  {creditsUsed * (30 / Math.max(new Date().getDate(), 1)) > creditsTotal
+                    ? ' Consider upgrading to avoid overages.'
+                    : ' You\'re on track to stay within your limits.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ROI CALCULATOR SIDEBAR                                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showROICalculator && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowROICalculator(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">ROI Calculator</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Return on investment analysis</p>
+              </div>
+              <button onClick={() => setShowROICalculator(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* ROI Score */}
+              <div className="flex flex-col items-center p-5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
+                <div className="relative w-28 h-28">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="52" fill="none" stroke="#f1f5f9" strokeWidth="8" />
+                    <circle
+                      cx="60" cy="60" r="52" fill="none"
+                      stroke={roiMetrics.roi >= 200 ? '#10b981' : roiMetrics.roi >= 100 ? '#f59e0b' : '#ef4444'}
+                      strokeWidth="8" strokeLinecap="round"
+                      strokeDasharray={`${Math.min((roiMetrics.roi / 500) * 327, 327)} 327`}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={`text-2xl font-black ${roiMetrics.roi >= 200 ? 'text-emerald-600' : roiMetrics.roi >= 100 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {roiMetrics.roi}%
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">ROI</span>
+                  </div>
+                </div>
+                <p className={`mt-2 text-sm font-black ${roiMetrics.roi >= 200 ? 'text-emerald-600' : roiMetrics.roi >= 100 ? 'text-amber-600' : 'text-rose-600'}`}>
+                  {roiMetrics.roi >= 200 ? 'Excellent Return' : roiMetrics.roi >= 100 ? 'Good Return' : 'Building Value'}
+                </p>
+              </div>
+
+              {/* Value Breakdown */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Value Generated</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100">
+                    <div className="flex items-center space-x-2">
+                      <UsersIcon className="w-4 h-4 text-indigo-600" />
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">Lead Pipeline Value</p>
+                        <p className="text-[10px] text-slate-400">{usage.leadsProcessed} leads @ $42 avg value</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-black text-emerald-600">${roiMetrics.leadsValue.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100">
+                    <div className="flex items-center space-x-2">
+                      <ClockIcon className="w-4 h-4 text-violet-600" />
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">Time Saved</p>
+                        <p className="text-[10px] text-slate-400">{roiMetrics.timeSavedHrs} hours @ $50/hr</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-black text-emerald-600">${roiMetrics.timeSavedValue.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="p-4 bg-slate-900 rounded-xl text-white">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Total Value</p>
+                    <p className="text-xl font-black text-emerald-400">${roiMetrics.totalValue.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Cost</p>
+                    <p className="text-xl font-black text-white">${roiMetrics.monthlyPrice}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Net Return</p>
+                    <p className="text-xl font-black text-emerald-400">${(roiMetrics.totalValue - roiMetrics.monthlyPrice).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Payback Period</p>
+                    <p className="text-xl font-black text-white">{roiMetrics.paybackDays}d</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upgrade Suggestion */}
+              {currentPlanName === 'Starter' && (
+                <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <ArrowRightIcon className="w-4 h-4 text-indigo-600" />
+                    <p className="text-xs font-black text-indigo-700 uppercase tracking-wider">Upgrade Opportunity</p>
+                  </div>
+                  <p className="text-xs text-indigo-700 leading-relaxed">
+                    Upgrading to Professional could increase your ROI by 3-5x with higher lead limits and AI token capacity.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* KEYBOARD SHORTCUTS MODAL                                      */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center space-x-2">
+                <KeyboardIcon className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-black text-slate-900 font-heading">Keyboard Shortcuts</h3>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {[
+                { key: 'C', label: 'Toggle cost analysis' },
+                { key: 'T', label: 'Toggle usage trends' },
+                { key: 'R', label: 'Toggle ROI calculator' },
+                { key: 'U', label: 'Refresh usage data' },
+                { key: '?', label: 'Toggle this shortcuts panel' },
+                { key: 'Esc', label: 'Close all panels' },
+              ].map((shortcut, i) => (
+                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                  <span className="text-sm text-slate-600">{shortcut.label}</span>
+                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">
+                    {shortcut.key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
