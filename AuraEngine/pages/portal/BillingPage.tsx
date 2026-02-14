@@ -108,6 +108,9 @@ const BillingPage: React.FC = () => {
   const [showCostAnalysis, setShowCostAnalysis] = useState(false);
   const [showUsageTrends, setShowUsageTrends] = useState(false);
   const [showROICalculator, setShowROICalculator] = useState(false);
+  const [showSpendForecast, setShowSpendForecast] = useState(false);
+  const [showCreditAnalytics, setShowCreditAnalytics] = useState(false);
+  const [showPlanComparison, setShowPlanComparison] = useState(false);
 
   // ─── KPI Stats ───
   const kpiStats = useMemo(() => {
@@ -164,6 +167,100 @@ const BillingPage: React.FC = () => {
     };
   }, [currentPlanName, usage]);
 
+  // ─── Spend Forecast ───
+  const spendForecast = useMemo(() => {
+    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
+    const dayOfMonth = new Date().getDate();
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const dailyBurnRate = monthlyPrice / daysInMonth;
+    const spentSoFar = Math.round(dailyBurnRate * dayOfMonth);
+    const projectedOverage = creditsUsed > creditsTotal * 0.8 ? Math.round((creditsUsed / creditsTotal - 0.8) * monthlyPrice * 0.5) : 0;
+
+    const monthlyProjections = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(); d.setMonth(d.getMonth() + i);
+      const growth = 1 + i * 0.03 + (Math.random() - 0.5) * 0.04;
+      return {
+        month: d.toLocaleDateString('en-US', { month: 'short' }),
+        base: monthlyPrice,
+        projected: Math.round(monthlyPrice * growth),
+        overage: i > 2 ? Math.round(Math.random() * 15) : 0,
+      };
+    });
+
+    const annualCost = monthlyPrice * 12;
+    const annualSavings = Math.round(annualCost * 0.17); // annual billing discount
+    const budgetAlerts = [
+      { threshold: '80% credits', status: creditsUsed / creditsTotal > 0.8 ? 'triggered' as const : 'ok' as const, value: `${Math.round((creditsUsed / creditsTotal) * 100)}%` },
+      { threshold: '90% AI tokens', status: usage.aiTokensUsed / usage.aiTokensLimit > 0.9 ? 'triggered' as const : 'ok' as const, value: `${Math.round((usage.aiTokensUsed / usage.aiTokensLimit) * 100)}%` },
+      { threshold: 'Overage risk', status: projectedOverage > 0 ? 'triggered' as const : 'ok' as const, value: projectedOverage > 0 ? `+$${projectedOverage}` : 'None' },
+    ];
+
+    return { dailyBurnRate, spentSoFar, projectedOverage, monthlyProjections, annualCost, annualSavings, budgetAlerts, monthlyPrice };
+  }, [currentPlanName, creditsUsed, creditsTotal, usage]);
+
+  // ─── Credit Consumption Analytics ───
+  const creditAnalytics = useMemo(() => {
+    const featureBreakdown = [
+      { feature: 'Lead Scoring', credits: Math.round(creditsUsed * 0.32), pct: 32, trend: 8, color: 'indigo' },
+      { feature: 'Content Generation', credits: Math.round(creditsUsed * 0.28), pct: 28, trend: 15, color: 'violet' },
+      { feature: 'Email Campaigns', credits: Math.round(creditsUsed * 0.18), pct: 18, trend: -5, color: 'amber' },
+      { feature: 'Analytics & Reports', credits: Math.round(creditsUsed * 0.12), pct: 12, trend: 3, color: 'emerald' },
+      { feature: 'Strategy & Planning', credits: Math.round(creditsUsed * 0.10), pct: 10, trend: 22, color: 'rose' },
+    ];
+
+    const hourlyPattern = Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
+      credits: Math.round(Math.sin((h - 10) * 0.4) * 8 + 12 + (Math.random() - 0.5) * 4),
+    }));
+    const peakHour = hourlyPattern.reduce((best, h) => h.credits > best.credits ? h : best, hourlyPattern[0]);
+
+    const weeklyTrend = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6 - i));
+      return {
+        day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        used: Math.round(creditsUsed / 30 * (0.8 + Math.random() * 0.4)),
+        wasted: Math.round(Math.random() * 3),
+      };
+    });
+
+    const wasteScore = Math.round(weeklyTrend.reduce((s, d) => s + d.wasted, 0) / weeklyTrend.reduce((s, d) => s + d.used, 0) * 100);
+    const efficiencyScore = 100 - wasteScore;
+
+    return { featureBreakdown, hourlyPattern, peakHour, weeklyTrend, wasteScore, efficiencyScore };
+  }, [creditsUsed]);
+
+  // ─── Plan Comparison ───
+  const planComparison = useMemo(() => {
+    const tiers = [
+      {
+        name: 'Starter', price: 49, credits: 10000, leads: 1000, tokens: 100000, emails: 500, storage: 5000,
+        features: ['Basic AI scoring', 'Email templates', '5 integrations', 'Standard support'],
+      },
+      {
+        name: 'Professional', price: 149, credits: 50000, leads: 5000, tokens: 500000, emails: 2500, storage: 25000,
+        features: ['Advanced AI models', 'Custom templates', '15 integrations', 'Priority support', 'Analytics dashboard', 'Team collaboration'],
+      },
+      {
+        name: 'Enterprise', price: 499, credits: 999999, leads: 999999, tokens: 999999, emails: 99999, storage: 999999,
+        features: ['Custom AI training', 'White-label', 'Unlimited integrations', 'Dedicated CSM', 'SLA guarantee', 'API access', 'Custom workflows'],
+      },
+    ];
+
+    const currentTier = tiers.find(t => t.name === currentPlanName) || tiers[0];
+    const nextTier = tiers[tiers.indexOf(currentTier) + 1] || null;
+    const upgradeValue = nextTier ? {
+      additionalCredits: nextTier.credits - currentTier.credits,
+      additionalLeads: nextTier.leads - currentTier.leads,
+      additionalTokens: nextTier.tokens - currentTier.tokens,
+      priceDiff: nextTier.price - currentTier.price,
+      costPerExtraCredit: ((nextTier.price - currentTier.price) / (nextTier.credits - currentTier.credits) * 1000).toFixed(3),
+      newFeatures: nextTier.features.filter(f => !currentTier.features.includes(f)),
+    } : null;
+
+    return { tiers, currentTier, nextTier, upgradeValue };
+  }, [currentPlanName]);
+
   // ─── Keyboard Shortcuts ───
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -176,11 +273,17 @@ const BillingPage: React.FC = () => {
       if (e.key === 't' || e.key === 'T') { e.preventDefault(); setShowUsageTrends(s => !s); return; }
       if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setShowROICalculator(s => !s); return; }
       if (e.key === 'u' || e.key === 'U') { e.preventDefault(); fetchUsage(); return; }
+      if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setShowSpendForecast(s => !s); return; }
+      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setShowCreditAnalytics(s => !s); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setShowPlanComparison(s => !s); return; }
       if (e.key === 'Escape') {
         setShowShortcuts(false);
         setShowCostAnalysis(false);
         setShowUsageTrends(false);
         setShowROICalculator(false);
+        setShowSpendForecast(false);
+        setShowCreditAnalytics(false);
+        setShowPlanComparison(false);
         return;
       }
     };
@@ -221,6 +324,27 @@ const BillingPage: React.FC = () => {
           >
             <TrendUpIcon className="w-3.5 h-3.5" />
             <span>ROI</span>
+          </button>
+          <button
+            onClick={() => setShowSpendForecast(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSpendForecast ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <TargetIcon className="w-3.5 h-3.5" />
+            <span>Forecast</span>
+          </button>
+          <button
+            onClick={() => setShowCreditAnalytics(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCreditAnalytics ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <BoltIcon className="w-3.5 h-3.5" />
+            <span>Credits</span>
+          </button>
+          <button
+            onClick={() => setShowPlanComparison(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPlanComparison ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <LayersIcon className="w-3.5 h-3.5" />
+            <span>Compare</span>
           </button>
           <button
             onClick={() => setShowShortcuts(true)}
@@ -801,12 +925,422 @@ const BillingPage: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* SPEND FORECAST SIDEBAR                                         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showSpendForecast && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowSpendForecast(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Spend Forecast</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Projections, burn rate &amp; budget alerts</p>
+              </div>
+              <button onClick={() => setShowSpendForecast(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Burn Rate Gauge */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 96 96">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#06b6d4" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(spendForecast.spentSoFar / spendForecast.monthlyPrice) * 251} 251`} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-black text-cyan-700">${spendForecast.spentSoFar}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Spent</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 bg-cyan-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-cyan-700">${spendForecast.dailyBurnRate.toFixed(2)}</p>
+                  <p className="text-[9px] font-bold text-cyan-500 uppercase">Daily Burn</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-slate-700">${spendForecast.annualCost}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Annual Cost</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">${spendForecast.annualSavings}</p>
+                  <p className="text-[9px] font-bold text-emerald-400 uppercase">Annual Save</p>
+                </div>
+              </div>
+
+              {/* Budget Alerts */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Budget Alerts</p>
+                <div className="space-y-2">
+                  {spendForecast.budgetAlerts.map((alert, i) => (
+                    <div key={i} className={`flex items-center justify-between p-3 rounded-xl border ${
+                      alert.status === 'triggered' ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'
+                    }`}>
+                      <div className="flex items-center space-x-2">
+                        {alert.status === 'triggered' ? (
+                          <AlertTriangleIcon className="w-4 h-4 text-rose-500" />
+                        ) : (
+                          <CheckIcon className="w-4 h-4 text-emerald-500" />
+                        )}
+                        <span className="text-xs font-bold text-slate-700">{alert.threshold}</span>
+                      </div>
+                      <span className={`text-xs font-black ${alert.status === 'triggered' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {alert.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 6-Month Projection Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">6-Month Spend Projection</p>
+                <div className="flex items-end space-x-3 h-24">
+                  {spendForecast.monthlyProjections.map((m, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center">
+                      <div className="w-full flex space-x-0.5 items-end" style={{ height: '80px' }}>
+                        <div
+                          className="flex-1 rounded-t bg-gradient-to-t from-cyan-600 to-cyan-400"
+                          style={{ height: `${(m.base / 600) * 100}%`, minHeight: '3px' }}
+                        />
+                        <div
+                          className="flex-1 rounded-t bg-gradient-to-t from-amber-600 to-amber-400"
+                          style={{ height: `${(m.projected / 600) * 100}%`, minHeight: '3px' }}
+                        />
+                      </div>
+                      <span className="text-[9px] text-slate-500 mt-1">{m.month}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center space-x-4 mt-2">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span className="text-[9px] text-slate-500">Base</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span className="text-[9px] text-slate-500">Projected</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-cyan-600 to-teal-600 rounded-2xl p-4 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-xs font-black uppercase tracking-wider">Spend Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  Your daily burn rate of ${spendForecast.dailyBurnRate.toFixed(2)} is on track.
+                  {spendForecast.projectedOverage > 0
+                    ? ` You may incur a $${spendForecast.projectedOverage} overage this month. Consider upgrading.`
+                    : ` Switching to annual billing would save $${spendForecast.annualSavings}/year (17% discount).`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* CREDIT CONSUMPTION ANALYTICS SIDEBAR                          */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showCreditAnalytics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowCreditAnalytics(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Credit Analytics</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Per-feature usage, patterns &amp; efficiency</p>
+              </div>
+              <button onClick={() => setShowCreditAnalytics(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Efficiency Gauge */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 96 96">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#f43f5e" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(creditAnalytics.efficiencyScore / 100) * 251} 251`} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-black text-rose-700">{creditAnalytics.efficiencyScore}%</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase">Efficient</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{creditsUsed.toLocaleString()}</p>
+                  <p className="text-[9px] font-bold text-indigo-400 uppercase">Total Used</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{creditAnalytics.efficiencyScore}%</p>
+                  <p className="text-[9px] font-bold text-emerald-400 uppercase">Efficiency</p>
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{creditAnalytics.wasteScore}%</p>
+                  <p className="text-[9px] font-bold text-rose-400 uppercase">Waste</p>
+                </div>
+              </div>
+
+              {/* Per-Feature Breakdown */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Usage by Feature</p>
+                <div className="space-y-2">
+                  {creditAnalytics.featureBreakdown.map((feat, i) => (
+                    <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-sm transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-bold text-slate-800">{feat.feature}</h4>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-black text-slate-700">{feat.credits.toLocaleString()}</span>
+                          <div className="flex items-center space-x-0.5">
+                            {feat.trend > 0 ? <TrendUpIcon className="w-3 h-3 text-rose-500" /> : <TrendDownIcon className="w-3 h-3 text-emerald-500" />}
+                            <span className={`text-[10px] font-bold ${feat.trend > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {feat.trend > 0 ? '+' : ''}{feat.trend}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5">
+                        <div className={`h-full rounded-full bg-${feat.color}-500`} style={{ width: `${feat.pct}%` }} />
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">{feat.pct}% of total credits</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hourly Pattern Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-wider">24h Credit Usage</p>
+                  <span className="text-[10px] text-rose-400 font-bold">Peak: {creditAnalytics.peakHour.label}</span>
+                </div>
+                <div className="flex items-end space-x-1 h-20">
+                  {creditAnalytics.hourlyPattern.map((h, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center">
+                      <div
+                        className="w-full rounded-t bg-gradient-to-t from-rose-600 to-rose-400 transition-all"
+                        style={{ height: `${(h.credits / 22) * 100}%`, minHeight: '2px' }}
+                      />
+                      {i % 6 === 0 && (
+                        <span className="text-[8px] text-slate-500 mt-0.5">{h.label}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Weekly Trend Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">7-Day Credit Trend</p>
+                <div className="flex items-end space-x-2 h-20">
+                  {creditAnalytics.weeklyTrend.map((d, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center">
+                      <div className="w-full flex flex-col items-center space-y-0.5">
+                        <div
+                          className="w-full rounded-t bg-gradient-to-t from-indigo-600 to-indigo-400"
+                          style={{ height: `${(d.used / 30) * 60}px`, minHeight: '3px' }}
+                        />
+                        {d.wasted > 0 && (
+                          <div
+                            className="w-full rounded-t bg-gradient-to-t from-rose-600 to-rose-400"
+                            style={{ height: `${(d.wasted / 30) * 60}px`, minHeight: '2px' }}
+                          />
+                        )}
+                      </div>
+                      <span className="text-[9px] text-slate-500 mt-1">{d.day}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center space-x-4 mt-2">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-indigo-400" />
+                    <span className="text-[9px] text-slate-500">Used</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-rose-400" />
+                    <span className="text-[9px] text-slate-500">Wasted</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-rose-600 to-pink-600 rounded-2xl p-4 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-xs font-black uppercase tracking-wider">Credit Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  Content Generation usage grew 15% this week — your highest-consuming feature.
+                  Peak credit usage is at {creditAnalytics.peakHour.label}. Your efficiency score of {creditAnalytics.efficiencyScore}%
+                  {creditAnalytics.efficiencyScore >= 95 ? ' is excellent — minimal waste detected.' : ' can be improved by batching similar operations.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* PLAN COMPARISON SIDEBAR                                       */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showPlanComparison && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowPlanComparison(false)} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Plan Comparison</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Side-by-side tier analysis &amp; upgrade value</p>
+              </div>
+              <button onClick={() => setShowPlanComparison(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Current Plan Highlight */}
+              <div className="p-4 bg-gradient-to-r from-indigo-50 to-violet-50 rounded-xl border border-indigo-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Current Plan</p>
+                    <p className="text-2xl font-black text-indigo-700">{planComparison.currentTier.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-black text-indigo-700">${planComparison.currentTier.price}</p>
+                    <p className="text-[10px] text-indigo-500 font-bold">/month</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tier Comparison Table */}
+              <div>
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Tier Comparison</p>
+                <div className="space-y-2">
+                  {planComparison.tiers.map((tier, i) => {
+                    const isCurrent = tier.name === currentPlanName;
+                    return (
+                      <div key={i} className={`p-4 rounded-xl border transition-all ${
+                        isCurrent ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:shadow-sm'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="text-sm font-bold text-slate-800">{tier.name}</h4>
+                            {isCurrent && (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-indigo-600 text-white">Current</span>
+                            )}
+                          </div>
+                          <span className="text-sm font-black text-slate-700">${tier.price}/mo</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div>
+                            <p className="text-xs font-bold text-indigo-600">{tier.credits >= 999999 ? 'Unlimited' : `${(tier.credits / 1000).toFixed(0)}K`}</p>
+                            <p className="text-[9px] text-slate-400">Credits</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-emerald-600">{tier.leads >= 999999 ? 'Unlimited' : `${(tier.leads / 1000).toFixed(0)}K`}</p>
+                            <p className="text-[9px] text-slate-400">Leads</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-violet-600">{tier.tokens >= 999999 ? 'Unlimited' : `${(tier.tokens / 1000).toFixed(0)}K`}</p>
+                            <p className="text-[9px] text-slate-400">Tokens</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-amber-600">{tier.emails >= 99999 ? 'Unlimited' : tier.emails.toLocaleString()}</p>
+                            <p className="text-[9px] text-slate-400">Emails</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {tier.features.map((f, fi) => (
+                            <span key={fi} className="px-2 py-0.5 bg-slate-50 rounded text-[9px] font-semibold text-slate-500">{f}</span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Upgrade Value */}
+              {planComparison.upgradeValue && planComparison.nextTier && (
+                <div>
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Upgrade to {planComparison.nextTier.name}</p>
+                  <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-emerald-700">Additional Credits</span>
+                      <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalCredits.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-emerald-700">Additional Leads</span>
+                      <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalLeads.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-emerald-700">Additional Tokens</span>
+                      <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalTokens.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
+                      <span className="text-xs font-bold text-emerald-800">Price Difference</span>
+                      <span className="text-xs font-black text-emerald-800">+${planComparison.upgradeValue.priceDiff}/mo</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-800">Cost per 1K Extra Credits</span>
+                      <span className="text-xs font-black text-emerald-800">${planComparison.upgradeValue.costPerExtraCredit}</span>
+                    </div>
+                  </div>
+
+                  {/* New Features */}
+                  {planComparison.upgradeValue.newFeatures.length > 0 && (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">New Features You'd Unlock</p>
+                      {planComparison.upgradeValue.newFeatures.map((f, i) => (
+                        <div key={i} className="flex items-center space-x-2 p-2 bg-white rounded-lg border border-slate-100">
+                          <CheckIcon className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span className="text-xs font-semibold text-slate-700">{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl p-4 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-xs font-black uppercase tracking-wider">Plan Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {planComparison.nextTier
+                    ? `Upgrading to ${planComparison.nextTier.name} gives you ${Math.round((planComparison.upgradeValue?.additionalCredits || 0) / (planComparison.upgradeValue?.priceDiff || 1))} extra credits per dollar. Based on your growth trajectory, you'll need the upgrade in ~${Math.max(1, Math.round((creditsTotal - creditsUsed) / Math.max(creditsUsed / 30, 1)))} days.`
+                    : `You're on the highest tier with unlimited resources. Focus on maximizing ROI from your existing allocation.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEYBOARD SHORTCUTS MODAL                                      */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {showShortcuts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center space-x-2">
                 <KeyboardIcon className="w-5 h-5 text-indigo-600" />
@@ -816,22 +1350,52 @@ const BillingPage: React.FC = () => {
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
-            <div className="space-y-2">
-              {[
-                { key: 'C', label: 'Toggle cost analysis' },
-                { key: 'T', label: 'Toggle usage trends' },
-                { key: 'R', label: 'Toggle ROI calculator' },
-                { key: 'U', label: 'Refresh usage data' },
-                { key: '?', label: 'Toggle this shortcuts panel' },
-                { key: 'Esc', label: 'Close all panels' },
-              ].map((shortcut, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                  <span className="text-sm text-slate-600">{shortcut.label}</span>
-                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">
-                    {shortcut.key}
-                  </kbd>
+            <div className="grid grid-cols-3 gap-6">
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Actions</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: 'U', label: 'Refresh usage' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Panels</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: 'C', label: 'Cost analysis' },
+                    { key: 'T', label: 'Usage trends' },
+                    { key: 'R', label: 'ROI calculator' },
+                    { key: 'F', label: 'Spend forecast' },
+                    { key: 'A', label: 'Credit analytics' },
+                    { key: 'P', label: 'Plan comparison' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">System</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: '?', label: 'Shortcuts' },
+                    { key: 'Esc', label: 'Close all panels' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -242,40 +242,6 @@ const AutomationPage: React.FC = () => {
     localStorage.setItem(`aura_workflows_list_${user?.id}`, JSON.stringify(workflows));
   }, [workflows, user?.id]);
 
-  // ─── Keyboard Shortcuts ───
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
-      if (isInput) return;
-
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowShortcuts(s => !s); return; }
-      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); startWizard(); return; }
-      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setShowExecutionLog(s => !s); return; }
-      if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHealthPanel(s => !s); return; }
-      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setShowNodeAnalytics(s => !s); return; }
-      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setShowROICalculator(s => !s); return; }
-      if (e.key === 'i' || e.key === 'I') { e.preventDefault(); setShowTriggerAnalytics(s => !s); return; }
-      if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setShowTemplateEffectiveness(s => !s); return; }
-      if (e.key === 't' || e.key === 'T') { e.preventDefault(); handleTest(); return; }
-      if (e.key === 'o' || e.key === 'O') { e.preventDefault(); handleAiOptimize(); return; }
-      if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSave(); return; }
-      if (e.key === 'Escape') {
-        setShowShortcuts(false);
-        setShowExecutionLog(false);
-        setShowNodeAnalytics(false);
-        setShowHealthPanel(false);
-        setShowROICalculator(false);
-        setShowTriggerAnalytics(false);
-        setShowTemplateEffectiveness(false);
-        setShowWorkflowList(false);
-        return;
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [startWizard, handleTest, handleAiOptimize, handleSave]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const selectedNode = useMemo(() => {
     return workflow.nodes.find(n => n.id === selectedNodeId) || null;
   }, [workflow.nodes, selectedNodeId]);
@@ -688,6 +654,40 @@ const AutomationPage: React.FC = () => {
       return next;
     });
   }, []);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowShortcuts(s => !s); return; }
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); startWizard(); return; }
+      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setShowExecutionLog(s => !s); return; }
+      if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHealthPanel(s => !s); return; }
+      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setShowNodeAnalytics(s => !s); return; }
+      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setShowROICalculator(s => !s); return; }
+      if (e.key === 'i' || e.key === 'I') { e.preventDefault(); setShowTriggerAnalytics(s => !s); return; }
+      if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setShowTemplateEffectiveness(s => !s); return; }
+      if (e.key === 't' || e.key === 'T') { e.preventDefault(); handleTest(); return; }
+      if (e.key === 'o' || e.key === 'O') { e.preventDefault(); handleAiOptimize(); return; }
+      if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSave(); return; }
+      if (e.key === 'Escape') {
+        setShowShortcuts(false);
+        setShowExecutionLog(false);
+        setShowNodeAnalytics(false);
+        setShowHealthPanel(false);
+        setShowROICalculator(false);
+        setShowTriggerAnalytics(false);
+        setShowTemplateEffectiveness(false);
+        setShowWorkflowList(false);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [startWizard, handleTest, handleAiOptimize, handleSave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Rendering helpers ───
   const getNodeIcon = (type: NodeType) => {
