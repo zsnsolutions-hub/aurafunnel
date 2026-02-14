@@ -353,6 +353,152 @@ const CALENDAR_FEATURES = [
   'Performance preview',
 ];
 
+// === Mobile Content Creation ===
+const MOBILE_FEATURES = [
+  { icon: '🎤', title: 'Voice Dictation', desc: 'Dictate content ideas hands-free' },
+  { icon: '📸', title: 'Photo Upload', desc: 'Quick upload for visual content' },
+  { icon: '🔔', title: 'Push Notifications', desc: 'Alerts when content performs well' },
+  { icon: '👆', title: 'One-Tap Responses', desc: 'Respond to comments/engagement' },
+  { icon: '📶', title: 'Offline Editing', desc: 'Syncs when back online' },
+];
+
+const MOBILE_WORKFLOW_STEPS = [
+  { step: 1, text: 'Receive notification: "Content performing well!"', color: 'indigo' },
+  { step: 2, text: 'Tap notification → See analytics', color: 'violet' },
+  { step: 3, text: 'Click [Create Similar Content]', color: 'emerald' },
+  { step: 4, text: 'Use voice: "Create a LinkedIn post about this success"', color: 'amber' },
+  { step: 5, text: 'AI generates draft in 10 seconds', color: 'rose' },
+  { step: 6, text: 'Edit with mobile-optimized editor', color: 'indigo' },
+  { step: 7, text: 'Schedule for optimal time', color: 'emerald' },
+];
+
+// === Measuring Success ===
+const EMAIL_METRICS = [
+  { metric: 'Open Rate', good: '> 40%', excellent: '> 50%' },
+  { metric: 'Click Rate', good: '> 10%', excellent: '> 15%' },
+  { metric: 'Reply Rate', good: '> 3%', excellent: '> 5%' },
+  { metric: 'Conversion Rate', good: '> 1.5%', excellent: '> 3%' },
+];
+
+const SOCIAL_METRICS = [
+  { metric: 'Engagement Rate', good: '> 2%', excellent: '> 5%' },
+  { metric: 'Shares/Retweets', good: 'Consistent', excellent: 'Viral' },
+  { metric: 'Profile Visits', good: 'Growing', excellent: '3x baseline' },
+  { metric: 'Lead Generation', good: '1-2/post', excellent: '5+/post' },
+];
+
+const OPTIMIZATION_TIMELINE = [
+  { time: 'First 24 hours', task: 'Monitor initial engagement', color: 'indigo' },
+  { time: 'Day 3', task: 'Check conversion metrics', color: 'violet' },
+  { time: 'Day 7', task: 'Full performance review', color: 'emerald' },
+  { time: 'Week 2', task: 'Compare with similar content', color: 'amber' },
+  { time: 'Week 4', task: 'Long-term impact assessment', color: 'rose' },
+  { time: 'Monthly', task: 'Update content based on learnings', color: 'indigo' },
+];
+
+// === Getting Started / Create New Walkthrough ===
+const FIRST_30_MINUTES = [
+  { range: '0-5 min', task: 'Create your first email sequence', icon: <MailIcon className="w-4 h-4" /> },
+  { range: '5-10 min', task: 'Generate a LinkedIn post', icon: <MessageIcon className="w-4 h-4" /> },
+  { range: '10-15 min', task: 'Set up A/B test on subject line', icon: <GitBranchIcon className="w-4 h-4" /> },
+  { range: '15-20 min', task: 'Review performance predictions', icon: <ChartIcon className="w-4 h-4" /> },
+  { range: '20-25 min', task: 'Schedule content for the week', icon: <ClockIcon className="w-4 h-4" /> },
+  { range: '25-30 min', task: 'Set up performance alerts', icon: <BellIcon className="w-4 h-4" /> },
+];
+
+const BEGINNER_WEEK = [
+  { day: 'Monday', tasks: ['Create 3 email variations', 'Test subject lines'] },
+  { day: 'Tuesday', tasks: ['Generate social media content', 'Schedule for week'] },
+  { day: 'Wednesday', tasks: ['Build a landing page', 'Connect to campaign'] },
+  { day: 'Thursday', tasks: ['Create a case study template', 'Add customer quotes'] },
+  { day: 'Friday', tasks: ['Review performance', 'Optimize for next week'] },
+];
+
+const CREATE_NEW_STEPS = [
+  {
+    step: 1,
+    title: 'Click "Create New"',
+    desc: 'From the Content Studio dashboard, click the big blue [Create New] button',
+    details: ['View recent content performance', 'See Quick Actions: Create Email, Social Post, Blog, Generate Multiple', 'Click [Create New] to open the creation wizard'],
+    color: 'indigo',
+  },
+  {
+    step: 2,
+    title: 'Select Content Type',
+    desc: 'Choose what you want to create from the content type picker',
+    details: ['AI recommends content type based on your leads', 'Email Sequence, Landing Page, Social Post, Blog Article', 'Reports, Sales Proposals, Ad Copy, Case Studies', 'Click your choice to continue'],
+    color: 'violet',
+  },
+  {
+    step: 3,
+    title: 'Basic Setup',
+    desc: 'Fill in campaign name, description, and target audience',
+    details: ['Campaign Name: Make it descriptive for easy finding', 'Description: Include goals and target outcomes', 'Target Audience: All Leads, Specific Segment, Custom List, or Test Group', 'Select your segment from the dropdown — preview shows lead count & avg score'],
+    color: 'emerald',
+  },
+  {
+    step: 4,
+    title: 'AI Configuration',
+    desc: 'Set AI parameters for optimal content generation',
+    details: ['Primary Goal: Schedule Demo, Download Content, Newsletter, Event, Onboarding, Re-engagement', 'Tone & Style: Professional, Technical, Casual, Urgent, Educational', 'Content Length: Short (3 emails), Medium (5 emails), Long (7+ emails)', 'Personalization: Basic, Standard, Advanced, Maximum', 'Include: Case studies, Metrics, Industry examples, CTAs, Social proof'],
+    color: 'amber',
+  },
+  {
+    step: 5,
+    title: 'AI Generation',
+    desc: 'Watch as AI creates your content in 10-20 seconds',
+    details: ['AI analyzes lead profiles', 'Researches industry trends', 'Personalizes for each company', 'Optimizes for maximum engagement', 'Predicts performance metrics'],
+    color: 'rose',
+  },
+  {
+    step: 6,
+    title: 'Review Generated Content',
+    desc: 'Preview your complete sequence with performance predictions',
+    details: ['See all emails in the sequence with subjects', 'Each email shows status (Ready to send)', 'Expected performance metrics displayed', 'Options: Review All Emails, Edit Individual, Send Now'],
+    color: 'indigo',
+  },
+  {
+    step: 7,
+    title: 'Edit & Refine',
+    desc: 'Fine-tune each email with AI suggestions in the sidebar',
+    details: ['Edit subject lines, preview text, and body content', 'AI Suggestions appear in right sidebar with impact predictions', 'Apply suggestions with one click — see expected improvement', 'Each suggestion shows: "Try X instead of Y → +8% expected opens"'],
+    color: 'violet',
+  },
+  {
+    step: 8,
+    title: 'Schedule & Optimize',
+    desc: 'Set timing with AI-optimized send windows',
+    details: ['Start immediately or schedule for specific time', 'Enable AI-optimized send times per lead', 'Space emails for maximum engagement', 'Avoid sending on weekends', 'See timeline: Email 1 today, Email 2 +2 days, etc.'],
+    color: 'emerald',
+  },
+  {
+    step: 9,
+    title: 'Activate & Monitor',
+    desc: 'Your sequence is live — monitor in real-time',
+    details: ['Confirmation shows expected results', 'AI tracks opens, clicks, and replies in real-time', 'Performance alerts notify you of milestones', 'View live metrics: Sent, Opened, Clicked, Replied', 'AI suggests optimizations after 24 hours'],
+    color: 'amber',
+  },
+];
+
+const POST_CREATION_TIMELINE = [
+  { period: 'Day 1', title: 'Monitor Launch', tasks: ['Check opens after 2 hours', 'Review click-through rates', 'Note immediate replies', 'Adjust if needed (pause/edit)'], color: 'indigo' },
+  { period: 'Day 3', title: 'Mid-Sequence Check', tasks: ['Review engagement across all emails', 'Check conversion metrics', 'Make optimizations if needed', 'Share insights with team'], color: 'violet' },
+  { period: 'Day 10', title: 'Complete Analysis', tasks: ['Full performance review', 'Calculate ROI', 'Save as template if successful', 'Apply learnings to next campaign'], color: 'emerald' },
+];
+
+const CONTENT_PRO_TIPS = [
+  { title: 'Save Time with Templates', desc: 'After creating a successful sequence, click [Save as Template]. Next time, just update the details — saves hours of work.' },
+  { title: 'Batch Create Weekly', desc: 'Every Monday: Click [Batch Create] → 3 LinkedIn posts + 2 emails + 1 blog. AI generates all in 2 minutes. Schedule for the week.' },
+  { title: 'Use Voice Commands', desc: 'Click the microphone icon and say: "Create a LinkedIn post about our new API features." AI generates a draft instantly — saves 10+ minutes per piece.' },
+];
+
+const CONTENT_FAQ = [
+  { q: 'I need to change the sequence after sending?', a: 'Click sequence → Click [Pause] → Make edits → [Resume]' },
+  { q: 'How do I add more leads to the sequence?', a: 'Sequence → Settings → Audience → [Add More Leads]' },
+  { q: 'Can I see what each lead received?', a: 'Yes! Click any lead → Activity → See all emails sent' },
+  { q: 'How do I stop the sequence for some leads?', a: 'Lead profile → Click [Unsubscribe from Campaign]' },
+];
+
 // === Analytics & Reporting (Chapter 4) ===
 const EXEC_DASHBOARD_METRICS = [
   {
@@ -2095,6 +2241,329 @@ const UserManualPage: React.FC = () => {
                       <span className="text-xs text-slate-600">{feat}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3.5 Mobile Content Creation */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-orange-50">
+              <div className="flex items-center space-x-2">
+                <span className="text-lg">📱</span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">3.5 Mobile Content Creation</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">On-the-go editing — create anywhere, anytime</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Mobile Features */}
+              <div>
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Mobile-Specific Features</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {MOBILE_FEATURES.map(feat => (
+                    <div key={feat.title} className="bg-slate-50 rounded-xl p-4 text-center hover:bg-amber-50 transition-colors group">
+                      <span className="text-2xl block mb-2">{feat.icon}</span>
+                      <p className="text-xs font-bold text-slate-800 group-hover:text-amber-700">{feat.title}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{feat.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mobile Workflow Example */}
+              <div>
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Mobile Workflow Example</h4>
+                <div className="bg-slate-900 rounded-xl p-5">
+                  <div className="space-y-3">
+                    {MOBILE_WORKFLOW_STEPS.map(s => (
+                      <div key={s.step} className="flex items-center space-x-3">
+                        <div className={`w-7 h-7 rounded-full bg-${s.color}-500/20 text-${s.color}-400 flex items-center justify-center text-xs font-black flex-shrink-0`}>
+                          {s.step}
+                        </div>
+                        <span className="text-xs text-slate-300">{s.text}</span>
+                        {s.step < MOBILE_WORKFLOW_STEPS.length && <span className="text-slate-600 flex-shrink-0">→</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-slate-800">
+                    <p className="text-[10px] text-indigo-400 font-bold">Total time from notification to scheduled post: ~2 minutes</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3.6 Measuring Success */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50">
+              <div className="flex items-center space-x-2">
+                <TrendUpIcon className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">3.6 Measuring Success</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Key metrics to watch and optimization timeline</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Email & Social Metrics Side by Side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Email Metrics */}
+                <div>
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-wider mb-3">Email Content Benchmarks</h4>
+                  <div className="bg-slate-50 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="px-4 py-2.5 text-left font-black text-slate-700">Metric</th>
+                          <th className="px-4 py-2.5 text-center font-black text-emerald-600">Good</th>
+                          <th className="px-4 py-2.5 text-center font-black text-indigo-600">Excellent</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {EMAIL_METRICS.map(m => (
+                          <tr key={m.metric} className="border-b border-slate-100 last:border-0">
+                            <td className="px-4 py-2.5 font-bold text-slate-800">{m.metric}</td>
+                            <td className="px-4 py-2.5 text-center text-emerald-600 font-bold">{m.good}</td>
+                            <td className="px-4 py-2.5 text-center text-indigo-600 font-bold">{m.excellent}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Social Metrics */}
+                <div>
+                  <h4 className="text-xs font-black text-violet-600 uppercase tracking-wider mb-3">Social Content Benchmarks</h4>
+                  <div className="bg-slate-50 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="px-4 py-2.5 text-left font-black text-slate-700">Metric</th>
+                          <th className="px-4 py-2.5 text-center font-black text-emerald-600">Good</th>
+                          <th className="px-4 py-2.5 text-center font-black text-violet-600">Excellent</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {SOCIAL_METRICS.map(m => (
+                          <tr key={m.metric} className="border-b border-slate-100 last:border-0">
+                            <td className="px-4 py-2.5 font-bold text-slate-800">{m.metric}</td>
+                            <td className="px-4 py-2.5 text-center text-emerald-600 font-bold">{m.good}</td>
+                            <td className="px-4 py-2.5 text-center text-violet-600 font-bold">{m.excellent}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Optimization Timeline */}
+              <div>
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Optimization Timeline</h4>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-slate-200" />
+                  <div className="space-y-3">
+                    {OPTIMIZATION_TIMELINE.map((item, idx) => (
+                      <div key={idx} className="relative pl-10 flex items-center">
+                        <div className={`absolute left-1.5 w-4 h-4 rounded-full border-2 border-white bg-${item.color}-500 shadow`} />
+                        <div className="flex-1 flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                          <span className={`text-xs font-black text-${item.color}-600 w-28 flex-shrink-0`}>{item.time}</span>
+                          <span className="text-xs text-slate-600 flex-1">{item.task}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3.7 "Create New" — Complete Step-by-Step Walkthrough */}
+          <div className="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+                    <SparklesIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900">3.7 "Create New" — Complete Click-by-Click Walkthrough</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">9-step guide from first click to live campaign</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider">Interactive Guide</span>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              {CREATE_NEW_STEPS.map(s => (
+                <div key={s.step} className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className={`w-10 h-10 rounded-xl bg-${s.color}-100 text-${s.color}-600 flex items-center justify-center text-sm font-black flex-shrink-0 shadow-sm`}>
+                      {s.step}
+                    </div>
+                    {s.step < CREATE_NEW_STEPS.length && <div className="w-px flex-1 bg-slate-200 mt-1" />}
+                  </div>
+                  <div className="pb-5 flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-900">{s.title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 mb-3">{s.desc}</p>
+                    <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+                      {s.details.map((d, i) => (
+                        <div key={i} className="flex items-start space-x-2">
+                          <span className={`text-${s.color}-400 mt-0.5 flex-shrink-0 font-bold`}>›</span>
+                          <span className="text-xs text-slate-600">{d}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 3.8 After Creation — What Happens Next */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="text-sm font-black text-slate-900">3.8 After Creation — What Happens Next</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Post-creation monitoring, optimization, and analysis</p>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Post-Creation Timeline */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {POST_CREATION_TIMELINE.map(period => (
+                  <div key={period.period} className={`rounded-2xl border-2 border-${period.color}-100 overflow-hidden`}>
+                    <div className={`bg-${period.color}-50 px-5 py-3 border-b border-${period.color}-100`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-black text-${period.color}-600 uppercase tracking-wider`}>{period.period}</span>
+                        <span className={`px-2 py-0.5 bg-${period.color}-100 text-${period.color}-700 rounded-full text-[10px] font-black`}>{period.title}</span>
+                      </div>
+                    </div>
+                    <div className="p-5 space-y-2.5">
+                      {period.tasks.map((task, idx) => (
+                        <div key={idx} className="flex items-start space-x-2">
+                          <CheckIcon className={`w-3.5 h-3.5 text-${period.color}-500 flex-shrink-0 mt-0.5`} />
+                          <span className="text-xs text-slate-600">{task}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* AI Optimization After 24 Hours */}
+              <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex items-center space-x-2 mb-4">
+                  <BoltIcon className="w-5 h-5 text-indigo-200" />
+                  <h4 className="text-xs font-black text-indigo-200 uppercase tracking-wider">AI Optimization (After 24 Hours)</h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white/10 rounded-xl p-4">
+                    <p className="text-xs font-bold text-indigo-200 mb-1">Analysis</p>
+                    <p className="text-[11px] text-indigo-100">AI identifies lowest-performing email and suggests improvements</p>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-4">
+                    <p className="text-xs font-bold text-indigo-200 mb-1">Recommendation</p>
+                    <p className="text-[11px] text-indigo-100">Update subject lines, add ROI metrics, test with 50% audience</p>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-4">
+                    <p className="text-xs font-bold text-indigo-200 mb-1">Expected Impact</p>
+                    <p className="text-[11px] text-indigo-100">+15% open rate, +8% click rate, +2 more demos booked</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pro Tips */}
+              <div>
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Pro Tips for Your Next Creation</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {CONTENT_PRO_TIPS.map((tip, idx) => (
+                    <div key={idx} className="bg-slate-50 rounded-xl p-4 hover:bg-indigo-50 transition-colors group">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <LightBulbIcon className="w-4 h-4 text-amber-500" />
+                        <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-700">{tip.title}</p>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">{tip.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3.9 Getting Started Today */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-rose-50 to-pink-50">
+              <div className="flex items-center space-x-2">
+                <BoltIcon className="w-5 h-5 text-rose-600" />
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">3.9 Getting Started Today</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Your first 30 minutes and beginner project plan</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* First 30 Minutes */}
+              <div>
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Your First 30 Minutes in Content Studio</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {FIRST_30_MINUTES.map((item, idx) => (
+                    <div key={idx} className="bg-slate-50 rounded-xl p-4 text-center hover:bg-rose-50 transition-colors group">
+                      <div className="w-10 h-10 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-2 group-hover:bg-rose-200 transition-colors">
+                        {item.icon}
+                      </div>
+                      <p className="text-[10px] font-black text-rose-600 mb-1">{item.range}</p>
+                      <p className="text-xs text-slate-600 font-medium leading-tight">{item.task}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Beginner Week */}
+              <div>
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Beginner Project: First Week</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                  {BEGINNER_WEEK.map((day, idx) => (
+                    <div key={idx} className="bg-slate-50 rounded-xl p-4">
+                      <p className="text-xs font-black text-indigo-600 mb-2">{day.day}</p>
+                      <div className="space-y-1.5">
+                        {day.tasks.map((task, i) => (
+                          <div key={i} className="flex items-start space-x-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 flex-shrink-0" />
+                            <span className="text-[11px] text-slate-600">{task}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Quick Help FAQ */}
+              <div>
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Quick Help</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {CONTENT_FAQ.map((faq, idx) => (
+                    <div key={idx} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                      <p className="text-xs font-bold text-slate-900 mb-1.5">Q: {faq.q}</p>
+                      <p className="text-xs text-indigo-600 font-medium">A: {faq.a}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CTA Banner */}
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-xl">
+                <div className="text-center">
+                  <h4 className="text-sm font-black mb-2">Ready to create your first piece?</h4>
+                  <p className="text-xs text-slate-400 mb-4 max-w-lg mx-auto">
+                    The more you use Content Studio, the better it learns your style and preferences. Your first few pieces might need more editing, but within a week, you'll see dramatically better results with less effort.
+                  </p>
+                  <div className="inline-flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-900/30">
+                    <SparklesIcon className="w-4 h-4" />
+                    <span className="text-sm font-bold">Content → Create New → Follow the steps above</span>
+                  </div>
                 </div>
               </div>
             </div>
