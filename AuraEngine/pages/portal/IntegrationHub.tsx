@@ -186,6 +186,8 @@ const IntegrationHub: React.FC = () => {
   const [showPipelineAnalytics, setShowPipelineAnalytics] = useState(false);
   const [showErrorDiagnostics, setShowErrorDiagnostics] = useState(false);
   const [showCostOptimization, setShowCostOptimization] = useState(false);
+  const [configureId, setConfigureId] = useState<string | null>(null);
+  const [configForm, setConfigForm] = useState<{ syncDirection: SyncDirection; objects: string[]; syncInterval: string }>({ syncDirection: 'bidirectional', objects: [], syncInterval: '5' });
 
   // ─── Filtered integrations ───
   const filteredIntegrations = useMemo(() => {
@@ -353,6 +355,20 @@ const IntegrationHub: React.FC = () => {
   const handleReconnect = useCallback((id: string) => {
     setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'connected' as IntegrationStatus, lastSync: 'Just now', error: undefined } : i));
   }, []);
+
+  const handleConfigure = useCallback((id: string) => {
+    const integ = integrations.find(i => i.id === id);
+    if (integ) {
+      setConfigForm({ syncDirection: integ.syncDirection, objects: [...integ.objects], syncInterval: '5' });
+      setConfigureId(id);
+    }
+  }, [integrations]);
+
+  const handleSaveConfig = useCallback(() => {
+    if (!configureId) return;
+    setIntegrations(prev => prev.map(i => i.id === configureId ? { ...i, syncDirection: configForm.syncDirection, objects: configForm.objects, lastSync: 'Just now' } : i));
+    setConfigureId(null);
+  }, [configureId, configForm]);
 
   const handleToggleWebhook = useCallback((id: string) => {
     setWebhooks(prev => prev.map(w => w.id === id ? { ...w, active: !w.active } : w));
@@ -667,7 +683,10 @@ const IntegrationHub: React.FC = () => {
                       <div className="flex items-center space-x-1.5">
                         {integ.status === 'connected' && (
                           <>
-                            <button className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-all">
+                            <button
+                              onClick={() => handleConfigure(integ.id)}
+                              className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-all"
+                            >
                               Configure
                             </button>
                             <button
@@ -1838,6 +1857,153 @@ const IntegrationHub: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* CONFIGURE INTEGRATION SIDEBAR                                  */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {configureId && (() => {
+        const integ = integrations.find(i => i.id === configureId);
+        if (!integ) return null;
+        const allObjectOptions: Record<string, string[]> = {
+          crm: ['Leads', 'Contacts', 'Accounts', 'Opportunities', 'Tasks', 'Notes'],
+          marketing: ['Campaigns', 'Contacts', 'Lists', 'Templates', 'Segments', 'Forms'],
+          comms: ['#sales-alerts', '#leads', '#marketing', '#general', '#support'],
+          analytics: ['Website traffic', 'Conversions', 'Events', 'Audiences', 'Goals'],
+        };
+        const objectOptions = allObjectOptions[integ.category] || ['Data objects'];
+        return (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setConfigureId(null)} />
+            <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+              <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: integ.color + '20' }}>
+                    {integ.icon}
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900">Configure {integ.name}</h2>
+                    <p className="text-[10px] text-slate-400">Sync settings & data objects</p>
+                  </div>
+                </div>
+                <button onClick={() => setConfigureId(null)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Status Badge */}
+                <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-bold text-emerald-700">Connected</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600">Last sync: {integ.lastSync}</span>
+                </div>
+
+                {/* Sync Direction */}
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Sync Direction</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['bidirectional', 'inbound', 'outbound'] as SyncDirection[]).map(dir => (
+                      <button
+                        key={dir}
+                        onClick={() => setConfigForm(f => ({ ...f, syncDirection: dir }))}
+                        className={`p-3 rounded-xl text-center text-xs font-bold transition-all border ${
+                          configForm.syncDirection === dir
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                            : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="text-base mb-1">
+                          {dir === 'bidirectional' ? '↔️' : dir === 'inbound' ? '⬇️' : '⬆️'}
+                        </div>
+                        <span className="capitalize">{dir}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sync Interval */}
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Sync Interval</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['1', '5', '15', '30'].map(mins => (
+                      <button
+                        key={mins}
+                        onClick={() => setConfigForm(f => ({ ...f, syncInterval: mins }))}
+                        className={`p-2.5 rounded-xl text-xs font-bold transition-all border ${
+                          configForm.syncInterval === mins
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                            : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        {mins} min
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Data Objects */}
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">
+                    Synced Objects ({configForm.objects.length} selected)
+                  </label>
+                  <div className="space-y-2">
+                    {objectOptions.map(obj => {
+                      const selected = configForm.objects.includes(obj);
+                      return (
+                        <label key={obj} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => {
+                              setConfigForm(f => ({
+                                ...f,
+                                objects: selected ? f.objects.filter(o => o !== obj) : [...f.objects, obj],
+                              }));
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className={`text-xs font-bold ${selected ? 'text-slate-900' : 'text-slate-500'}`}>{obj}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Data Volume */}
+                <div className="p-4 bg-slate-900 rounded-xl">
+                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider mb-3">Data Volume</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-lg font-black text-white">{integ.dataVolume}%</p>
+                      <p className="text-[10px] text-slate-400">Of total volume</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-black text-white">{configForm.objects.length}</p>
+                      <p className="text-[10px] text-slate-400">Objects syncing</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save / Cancel */}
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={handleSaveConfig}
+                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+                  >
+                    Save Configuration
+                  </button>
+                  <button
+                    onClick={() => setConfigureId(null)}
+                    className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEYBOARD SHORTCUTS MODAL                                      */}
