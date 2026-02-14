@@ -172,6 +172,11 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     return { days, totalAdded, totalConverted, avgDaily };
   }, [leads]);
 
+  // Derived conversion rate (needed by goals)
+  const conversionRate = leads.length > 0
+    ? Math.round((leads.filter(l => l.status === 'Qualified').length / leads.length) * 100)
+    : 0;
+
   // ─── Goal Tracker ───
   const goals = useMemo(() => [
     { id: 'leads', label: 'Monthly Lead Target', current: leads.length, target: 100, unit: 'leads', color: 'indigo' },
@@ -550,9 +555,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   };
 
   // Derived stats
-  const conversionRate = leads.length > 0
-    ? Math.round((leads.filter(l => l.status === 'Qualified').length / leads.length) * 100)
-    : 0;
   const topPredictions = leads.slice(0, 3);
   const creditsRemaining = (user.credits_total || 500) - (user.credits_used || 0);
 

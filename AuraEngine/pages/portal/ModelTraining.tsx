@@ -182,6 +182,9 @@ const ModelTraining: React.FC = () => {
   const [showBenchmarkPanel, setShowBenchmarkPanel] = useState(false);
   const [showDataInsights, setShowDataInsights] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
+  const [showHyperTuning, setShowHyperTuning] = useState(false);
+  const [showDriftMonitor, setShowDriftMonitor] = useState(false);
+  const [showFeatureImportance, setShowFeatureImportance] = useState(false);
 
   // ─── Training Simulation ───
   const startTraining = useCallback(() => {
@@ -249,6 +252,96 @@ const ModelTraining: React.FC = () => {
       return { ...ds, quality, freshness, coverage };
     });
   }, [datasets]);
+
+  // ─── Hyperparameter Tuning Analysis ───
+  const hyperTuningAnalysis = useMemo(() => {
+    const runs = MOCK_EXPERIMENTS.filter(e => e.status === 'completed');
+    const paramSensitivity = [
+      { param: 'Learning Rate', impact: 82, optimal: '0.001', range: '0.0001 - 0.01', direction: 'Lower is more stable' },
+      { param: 'Epochs', impact: 68, optimal: '50-100', range: '10 - 200', direction: 'Diminishing returns after 100' },
+      { param: 'Batch Size', impact: 45, optimal: '32', range: '8 - 128', direction: 'Smaller = better accuracy, slower' },
+      { param: 'Validation Split', impact: 31, optimal: '20%', range: '10% - 30%', direction: 'Higher = better generalization' },
+    ];
+
+    const gridSearch = [
+      { lr: 0.01, epochs: 25, accuracy: 86.4, loss: 0.082, time: '5m' },
+      { lr: 0.001, epochs: 50, accuracy: 94.2, loss: 0.028, time: '18m' },
+      { lr: 0.001, epochs: 100, accuracy: 94.8, loss: 0.022, time: '35m' },
+      { lr: 0.0001, epochs: 200, accuracy: 95.1, loss: 0.019, time: '72m' },
+      { lr: 0.005, epochs: 25, accuracy: 88.7, loss: 0.061, time: '8m' },
+      { lr: 0.0005, epochs: 50, accuracy: 93.1, loss: 0.034, time: '20m' },
+    ].sort((a, b) => b.accuracy - a.accuracy);
+
+    const bestConfig = gridSearch[0];
+    const efficiencyScore = Math.round((bestConfig.accuracy / parseInt(bestConfig.time)) * 10);
+
+    return { paramSensitivity, gridSearch, bestConfig, efficiencyScore, totalRuns: runs.length };
+  }, []);
+
+  // ─── Model Drift Monitor ───
+  const driftMetrics = useMemo(() => {
+    const weeks = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (11 - i) * 7);
+      const baseAccuracy = 94.2;
+      const drift = Math.sin(i * 0.4) * 1.5 + (i > 8 ? -(i - 8) * 0.3 : 0);
+      const accuracy = Math.round((baseAccuracy + drift + (Math.random() - 0.5) * 0.8) * 10) / 10;
+      return {
+        week: `W${i + 1}`,
+        date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        accuracy,
+        predictions: Math.floor(Math.random() * 200) + 100,
+        errors: Math.floor(Math.random() * 15) + 2,
+      };
+    });
+
+    const currentAccuracy = weeks[weeks.length - 1].accuracy;
+    const peakAccuracy = Math.max(...weeks.map(w => w.accuracy));
+    const driftAmount = Math.round((peakAccuracy - currentAccuracy) * 10) / 10;
+    const driftStatus = driftAmount < 1 ? 'Stable' : driftAmount < 2 ? 'Minor Drift' : 'Significant Drift';
+    const totalPredictions = weeks.reduce((s, w) => s + w.predictions, 0);
+    const totalErrors = weeks.reduce((s, w) => s + w.errors, 0);
+    const errorRate = totalPredictions > 0 ? Math.round((totalErrors / totalPredictions) * 1000) / 10 : 0;
+
+    const alerts = [
+      ...(driftAmount >= 2 ? [{ severity: 'high' as const, message: `Accuracy dropped ${driftAmount}% from peak. Consider retraining.` }] : []),
+      ...(errorRate > 5 ? [{ severity: 'medium' as const, message: `Error rate at ${errorRate}%. Review recent predictions.` }] : []),
+      ...(weeks.slice(-3).every((w, i, arr) => i === 0 || w.accuracy < arr[i - 1].accuracy) ? [{ severity: 'medium' as const, message: 'Consistent accuracy decline over last 3 weeks.' }] : []),
+      { severity: 'low' as const, message: 'Data distribution shift detected in "Industry" dataset.' },
+    ];
+
+    return { weeks, currentAccuracy, peakAccuracy, driftAmount, driftStatus, totalPredictions, totalErrors, errorRate, alerts };
+  }, []);
+
+  // ─── Feature Importance ───
+  const featureImportance = useMemo(() => {
+    const features = [
+      { name: 'Lead Score', importance: 92, category: 'Core', correlation: 0.89, stability: 95 },
+      { name: 'Email Engagement', importance: 78, category: 'Behavioral', correlation: 0.72, stability: 88 },
+      { name: 'Company Size', importance: 71, category: 'Firmographic', correlation: 0.65, stability: 92 },
+      { name: 'Industry Match', importance: 65, category: 'Context', correlation: 0.58, stability: 85 },
+      { name: 'Page Visits', importance: 58, category: 'Behavioral', correlation: 0.51, stability: 78 },
+      { name: 'Content Downloads', importance: 52, category: 'Behavioral', correlation: 0.44, stability: 82 },
+      { name: 'Social Signals', importance: 41, category: 'Social', correlation: 0.35, stability: 70 },
+      { name: 'Time of Day', importance: 28, category: 'Temporal', correlation: 0.22, stability: 65 },
+    ].sort((a, b) => b.importance - a.importance);
+
+    const categoryBreakdown = ['Core', 'Behavioral', 'Firmographic', 'Context', 'Social', 'Temporal'].map(cat => {
+      const catFeatures = features.filter(f => f.category === cat);
+      return {
+        category: cat,
+        count: catFeatures.length,
+        avgImportance: catFeatures.length > 0 ? Math.round(catFeatures.reduce((s, f) => s + f.importance, 0) / catFeatures.length) : 0,
+        color: cat === 'Core' ? '#6366f1' : cat === 'Behavioral' ? '#10b981' : cat === 'Firmographic' ? '#f59e0b' :
+               cat === 'Context' ? '#8b5cf6' : cat === 'Social' ? '#ec4899' : '#64748b',
+      };
+    }).filter(c => c.count > 0);
+
+    const topFeature = features[0];
+    const avgCorrelation = Math.round(features.reduce((s, f) => s + f.correlation, 0) / features.length * 100) / 100;
+
+    return { features, categoryBreakdown, topFeature, avgCorrelation };
+  }, []);
 
   // ─── Handlers ───
   const toggleDataset = (id: string) => {
@@ -331,6 +424,9 @@ ${versions.map(v => `v${v.version} (${v.date}) - ${v.accuracy}% - ${v.notes}${v.
       if (e.key === 'b' || e.key === 'B') { e.preventDefault(); setShowBenchmarkPanel(s => !s); return; }
       if (e.key === 'd' || e.key === 'D') { e.preventDefault(); setShowDataInsights(s => !s); return; }
       if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setShowPresets(s => !s); return; }
+      if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHyperTuning(s => !s); return; }
+      if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setShowDriftMonitor(s => !s); return; }
+      if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setShowFeatureImportance(s => !s); return; }
       if ((e.key === 'Enter' || e.key === 'r' || e.key === 'R') && status === 'idle') { e.preventDefault(); startTraining(); return; }
       if (e.key === ' ' && status === 'training') { e.preventDefault(); pauseTraining(); return; }
       if (e.key === ' ' && status === 'paused') { e.preventDefault(); resumeTraining(); return; }
@@ -341,6 +437,9 @@ ${versions.map(v => `v${v.version} (${v.date}) - ${v.accuracy}% - ${v.notes}${v.
         setShowBenchmarkPanel(false);
         setShowDataInsights(false);
         setShowPresets(false);
+        setShowHyperTuning(false);
+        setShowDriftMonitor(false);
+        setShowFeatureImportance(false);
         return;
       }
     };
@@ -389,6 +488,27 @@ ${versions.map(v => `v${v.version} (${v.date}) - ${v.accuracy}% - ${v.notes}${v.
           >
             <PieChartIcon className="w-3.5 h-3.5" />
             <span>Data Quality</span>
+          </button>
+          <button
+            onClick={() => setShowHyperTuning(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showHyperTuning ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <SlidersIcon className="w-3.5 h-3.5" />
+            <span>Tuning</span>
+          </button>
+          <button
+            onClick={() => setShowDriftMonitor(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showDriftMonitor ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <AlertTriangleIcon className="w-3.5 h-3.5" />
+            <span>Drift</span>
+          </button>
+          <button
+            onClick={() => setShowFeatureImportance(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showFeatureImportance ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <LayersIcon className="w-3.5 h-3.5" />
+            <span>Features</span>
           </button>
           <button
             onClick={() => setShowShortcuts(true)}
@@ -1229,12 +1349,347 @@ ${versions.map(v => `v${v.version} (${v.date}) - ${v.accuracy}% - ${v.notes}${v.
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* HYPERPARAMETER TUNING SIDEBAR                                  */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showHyperTuning && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowHyperTuning(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <SlidersIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Hyperparameter Tuning</h2>
+                  <p className="text-[10px] text-slate-400">Parameter sensitivity & grid search results</p>
+                </div>
+              </div>
+              <button onClick={() => setShowHyperTuning(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Best Configuration */}
+              <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100">
+                <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider mb-2">Optimal Configuration</p>
+                <p className="text-3xl font-black text-slate-900">{hyperTuningAnalysis.bestConfig.accuracy}%</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  lr={hyperTuningAnalysis.bestConfig.lr} &middot; {hyperTuningAnalysis.bestConfig.epochs} epochs &middot; {hyperTuningAnalysis.bestConfig.time}
+                </p>
+                <div className="mt-3 px-3 py-1.5 bg-white/80 rounded-lg inline-block">
+                  <span className="text-[10px] font-black text-amber-700 uppercase tracking-wider">Efficiency Score: {hyperTuningAnalysis.efficiencyScore}</span>
+                </div>
+              </div>
+
+              {/* Parameter Sensitivity */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Parameter Sensitivity</p>
+                <div className="space-y-3">
+                  {hyperTuningAnalysis.paramSensitivity.map(ps => (
+                    <div key={ps.param} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-800">{ps.param}</span>
+                        <span className="text-xs font-black text-amber-600">{ps.impact}% impact</span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mb-2">
+                        <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full" style={{ width: `${ps.impact}%` }} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div>
+                          <span className="text-slate-400">Optimal: </span>
+                          <span className="font-bold text-slate-700">{ps.optimal}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Range: </span>
+                          <span className="font-bold text-slate-700">{ps.range}</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 italic">{ps.direction}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grid Search Results */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Grid Search Results</p>
+                <div className="space-y-2">
+                  {hyperTuningAnalysis.gridSearch.map((gs, idx) => (
+                    <div key={idx} className={`p-3 rounded-xl border ${idx === 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center space-x-2">
+                          {idx === 0 && <StarIcon className="w-3.5 h-3.5 text-emerald-600" />}
+                          <span className="text-xs font-bold text-slate-800">lr={gs.lr} &middot; {gs.epochs}ep</span>
+                        </div>
+                        <span className={`text-xs font-black ${idx === 0 ? 'text-emerald-600' : 'text-slate-600'}`}>{gs.accuracy}%</span>
+                      </div>
+                      <div className="flex items-center space-x-3 text-[10px] text-slate-400">
+                        <span>Loss: {gs.loss}</span>
+                        <span>Time: {gs.time}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="p-4 bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-amber-200" />
+                  <p className="text-[10px] font-black text-amber-200 uppercase tracking-wider">AI Tuning Insight</p>
+                </div>
+                <p className="text-xs text-amber-100 leading-relaxed">
+                  Learning rate has the highest impact at {hyperTuningAnalysis.paramSensitivity[0].impact}%. Your current config (lr=0.001, 50 epochs) achieves {hyperTuningAnalysis.bestConfig.accuracy}% accuracy. Increasing to 100 epochs yields only +0.6% gain at 2x cost — diminishing returns detected.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODEL DRIFT MONITOR SIDEBAR                                   */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showDriftMonitor && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowDriftMonitor(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
+                  <AlertTriangleIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Model Drift Monitor</h2>
+                  <p className="text-[10px] text-slate-400">Performance degradation & drift alerts</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDriftMonitor(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Drift Gauge */}
+              <div className="text-center p-6 rounded-2xl bg-slate-50 border border-slate-100">
+                <svg className="w-24 h-24 mx-auto mb-4" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                  <circle cx="48" cy="48" r="40" fill="none"
+                    stroke={driftMetrics.driftStatus === 'Stable' ? '#10b981' : driftMetrics.driftStatus === 'Minor Drift' ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8"
+                    strokeDasharray={`${(driftMetrics.currentAccuracy / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-xl font-black" fill="#1e293b">{driftMetrics.currentAccuracy}</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[8px] font-bold" fill="#94a3b8">ACCURACY</text>
+                </svg>
+                <p className={`text-sm font-black ${
+                  driftMetrics.driftStatus === 'Stable' ? 'text-emerald-600' :
+                  driftMetrics.driftStatus === 'Minor Drift' ? 'text-amber-600' : 'text-rose-600'
+                }`}>{driftMetrics.driftStatus}</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {driftMetrics.driftAmount > 0 ? `${driftMetrics.driftAmount}% below peak (${driftMetrics.peakAccuracy}%)` : 'At peak performance'}
+                </p>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-indigo-50 rounded-xl text-center border border-indigo-100">
+                  <p className="text-xl font-black text-indigo-700">{driftMetrics.totalPredictions}</p>
+                  <p className="text-[9px] font-bold text-indigo-500">Predictions</p>
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl text-center border border-rose-100">
+                  <p className="text-xl font-black text-rose-700">{driftMetrics.totalErrors}</p>
+                  <p className="text-[9px] font-bold text-rose-500">Errors</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-xl text-center border border-amber-100">
+                  <p className="text-xl font-black text-amber-700">{driftMetrics.errorRate}%</p>
+                  <p className="text-[9px] font-bold text-amber-500">Error Rate</p>
+                </div>
+              </div>
+
+              {/* 12-Week Accuracy Trend */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">12-Week Accuracy Trend</p>
+                <div className="bg-slate-900 rounded-xl p-5">
+                  <div className="flex items-end space-x-1.5 h-24 mb-3">
+                    {driftMetrics.weeks.map((w, idx) => {
+                      const height = ((w.accuracy - 88) / 8) * 100;
+                      const color = w.accuracy >= 94 ? 'from-emerald-500 to-emerald-400' :
+                                    w.accuracy >= 92 ? 'from-amber-500 to-amber-400' : 'from-rose-500 to-rose-400';
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center" title={`${w.date}: ${w.accuracy}%`}>
+                          <div className={`w-full bg-gradient-to-t ${color} rounded-t`} style={{ height: `${Math.max(height, 5)}%` }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex space-x-1.5">
+                    {driftMetrics.weeks.map((w, idx) => (
+                      <div key={idx} className="flex-1 text-center">
+                        <p className="text-[7px] text-slate-500 font-bold">{w.week}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Alerts */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Active Alerts</p>
+                <div className="space-y-2">
+                  {driftMetrics.alerts.map((alert, idx) => (
+                    <div key={idx} className={`p-3 rounded-xl border ${
+                      alert.severity === 'high' ? 'bg-rose-50 border-rose-100' :
+                      alert.severity === 'medium' ? 'bg-amber-50 border-amber-100' :
+                      'bg-blue-50 border-blue-100'
+                    }`}>
+                      <div className="flex items-start space-x-2">
+                        <AlertTriangleIcon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${
+                          alert.severity === 'high' ? 'text-rose-600' :
+                          alert.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
+                        }`} />
+                        <div>
+                          <span className={`text-[9px] font-black uppercase ${
+                            alert.severity === 'high' ? 'text-rose-600' :
+                            alert.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
+                          }`}>{alert.severity}</span>
+                          <p className="text-xs text-slate-700 mt-0.5">{alert.message}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="p-4 bg-gradient-to-r from-rose-600 to-pink-600 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-rose-200" />
+                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-wider">AI Drift Insight</p>
+                </div>
+                <p className="text-xs text-rose-100 leading-relaxed">
+                  {driftMetrics.driftStatus === 'Stable'
+                    ? 'Model performance is stable. Continue monitoring weekly. Consider scheduled retraining every 30 days to prevent gradual drift.'
+                    : driftMetrics.driftStatus === 'Minor Drift'
+                    ? `Minor drift of ${driftMetrics.driftAmount}% detected. Schedule a retraining session with fresh data within the next 2 weeks to maintain accuracy above 93%.`
+                    : `Significant drift detected (${driftMetrics.driftAmount}%). Immediate retraining recommended. Check for data distribution changes in recent datasets.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* FEATURE IMPORTANCE SIDEBAR                                     */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showFeatureImportance && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowFeatureImportance(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center">
+                  <LayersIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Feature Importance</h2>
+                  <p className="text-[10px] text-slate-400">Feature ranking & correlation analysis</p>
+                </div>
+              </div>
+              <button onClick={() => setShowFeatureImportance(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Top Feature Highlight */}
+              <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100">
+                <p className="text-[10px] font-black text-sky-600 uppercase tracking-wider mb-2">Most Important Feature</p>
+                <p className="text-2xl font-black text-slate-900">{featureImportance.topFeature.name}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {featureImportance.topFeature.importance}% importance &middot; {featureImportance.topFeature.correlation} correlation
+                </p>
+                <div className="mt-3 flex items-center justify-center space-x-4">
+                  <div className="px-3 py-1.5 bg-white/80 rounded-lg">
+                    <p className="text-sm font-black text-sky-700">{featureImportance.features.length}</p>
+                    <p className="text-[9px] text-slate-400">Features</p>
+                  </div>
+                  <div className="px-3 py-1.5 bg-white/80 rounded-lg">
+                    <p className="text-sm font-black text-sky-700">{featureImportance.avgCorrelation}</p>
+                    <p className="text-[9px] text-slate-400">Avg Corr.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Breakdown */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Category Distribution</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {featureImportance.categoryBreakdown.map(cat => (
+                    <div key={cat.category} className="p-2.5 bg-slate-50 rounded-xl text-center border border-slate-100">
+                      <div className="w-3 h-3 rounded-full mx-auto mb-1.5" style={{ backgroundColor: cat.color }} />
+                      <p className="text-sm font-black text-slate-900">{cat.avgImportance}%</p>
+                      <p className="text-[8px] font-bold text-slate-400">{cat.category}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Feature Rankings */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Feature Rankings</p>
+                <div className="space-y-2">
+                  {featureImportance.features.map((feat, idx) => (
+                    <div key={feat.name} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black text-white ${
+                          idx === 0 ? 'bg-sky-500' : idx === 1 ? 'bg-sky-400' : idx === 2 ? 'bg-sky-300' : 'bg-slate-300'
+                        }`}>{idx + 1}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-800">{feat.name}</span>
+                            <span className="text-xs font-black text-sky-600">{feat.importance}%</span>
+                          </div>
+                          <span className="text-[9px] text-slate-400">{feat.category}</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-2">
+                        <div className="h-full bg-sky-500 rounded-full" style={{ width: `${feat.importance}%` }} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Correlation</span>
+                          <span className="font-bold text-slate-700">{feat.correlation}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Stability</span>
+                          <span className={`font-bold ${feat.stability >= 85 ? 'text-emerald-600' : feat.stability >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>{feat.stability}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="p-4 bg-gradient-to-r from-sky-600 to-cyan-600 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-sky-200" />
+                  <p className="text-[10px] font-black text-sky-200 uppercase tracking-wider">AI Feature Insight</p>
+                </div>
+                <p className="text-xs text-sky-100 leading-relaxed">
+                  Lead Score dominates at {featureImportance.topFeature.importance}% importance. Behavioral features (Email Engagement, Page Visits, Content Downloads) collectively account for significant predictive power. Consider enriching Social Signals data — it has low stability ({featureImportance.features.find(f => f.name === 'Social Signals')?.stability}%) which may improve with more training data.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEYBOARD SHORTCUTS MODAL                                      */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {showShortcuts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center space-x-2">
                 <KeyboardIcon className="w-5 h-5 text-indigo-600" />
@@ -1244,25 +1699,55 @@ ${versions.map(v => `v${v.version} (${v.date}) - ${v.accuracy}% - ${v.notes}${v.
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
-            <div className="space-y-2">
-              {[
-                { key: 'R / Enter', label: 'Start training (when idle)' },
-                { key: 'Space', label: 'Pause/Resume training' },
-                { key: 'E', label: 'Export training report' },
-                { key: 'X', label: 'Toggle experiment history' },
-                { key: 'B', label: 'Toggle benchmarks panel' },
-                { key: 'D', label: 'Toggle data quality insights' },
-                { key: 'P', label: 'Toggle hyperparameter presets' },
-                { key: '?', label: 'Toggle this shortcuts panel' },
-                { key: 'Esc', label: 'Close all panels' },
-              ].map((shortcut, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                  <span className="text-sm text-slate-600">{shortcut.label}</span>
-                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">
-                    {shortcut.key}
-                  </kbd>
+            <div className="grid grid-cols-3 gap-6">
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Actions</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: 'R / Enter', label: 'Start training' },
+                    { key: 'Space', label: 'Pause / Resume' },
+                    { key: 'E', label: 'Export report' },
+                    { key: 'P', label: 'Hyper presets' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Panels</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: 'X', label: 'Experiments' },
+                    { key: 'B', label: 'Benchmarks' },
+                    { key: 'D', label: 'Data quality' },
+                    { key: 'H', label: 'Hyper tuning' },
+                    { key: 'M', label: 'Drift monitor' },
+                    { key: 'F', label: 'Feature importance' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">System</h4>
+                <div className="space-y-2">
+                  {[
+                    { key: '?', label: 'Shortcuts' },
+                    { key: 'Esc', label: 'Close all panels' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
+                      <span className="text-sm text-slate-600">{s.label}</span>
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
