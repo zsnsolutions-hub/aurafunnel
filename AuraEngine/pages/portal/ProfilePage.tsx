@@ -141,6 +141,9 @@ const ProfilePage: React.FC = () => {
   const [showAccountHealth, setShowAccountHealth] = useState(false);
   const [showSessionActivity, setShowSessionActivity] = useState(false);
   const [showDataExport, setShowDataExport] = useState(false);
+  const [showUsageAnalytics, setShowUsageAnalytics] = useState(false);
+  const [showPrivacyAudit, setShowPrivacyAudit] = useState(false);
+  const [showQuotaTracker, setShowQuotaTracker] = useState(false);
 
   // ─── KPI Stats ───
   const kpiStats = useMemo(() => {
@@ -205,6 +208,68 @@ const ProfilePage: React.FC = () => {
     { id: 'api', label: 'API Usage Logs', desc: 'Request history and rate limits', icon: <KeyIcon className="w-4 h-4" />, size: '~150 KB' },
   ], []);
 
+  // ─── Usage Analytics ───
+  const usageAnalytics = useMemo(() => {
+    const weeklyLogins = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6 - i));
+      return { day: d.toLocaleDateString('en-US', { weekday: 'short' }), logins: Math.floor(Math.random() * 3) + 1, actions: Math.floor(Math.random() * 40) + 10 };
+    });
+
+    const featureUsage = [
+      { feature: 'Lead Management', sessions: 42, pct: 35, avgDuration: '12m' },
+      { feature: 'Content Studio', sessions: 28, pct: 23, avgDuration: '18m' },
+      { feature: 'Analytics', sessions: 22, pct: 18, avgDuration: '8m' },
+      { feature: 'Automation', sessions: 15, pct: 13, avgDuration: '15m' },
+      { feature: 'Settings', sessions: 8, pct: 7, avgDuration: '3m' },
+      { feature: 'Other', sessions: 5, pct: 4, avgDuration: '5m' },
+    ];
+
+    const totalSessions = featureUsage.reduce((s, f) => s + f.sessions, 0);
+    const totalActions = weeklyLogins.reduce((s, d) => s + d.actions, 0);
+    const avgSessionDuration = '11m';
+    const peakHour = '10 AM';
+
+    return { weeklyLogins, featureUsage, totalSessions, totalActions, avgSessionDuration, peakHour };
+  }, []);
+
+  // ─── Privacy & Compliance Audit ───
+  const privacyAudit = useMemo(() => {
+    const checks = [
+      { label: 'Data Encryption', status: 'pass' as const, detail: 'AES-256 at rest, TLS 1.3 in transit' },
+      { label: 'GDPR Compliance', status: 'pass' as const, detail: 'Data processing agreement active' },
+      { label: 'Data Retention Policy', status: 'pass' as const, detail: '12-month retention, auto-purge enabled' },
+      { label: 'Access Logging', status: 'pass' as const, detail: 'Full audit trail enabled' },
+      { label: 'Third-Party Sharing', status: notifications.teamMentions ? 'warn' as const : 'pass' as const, detail: notifications.teamMentions ? 'Team mentions may expose data' : 'No third-party sharing' },
+      { label: 'Cookie Consent', status: 'pass' as const, detail: 'Essential cookies only' },
+      { label: 'Password Policy', status: twoFactorEnabled ? 'pass' as const : 'warn' as const, detail: twoFactorEnabled ? 'Strong: password + 2FA' : 'Moderate: password only' },
+      { label: 'Session Timeout', status: 'pass' as const, detail: '30-minute inactivity timeout' },
+    ];
+
+    const passCount = checks.filter(c => c.status === 'pass').length;
+    const complianceScore = Math.round((passCount / checks.length) * 100);
+    const lastAudit = '2024-01-15';
+
+    return { checks, passCount, total: checks.length, complianceScore, lastAudit };
+  }, [twoFactorEnabled, notifications]);
+
+  // ─── Quota & Limits Tracker ───
+  const quotaTracker = useMemo(() => {
+    const activeKeyCount = apiKeys.filter(k => k.status === 'active').length;
+    const quotas = [
+      { resource: 'API Calls', used: 2847, limit: 10000, unit: 'calls/mo', color: 'indigo' },
+      { resource: 'AI Credits', used: 156, limit: 500, unit: 'credits/mo', color: 'violet' },
+      { resource: 'Storage', used: 2.4, limit: 10, unit: 'GB', color: 'emerald' },
+      { resource: 'Team Members', used: 3, limit: 10, unit: 'seats', color: 'amber' },
+      { resource: 'Active API Keys', used: activeKeyCount, limit: 5, unit: 'keys', color: 'rose' },
+      { resource: 'Webhooks', used: 2, limit: 20, unit: 'endpoints', color: 'cyan' },
+    ];
+
+    const overallUsage = Math.round(quotas.reduce((s, q) => s + (q.used / q.limit) * 100, 0) / quotas.length);
+    const nearLimit = quotas.filter(q => (q.used / q.limit) > 0.8);
+
+    return { quotas, overallUsage, nearLimit };
+  }, [apiKeys]);
+
   // ─── Keyboard Shortcuts ───
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -212,13 +277,16 @@ const ProfilePage: React.FC = () => {
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
       if (isInput) return;
 
-      const overlayOpen = showShortcuts || showAccountHealth || showSessionActivity || showDataExport || isDeleteModalOpen;
+      const overlayOpen = showShortcuts || showAccountHealth || showSessionActivity || showDataExport || showUsageAnalytics || showPrivacyAudit || showQuotaTracker || isDeleteModalOpen;
 
       if (e.key === 'Escape') {
         if (showShortcuts) setShowShortcuts(false);
         if (showAccountHealth) setShowAccountHealth(false);
         if (showSessionActivity) setShowSessionActivity(false);
         if (showDataExport) setShowDataExport(false);
+        if (showUsageAnalytics) setShowUsageAnalytics(false);
+        if (showPrivacyAudit) setShowPrivacyAudit(false);
+        if (showQuotaTracker) setShowQuotaTracker(false);
         return;
       }
 
@@ -233,13 +301,16 @@ const ProfilePage: React.FC = () => {
         case 'h': case 'H': e.preventDefault(); setShowAccountHealth(true); break;
         case 'a': case 'A': e.preventDefault(); setShowSessionActivity(true); break;
         case 'e': case 'E': e.preventDefault(); setShowDataExport(true); break;
+        case 'u': case 'U': e.preventDefault(); setShowUsageAnalytics(true); break;
+        case 'p': case 'P': e.preventDefault(); setShowPrivacyAudit(true); break;
+        case 'q': case 'Q': e.preventDefault(); setShowQuotaTracker(true); break;
         case '?': e.preventDefault(); setShowShortcuts(true); break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showShortcuts, showAccountHealth, showSessionActivity, showDataExport, isDeleteModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showShortcuts, showAccountHealth, showSessionActivity, showDataExport, showUsageAnalytics, showPrivacyAudit, showQuotaTracker, isDeleteModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const notificationItems = [
     { key: 'emailAlerts' as const, label: 'Email Alerts', desc: 'Receive email notifications for important events' },
@@ -270,6 +341,18 @@ const ProfilePage: React.FC = () => {
           <button onClick={() => setShowDataExport(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
             <DownloadIcon className="w-3.5 h-3.5" />
             <span>Export</span>
+          </button>
+          <button onClick={() => setShowUsageAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showUsageAnalytics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+            <TrendUpIcon className="w-3.5 h-3.5" />
+            <span>Usage</span>
+          </button>
+          <button onClick={() => setShowPrivacyAudit(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showPrivacyAudit ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
+            <LockIcon className="w-3.5 h-3.5" />
+            <span>Privacy</span>
+          </button>
+          <button onClick={() => setShowQuotaTracker(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showQuotaTracker ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+            <LayersIcon className="w-3.5 h-3.5" />
+            <span>Quotas</span>
           </button>
           <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
             <KeyboardIcon className="w-3.5 h-3.5" />
@@ -967,12 +1050,349 @@ const ProfilePage: React.FC = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Usage Analytics Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showUsageAnalytics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowUsageAnalytics(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-cyan-100 text-cyan-600 flex items-center justify-center">
+                  <TrendUpIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Usage Analytics</h2>
+                  <p className="text-[10px] text-slate-400">Your platform activity patterns</p>
+                </div>
+              </div>
+              <button onClick={() => setShowUsageAnalytics(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#06b6d4" strokeWidth="7"
+                    strokeDasharray={`${Math.min((usageAnalytics.totalSessions / 150) * 251.3, 251.3)} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{usageAnalytics.totalSessions}</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-cyan-600 uppercase">Sessions</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-cyan-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-cyan-700">{usageAnalytics.totalActions}</p>
+                  <p className="text-[10px] font-bold text-cyan-500">Weekly Actions</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{usageAnalytics.avgSessionDuration}</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Avg Duration</p>
+                </div>
+                <div className="p-3 bg-violet-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-violet-700">{usageAnalytics.peakHour}</p>
+                  <p className="text-[10px] font-bold text-violet-500">Peak Hour</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{usageAnalytics.featureUsage.length}</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Features Used</p>
+                </div>
+              </div>
+
+              {/* Feature Usage Breakdown */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Feature Usage</p>
+                <div className="space-y-2.5">
+                  {usageAnalytics.featureUsage.map((feat, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-700">{feat.feature}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{feat.sessions} sessions</span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-1.5">
+                        <div className="bg-cyan-500 h-full rounded-full transition-all" style={{ width: `${feat.pct}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span>{feat.pct}% of usage</span>
+                        <span>Avg: {feat.avgDuration}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Weekly Login Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-cyan-400 uppercase tracking-wider mb-4">7-Day Activity</p>
+                <div className="flex items-end justify-between h-28 gap-1">
+                  {usageAnalytics.weeklyLogins.map((d, i) => {
+                    const maxVal = Math.max(...usageAnalytics.weeklyLogins.map(v => v.actions));
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                        <div className="w-full flex gap-0.5" style={{ height: '100%', alignItems: 'flex-end' }}>
+                          <div className="flex-1 bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-t" style={{ height: `${(d.actions / maxVal) * 100}%`, minHeight: '4px' }} />
+                        </div>
+                        <span className="text-[8px] text-slate-500 mt-1">{d.day}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-center space-x-4 mt-3">
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span className="text-[9px] text-slate-400">Actions</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-cyan-600 to-cyan-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-cyan-200" />
+                  <p className="text-[10px] font-black text-cyan-200 uppercase tracking-wider">AI Usage Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  Your most active feature is {usageAnalytics.featureUsage[0]?.feature} at {usageAnalytics.featureUsage[0]?.pct}% of total usage. Peak activity at {usageAnalytics.peakHour} suggests a morning workflow pattern. Consider exploring Automation more — users who leverage it save an average of 15 hours/week.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Privacy & Compliance Audit Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showPrivacyAudit && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowPrivacyAudit(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
+                  <LockIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Privacy Audit</h2>
+                  <p className="text-[10px] text-slate-400">Compliance & data protection status</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPrivacyAudit(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e11d48" strokeWidth="7"
+                    strokeDasharray={`${(privacyAudit.complianceScore / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{privacyAudit.complianceScore}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-rose-600 uppercase">Compliant</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{privacyAudit.passCount}/{privacyAudit.total}</p>
+                  <p className="text-[10px] font-bold text-rose-500">Checks Passed</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{privacyAudit.complianceScore}%</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Compliance Score</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{privacyAudit.lastAudit}</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Last Audit</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">{privacyAudit.total - privacyAudit.passCount}</p>
+                  <p className="text-[10px] font-bold text-amber-500">Warnings</p>
+                </div>
+              </div>
+
+              {/* Compliance Checks */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Compliance Checklist</p>
+                <div className="space-y-2">
+                  {privacyAudit.checks.map((check, idx) => (
+                    <div key={idx} className={`p-3 rounded-xl ${check.status === 'pass' ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center space-x-2">
+                          {check.status === 'pass' ? (
+                            <CheckIcon className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <AlertTriangleIcon className="w-4 h-4 text-amber-600" />
+                          )}
+                          <span className="text-xs font-bold text-slate-700">{check.label}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${check.status === 'pass' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {check.status === 'pass' ? 'Pass' : 'Warning'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 ml-6">{check.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Privacy Standards */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-rose-400 uppercase tracking-wider mb-4">Compliance Standards</p>
+                <div className="space-y-3">
+                  {[
+                    { standard: 'GDPR', status: 'Compliant', pct: 100 },
+                    { standard: 'SOC 2 Type II', status: 'Compliant', pct: 100 },
+                    { standard: 'CCPA', status: 'Compliant', pct: 100 },
+                    { standard: 'ISO 27001', status: 'In Progress', pct: 85 },
+                  ].map((std, idx) => (
+                    <div key={idx} className="flex items-center space-x-3">
+                      <span className="text-[10px] text-slate-400 w-20">{std.standard}</span>
+                      <div className="flex-1 bg-slate-800 h-3 rounded-full overflow-hidden">
+                        <div className="bg-gradient-to-r from-rose-600 to-rose-400 h-full rounded-full" style={{ width: `${std.pct}%` }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-white w-16 text-right">{std.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-rose-600 to-rose-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-rose-200" />
+                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-wider">AI Privacy Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {privacyAudit.complianceScore === 100
+                    ? 'Your account meets all privacy and compliance requirements. All data protection checks pass. Regular audits are recommended to maintain this status.'
+                    : `Compliance score of ${privacyAudit.complianceScore}% — ${privacyAudit.total - privacyAudit.passCount} item(s) need attention. ${!twoFactorEnabled ? 'Enabling 2FA is the highest-priority improvement for account security.' : 'Review team sharing settings to resolve remaining warnings.'}`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Quota & Limits Tracker Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showQuotaTracker && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowQuotaTracker(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <LayersIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Quota Tracker</h2>
+                  <p className="text-[10px] text-slate-400">Resource limits & usage</p>
+                </div>
+              </div>
+              <button onClick={() => setShowQuotaTracker(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#f59e0b" strokeWidth="7"
+                    strokeDasharray={`${(quotaTracker.overallUsage / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{quotaTracker.overallUsage}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-amber-600 uppercase">Used</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">{quotaTracker.quotas.length}</p>
+                  <p className="text-[10px] font-bold text-amber-500">Resources</p>
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{quotaTracker.nearLimit.length}</p>
+                  <p className="text-[10px] font-bold text-rose-500">Near Limit</p>
+                </div>
+              </div>
+
+              {/* Quota Breakdown */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Resource Usage</p>
+                <div className="space-y-2.5">
+                  {quotaTracker.quotas.map((q, idx) => {
+                    const pct = Math.round((q.used / q.limit) * 100);
+                    const barColor = pct > 80 ? 'bg-red-500' : pct > 60 ? 'bg-amber-500' : `bg-${q.color}-500`;
+                    return (
+                      <div key={idx} className="p-3 bg-slate-50 rounded-xl">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-bold text-slate-700">{q.resource}</span>
+                          <span className="text-[10px] font-bold text-slate-500">{q.used} / {q.limit} {q.unit}</span>
+                        </div>
+                        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-1.5">
+                          <div className={`${barColor} h-full rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-400">{pct}% used</span>
+                          {pct > 80 && <span className="text-red-500 font-bold">Near limit!</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Quota Usage Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-4">Usage Overview</p>
+                <div className="space-y-3">
+                  {quotaTracker.quotas.map((q, idx) => {
+                    const pct = Math.round((q.used / q.limit) * 100);
+                    return (
+                      <div key={idx} className="flex items-center space-x-3">
+                        <span className="text-[9px] text-slate-400 w-20 truncate">{q.resource}</span>
+                        <div className="flex-1 bg-slate-800 h-3 rounded-full overflow-hidden">
+                          <div className={`bg-gradient-to-r ${pct > 80 ? 'from-red-600 to-red-400' : 'from-amber-600 to-amber-400'} h-full rounded-full`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[10px] font-bold text-white w-8 text-right">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-amber-600 to-amber-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-amber-200" />
+                  <p className="text-[10px] font-black text-amber-200 uppercase tracking-wider">AI Quota Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {quotaTracker.nearLimit.length > 0
+                    ? `${quotaTracker.nearLimit.length} resource(s) approaching limits: ${quotaTracker.nearLimit.map(q => q.resource).join(', ')}. At current usage rates, you may hit the cap within ${Math.floor(Math.random() * 10) + 5} days. Consider upgrading your plan or optimizing usage patterns.`
+                    : `All resources well within limits at ${quotaTracker.overallUsage}% average usage. Your current plan comfortably supports your usage patterns. API calls are your highest-consumed resource — monitor this if you scale integrations.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
       {/* ─── Keyboard Shortcuts Modal ─── */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {showShortcuts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 overflow-hidden">
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl mx-4 overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
@@ -982,24 +1402,53 @@ const ProfilePage: React.FC = () => {
               </div>
               <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
             </div>
-            <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
-              {[
-                { key: '1', action: 'Profile tab' },
-                { key: '2', action: 'Notifications tab' },
-                { key: '3', action: 'Preferences tab' },
-                { key: '4', action: 'API Keys tab' },
-                { key: '5', action: 'Security tab' },
-                { key: 'H', action: 'Account Health' },
-                { key: 'A', action: 'Session Activity' },
-                { key: 'E', action: 'Data Export' },
-                { key: '?', action: 'This shortcuts panel' },
-                { key: 'Esc', action: 'Close panels' },
-              ].map((sc, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <span className="text-xs text-slate-600">{sc.action}</span>
-                  <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
-                </div>
-              ))}
+            <div className="p-6 grid grid-cols-3 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
+              {/* Tabs Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Tabs</p>
+                {[
+                  { key: '1', action: 'Profile' },
+                  { key: '2', action: 'Notifications' },
+                  { key: '3', action: 'Preferences' },
+                  { key: '4', action: 'API Keys' },
+                  { key: '5', action: 'Security' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              {/* Panels Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Panels</p>
+                {[
+                  { key: 'H', action: 'Account Health' },
+                  { key: 'A', action: 'Session Activity' },
+                  { key: 'E', action: 'Data Export' },
+                  { key: 'U', action: 'Usage Analytics' },
+                  { key: 'P', action: 'Privacy Audit' },
+                  { key: 'Q', action: 'Quota Tracker' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              {/* System Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">System</p>
+                {[
+                  { key: '?', action: 'Shortcuts panel' },
+                  { key: 'Esc', action: 'Close panels' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
               <p className="text-[10px] text-slate-400">Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
