@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
 import {
   HelpCircleIcon, BookOpenIcon, KeyboardIcon, LightBulbIcon, AcademicCapIcon,
   ShieldIcon, SparklesIcon, CheckIcon, ClockIcon, MailIcon, PhoneIcon,
   MessageIcon, AlertTriangleIcon, TrendUpIcon, RefreshIcon, TargetIcon,
-  DocumentIcon, BoltIcon, ChartIcon, CogIcon, XIcon
+  DocumentIcon, BoltIcon, ChartIcon, CogIcon, XIcon, TrendDownIcon,
+  BrainIcon, LayersIcon, FilterIcon, PieChartIcon, UsersIcon, StarIcon,
+  ActivityIcon, EyeIcon, ArrowRightIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -207,6 +209,69 @@ const PRO_TIPS = [
   },
 ];
 
+// === Knowledge Base Articles ===
+interface KBArticle {
+  id: string;
+  title: string;
+  category: string;
+  views: number;
+  helpful: number;
+  lastUpdated: string;
+  readTime: string;
+  tags: string[];
+}
+
+const KB_ARTICLES: KBArticle[] = [
+  { id: 'kb-1', title: 'Getting Started with Lead Scoring', category: 'Leads', views: 2841, helpful: 94, lastUpdated: '2024-01-15', readTime: '5 min', tags: ['leads', 'scoring', 'ai'] },
+  { id: 'kb-2', title: 'How to Set Up Email Automations', category: 'Automation', views: 2156, helpful: 91, lastUpdated: '2024-01-12', readTime: '8 min', tags: ['email', 'automation', 'workflow'] },
+  { id: 'kb-3', title: 'Understanding AI Content Generation', category: 'AI', views: 1893, helpful: 88, lastUpdated: '2024-01-10', readTime: '6 min', tags: ['ai', 'content', 'generation'] },
+  { id: 'kb-4', title: 'CSV Import Best Practices', category: 'Data', views: 1654, helpful: 96, lastUpdated: '2024-01-08', readTime: '4 min', tags: ['csv', 'import', 'data'] },
+  { id: 'kb-5', title: 'Integration Setup Guide', category: 'Integrations', views: 1421, helpful: 90, lastUpdated: '2024-01-05', readTime: '10 min', tags: ['integrations', 'api', 'webhooks'] },
+  { id: 'kb-6', title: 'Advanced Analytics & Reporting', category: 'Analytics', views: 1287, helpful: 87, lastUpdated: '2024-01-03', readTime: '7 min', tags: ['analytics', 'reports', 'metrics'] },
+  { id: 'kb-7', title: 'Team Collaboration Features', category: 'Team', views: 1104, helpful: 93, lastUpdated: '2024-01-01', readTime: '5 min', tags: ['team', 'collaboration', 'permissions'] },
+  { id: 'kb-8', title: 'Billing & Subscription Management', category: 'Billing', views: 987, helpful: 85, lastUpdated: '2023-12-28', readTime: '3 min', tags: ['billing', 'subscription', 'credits'] },
+];
+
+// === System Status ===
+interface SystemService {
+  name: string;
+  status: 'operational' | 'degraded' | 'outage';
+  uptime: number;
+  lastIncident: string | null;
+}
+
+const SYSTEM_SERVICES: SystemService[] = [
+  { name: 'AI Engine', status: 'operational', uptime: 99.98, lastIncident: null },
+  { name: 'Lead Processing', status: 'operational', uptime: 99.95, lastIncident: null },
+  { name: 'Email Delivery', status: 'operational', uptime: 99.92, lastIncident: '2024-01-02' },
+  { name: 'Data Sync', status: 'operational', uptime: 99.89, lastIncident: '2024-01-05' },
+  { name: 'Analytics Pipeline', status: 'operational', uptime: 99.97, lastIncident: null },
+  { name: 'Webhook Engine', status: 'operational', uptime: 99.94, lastIncident: null },
+  { name: 'Storage & CDN', status: 'operational', uptime: 99.99, lastIncident: null },
+  { name: 'Authentication', status: 'operational', uptime: 99.99, lastIncident: null },
+];
+
+const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  operational: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Operational' },
+  degraded: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500', label: 'Degraded' },
+  outage: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'Outage' },
+};
+
+// === Recent Updates / Changelog ===
+const RECENT_UPDATES = [
+  { version: 'v3.2.0', date: '2024-01-15', title: 'Enhanced AI Model Training', type: 'feature' as const },
+  { version: 'v3.1.5', date: '2024-01-10', title: 'Bug fix: CSV import encoding', type: 'fix' as const },
+  { version: 'v3.1.4', date: '2024-01-08', title: 'Performance: 40% faster analytics', type: 'improvement' as const },
+  { version: 'v3.1.3', date: '2024-01-05', title: 'New: Integration health dashboard', type: 'feature' as const },
+  { version: 'v3.1.2', date: '2024-01-02', title: 'Fix: Email template rendering', type: 'fix' as const },
+];
+
+const UPDATE_TYPE_STYLES: Record<string, { bg: string; text: string }> = {
+  feature: { bg: 'bg-indigo-50', text: 'text-indigo-700' },
+  fix: { bg: 'bg-red-50', text: 'text-red-700' },
+  improvement: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+};
+
 // === Onboarding Path ===
 const ONBOARDING_WEEKS = [
   {
@@ -252,6 +317,99 @@ const HelpCenterPage: React.FC = () => {
     return saved ? JSON.parse(saved) : {};
   });
 
+  // ─── New Enhancement State ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSystemStatus, setShowSystemStatus] = useState(false);
+  const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [kbSearchQuery, setKbSearchQuery] = useState('');
+  const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+
+  // ─── KPI Stats ───
+  const kpiStats = useMemo(() => {
+    const totalChecked = Object.values(checkedItems).filter(Boolean).length;
+    const totalChecklistItems =
+      DAILY_CHECKLIST.morning.length + DAILY_CHECKLIST.midday.length + DAILY_CHECKLIST.endOfDay.length +
+      Object.values(WEEKLY_TASKS).flat().length +
+      Object.values(MONTHLY_TASKS).flat().length;
+    const checklistProgress = totalChecklistItems > 0 ? Math.round((totalChecked / totalChecklistItems) * 100) : 0;
+    const totalArticleViews = KB_ARTICLES.reduce((s, a) => s + a.views, 0);
+    const avgHelpfulness = Math.round(KB_ARTICLES.reduce((s, a) => s + a.helpful, 0) / KB_ARTICLES.length);
+    const allOperational = SYSTEM_SERVICES.every(s => s.status === 'operational');
+    const avgUptime = (SYSTEM_SERVICES.reduce((s, sv) => s + sv.uptime, 0) / SYSTEM_SERVICES.length).toFixed(2);
+
+    return [
+      { label: 'KB Articles', value: KB_ARTICLES.length.toString(), sub: `${totalArticleViews.toLocaleString()} views`, trend: 'up' as const, color: 'indigo' },
+      { label: 'Issues Resolved', value: COMMON_ISSUES.length.toString(), sub: `${COMMON_ISSUES.reduce((s, i) => s + i.steps.length, 0)} steps covered`, trend: 'up' as const, color: 'emerald' },
+      { label: 'Checklist Progress', value: `${checklistProgress}%`, sub: `${totalChecked}/${totalChecklistItems} items`, trend: checklistProgress > 50 ? 'up' as const : 'down' as const, color: 'violet' },
+      { label: 'System Uptime', value: `${avgUptime}%`, sub: allOperational ? 'All operational' : 'Issues detected', trend: 'up' as const, color: 'emerald' },
+      { label: 'Avg Helpfulness', value: `${avgHelpfulness}%`, sub: 'Article rating', trend: avgHelpfulness > 85 ? 'up' as const : 'down' as const, color: 'amber' },
+      { label: 'Pro Tips', value: PRO_TIPS.length.toString(), sub: `${OPTIMIZATION_CATEGORIES.length} categories`, trend: 'up' as const, color: 'rose' },
+    ];
+  }, [checkedItems]);
+
+  // ─── Filtered KB Articles ───
+  const filteredArticles = useMemo(() => {
+    if (!kbSearchQuery.trim()) return KB_ARTICLES;
+    const q = kbSearchQuery.toLowerCase();
+    return KB_ARTICLES.filter(a =>
+      a.title.toLowerCase().includes(q) ||
+      a.category.toLowerCase().includes(q) ||
+      a.tags.some(t => t.includes(q))
+    );
+  }, [kbSearchQuery]);
+
+  // ─── Feedback Submit ───
+  const handleFeedbackSubmit = useCallback(() => {
+    if (feedbackRating !== null) {
+      setFeedbackSubmitted(true);
+      setTimeout(() => {
+        setFeedbackSubmitted(false);
+        setFeedbackRating(null);
+        setFeedbackComment('');
+      }, 3000);
+    }
+  }, [feedbackRating]);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      const overlayOpen = showShortcuts || showSystemStatus || showKnowledgeBase || showChangelog;
+
+      if (e.key === 'Escape') {
+        if (showShortcuts) setShowShortcuts(false);
+        if (showSystemStatus) setShowSystemStatus(false);
+        if (showKnowledgeBase) setShowKnowledgeBase(false);
+        if (showChangelog) setShowChangelog(false);
+        return;
+      }
+
+      if (overlayOpen) return;
+
+      switch (e.key) {
+        case '1': e.preventDefault(); setActiveTab('troubleshoot'); break;
+        case '2': e.preventDefault(); setActiveTab('optimize'); break;
+        case '3': e.preventDefault(); setActiveTab('support'); break;
+        case '4': e.preventDefault(); setActiveTab('training'); break;
+        case '5': e.preventDefault(); setActiveTab('shortcuts'); break;
+        case '6': e.preventDefault(); setActiveTab('tips'); break;
+        case 's': case 'S': e.preventDefault(); setShowSystemStatus(true); break;
+        case 'k': case 'K': e.preventDefault(); setShowKnowledgeBase(true); break;
+        case 'u': case 'U': e.preventDefault(); setShowChangelog(true); break;
+        case '?': e.preventDefault(); setShowShortcuts(true); break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showShortcuts, showSystemStatus, showKnowledgeBase, showChangelog]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleCheck = (key: string) => {
     setCheckedItems(prev => {
       const next = { ...prev, [key]: !prev[key] };
@@ -277,9 +435,47 @@ const HelpCenterPage: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">Help Center</h1>
-        <p className="text-slate-500 mt-1 text-sm">Troubleshooting, guides, shortcuts, and expert tips to maximize your AuraFunnel experience</p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">Help Center</h1>
+          <p className="text-slate-500 mt-1 text-sm">Troubleshooting, guides, shortcuts, and expert tips to maximize your AuraFunnel experience</p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button onClick={() => setShowSystemStatus(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
+            <ActivityIcon className="w-3.5 h-3.5" />
+            <span>System Status</span>
+          </button>
+          <button onClick={() => setShowKnowledgeBase(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
+            <BookOpenIcon className="w-3.5 h-3.5" />
+            <span>Knowledge Base</span>
+          </button>
+          <button onClick={() => setShowChangelog(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
+            <LayersIcon className="w-3.5 h-3.5" />
+            <span>Updates</span>
+          </button>
+          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <span>?</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── KPI Stats Banner ─── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {kpiStats.map((stat, idx) => (
+          <div key={idx} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{stat.label}</p>
+              {stat.trend === 'up' ? (
+                <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" />
+              ) : (
+                <TrendDownIcon className="w-3.5 h-3.5 text-red-400" />
+              )}
+            </div>
+            <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{stat.sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* Tab Navigation */}
@@ -730,6 +926,430 @@ const HelpCenterPage: React.FC = () => {
             <p className="text-[11px] text-slate-400 mt-1">
               This is a living document. New features and updates are added monthly. Check "What's New" for latest capabilities.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Feedback Widget (always visible at bottom) ─── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        <div className="flex items-start space-x-6">
+          <div className="flex-1">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-1">Was this helpful?</h3>
+            <p className="text-xs text-slate-500 mb-4">Rate your Help Center experience to help us improve</p>
+            {feedbackSubmitted ? (
+              <div className="flex items-center space-x-2 p-3 bg-emerald-50 rounded-xl">
+                <CheckIcon className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-bold text-emerald-700">Thank you for your feedback!</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center space-x-1">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      onClick={() => setFeedbackRating(star)}
+                      className={`p-1 rounded transition-all ${
+                        feedbackRating !== null && star <= feedbackRating
+                          ? 'text-amber-400 scale-110'
+                          : 'text-slate-300 hover:text-amber-300'
+                      }`}
+                    >
+                      <StarIcon className="w-6 h-6" />
+                    </button>
+                  ))}
+                  {feedbackRating !== null && (
+                    <span className="text-xs font-bold text-slate-500 ml-2">
+                      {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][feedbackRating]}
+                    </span>
+                  )}
+                </div>
+                {feedbackRating !== null && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={feedbackComment}
+                      onChange={e => setFeedbackComment(e.target.value)}
+                      placeholder="Optional: Tell us more..."
+                      className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      onClick={handleFeedbackSubmit}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors"
+                    >
+                      Submit
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="hidden md:flex flex-col items-center space-y-2 p-4 bg-slate-50 rounded-xl">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Quick Links</p>
+            <button onClick={() => setShowKnowledgeBase(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">Search Knowledge Base</button>
+            <button onClick={() => setShowSystemStatus(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">Check System Status</button>
+            <button onClick={() => setShowChangelog(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">View Recent Updates</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── System Status Dashboard Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showSystemStatus && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowSystemStatus(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <ActivityIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">System Status</h2>
+                  <p className="text-[10px] text-slate-400">Real-time service health</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSystemStatus(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Overall Status */}
+              <div className="text-center p-6 rounded-2xl bg-emerald-50 border border-emerald-100">
+                <svg className="w-16 h-16 mx-auto mb-3" viewBox="0 0 64 64">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="#d1fae5" strokeWidth="6" />
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="#10b981" strokeWidth="6"
+                    strokeDasharray={`${(SYSTEM_SERVICES.filter(s => s.status === 'operational').length / SYSTEM_SERVICES.length) * 175.9} 175.9`}
+                    strokeLinecap="round" transform="rotate(-90 32 32)" />
+                  <text x="32" y="30" textAnchor="middle" className="text-sm font-black fill-emerald-700">
+                    {SYSTEM_SERVICES.filter(s => s.status === 'operational').length}/{SYSTEM_SERVICES.length}
+                  </text>
+                  <text x="32" y="42" textAnchor="middle" className="text-[8px] font-bold fill-emerald-500">ONLINE</text>
+                </svg>
+                <p className="text-sm font-black text-emerald-800">
+                  {SYSTEM_SERVICES.every(s => s.status === 'operational') ? 'All Systems Operational' : 'Some Issues Detected'}
+                </p>
+                <p className="text-[11px] text-emerald-600 mt-1">Last checked: just now</p>
+              </div>
+
+              {/* Service List */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Service Health</p>
+                <div className="space-y-2">
+                  {SYSTEM_SERVICES.map((service, idx) => {
+                    const style = STATUS_STYLES[service.status];
+                    return (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-2 h-2 rounded-full ${style.dot} animate-pulse`} />
+                          <span className="text-xs font-bold text-slate-700">{service.name}</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${service.uptime}%` }} />
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-500 w-14 text-right">{service.uptime}%</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${style.bg} ${style.text}`}>
+                            {style.label}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Recent Incidents */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Recent Incidents</p>
+                {SYSTEM_SERVICES.filter(s => s.lastIncident).length === 0 ? (
+                  <div className="p-4 bg-emerald-50 rounded-xl text-center">
+                    <CheckIcon className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+                    <p className="text-xs font-bold text-emerald-700">No recent incidents</p>
+                    <p className="text-[10px] text-emerald-500 mt-0.5">All clear for the past 30 days</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {SYSTEM_SERVICES.filter(s => s.lastIncident).map((service, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-amber-50 rounded-xl">
+                        <div>
+                          <p className="text-xs font-bold text-slate-700">{service.name}</p>
+                          <p className="text-[10px] text-amber-600">Resolved on {service.lastIncident}</p>
+                        </div>
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black">Resolved</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SLA Summary */}
+              <div className="p-4 bg-slate-900 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider mb-3">SLA Summary</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-lg font-black">{(SYSTEM_SERVICES.reduce((s, sv) => s + sv.uptime, 0) / SYSTEM_SERVICES.length).toFixed(2)}%</p>
+                    <p className="text-[10px] text-slate-400">Avg Uptime</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">{SYSTEM_SERVICES.filter(s => s.lastIncident).length}</p>
+                    <p className="text-[10px] text-slate-400">Incidents (30d)</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">&lt;50ms</p>
+                    <p className="text-[10px] text-slate-400">Avg Response</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">99.9%</p>
+                    <p className="text-[10px] text-slate-400">SLA Target</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Knowledge Base Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showKnowledgeBase && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowKnowledgeBase(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <BookOpenIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Knowledge Base</h2>
+                  <p className="text-[10px] text-slate-400">{KB_ARTICLES.length} articles available</p>
+                </div>
+              </div>
+              <button onClick={() => setShowKnowledgeBase(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Search */}
+              <div className="relative">
+                <FilterIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={kbSearchQuery}
+                  onChange={e => setKbSearchQuery(e.target.value)}
+                  placeholder="Search articles by title, category, or tag..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Category Badges */}
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(new Set(KB_ARTICLES.map(a => a.category))).map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setKbSearchQuery(cat)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                      kbSearchQuery === cat
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                {kbSearchQuery && (
+                  <button onClick={() => setKbSearchQuery('')} className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-600 hover:bg-red-100">
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Articles */}
+              <div className="space-y-2">
+                {filteredArticles.map(article => (
+                  <div key={article.id} className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer group">
+                    <div className="flex items-start justify-between mb-2">
+                      <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex-1">{article.title}</p>
+                      <ArrowRightIcon className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-all" />
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black">{article.category}</span>
+                      <span className="text-[10px] text-slate-400 flex items-center space-x-1">
+                        <EyeIcon className="w-3 h-3" />
+                        <span>{article.views.toLocaleString()}</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 flex items-center space-x-1">
+                        <ClockIcon className="w-3 h-3" />
+                        <span>{article.readTime}</span>
+                      </span>
+                      <span className="text-[10px] text-emerald-600 font-bold">{article.helpful}% helpful</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {article.tags.map(tag => (
+                        <span key={tag} className="text-[9px] text-slate-400 bg-white px-1.5 py-0.5 rounded">#{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {filteredArticles.length === 0 && (
+                  <div className="p-6 text-center">
+                    <FilterIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-500">No articles found</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Try a different search term</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Popular Tags */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Popular Tags</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from(new Set(KB_ARTICLES.flatMap(a => a.tags))).slice(0, 12).map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => setKbSearchQuery(tag)}
+                      className="px-2 py-1 bg-slate-100 text-slate-500 rounded text-[10px] font-medium hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Changelog / Updates Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showChangelog && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowChangelog(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center">
+                  <LayersIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Recent Updates</h2>
+                  <p className="text-[10px] text-slate-400">Changelog & release notes</p>
+                </div>
+              </div>
+              <button onClick={() => setShowChangelog(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Features', value: RECENT_UPDATES.filter(u => u.type === 'feature').length, color: 'indigo' },
+                  { label: 'Fixes', value: RECENT_UPDATES.filter(u => u.type === 'fix').length, color: 'red' },
+                  { label: 'Improvements', value: RECENT_UPDATES.filter(u => u.type === 'improvement').length, color: 'emerald' },
+                ].map((stat, idx) => (
+                  <div key={idx} className={`p-3 bg-${stat.color}-50 rounded-xl text-center`}>
+                    <p className={`text-xl font-black text-${stat.color}-700`}>{stat.value}</p>
+                    <p className={`text-[10px] font-bold text-${stat.color}-500`}>{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Timeline */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Release Timeline</p>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-slate-200" />
+                  <div className="space-y-4">
+                    {RECENT_UPDATES.map((update, idx) => {
+                      const typeStyle = UPDATE_TYPE_STYLES[update.type];
+                      return (
+                        <div key={idx} className="relative pl-10">
+                          <div className={`absolute left-1.5 top-1.5 w-4 h-4 rounded-full border-2 border-white ${
+                            update.type === 'feature' ? 'bg-indigo-500' : update.type === 'fix' ? 'bg-red-500' : 'bg-emerald-500'
+                          } shadow`} />
+                          <div className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${typeStyle.bg} ${typeStyle.text} capitalize`}>{update.type}</span>
+                              <span className="text-[10px] font-bold text-slate-400">{update.version}</span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-900">{update.title}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">{update.date}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* What's Coming */}
+              <div className="p-4 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-indigo-200 uppercase tracking-wider mb-3">Coming Soon</p>
+                <div className="space-y-2">
+                  {[
+                    'Advanced A/B testing dashboard',
+                    'Multi-language content generation',
+                    'Custom AI model fine-tuning',
+                    'Real-time collaboration features',
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-center space-x-2">
+                      <SparklesIcon className="w-3.5 h-3.5 text-indigo-300" />
+                      <span className="text-xs font-medium text-indigo-100">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Feedback CTA */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                <p className="text-xs font-bold text-slate-700 mb-1">Have a feature request?</p>
+                <p className="text-[10px] text-slate-400">Share your ideas at feedback@aura-funnel.com</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Keyboard Shortcuts Modal ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                  <KeyboardIcon className="w-4 h-4" />
+                </div>
+                <h2 className="text-sm font-black text-slate-900">Help Center Shortcuts</h2>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
+              {[
+                { key: '1', action: 'Troubleshooting tab' },
+                { key: '2', action: 'Optimization tab' },
+                { key: '3', action: 'Get Support tab' },
+                { key: '4', action: 'Training tab' },
+                { key: '5', action: 'Quick Reference tab' },
+                { key: '6', action: 'Pro Tips tab' },
+                { key: 'S', action: 'System Status' },
+                { key: 'K', action: 'Knowledge Base' },
+                { key: 'U', action: 'Updates / Changelog' },
+                { key: '?', action: 'This shortcuts panel' },
+                { key: 'Esc', action: 'Close panels' },
+              ].map((sc, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <span className="text-xs text-slate-600">{sc.action}</span>
+                  <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
+              <p className="text-[10px] text-slate-400">Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
+            </div>
           </div>
         </div>
       )}
