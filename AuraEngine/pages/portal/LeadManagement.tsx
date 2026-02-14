@@ -170,6 +170,12 @@ const LeadManagement: React.FC = () => {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [focusedIndex, setFocusedIndex] = useState(-1);
 
+  // ── Panel State ──
+  const [showPipelineAnalytics, setShowPipelineAnalytics] = useState(false);
+  const [showEngagementMetrics, setShowEngagementMetrics] = useState(false);
+  const [showScoreIntelligence, setShowScoreIntelligence] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
   // ── Fetch ──
   useEffect(() => {
     fetchLeads();
@@ -257,6 +263,89 @@ const LeadManagement: React.FC = () => {
     });
     const max = Math.max(...buckets.map(b => b.count), 1);
     return buckets.map(b => ({ ...b, pct: Math.round((b.count / max) * 100) }));
+  }, [allLeads]);
+
+  // ── Pipeline Analytics ──
+  const pipelineAnalytics = useMemo(() => {
+    const total = allLeads.length || 1;
+    const stages = [
+      { name: 'New', count: allLeads.filter(l => l.status === 'New').length, bg: 'bg-emerald-500' },
+      { name: 'Contacted', count: allLeads.filter(l => l.status === 'Contacted').length, bg: 'bg-blue-500' },
+      { name: 'Qualified', count: allLeads.filter(l => l.status === 'Qualified').length, bg: 'bg-violet-500' },
+      { name: 'Lost', count: allLeads.filter(l => l.status === 'Lost').length, bg: 'bg-slate-400' },
+    ].map(s => ({ ...s, pct: Math.round((s.count / total) * 100) }));
+    const newCount = stages[0].count || 1;
+    const contactedRate = Math.round((stages[1].count / newCount) * 100);
+    const qualifiedRate = Math.round((stages[2].count / newCount) * 100);
+    const lostRate = Math.round((stages[3].count / newCount) * 100);
+    const healthScore = Math.min(100, Math.round(
+      (qualifiedRate * 0.4) + (contactedRate * 0.3) + ((100 - lostRate) * 0.3)
+    ));
+    const now = new Date();
+    const staleLeads = allLeads.filter(l => l.status === 'New' && l.created_at && (now.getTime() - new Date(l.created_at).getTime()) > 14 * 86400000).length;
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const processedThisWeek = allLeads.filter(l => l.status !== 'New' && l.created_at && new Date(l.created_at) >= weekAgo).length;
+    return { stages, contactedRate, qualifiedRate, lostRate, healthScore, staleLeads, processedThisWeek };
+  }, [allLeads]);
+
+  // ── Engagement Metrics ──
+  const engagementMetrics = useMemo(() => {
+    const total = allLeads.length || 1;
+    const contacted = allLeads.filter(l => l.status !== 'New').length;
+    const contactRate = Math.round((contacted / total) * 100);
+    const tiers = [
+      { name: 'Critical (90+)', count: 0, engaged: 0, rate: 0, leads: allLeads.filter(l => l.score >= 90), cardBg: 'bg-rose-50', textColor: 'text-rose-700' },
+      { name: 'Hot (75-89)', count: 0, engaged: 0, rate: 0, leads: allLeads.filter(l => l.score >= 75 && l.score < 90), cardBg: 'bg-orange-50', textColor: 'text-orange-700' },
+      { name: 'Warm (50-74)', count: 0, engaged: 0, rate: 0, leads: allLeads.filter(l => l.score >= 50 && l.score < 75), cardBg: 'bg-amber-50', textColor: 'text-amber-700' },
+      { name: 'Cold (<50)', count: 0, engaged: 0, rate: 0, leads: allLeads.filter(l => l.score < 50), cardBg: 'bg-blue-50', textColor: 'text-blue-700' },
+    ].map(t => ({
+      ...t,
+      count: t.leads.length,
+      engaged: t.leads.filter(l => l.status !== 'New').length,
+      rate: t.leads.length > 0 ? Math.round((t.leads.filter(l => l.status !== 'New').length / t.leads.length) * 100) : 0,
+    }));
+    const engagementScore = Math.min(100, Math.round(
+      tiers.reduce((sum, t, i) => sum + t.rate * (4 - i) * 0.1, 0) + contactRate * 0.4
+    ));
+    const now = new Date();
+    const timeline = [
+      { label: 'Today', count: allLeads.filter(l => l.created_at && (now.getTime() - new Date(l.created_at).getTime()) < 86400000).length },
+      { label: 'This Week', count: allLeads.filter(l => l.created_at && (now.getTime() - new Date(l.created_at).getTime()) < 7 * 86400000).length },
+      { label: 'This Month', count: allLeads.filter(l => l.created_at && (now.getTime() - new Date(l.created_at).getTime()) < 30 * 86400000).length },
+      { label: 'Older', count: allLeads.filter(l => !l.created_at || (now.getTime() - new Date(l.created_at).getTime()) >= 30 * 86400000).length },
+    ];
+    const maxTimeline = Math.max(...timeline.map(t => t.count), 1);
+    return { contactRate, tiers, engagementScore, timeline, maxTimeline, contacted, total };
+  }, [allLeads]);
+
+  // ── Score Intelligence ──
+  const scoreIntelligence = useMemo(() => {
+    if (allLeads.length === 0) return {
+      avg: 0, median: 0, stdDev: 0, distribution: [] as { label: string; count: number; pct: number }[],
+      topPerformers: [] as Lead[], atRisk: [] as Lead[],
+      quartiles: { q1: 0, q2: 0, q3: 0 }, healthIndex: 0
+    };
+    const scores = allLeads.map(l => l.score).sort((a, b) => a - b);
+    const avg = Math.round(scores.reduce((s, v) => s + v, 0) / scores.length);
+    const median = scores[Math.floor(scores.length / 2)];
+    const variance = scores.reduce((s, v) => s + (v - avg) ** 2, 0) / scores.length;
+    const stdDev = Math.round(Math.sqrt(variance));
+    const q1 = scores[Math.floor(scores.length * 0.25)];
+    const q3 = scores[Math.floor(scores.length * 0.75)];
+    const distribution = Array.from({ length: 10 }, (_, i) => {
+      const min = i * 10;
+      const max = min + 9;
+      return { label: `${min}-${max}`, count: scores.filter(s => s >= min && s <= max).length };
+    });
+    const maxCount = Math.max(...distribution.map(d => d.count), 1);
+    const distWithPct = distribution.map(d => ({ ...d, pct: Math.round((d.count / maxCount) * 100) }));
+    const topPerformers = [...allLeads].sort((a, b) => b.score - a.score).slice(0, 5);
+    const atRisk = allLeads.filter(l => l.score < 30 && l.status === 'New').slice(0, 5);
+    const healthIndex = Math.min(100, Math.round(
+      (avg * 0.3) + ((100 - Math.min(stdDev, 100)) * 0.2) + (q3 * 0.2) +
+      ((topPerformers.filter(l => l.score >= 85).length / Math.max(allLeads.length, 1)) * 100 * 0.3)
+    ));
+    return { avg, median, stdDev, distribution: distWithPct, topPerformers, atRisk, quartiles: { q1, q2: median, q3 }, healthIndex };
   }, [allLeads]);
 
   // ── Kanban Grouped Leads ──
@@ -468,7 +557,16 @@ const LeadManagement: React.FC = () => {
       if (e.key === 'x' && focusedIndex >= 0 && focusedIndex < paginatedLeads.length) {
         toggleSelect(paginatedLeads[focusedIndex].id); return;
       }
-      if (e.key === 'Escape') { setQuickInsightLead(null); setBulkActionOpen(null); setInlineStatusId(null); return; }
+      if (e.key === 'p') { setShowPipelineAnalytics(prev => !prev); return; }
+      if (e.key === 'e') { setShowEngagementMetrics(prev => !prev); return; }
+      if (e.key === 's') { setShowScoreIntelligence(prev => !prev); return; }
+      if (e.key === '?') { e.preventDefault(); setShowShortcuts(prev => !prev); return; }
+      if (e.key === 'Escape') {
+        setQuickInsightLead(null); setBulkActionOpen(null); setInlineStatusId(null);
+        setShowPipelineAnalytics(false); setShowEngagementMetrics(false);
+        setShowScoreIntelligence(false); setShowShortcuts(false);
+        return;
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -524,6 +622,40 @@ const LeadManagement: React.FC = () => {
           >
             <PlusIcon className="w-4 h-4" />
             <span>Add Lead</span>
+          </button>
+          <div className="w-px h-6 bg-slate-200" />
+          <button
+            onClick={() => setShowPipelineAnalytics(prev => !prev)}
+            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              showPipelineAnalytics
+                ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200'
+                : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'
+            }`}
+          >
+            <TrendUpIcon className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Pipeline</span>
+          </button>
+          <button
+            onClick={() => setShowEngagementMetrics(prev => !prev)}
+            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              showEngagementMetrics
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-200'
+                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+            }`}
+          >
+            <BoltIcon className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Engagement</span>
+          </button>
+          <button
+            onClick={() => setShowScoreIntelligence(prev => !prev)}
+            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              showScoreIntelligence
+                ? 'bg-amber-600 text-white shadow-lg shadow-amber-200'
+                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            }`}
+          >
+            <BrainIcon className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Scores</span>
           </button>
         </div>
       </div>
@@ -902,7 +1034,12 @@ const LeadManagement: React.FC = () => {
 
           {/* Keyboard Shortcuts */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Keyboard Shortcuts</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Keyboard Shortcuts</p>
+              <button onClick={() => setShowShortcuts(true)} className="text-[9px] font-bold text-indigo-500 hover:text-indigo-700 transition-colors">
+                View All
+              </button>
+            </div>
             <div className="space-y-1.5">
               {[
                 ['j / k', 'Navigate leads'],
@@ -911,6 +1048,10 @@ const LeadManagement: React.FC = () => {
                 ['v', 'Toggle view'],
                 ['n', 'New lead'],
                 ['i', 'Import CSV'],
+                ['p', 'Pipeline panel'],
+                ['e', 'Engagement panel'],
+                ['s', 'Score panel'],
+                ['?', 'All shortcuts'],
                 ['Esc', 'Close panels'],
               ].map(([key, desc]) => (
                 <div key={key} className="flex items-center justify-between">
@@ -1566,6 +1707,446 @@ const LeadManagement: React.FC = () => {
                 <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-xl hover:bg-indigo-700 transition-colors">Create Lead Profile</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ANALYTICS PANELS                                             */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+
+      {/* Pipeline Analytics Panel */}
+      {showPipelineAnalytics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowPipelineAnalytics(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-500">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-5 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 font-heading">Pipeline Analytics</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Conversion funnel & velocity metrics</p>
+                </div>
+                <button onClick={() => setShowPipelineAnalytics(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <svg viewBox="0 0 96 96" className="w-28 h-28">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#06b6d4" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(pipelineAnalytics.healthScore / 100) * 251.3} 251.3`}
+                      transform="rotate(-90 48 48)" className="transition-all duration-1000" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-slate-900">{pipelineAnalytics.healthScore}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Health</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Contacted', value: `${pipelineAnalytics.contactedRate}%`, sub: 'conversion' },
+                  { label: 'Qualified', value: `${pipelineAnalytics.qualifiedRate}%`, sub: 'conversion' },
+                  { label: 'Lost Rate', value: `${pipelineAnalytics.lostRate}%`, sub: 'of pipeline' },
+                  { label: 'Stale Leads', value: pipelineAnalytics.staleLeads.toString(), sub: '> 14 days idle' },
+                ].map((card, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl p-3 text-center">
+                    <p className="text-lg font-black text-slate-900">{card.value}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{card.label}</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">{card.sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pipeline Stages */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Pipeline Stages</p>
+                <div className="space-y-2.5">
+                  {pipelineAnalytics.stages.map((stage, i) => (
+                    <div key={i} className="flex items-center space-x-3">
+                      <span className="text-xs font-bold text-slate-600 w-20">{stage.name}</span>
+                      <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full ${stage.bg} rounded-full transition-all duration-700`} style={{ width: `${Math.max(stage.pct, 2)}%` }} />
+                      </div>
+                      <span className="text-xs font-black text-slate-700 w-12 text-right">{stage.count} ({stage.pct}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dark Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Funnel Velocity</p>
+                <div className="flex items-end justify-between h-24 space-x-3">
+                  {pipelineAnalytics.stages.map((stage, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center space-y-1.5">
+                      <div className="w-full rounded-t-lg bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all duration-700"
+                        style={{ height: `${Math.max(stage.pct, 4)}%` }} />
+                      <span className="text-[8px] font-bold text-slate-500">{stage.name}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">Processed this week</span>
+                  <span className="text-sm font-black text-cyan-400">{pipelineAnalytics.processedThisWeek}</span>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-cyan-600 to-teal-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">AI Pipeline Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {pipelineAnalytics.healthScore >= 70
+                    ? `Strong pipeline health at ${pipelineAnalytics.healthScore}%. Your conversion funnel shows ${pipelineAnalytics.qualifiedRate}% qualification rate \u2014 above industry benchmarks.`
+                    : pipelineAnalytics.staleLeads > 0
+                      ? `${pipelineAnalytics.staleLeads} leads stagnating in "New" for 2+ weeks. Automated outreach could recover up to ${Math.round(pipelineAnalytics.staleLeads * 0.3)} conversions.`
+                      : `Pipeline health at ${pipelineAnalytics.healthScore}%. Focus on moving "Contacted" leads to "Qualified" to boost funnel throughput.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Engagement Metrics Panel */}
+      {showEngagementMetrics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowEngagementMetrics(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-500">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-5 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 font-heading">Engagement Metrics</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Contact rates & tier analysis</p>
+                </div>
+                <button onClick={() => setShowEngagementMetrics(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <svg viewBox="0 0 96 96" className="w-28 h-28">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e11d48" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(engagementMetrics.engagementScore / 100) * 251.3} 251.3`}
+                      transform="rotate(-90 48 48)" className="transition-all duration-1000" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-slate-900">{engagementMetrics.engagementScore}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Score</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Contact Rate', value: `${engagementMetrics.contactRate}%` },
+                  { label: 'Engaged', value: `${engagementMetrics.contacted}/${engagementMetrics.total}` },
+                  { label: 'Hot Engaged', value: `${engagementMetrics.tiers[1].rate}%` },
+                  { label: 'Cold Engaged', value: `${engagementMetrics.tiers[3].rate}%` },
+                ].map((card, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl p-3 text-center">
+                    <p className="text-lg font-black text-slate-900">{card.value}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{card.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tier Breakdown */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Engagement by Tier</p>
+                <div className="space-y-2">
+                  {engagementMetrics.tiers.map((tier, i) => (
+                    <div key={i} className={`${tier.cardBg} rounded-xl p-3`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-xs font-bold ${tier.textColor}`}>{tier.name}</span>
+                        <span className="text-xs font-black text-slate-700">{tier.count} leads</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex-1 h-2 bg-white/60 rounded-full overflow-hidden">
+                          <div className="h-full bg-slate-700 rounded-full transition-all duration-700" style={{ width: `${tier.rate}%` }} />
+                        </div>
+                        <span className="text-[10px] font-black text-slate-600">{tier.rate}%</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">{tier.engaged} of {tier.count} engaged</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dark Chart - Timeline */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Activity Timeline</p>
+                <div className="space-y-2.5">
+                  {engagementMetrics.timeline.map((t, i) => (
+                    <div key={i} className="flex items-center space-x-3">
+                      <span className="text-[10px] font-bold text-slate-500 w-20">{t.label}</span>
+                      <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-rose-600 to-rose-400 rounded-full transition-all duration-700"
+                          style={{ width: `${Math.round((t.count / engagementMetrics.maxTimeline) * 100)}%` }} />
+                      </div>
+                      <span className="text-[10px] font-black text-rose-400 w-6 text-right">{t.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-rose-600 to-pink-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">AI Engagement Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {engagementMetrics.engagementScore >= 65
+                    ? `Engagement score of ${engagementMetrics.engagementScore} indicates strong outreach performance. ${engagementMetrics.contactRate}% contact rate is ${engagementMetrics.contactRate >= 50 ? 'above' : 'near'} target.`
+                    : engagementMetrics.tiers[0].count > 0 && engagementMetrics.tiers[0].rate < 50
+                      ? `${engagementMetrics.tiers[0].count} critical leads with only ${engagementMetrics.tiers[0].rate}% engagement. Prioritize immediate outreach to prevent decay.`
+                      : `Engagement at ${engagementMetrics.engagementScore}%. Increase touchpoints across all tiers \u2014 multi-channel campaigns can boost engagement by 40%.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Score Intelligence Panel */}
+      {showScoreIntelligence && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowScoreIntelligence(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-500">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-5 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 font-heading">Score Intelligence</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Statistical analysis & top performers</p>
+                </div>
+                <button onClick={() => setShowScoreIntelligence(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <svg viewBox="0 0 96 96" className="w-28 h-28">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#d97706" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(scoreIntelligence.healthIndex / 100) * 251.3} 251.3`}
+                      transform="rotate(-90 48 48)" className="transition-all duration-1000" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-slate-900">{scoreIntelligence.healthIndex}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Index</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Average', value: scoreIntelligence.avg.toString() },
+                  { label: 'Median', value: scoreIntelligence.median.toString() },
+                  { label: 'Std Dev', value: `\u00B1${scoreIntelligence.stdDev}` },
+                  { label: 'Q3 (75th)', value: scoreIntelligence.quartiles.q3.toString() },
+                ].map((card, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl p-3 text-center">
+                    <p className="text-lg font-black text-slate-900">{card.value}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{card.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Quartile Visualization */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Score Quartiles</p>
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-2">
+                    <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
+                  </div>
+                  <div className="h-4 bg-slate-200 rounded-full overflow-hidden relative">
+                    <div className="absolute h-full bg-amber-200 rounded-full" style={{ left: `${scoreIntelligence.quartiles.q1}%`, width: `${scoreIntelligence.quartiles.q3 - scoreIntelligence.quartiles.q1}%` }} />
+                    <div className="absolute h-full w-0.5 bg-amber-600" style={{ left: `${scoreIntelligence.quartiles.q2}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[9px] text-slate-400">Q1: {scoreIntelligence.quartiles.q1}</span>
+                    <span className="text-[9px] font-bold text-amber-600">Median: {scoreIntelligence.quartiles.q2}</span>
+                    <span className="text-[9px] text-slate-400">Q3: {scoreIntelligence.quartiles.q3}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top Performers */}
+              {scoreIntelligence.topPerformers.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Top Performers</p>
+                  <div className="space-y-1.5">
+                    {scoreIntelligence.topPerformers.map((lead, i) => (
+                      <button key={lead.id} onClick={() => navigate(`/portal/leads/${lead.id}`)}
+                        className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition-all text-left group">
+                        <span className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center text-[10px] font-black text-amber-700">
+                          #{i + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
+                        </div>
+                        <div className="flex items-center space-x-1.5">
+                          <StarRating score={lead.score} />
+                          <span className="text-xs font-black text-slate-700">{lead.score}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* At-Risk Leads */}
+              {scoreIntelligence.atRisk.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">At-Risk Leads</p>
+                  <div className="space-y-1.5">
+                    {scoreIntelligence.atRisk.map((lead) => (
+                      <button key={lead.id} onClick={() => navigate(`/portal/leads/${lead.id}`)}
+                        className="w-full flex items-center space-x-3 p-2.5 rounded-xl bg-red-50 hover:bg-red-100 transition-all text-left group">
+                        <AlertTriangleIcon className="w-4 h-4 text-red-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{lead.name}</p>
+                          <p className="text-[10px] text-red-500">{lead.company} &middot; Score: {lead.score}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dark Chart - Distribution */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Score Distribution (10-pt)</p>
+                <div className="flex items-end justify-between h-24 space-x-1">
+                  {scoreIntelligence.distribution.map((d, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center space-y-1">
+                      <div className="w-full rounded-t bg-gradient-to-t from-amber-600 to-amber-400 transition-all duration-700"
+                        style={{ height: `${Math.max(d.pct, 3)}%` }} />
+                      <span className="text-[6px] font-bold text-slate-600">{d.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-700 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <span className="text-[10px] text-slate-500">Low (&lt;30)</span>
+                    <p className="text-xs font-black text-amber-400">{allLeads.filter(l => l.score < 30).length}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500">Mid (30-69)</span>
+                    <p className="text-xs font-black text-amber-400">{allLeads.filter(l => l.score >= 30 && l.score < 70).length}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500">High (70+)</span>
+                    <p className="text-xs font-black text-amber-400">{allLeads.filter(l => l.score >= 70).length}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">AI Score Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {scoreIntelligence.avg >= 65
+                    ? `Average score of ${scoreIntelligence.avg} with \u00B1${scoreIntelligence.stdDev} deviation indicates a strong, consistent lead pool. Focus on nurturing mid-range leads to push them above 75.`
+                    : scoreIntelligence.atRisk.length > 3
+                      ? `${scoreIntelligence.atRisk.length} leads at risk with scores below 30. Consider re-engagement campaigns or cleanup to improve overall pipeline quality.`
+                      : `Average score is ${scoreIntelligence.avg}. The Q3 at ${scoreIntelligence.quartiles.q3} suggests a top quartile with strong potential \u2014 prioritize those leads for conversion.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Modal */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900 font-heading">Keyboard Shortcuts</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Lead Management navigation & panels</p>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 grid grid-cols-3 gap-6">
+              <div>
+                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-3">Navigation</p>
+                <div className="space-y-2">
+                  {[
+                    ['j / k', 'Navigate leads'],
+                    ['Enter', 'Open lead profile'],
+                    ['x', 'Toggle select'],
+                    ['v', 'Toggle view mode'],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">{key}</kbd>
+                      <span className="text-xs text-slate-500">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-3">Panels</p>
+                <div className="space-y-2">
+                  {[
+                    ['P', 'Pipeline Analytics'],
+                    ['E', 'Engagement Metrics'],
+                    ['S', 'Score Intelligence'],
+                    ['?', 'This dialog'],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">{key}</kbd>
+                      <span className="text-xs text-slate-500">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-3">Actions</p>
+                <div className="space-y-2">
+                  {[
+                    ['N', 'New lead'],
+                    ['I', 'Import CSV'],
+                    ['Esc', 'Close all panels'],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">{key}</kbd>
+                      <span className="text-xs text-slate-500">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
