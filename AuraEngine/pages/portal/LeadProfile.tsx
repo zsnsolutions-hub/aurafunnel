@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Lead, User, ContentType } from '../../types';
 import {
   TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, ChartIcon,
   TagIcon, UsersIcon, ClockIcon, TrendUpIcon, BoltIcon, CalendarIcon,
-  ArrowLeftIcon, CheckIcon, EditIcon, LinkIcon, GlobeIcon
+  ArrowLeftIcon, CheckIcon, EditIcon, LinkIcon, GlobeIcon, XIcon,
+  BrainIcon, AlertTriangleIcon, TrendDownIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
@@ -176,6 +177,12 @@ const LeadProfile: React.FC = () => {
   // Menu
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ── Panel State ──
+  const [showLeadHealth, setShowLeadHealth] = useState(false);
+  const [showConversionIntel, setShowConversionIntel] = useState(false);
+  const [showEngagementMap, setShowEngagementMap] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
   useEffect(() => {
     if (leadId) fetchLead();
   }, [leadId]);
@@ -227,6 +234,97 @@ const LeadProfile: React.FC = () => {
   const toggleTask = (id: string) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
   };
+
+  // ── Lead Health ──
+  const leadHealth = useMemo(() => {
+    if (!lead) return { healthScore: 0, tier: 'Cold', factors: [] as { name: string; value: number; max: number }[], risks: [] as string[], strengths: [] as string[], freshness: 0, statusScore: 0, daysSinceCreated: 0 };
+    const daysSinceCreated = lead.created_at ? Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000) : 30;
+    const freshness = Math.max(0, 100 - daysSinceCreated * 3);
+    const statusScore = lead.status === 'Qualified' ? 100 : lead.status === 'Contacted' ? 66 : lead.status === 'New' ? 33 : 10;
+    const healthScore = Math.min(100, Math.round(lead.score * 0.5 + freshness * 0.2 + statusScore * 0.3));
+    const tier = lead.score >= 90 ? 'Critical' : lead.score >= 75 ? 'Hot' : lead.score >= 50 ? 'Warm' : 'Cold';
+    const factors = [
+      { name: 'Lead Score', value: lead.score, max: 100 },
+      { name: 'Freshness', value: freshness, max: 100 },
+      { name: 'Status Progress', value: statusScore, max: 100 },
+      { name: 'Profile Complete', value: lead.insights ? 85 : 45, max: 100 },
+    ];
+    const risks: string[] = [];
+    if (lead.score < 40) risks.push('Low engagement score indicates weak interest');
+    if (daysSinceCreated > 14 && lead.status === 'New') risks.push('Lead aging \u2014 no outreach in 2+ weeks');
+    if (lead.status === 'Lost') risks.push('Lead marked as lost \u2014 consider re-engagement');
+    if (!lead.insights) risks.push('Missing AI insights \u2014 run enrichment');
+    const strengths: string[] = [];
+    if (lead.score >= 75) strengths.push('High engagement score');
+    if (lead.status === 'Qualified') strengths.push('Qualified and ready for conversion');
+    if (lead.status === 'Contacted') strengths.push('Active communication established');
+    if (freshness >= 70) strengths.push('Recently added \u2014 high intent period');
+    if (lead.company) strengths.push(`Company identified: ${lead.company}`);
+    return { healthScore, tier, factors, risks, strengths, freshness, statusScore, daysSinceCreated };
+  }, [lead]);
+
+  // ── Conversion Intel ──
+  const conversionIntel = useMemo(() => {
+    if (!lead) return { probability: 0, dealSize: '$0', timeline: 'N/A', signals: [] as { label: string; strength: string }[], stage: 'Unknown', readiness: 0, forecast: [] as { scenario: string; value: string; prob: number }[] };
+    const prediction = derivePredictiveAnalysis(lead);
+    const signals: { label: string; strength: string }[] = [];
+    if (lead.score >= 80) signals.push({ label: 'High engagement score', strength: 'strong' });
+    if (lead.score >= 70) signals.push({ label: 'Multiple page visits', strength: 'strong' });
+    if (lead.status === 'Qualified') signals.push({ label: 'Qualification confirmed', strength: 'strong' });
+    if (lead.status === 'Contacted') signals.push({ label: 'Outreach responded', strength: 'medium' });
+    signals.push({ label: lead.score >= 60 ? 'Content engagement active' : 'Content engagement low', strength: lead.score >= 60 ? 'medium' : 'weak' });
+    signals.push({ label: lead.score >= 75 ? 'Decision-maker identified' : 'Decision-maker unconfirmed', strength: lead.score >= 75 ? 'strong' : 'weak' });
+    const stage = lead.status === 'Qualified' ? 'Negotiation' : lead.status === 'Contacted' ? 'Discovery' : lead.status === 'New' ? 'Awareness' : 'Closed-Lost';
+    const readiness = Math.min(100, Math.round(lead.score * 0.4 + (lead.status === 'Qualified' ? 40 : lead.status === 'Contacted' ? 25 : lead.status === 'New' ? 10 : 0) + (lead.insights ? 20 : 5)));
+    const forecast = [
+      { scenario: 'Best Case', value: lead.score >= 80 ? '$25,000' : lead.score >= 60 ? '$15,000' : '$5,000', prob: Math.min(95, prediction.conversionProb + 10) },
+      { scenario: 'Expected', value: prediction.dealSize, prob: prediction.conversionProb },
+      { scenario: 'Conservative', value: lead.score >= 80 ? '$10,000' : lead.score >= 60 ? '$3,000' : '$1,000', prob: Math.max(10, prediction.conversionProb - 20) },
+    ];
+    return { probability: prediction.conversionProb, dealSize: prediction.dealSize, timeline: prediction.timeline, signals, stage, readiness, forecast };
+  }, [lead]);
+
+  // ── Engagement Map ──
+  const engagementMap = useMemo(() => {
+    if (!lead) return { depth: 0, channels: [] as { name: string; effectiveness: number; interactions: number; preferred: boolean }[], touchpoints: 0, responsiveness: 'Unknown', preferredChannel: { name: 'N/A', effectiveness: 0 }, interactionScore: 0, bestWindow: 'N/A' };
+    const tl = deriveEngagementTimeline(lead);
+    const depth = Math.min(100, Math.round(lead.score * 0.6 + tl.length * 8 + (lead.status !== 'New' ? 20 : 0)));
+    const channels = [
+      { name: 'Email', effectiveness: lead.score >= 70 ? 85 : 50, interactions: Math.ceil(lead.score / 25), preferred: lead.score >= 75 },
+      { name: 'Website', effectiveness: Math.min(95, lead.score + 10), interactions: Math.ceil(lead.score / 20), preferred: true },
+      { name: 'Phone', effectiveness: lead.score >= 60 ? 70 : 30, interactions: Math.ceil(lead.score / 40), preferred: false },
+      { name: 'LinkedIn', effectiveness: lead.score >= 50 ? 60 : 40, interactions: Math.ceil(lead.score / 35), preferred: lead.score < 75 },
+      { name: 'Events', effectiveness: lead.score >= 65 ? 75 : 20, interactions: lead.score >= 65 ? 2 : 0, preferred: false },
+    ];
+    const touchpoints = channels.reduce((sum, c) => sum + c.interactions, 0);
+    const responsiveness = lead.score >= 80 ? 'Highly responsive' : lead.score >= 60 ? 'Responsive' : lead.score >= 40 ? 'Moderate' : 'Low';
+    const preferredChannel = channels.reduce((best, c) => c.effectiveness > best.effectiveness ? c : best, channels[0]);
+    const interactionScore = Math.min(100, Math.round(depth * 0.4 + (touchpoints / 20) * 100 * 0.3 + (lead.status !== 'New' ? 30 : 0)));
+    const bestWindow = lead.score >= 70 ? 'Tue\u2013Thu, 9\u201311am' : 'Wed\u2013Fri, 2\u20134pm';
+    return { depth, channels, touchpoints, responsiveness, preferredChannel, interactionScore, bestWindow };
+  }, [lead]);
+
+  // ── Keyboard Shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      if (e.key === 'h') { setShowLeadHealth(prev => !prev); return; }
+      if (e.key === 'c') { setShowConversionIntel(prev => !prev); return; }
+      if (e.key === 'g') { setShowEngagementMap(prev => !prev); return; }
+      if (e.key === '?') { e.preventDefault(); setShowShortcuts(prev => !prev); return; }
+      if (e.key === 'Escape') {
+        setShowLeadHealth(false); setShowConversionIntel(false);
+        setShowEngagementMap(false); setShowShortcuts(false);
+        setMenuOpen(false);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   if (loading) {
     return (
@@ -288,7 +386,35 @@ const LeadProfile: React.FC = () => {
             </h1>
           </div>
         </div>
-        <div className="relative">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setShowLeadHealth(prev => !prev)}
+            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              showLeadHealth ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'
+            }`}
+          >
+            <TrendUpIcon className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline">Health</span>
+          </button>
+          <button
+            onClick={() => setShowConversionIntel(prev => !prev)}
+            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              showConversionIntel ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+            }`}
+          >
+            <TargetIcon className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline">Conversion</span>
+          </button>
+          <button
+            onClick={() => setShowEngagementMap(prev => !prev)}
+            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              showEngagementMap ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            }`}
+          >
+            <BrainIcon className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline">Engagement</span>
+          </button>
+          <div className="relative">
           <button onClick={() => setMenuOpen(!menuOpen)} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-500">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01" />
@@ -309,6 +435,7 @@ const LeadProfile: React.FC = () => {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -716,9 +843,454 @@ const LeadProfile: React.FC = () => {
                 <span>Assign to Team</span>
               </button>
             </div>
+
+            {/* Shortcuts */}
+            <div className="mt-6 pt-4 border-t border-slate-100">
+              <button onClick={() => setShowShortcuts(true)} className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all">
+                <span>Keyboard Shortcuts</span>
+                <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold">?</kbd>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ANALYTICS PANELS                                             */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+
+      {/* Lead Health Panel */}
+      {showLeadHealth && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowLeadHealth(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-500">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-5 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 font-heading">Lead Health</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Comprehensive health assessment for {lead.name}</p>
+                </div>
+                <button onClick={() => setShowLeadHealth(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <svg viewBox="0 0 96 96" className="w-28 h-28">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#06b6d4" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(leadHealth.healthScore / 100) * 251.3} 251.3`}
+                      transform="rotate(-90 48 48)" className="transition-all duration-1000" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-slate-900">{leadHealth.healthScore}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Health</span>
+                  </div>
+                </div>
+                <span className={`mt-2 px-3 py-1 rounded-lg text-xs font-bold ${TAG_BADGE[leadHealth.tier] || 'bg-slate-100 text-slate-600'}`}>
+                  {leadHealth.tier}
+                </span>
+              </div>
+
+              {/* Factor Breakdown */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Health Factors</p>
+                <div className="space-y-3">
+                  {leadHealth.factors.map((f, i) => (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-slate-600">{f.name}</span>
+                        <span className="text-xs font-black text-slate-700">{f.value}/{f.max}</span>
+                      </div>
+                      <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${
+                          f.value >= 75 ? 'bg-emerald-500' : f.value >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                        }`} style={{ width: `${(f.value / f.max) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Strengths */}
+              {leadHealth.strengths.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Strengths</p>
+                  <div className="space-y-1.5">
+                    {leadHealth.strengths.map((s, i) => (
+                      <div key={i} className="flex items-start space-x-2.5 p-2.5 bg-emerald-50 rounded-xl">
+                        <CheckIcon className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
+                        <p className="text-xs text-emerald-800 font-medium">{s}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Risks */}
+              {leadHealth.risks.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Risk Factors</p>
+                  <div className="space-y-1.5">
+                    {leadHealth.risks.map((r, i) => (
+                      <div key={i} className="flex items-start space-x-2.5 p-2.5 bg-red-50 rounded-xl">
+                        <AlertTriangleIcon className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
+                        <p className="text-xs text-red-800 font-medium">{r}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dark Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Factor Comparison</p>
+                <div className="flex items-end justify-between h-24 space-x-3">
+                  {leadHealth.factors.map((f, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center space-y-1.5">
+                      <div className="w-full rounded-t-lg bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all duration-700"
+                        style={{ height: `${Math.max(f.value, 4)}%` }} />
+                      <span className="text-[7px] font-bold text-slate-500 text-center leading-tight">{f.name.split(' ')[0]}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">Days since added</span>
+                  <span className="text-sm font-black text-cyan-400">{leadHealth.daysSinceCreated}d</span>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-cyan-600 to-teal-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">AI Health Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {leadHealth.healthScore >= 70
+                    ? `${lead.name} shows strong health at ${leadHealth.healthScore}%. ${leadHealth.strengths.length} positive signals detected. Recommend accelerating to conversion.`
+                    : leadHealth.risks.length > 0
+                      ? `${leadHealth.risks.length} risk factor${leadHealth.risks.length > 1 ? 's' : ''} detected. ${leadHealth.risks[0]}. Address risks to improve conversion likelihood.`
+                      : `Health score at ${leadHealth.healthScore}%. Focus on increasing engagement through targeted outreach and content sharing.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conversion Intel Panel */}
+      {showConversionIntel && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowConversionIntel(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-500">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-5 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 font-heading">Conversion Intel</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Deal probability & buying signals</p>
+                </div>
+                <button onClick={() => setShowConversionIntel(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <svg viewBox="0 0 96 96" className="w-28 h-28">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e11d48" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(conversionIntel.readiness / 100) * 251.3} 251.3`}
+                      transform="rotate(-90 48 48)" className="transition-all duration-1000" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-slate-900">{conversionIntel.readiness}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ready</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Probability', value: `${conversionIntel.probability}%` },
+                  { label: 'Timeline', value: conversionIntel.timeline },
+                  { label: 'Deal Size', value: conversionIntel.dealSize },
+                  { label: 'Stage', value: conversionIntel.stage },
+                ].map((card, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl p-3 text-center">
+                    <p className="text-lg font-black text-slate-900">{card.value}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{card.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Buying Signals */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Buying Signals</p>
+                <div className="space-y-2">
+                  {conversionIntel.signals.map((sig, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                      <div className="flex items-center space-x-2.5">
+                        <div className={`w-2 h-2 rounded-full ${
+                          sig.strength === 'strong' ? 'bg-emerald-500' :
+                          sig.strength === 'medium' ? 'bg-amber-500' : 'bg-slate-300'
+                        }`} />
+                        <span className="text-xs font-medium text-slate-700">{sig.label}</span>
+                      </div>
+                      <span className={`text-[9px] font-bold uppercase tracking-widest ${
+                        sig.strength === 'strong' ? 'text-emerald-600' :
+                        sig.strength === 'medium' ? 'text-amber-600' : 'text-slate-400'
+                      }`}>{sig.strength}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Revenue Forecast */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Revenue Forecast</p>
+                <div className="space-y-2">
+                  {conversionIntel.forecast.map((f, i) => (
+                    <div key={i} className={`p-3 rounded-xl border ${i === 1 ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-100'}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-600">{f.scenario}</span>
+                        <span className="text-sm font-black text-slate-900">{f.value}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex-1 h-2 bg-white/60 rounded-full overflow-hidden">
+                          <div className="h-full bg-rose-500 rounded-full transition-all duration-700" style={{ width: `${f.prob}%` }} />
+                        </div>
+                        <span className="text-[10px] font-black text-slate-500">{f.prob}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dark Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Conversion Factors</p>
+                <div className="space-y-2.5">
+                  {[
+                    { label: 'Lead Score', value: lead.score },
+                    { label: 'Readiness', value: conversionIntel.readiness },
+                    { label: 'Probability', value: conversionIntel.probability },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center space-x-3">
+                      <span className="text-[10px] font-bold text-slate-500 w-20">{item.label}</span>
+                      <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-rose-600 to-rose-400 rounded-full transition-all duration-700"
+                          style={{ width: `${item.value}%` }} />
+                      </div>
+                      <span className="text-[10px] font-black text-rose-400 w-8 text-right">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-rose-600 to-pink-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">AI Conversion Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {conversionIntel.probability >= 75
+                    ? `${conversionIntel.probability}% conversion probability with ${conversionIntel.signals.filter(s => s.strength === 'strong').length} strong buying signals. This lead is primed for closing \u2014 schedule a proposal review.`
+                    : conversionIntel.stage === 'Discovery'
+                      ? `Lead is in Discovery stage. ${conversionIntel.signals.filter(s => s.strength === 'strong').length} strong signals detected. Focus on qualifying needs and demonstrating ROI.`
+                      : `Conversion readiness at ${conversionIntel.readiness}%. Strengthen engagement through personalized content and timely follow-ups to improve probability.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Engagement Map Panel */}
+      {showEngagementMap && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowEngagementMap(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-500">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-5 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 font-heading">Engagement Map</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Channel analysis & interaction patterns</p>
+                </div>
+                <button onClick={() => setShowEngagementMap(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <svg viewBox="0 0 96 96" className="w-28 h-28">
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                    <circle cx="48" cy="48" r="40" fill="none" stroke="#d97706" strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${(engagementMap.interactionScore / 100) * 251.3} 251.3`}
+                      transform="rotate(-90 48 48)" className="transition-all duration-1000" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-slate-900">{engagementMap.interactionScore}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Score</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Depth', value: `${engagementMap.depth}%` },
+                  { label: 'Touchpoints', value: engagementMap.touchpoints.toString() },
+                  { label: 'Response', value: engagementMap.responsiveness },
+                  { label: 'Best Window', value: engagementMap.bestWindow },
+                ].map((card, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl p-3 text-center">
+                    <p className="text-lg font-black text-slate-900">{card.value}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{card.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Channel Effectiveness */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Channel Effectiveness</p>
+                <div className="space-y-2.5">
+                  {engagementMap.channels.map((ch, i) => (
+                    <div key={i} className={`p-3 rounded-xl border ${ch.name === engagementMap.preferredChannel.name ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-bold text-slate-700">{ch.name}</span>
+                          {ch.preferred && (
+                            <span className="text-[8px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PREFERRED</span>
+                          )}
+                        </div>
+                        <span className="text-xs font-black text-slate-600">{ch.effectiveness}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${
+                          ch.effectiveness >= 70 ? 'bg-amber-500' : ch.effectiveness >= 50 ? 'bg-amber-400' : 'bg-slate-300'
+                        }`} style={{ width: `${ch.effectiveness}%` }} />
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">{ch.interactions} interaction{ch.interactions !== 1 ? 's' : ''}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dark Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Channel Comparison</p>
+                <div className="flex items-end justify-between h-24 space-x-2">
+                  {engagementMap.channels.map((ch, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center space-y-1.5">
+                      <div className="w-full rounded-t-lg bg-gradient-to-t from-amber-600 to-amber-400 transition-all duration-700"
+                        style={{ height: `${Math.max(ch.effectiveness, 4)}%` }} />
+                      <span className="text-[7px] font-bold text-slate-500 text-center leading-tight">{ch.name.slice(0, 5)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">Best channel</span>
+                  <span className="text-sm font-black text-amber-400">{engagementMap.preferredChannel.name}</span>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="w-4 h-4" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">AI Engagement Insight</p>
+                </div>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {engagementMap.interactionScore >= 65
+                    ? `Strong engagement at ${engagementMap.interactionScore}% with ${engagementMap.touchpoints} touchpoints. ${engagementMap.preferredChannel.name} is the most effective channel at ${engagementMap.preferredChannel.effectiveness}%.`
+                    : engagementMap.responsiveness === 'Low'
+                      ? `Low responsiveness detected. Try switching to ${engagementMap.channels.find(c => !c.preferred && c.effectiveness > 30)?.name || 'LinkedIn'} outreach during ${engagementMap.bestWindow}.`
+                      : `Engagement depth at ${engagementMap.depth}%. Increase ${engagementMap.preferredChannel.name} touchpoints and reach out during ${engagementMap.bestWindow} for best results.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Modal */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900 font-heading">Keyboard Shortcuts</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Lead Profile navigation & panels</p>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 grid grid-cols-3 gap-6">
+              <div>
+                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-3">Panels</p>
+                <div className="space-y-2">
+                  {[
+                    ['H', 'Lead Health'],
+                    ['C', 'Conversion Intel'],
+                    ['G', 'Engagement Map'],
+                    ['?', 'This dialog'],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">{key}</kbd>
+                      <span className="text-xs text-slate-500">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-3">Actions</p>
+                <div className="space-y-2">
+                  {[
+                    ['Click tab', 'Switch sections'],
+                    ['Add note', 'In Notes tab'],
+                    ['Add task', 'In Tasks tab'],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">{key}</kbd>
+                      <span className="text-xs text-slate-500">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-3">System</p>
+                <div className="space-y-2">
+                  {[
+                    ['Esc', 'Close panels'],
+                    ['Back \u2190', 'Return to leads'],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">{key}</kbd>
+                      <span className="text-xs text-slate-500">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
