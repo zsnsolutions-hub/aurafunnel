@@ -326,6 +326,9 @@ const HelpCenterPage: React.FC = () => {
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [showSupportMetrics, setShowSupportMetrics] = useState(false);
+  const [showLearningPath, setShowLearningPath] = useState(false);
+  const [showFAQAnalytics, setShowFAQAnalytics] = useState(false);
 
   // ─── KPI Stats ───
   const kpiStats = useMemo(() => {
@@ -361,6 +364,93 @@ const HelpCenterPage: React.FC = () => {
     );
   }, [kbSearchQuery]);
 
+  // ─── Support Metrics ───
+  const supportMetrics = useMemo(() => {
+    const ticketVolume = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6 - i));
+      return {
+        day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        opened: Math.floor(Math.random() * 8) + 2,
+        resolved: Math.floor(Math.random() * 10) + 3,
+      };
+    });
+
+    const categoryDistribution = [
+      { category: 'AI & Content', tickets: 34, pct: 28, avgResolution: 1.2, satisfaction: 94 },
+      { category: 'Lead Management', tickets: 28, pct: 23, avgResolution: 0.8, satisfaction: 96 },
+      { category: 'Integrations', tickets: 22, pct: 18, avgResolution: 2.4, satisfaction: 88 },
+      { category: 'Billing', tickets: 18, pct: 15, avgResolution: 0.5, satisfaction: 97 },
+      { category: 'Account & Auth', tickets: 12, pct: 10, avgResolution: 0.3, satisfaction: 99 },
+      { category: 'Other', tickets: 8, pct: 6, avgResolution: 1.5, satisfaction: 91 },
+    ];
+
+    const totalTickets = categoryDistribution.reduce((s, c) => s + c.tickets, 0);
+    const avgResolutionTime = (categoryDistribution.reduce((s, c) => s + c.avgResolution * c.tickets, 0) / totalTickets).toFixed(1);
+    const overallSatisfaction = Math.round(categoryDistribution.reduce((s, c) => s + c.satisfaction * c.tickets, 0) / totalTickets);
+    const firstResponseTime = 12; // minutes
+    const selfServiceRate = 68; // percent resolved without ticket
+
+    return { ticketVolume, categoryDistribution, totalTickets, avgResolutionTime, overallSatisfaction, firstResponseTime, selfServiceRate };
+  }, []);
+
+  // ─── Learning Path Progress ───
+  const learningPath = useMemo(() => {
+    const totalChecked = Object.values(checkedItems).filter(Boolean).length;
+    const modules = [
+      { name: 'Platform Basics', lessons: 8, completed: Math.min(8, Math.floor(totalChecked * 0.6)), duration: '45 min', level: 'Beginner' as const },
+      { name: 'Lead Management', lessons: 12, completed: Math.min(12, Math.floor(totalChecked * 0.4)), duration: '1.5 hrs', level: 'Beginner' as const },
+      { name: 'AI Content Studio', lessons: 10, completed: Math.min(10, Math.floor(totalChecked * 0.3)), duration: '1 hr', level: 'Intermediate' as const },
+      { name: 'Analytics Mastery', lessons: 8, completed: Math.min(8, Math.floor(totalChecked * 0.2)), duration: '1 hr', level: 'Intermediate' as const },
+      { name: 'Automation Workflows', lessons: 14, completed: Math.min(14, Math.floor(totalChecked * 0.15)), duration: '2 hrs', level: 'Advanced' as const },
+      { name: 'Integration Expert', lessons: 6, completed: Math.min(6, Math.floor(totalChecked * 0.1)), duration: '45 min', level: 'Advanced' as const },
+    ];
+
+    const totalLessons = modules.reduce((s, m) => s + m.lessons, 0);
+    const completedLessons = modules.reduce((s, m) => s + m.completed, 0);
+    const overallProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
+    const certifications = [
+      { name: 'AuraFunnel Foundations', status: overallProgress > 30 ? 'earned' as const : 'locked' as const, earnedDate: overallProgress > 30 ? '2024-01-10' : null },
+      { name: 'Lead Scoring Specialist', status: overallProgress > 50 ? 'earned' as const : overallProgress > 30 ? 'in_progress' as const : 'locked' as const, earnedDate: overallProgress > 50 ? '2024-01-18' : null },
+      { name: 'AI Power User', status: overallProgress > 70 ? 'earned' as const : overallProgress > 50 ? 'in_progress' as const : 'locked' as const, earnedDate: null },
+    ];
+
+    const streakDays = Math.min(totalChecked, 14);
+    const xpPoints = totalChecked * 25 + completedLessons * 50;
+
+    return { modules, totalLessons, completedLessons, overallProgress, certifications, streakDays, xpPoints };
+  }, [checkedItems]);
+
+  // ─── FAQ Analytics ───
+  const faqAnalytics = useMemo(() => {
+    const topSearches = [
+      { query: 'csv import', count: 342, trend: 12, resolved: 89 },
+      { query: 'ai not generating', count: 287, trend: -8, resolved: 94 },
+      { query: 'lead score accuracy', count: 234, trend: 5, resolved: 78 },
+      { query: 'email delivery', count: 198, trend: -15, resolved: 91 },
+      { query: 'integration setup', count: 176, trend: 22, resolved: 85 },
+      { query: 'billing upgrade', count: 145, trend: 3, resolved: 97 },
+      { query: 'automation workflow', count: 132, trend: 18, resolved: 82 },
+      { query: 'dashboard slow', count: 98, trend: -25, resolved: 96 },
+    ];
+
+    const weeklySearchVolume = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6 - i));
+      return {
+        day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        searches: Math.floor(Math.random() * 60) + 30,
+        resolved: Math.floor(Math.random() * 50) + 25,
+      };
+    });
+
+    const totalSearches = topSearches.reduce((s, t) => s + t.count, 0);
+    const avgResolutionRate = Math.round(topSearches.reduce((s, t) => s + t.resolved, 0) / topSearches.length);
+    const trendingUp = topSearches.filter(t => t.trend > 10).length;
+    const trendingDown = topSearches.filter(t => t.trend < -10).length;
+
+    return { topSearches, weeklySearchVolume, totalSearches, avgResolutionRate, trendingUp, trendingDown };
+  }, []);
+
   // ─── Feedback Submit ───
   const handleFeedbackSubmit = useCallback(() => {
     if (feedbackRating !== null) {
@@ -380,13 +470,16 @@ const HelpCenterPage: React.FC = () => {
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
       if (isInput) return;
 
-      const overlayOpen = showShortcuts || showSystemStatus || showKnowledgeBase || showChangelog;
+      const overlayOpen = showShortcuts || showSystemStatus || showKnowledgeBase || showChangelog || showSupportMetrics || showLearningPath || showFAQAnalytics;
 
       if (e.key === 'Escape') {
         if (showShortcuts) setShowShortcuts(false);
         if (showSystemStatus) setShowSystemStatus(false);
         if (showKnowledgeBase) setShowKnowledgeBase(false);
         if (showChangelog) setShowChangelog(false);
+        if (showSupportMetrics) setShowSupportMetrics(false);
+        if (showLearningPath) setShowLearningPath(false);
+        if (showFAQAnalytics) setShowFAQAnalytics(false);
         return;
       }
 
@@ -402,13 +495,16 @@ const HelpCenterPage: React.FC = () => {
         case 's': case 'S': e.preventDefault(); setShowSystemStatus(true); break;
         case 'k': case 'K': e.preventDefault(); setShowKnowledgeBase(true); break;
         case 'u': case 'U': e.preventDefault(); setShowChangelog(true); break;
+        case 'd': case 'D': e.preventDefault(); setShowSupportMetrics(true); break;
+        case 'g': case 'G': e.preventDefault(); setShowLearningPath(true); break;
+        case 'q': case 'Q': e.preventDefault(); setShowFAQAnalytics(true); break;
         case '?': e.preventDefault(); setShowShortcuts(true); break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showShortcuts, showSystemStatus, showKnowledgeBase, showChangelog]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showShortcuts, showSystemStatus, showKnowledgeBase, showChangelog, showSupportMetrics, showLearningPath, showFAQAnalytics]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCheck = (key: string) => {
     setCheckedItems(prev => {
@@ -452,6 +548,18 @@ const HelpCenterPage: React.FC = () => {
           <button onClick={() => setShowChangelog(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
             <LayersIcon className="w-3.5 h-3.5" />
             <span>Updates</span>
+          </button>
+          <button onClick={() => setShowSupportMetrics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showSupportMetrics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+            <ChartIcon className="w-3.5 h-3.5" />
+            <span>Support Metrics</span>
+          </button>
+          <button onClick={() => setShowLearningPath(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showLearningPath ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
+            <AcademicCapIcon className="w-3.5 h-3.5" />
+            <span>Learning Path</span>
+          </button>
+          <button onClick={() => setShowFAQAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showFAQAnalytics ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+            <FilterIcon className="w-3.5 h-3.5" />
+            <span>FAQ Analytics</span>
           </button>
           <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
             <KeyboardIcon className="w-3.5 h-3.5" />
@@ -1312,12 +1420,391 @@ const HelpCenterPage: React.FC = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Support Metrics Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showSupportMetrics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowSupportMetrics(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-cyan-100 text-cyan-600 flex items-center justify-center">
+                  <ChartIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Support Metrics</h2>
+                  <p className="text-[10px] text-slate-400">Ticket analytics & resolution rates</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSupportMetrics(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#06b6d4" strokeWidth="7"
+                    strokeDasharray={`${(supportMetrics.overallSatisfaction / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{supportMetrics.overallSatisfaction}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-cyan-600 uppercase">CSAT Score</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-cyan-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-cyan-700">{supportMetrics.totalTickets}</p>
+                  <p className="text-[10px] font-bold text-cyan-500">Total Tickets</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{supportMetrics.avgResolutionTime}h</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Avg Resolution</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{supportMetrics.firstResponseTime}m</p>
+                  <p className="text-[10px] font-bold text-indigo-500">First Response</p>
+                </div>
+                <div className="p-3 bg-violet-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-violet-700">{supportMetrics.selfServiceRate}%</p>
+                  <p className="text-[10px] font-bold text-violet-500">Self-Service</p>
+                </div>
+              </div>
+
+              {/* Category Breakdown */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Category Distribution</p>
+                <div className="space-y-2.5">
+                  {supportMetrics.categoryDistribution.map((cat, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-700">{cat.category}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{cat.tickets} tickets</span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-1.5">
+                        <div className="bg-cyan-500 h-full rounded-full transition-all" style={{ width: `${cat.pct}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span>Avg: {cat.avgResolution}h</span>
+                        <span className="text-emerald-600 font-bold">{cat.satisfaction}% satisfied</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 7-Day Ticket Volume Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-cyan-400 uppercase tracking-wider mb-4">7-Day Ticket Volume</p>
+                <div className="flex items-end justify-between h-28 gap-1">
+                  {supportMetrics.ticketVolume.map((d, i) => {
+                    const maxVal = Math.max(...supportMetrics.ticketVolume.map(v => Math.max(v.opened, v.resolved)));
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                        <div className="w-full flex gap-0.5" style={{ height: '100%', alignItems: 'flex-end' }}>
+                          <div className="flex-1 bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-t" style={{ height: `${(d.opened / maxVal) * 100}%`, minHeight: '4px' }} />
+                          <div className="flex-1 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t" style={{ height: `${(d.resolved / maxVal) * 100}%`, minHeight: '4px' }} />
+                        </div>
+                        <span className="text-[8px] text-slate-500 mt-1">{d.day}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-center space-x-4 mt-3">
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span className="text-[9px] text-slate-400">Opened</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-[9px] text-slate-400">Resolved</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-cyan-600 to-cyan-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-cyan-200" />
+                  <p className="text-[10px] font-black text-cyan-200 uppercase tracking-wider">AI Support Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {supportMetrics.selfServiceRate > 60
+                    ? `Strong self-service adoption at ${supportMetrics.selfServiceRate}%. Integration-related tickets take longest to resolve (${supportMetrics.categoryDistribution.find(c => c.category === 'Integrations')?.avgResolution}h avg). Consider adding more integration troubleshooting guides to reduce ticket volume by an estimated 15%.`
+                    : `Self-service rate of ${supportMetrics.selfServiceRate}% has room for improvement. Expanding the knowledge base with common resolution steps could reduce ticket volume by 20% and improve first-response times.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Learning Path Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showLearningPath && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowLearningPath(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
+                  <AcademicCapIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Learning Path</h2>
+                  <p className="text-[10px] text-slate-400">Track your progress & certifications</p>
+                </div>
+              </div>
+              <button onClick={() => setShowLearningPath(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e11d48" strokeWidth="7"
+                    strokeDasharray={`${(learningPath.overallProgress / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{learningPath.overallProgress}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-rose-600 uppercase">Complete</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{learningPath.completedLessons}/{learningPath.totalLessons}</p>
+                  <p className="text-[10px] font-bold text-rose-500">Lessons Done</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">{learningPath.xpPoints}</p>
+                  <p className="text-[10px] font-bold text-amber-500">XP Points</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{learningPath.streakDays}d</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Learning Streak</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{learningPath.certifications.filter(c => c.status === 'earned').length}</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Certifications</p>
+                </div>
+              </div>
+
+              {/* Module Progress */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Module Progress</p>
+                <div className="space-y-2.5">
+                  {learningPath.modules.map((mod, idx) => {
+                    const pct = mod.lessons > 0 ? Math.round((mod.completed / mod.lessons) * 100) : 0;
+                    const levelColor = mod.level === 'Beginner' ? 'emerald' : mod.level === 'Intermediate' ? 'amber' : 'rose';
+                    return (
+                      <div key={idx} className="p-3 bg-slate-50 rounded-xl">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-bold text-slate-700">{mod.name}</span>
+                          <span className={`px-2 py-0.5 bg-${levelColor}-50 text-${levelColor}-600 rounded-full text-[9px] font-black`}>{mod.level}</span>
+                        </div>
+                        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-1.5">
+                          <div className="bg-rose-500 h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                          <span>{mod.completed}/{mod.lessons} lessons</span>
+                          <span>{mod.duration}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Certifications */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-rose-400 uppercase tracking-wider mb-4">Certifications</p>
+                <div className="space-y-3">
+                  {learningPath.certifications.map((cert, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-800 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                          cert.status === 'earned' ? 'bg-emerald-500/20 text-emerald-400' :
+                          cert.status === 'in_progress' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-slate-700 text-slate-500'
+                        }`}>
+                          {cert.status === 'earned' ? <CheckIcon className="w-4 h-4" /> :
+                           cert.status === 'in_progress' ? <ClockIcon className="w-4 h-4" /> :
+                           <ShieldIcon className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white">{cert.name}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {cert.status === 'earned' ? `Earned ${cert.earnedDate}` :
+                             cert.status === 'in_progress' ? 'In progress' : 'Locked'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                        cert.status === 'earned' ? 'bg-emerald-500/20 text-emerald-400' :
+                        cert.status === 'in_progress' ? 'bg-amber-500/20 text-amber-400' :
+                        'bg-slate-700 text-slate-500'
+                      }`}>
+                        {cert.status === 'earned' ? 'Earned' : cert.status === 'in_progress' ? 'Active' : 'Locked'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-rose-600 to-rose-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-rose-200" />
+                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-wider">AI Learning Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {learningPath.overallProgress > 50
+                    ? `Great progress at ${learningPath.overallProgress}%! You're on track for the next certification. Focus on "${learningPath.modules.find(m => m.completed < m.lessons)?.name || 'Advanced topics'}" to unlock AI Power User status. Your ${learningPath.streakDays}-day streak shows excellent commitment.`
+                    : `You've completed ${learningPath.completedLessons} of ${learningPath.totalLessons} lessons. Start with "${learningPath.modules[0]?.name}" to build a strong foundation. Completing 2-3 lessons daily will earn your first certification within a week.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── FAQ Analytics Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showFAQAnalytics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowFAQAnalytics(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <FilterIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">FAQ Analytics</h2>
+                  <p className="text-[10px] text-slate-400">Search patterns & resolution rates</p>
+                </div>
+              </div>
+              <button onClick={() => setShowFAQAnalytics(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Gauge */}
+              <div className="text-center">
+                <svg className="w-24 h-24 mx-auto" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="7" />
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#f59e0b" strokeWidth="7"
+                    strokeDasharray={`${(faqAnalytics.avgResolutionRate / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-lg font-black fill-slate-900">{faqAnalytics.avgResolutionRate}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[7px] font-bold fill-amber-600 uppercase">Resolved</text>
+                </svg>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-amber-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-amber-700">{faqAnalytics.totalSearches.toLocaleString()}</p>
+                  <p className="text-[10px] font-bold text-amber-500">Total Searches</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-emerald-700">{faqAnalytics.avgResolutionRate}%</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Resolution Rate</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-indigo-700">{faqAnalytics.trendingUp}</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Trending Up</p>
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl text-center">
+                  <p className="text-lg font-black text-rose-700">{faqAnalytics.trendingDown}</p>
+                  <p className="text-[10px] font-bold text-rose-500">Trending Down</p>
+                </div>
+              </div>
+
+              {/* Top Searches */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Top Search Queries</p>
+                <div className="space-y-2.5">
+                  {faqAnalytics.topSearches.map((search, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-black text-slate-400 w-5">#{idx + 1}</span>
+                          <span className="text-xs font-bold text-slate-700">"{search.query}"</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500">{search.count} searches</span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-1.5">
+                        <div className="bg-amber-500 h-full rounded-full transition-all" style={{ width: `${search.resolved}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className={`font-bold ${search.trend > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                          {search.trend > 0 ? '+' : ''}{search.trend}% trend
+                        </span>
+                        <span className="text-emerald-600 font-bold">{search.resolved}% resolved</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Weekly Search Volume Chart */}
+              <div className="bg-slate-900 rounded-xl p-5">
+                <p className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-4">Weekly Search Volume</p>
+                <div className="flex items-end justify-between h-28 gap-1">
+                  {faqAnalytics.weeklySearchVolume.map((d, i) => {
+                    const maxVal = Math.max(...faqAnalytics.weeklySearchVolume.map(v => Math.max(v.searches, v.resolved)));
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                        <div className="w-full flex gap-0.5" style={{ height: '100%', alignItems: 'flex-end' }}>
+                          <div className="flex-1 bg-gradient-to-t from-amber-600 to-amber-400 rounded-t" style={{ height: `${(d.searches / maxVal) * 100}%`, minHeight: '4px' }} />
+                          <div className="flex-1 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t" style={{ height: `${(d.resolved / maxVal) * 100}%`, minHeight: '4px' }} />
+                        </div>
+                        <span className="text-[8px] text-slate-500 mt-1">{d.day}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-center space-x-4 mt-3">
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span className="text-[9px] text-slate-400">Searches</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-[9px] text-slate-400">Resolved</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="bg-gradient-to-r from-amber-600 to-amber-600 rounded-2xl p-5 text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <SparklesIcon className="w-4 h-4 text-amber-200" />
+                  <p className="text-[10px] font-black text-amber-200 uppercase tracking-wider">AI FAQ Insight</p>
+                </div>
+                <p className="text-xs font-bold leading-relaxed">
+                  {faqAnalytics.avgResolutionRate > 85
+                    ? `Excellent resolution rate at ${faqAnalytics.avgResolutionRate}%. "${faqAnalytics.topSearches[0]?.query}" is the most searched topic with ${faqAnalytics.topSearches[0]?.count} queries. ${faqAnalytics.trendingUp} topics are trending up — consider adding proactive guidance for these to reduce future search volume.`
+                    : `Resolution rate of ${faqAnalytics.avgResolutionRate}% indicates room to improve self-service content. Focus on the top 3 queries which account for ${Math.round((faqAnalytics.topSearches.slice(0, 3).reduce((s, t) => s + t.count, 0) / faqAnalytics.totalSearches) * 100)}% of all searches. Adding video walkthroughs could boost resolution by 15%.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
       {/* ─── Keyboard Shortcuts Modal ─── */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {showShortcuts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 overflow-hidden">
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl mx-4 overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
@@ -1327,25 +1814,54 @@ const HelpCenterPage: React.FC = () => {
               </div>
               <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
             </div>
-            <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
-              {[
-                { key: '1', action: 'Troubleshooting tab' },
-                { key: '2', action: 'Optimization tab' },
-                { key: '3', action: 'Get Support tab' },
-                { key: '4', action: 'Training tab' },
-                { key: '5', action: 'Quick Reference tab' },
-                { key: '6', action: 'Pro Tips tab' },
-                { key: 'S', action: 'System Status' },
-                { key: 'K', action: 'Knowledge Base' },
-                { key: 'U', action: 'Updates / Changelog' },
-                { key: '?', action: 'This shortcuts panel' },
-                { key: 'Esc', action: 'Close panels' },
-              ].map((sc, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <span className="text-xs text-slate-600">{sc.action}</span>
-                  <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
-                </div>
-              ))}
+            <div className="p-6 grid grid-cols-3 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
+              {/* Tabs Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Tabs</p>
+                {[
+                  { key: '1', action: 'Troubleshooting' },
+                  { key: '2', action: 'Optimization' },
+                  { key: '3', action: 'Get Support' },
+                  { key: '4', action: 'Training' },
+                  { key: '5', action: 'Quick Reference' },
+                  { key: '6', action: 'Pro Tips' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              {/* Panels Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Panels</p>
+                {[
+                  { key: 'S', action: 'System Status' },
+                  { key: 'K', action: 'Knowledge Base' },
+                  { key: 'U', action: 'Updates' },
+                  { key: 'D', action: 'Support Metrics' },
+                  { key: 'G', action: 'Learning Path' },
+                  { key: 'Q', action: 'FAQ Analytics' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              {/* System Column */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">System</p>
+                {[
+                  { key: '?', action: 'Shortcuts panel' },
+                  { key: 'Esc', action: 'Close panels' },
+                ].map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">{sc.action}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
               <p className="text-[10px] text-slate-400">Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
