@@ -500,18 +500,41 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     const mockScore = Math.floor(Math.random() * 40) + 60;
     const kb = buildKnowledgeBase(newLeadKB);
 
-    const { data } = await supabase
+    const payload: Record<string, any> = {
+      ...newLead,
+      client_id: user.id,
+      score: mockScore,
+      status: 'New',
+      lastActivity: 'Just now',
+    };
+    if (kb) payload.knowledgeBase = kb;
+
+    const { data, error } = await supabase
       .from('leads')
-      .insert([{
-        ...newLead,
-        client_id: user.id,
-        score: mockScore,
-        status: 'New',
-        lastActivity: 'Just now',
-        ...(kb ? { knowledgeBase: kb } : {})
-      }])
+      .insert([payload])
       .select()
       .single();
+
+    if (error) {
+      console.error('Lead creation failed:', error);
+      // If knowledgeBase column doesn't exist, retry without it
+      if (error.message?.includes('knowledgeBase') || error.code === 'PGRST204') {
+        delete payload.knowledgeBase;
+        const { data: retryData } = await supabase.from('leads').insert([payload]).select().single();
+        if (retryData) {
+          const updated = [retryData, ...leads];
+          setLeads(updated);
+          setFilteredLeads(updated);
+          setActiveSegmentId(null);
+          setIsAddLeadOpen(false);
+          setNewLead({ name: '', email: '', company: '', insights: '' });
+          setNewLeadKB({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
+          setShowKBFields(false);
+          fetchQuickStats();
+        }
+        return;
+      }
+    }
 
     if (data) {
       const updated = [data, ...leads];
@@ -1163,7 +1186,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
               <h2 className="text-2xl font-bold text-slate-900 font-heading">New Lead Profile</h2>
               <p className="text-sm text-slate-500 mt-1">Add details for manual AI enrichment.</p>
             </div>
-            <form className="space-y-6 flex-grow" onSubmit={handleAddLead}>
+            <form className="space-y-6 flex-grow overflow-y-auto" onSubmit={handleAddLead}>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Full Name</label>
                 <input required type="text" value={newLead.name} onChange={e => setNewLead({...newLead, name: e.target.value})} placeholder="e.g. Robert Fox" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" />
