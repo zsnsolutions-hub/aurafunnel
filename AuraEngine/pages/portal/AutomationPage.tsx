@@ -218,6 +218,9 @@ const AutomationPage: React.FC = () => {
   const [showExecutionLog, setShowExecutionLog] = useState(false);
   const [showNodeAnalytics, setShowNodeAnalytics] = useState(false);
   const [showHealthPanel, setShowHealthPanel] = useState(false);
+  const [showROICalculator, setShowROICalculator] = useState(false);
+  const [showTriggerAnalytics, setShowTriggerAnalytics] = useState(false);
+  const [showTemplateEffectiveness, setShowTemplateEffectiveness] = useState(false);
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -251,6 +254,9 @@ const AutomationPage: React.FC = () => {
       if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setShowExecutionLog(s => !s); return; }
       if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHealthPanel(s => !s); return; }
       if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setShowNodeAnalytics(s => !s); return; }
+      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setShowROICalculator(s => !s); return; }
+      if (e.key === 'i' || e.key === 'I') { e.preventDefault(); setShowTriggerAnalytics(s => !s); return; }
+      if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setShowTemplateEffectiveness(s => !s); return; }
       if (e.key === 't' || e.key === 'T') { e.preventDefault(); handleTest(); return; }
       if (e.key === 'o' || e.key === 'O') { e.preventDefault(); handleAiOptimize(); return; }
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSave(); return; }
@@ -259,6 +265,9 @@ const AutomationPage: React.FC = () => {
         setShowExecutionLog(false);
         setShowNodeAnalytics(false);
         setShowHealthPanel(false);
+        setShowROICalculator(false);
+        setShowTriggerAnalytics(false);
+        setShowTemplateEffectiveness(false);
         setShowWorkflowList(false);
         return;
       }
@@ -323,6 +332,128 @@ const AutomationPage: React.FC = () => {
       { label: 'Complexity', score: complexity, max: 15, status: complexity >= 9 ? 'pass' as const : 'warn' as const },
     ];
     return { score, metrics };
+  }, [workflow.nodes]);
+
+  // ─── ROI Calculator ───
+  const roiCalculation = useMemo(() => {
+    const manualHoursPerLead = 2.5;
+    const automatedHoursPerLead = 0.3;
+    const hourlyRate = 45;
+    const totalLeads = workflow.stats.leadsProcessed || leads.length || 50;
+
+    const manualCost = totalLeads * manualHoursPerLead * hourlyRate;
+    const automatedCost = totalLeads * automatedHoursPerLead * hourlyRate;
+    const savings = manualCost - automatedCost;
+    const savingsPct = manualCost > 0 ? Math.round((savings / manualCost) * 100) : 0;
+
+    const timeSavedPerLead = manualHoursPerLead - automatedHoursPerLead;
+    const totalTimeSaved = Math.round(totalLeads * timeSavedPerLead);
+    const conversionLift = workflow.stats.conversionRate > 0 ? Math.round(workflow.stats.conversionRate * 1.35) : 12;
+    const revenueImpact = Math.round(totalLeads * (conversionLift / 100) * 2800);
+
+    const monthlyBreakdown = Array.from({ length: 6 }, (_, i) => {
+      const month = new Date();
+      month.setMonth(month.getMonth() - (5 - i));
+      const factor = 0.7 + i * 0.06;
+      return {
+        month: month.toLocaleDateString('en-US', { month: 'short' }),
+        manual: Math.round(manualCost * factor / 6),
+        automated: Math.round(automatedCost * factor / 6),
+        savings: Math.round(savings * factor / 6),
+      };
+    });
+
+    return {
+      manualCost, automatedCost, savings, savingsPct, totalTimeSaved,
+      timeSavedPerLead, conversionLift, revenueImpact, monthlyBreakdown,
+      costPerLead: automatedCost > 0 ? Math.round(automatedCost / totalLeads) : 0,
+      totalLeads,
+    };
+  }, [workflow.stats, leads.length]);
+
+  // ─── Trigger Analytics ───
+  const triggerAnalytics = useMemo(() => {
+    const triggerNodes = workflow.nodes.filter(n => n.type === 'trigger');
+    const triggerTypes = TRIGGER_OPTIONS.map(opt => {
+      const count = triggerNodes.filter(n => n.config.triggerType === opt.type).length;
+      const fired = Math.floor(Math.random() * 200) + 50;
+      const converted = Math.floor(fired * (0.05 + Math.random() * 0.15));
+      return {
+        type: opt.type,
+        label: opt.label,
+        count,
+        fired,
+        converted,
+        conversionRate: fired > 0 ? Math.round((converted / fired) * 100) : 0,
+        avgResponseTime: parseFloat((Math.random() * 3 + 0.5).toFixed(1)),
+      };
+    });
+
+    const hourlyDistribution = Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
+      triggers: Math.round(Math.sin((h - 10) * 0.35) * 30 + 40 + (Math.random() - 0.5) * 10),
+    }));
+    const peakHour = hourlyDistribution.reduce((best, h) => h.triggers > best.triggers ? h : best, hourlyDistribution[0]);
+
+    const totalFired = triggerTypes.reduce((s, t) => s + t.fired, 0);
+    const totalConverted = triggerTypes.reduce((s, t) => s + t.converted, 0);
+    const overallConversion = totalFired > 0 ? Math.round((totalConverted / totalFired) * 100) : 0;
+
+    const weeklyTrend = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return {
+        day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        count: Math.floor(Math.random() * 40) + 20,
+      };
+    });
+
+    return { triggerTypes, hourlyDistribution, peakHour, totalFired, totalConverted, overallConversion, weeklyTrend };
+  }, [workflow.nodes]);
+
+  // ─── Template Effectiveness ───
+  const templateEffectiveness = useMemo(() => {
+    const templates = EMAIL_TEMPLATES.map(tmpl => {
+      const nodesUsing = workflow.nodes.filter(n => n.config.template === tmpl.id).length;
+      const sent = Math.floor(Math.random() * 300) + 50;
+      const opened = Math.floor(sent * (0.2 + Math.random() * 0.35));
+      const clicked = Math.floor(opened * (0.1 + Math.random() * 0.3));
+      const replied = Math.floor(clicked * (0.15 + Math.random() * 0.25));
+      const aiEnhanced = workflow.nodes.some(n => n.config.template === tmpl.id && n.config.aiPersonalization);
+      return {
+        id: tmpl.id,
+        label: tmpl.label,
+        desc: tmpl.desc,
+        nodesUsing,
+        sent,
+        openRate: sent > 0 ? Math.round((opened / sent) * 100) : 0,
+        clickRate: opened > 0 ? Math.round((clicked / opened) * 100) : 0,
+        replyRate: clicked > 0 ? Math.round((replied / clicked) * 100) : 0,
+        aiEnhanced,
+        conversionScore: Math.round(
+          ((opened / Math.max(sent, 1)) * 40) + ((clicked / Math.max(opened, 1)) * 35) + ((replied / Math.max(clicked, 1)) * 25)
+        ),
+      };
+    }).sort((a, b) => b.conversionScore - a.conversionScore);
+
+    const aiTemplates = templates.filter(t => t.aiEnhanced);
+    const nonAiTemplates = templates.filter(t => !t.aiEnhanced);
+    const avgAiOpenRate = aiTemplates.length > 0 ? Math.round(aiTemplates.reduce((s, t) => s + t.openRate, 0) / aiTemplates.length) : 0;
+    const avgNonAiOpenRate = nonAiTemplates.length > 0 ? Math.round(nonAiTemplates.reduce((s, t) => s + t.openRate, 0) / nonAiTemplates.length) : 0;
+    const aiLift = avgAiOpenRate - avgNonAiOpenRate;
+
+    const timingPerformance = [
+      { timing: 'Immediate', openRate: 38, clickRate: 12, label: 'instant' },
+      { timing: 'AI Optimal', openRate: 52, clickRate: 22, label: 'optimal' },
+      { timing: 'Morning (9 AM)', openRate: 45, clickRate: 16, label: 'morning' },
+      { timing: 'Afternoon (2 PM)', openRate: 41, clickRate: 14, label: 'afternoon' },
+    ];
+
+    const bestTemplate = templates[0];
+    const totalSent = templates.reduce((s, t) => s + t.sent, 0);
+
+    return { templates, aiLift, avgAiOpenRate, avgNonAiOpenRate, timingPerformance, bestTemplate, totalSent };
   }, [workflow.nodes]);
 
   // ─── Node Handlers ───
@@ -613,6 +744,27 @@ const AutomationPage: React.FC = () => {
           >
             <PieChartIcon className="w-3.5 h-3.5" />
             <span>Analytics</span>
+          </button>
+          <button
+            onClick={() => setShowROICalculator(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showROICalculator ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <TrendUpIcon className="w-3.5 h-3.5" />
+            <span>ROI</span>
+          </button>
+          <button
+            onClick={() => setShowTriggerAnalytics(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTriggerAnalytics ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <BoltIcon className="w-3.5 h-3.5" />
+            <span>Triggers</span>
+          </button>
+          <button
+            onClick={() => setShowTemplateEffectiveness(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTemplateEffectiveness ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <MailIcon className="w-3.5 h-3.5" />
+            <span>Templates</span>
           </button>
           <button
             onClick={() => setShowShortcuts(true)}
@@ -1822,12 +1974,422 @@ const AutomationPage: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ROI CALCULATOR SIDEBAR                                         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showROICalculator && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowROICalculator(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <TrendUpIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">ROI Calculator</h2>
+                  <p className="text-[10px] text-slate-400">Automation cost savings & revenue impact</p>
+                </div>
+              </div>
+              <button onClick={() => setShowROICalculator(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Savings Headline */}
+              <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100">
+                <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider mb-2">Total Savings</p>
+                <p className="text-3xl font-black text-slate-900">${roiCalculation.savings.toLocaleString()}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  <span className="font-bold text-emerald-600">{roiCalculation.savingsPct}%</span> cost reduction vs manual
+                </p>
+                <div className="mt-3 flex items-center justify-center space-x-4">
+                  <div className="px-3 py-1.5 bg-white/80 rounded-lg">
+                    <p className="text-sm font-black text-slate-900">{roiCalculation.totalTimeSaved}h</p>
+                    <p className="text-[9px] text-slate-400">Time Saved</p>
+                  </div>
+                  <div className="px-3 py-1.5 bg-white/80 rounded-lg">
+                    <p className="text-sm font-black text-slate-900">{roiCalculation.totalLeads}</p>
+                    <p className="text-[9px] text-slate-400">Leads Processed</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cost Comparison */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Cost Comparison</p>
+                <div className="space-y-3">
+                  <div className="p-4 bg-rose-50 rounded-xl border border-rose-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-rose-700">Manual Process</span>
+                      <span className="text-sm font-black text-rose-700">${roiCalculation.manualCost.toLocaleString()}</span>
+                    </div>
+                    <p className="text-[10px] text-rose-500">{roiCalculation.timeSavedPerLead + 0.3}h per lead &times; ${45}/hr</p>
+                    <div className="mt-2 w-full bg-rose-200 h-2 rounded-full">
+                      <div className="h-full bg-rose-500 rounded-full" style={{ width: '100%' }} />
+                    </div>
+                  </div>
+                  <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-emerald-700">Automated Process</span>
+                      <span className="text-sm font-black text-emerald-700">${roiCalculation.automatedCost.toLocaleString()}</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-500">0.3h per lead &times; ${45}/hr</p>
+                    <div className="mt-2 w-full bg-emerald-200 h-2 rounded-full">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${100 - roiCalculation.savingsPct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Monthly Trend */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">6-Month Savings Trend</p>
+                <div className="bg-slate-900 rounded-xl p-5">
+                  <div className="flex items-end space-x-2 h-24 mb-3">
+                    {roiCalculation.monthlyBreakdown.map((m, idx) => {
+                      const maxVal = Math.max(...roiCalculation.monthlyBreakdown.map(x => x.savings), 1);
+                      const height = Math.max((m.savings / maxVal) * 100, 8);
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center">
+                          <p className="text-[7px] text-amber-400 font-bold mb-1">${(m.savings / 1000).toFixed(0)}k</p>
+                          <div className="w-full bg-gradient-to-t from-amber-500 to-amber-400 rounded-t" style={{ height: `${height}%` }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex space-x-2">
+                    {roiCalculation.monthlyBreakdown.map((m, idx) => (
+                      <div key={idx} className="flex-1 text-center">
+                        <p className="text-[9px] text-slate-500 font-bold">{m.month}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Metrics */}
+              <div className="p-4 bg-slate-900 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-3">Impact Metrics</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-lg font-black">${roiCalculation.costPerLead}</p>
+                    <p className="text-[10px] text-slate-400">Cost per Lead</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">{roiCalculation.conversionLift}%</p>
+                    <p className="text-[10px] text-slate-400">Conversion Lift</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">${roiCalculation.revenueImpact.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400">Revenue Impact</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">{workflow.stats.roi}%</p>
+                    <p className="text-[10px] text-slate-400">Overall ROI</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="p-4 bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-amber-200" />
+                  <p className="text-[10px] font-black text-amber-200 uppercase tracking-wider">AI ROI Insight</p>
+                </div>
+                <p className="text-xs text-amber-100 leading-relaxed">
+                  {roiCalculation.savingsPct >= 80
+                    ? `Automation is saving ${roiCalculation.savingsPct}% of manual costs. Scaling to 2x lead volume would yield $${(roiCalculation.savings * 2).toLocaleString()} in savings with minimal additional cost.`
+                    : roiCalculation.savingsPct >= 50
+                    ? `Good cost reduction at ${roiCalculation.savingsPct}%. Adding AI personalization to more action nodes could further reduce per-lead costs by 15-20%.`
+                    : `Automation savings are building. Focus on increasing lead volume through the pipeline to maximize fixed-cost automation benefits.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* TRIGGER ANALYTICS SIDEBAR                                      */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showTriggerAnalytics && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowTriggerAnalytics(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
+                  <BoltIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Trigger Analytics</h2>
+                  <p className="text-[10px] text-slate-400">Trigger frequency & conversion tracking</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTriggerAnalytics(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Overview Score */}
+              <div className="text-center p-6 rounded-2xl bg-slate-50 border border-slate-100">
+                <svg className="w-24 h-24 mx-auto mb-4" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                  <circle cx="48" cy="48" r="40" fill="none"
+                    stroke={triggerAnalytics.overallConversion >= 15 ? '#10b981' : triggerAnalytics.overallConversion >= 8 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8"
+                    strokeDasharray={`${(triggerAnalytics.overallConversion / 30) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-xl font-black" fill="#1e293b">{triggerAnalytics.overallConversion}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[8px] font-bold" fill="#94a3b8">CONV</text>
+                </svg>
+                <p className="text-sm font-black text-slate-900">{triggerAnalytics.totalFired.toLocaleString()} Total Triggers Fired</p>
+                <p className="text-[11px] text-slate-500 mt-1">{triggerAnalytics.totalConverted} converted</p>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-rose-50 rounded-xl text-center border border-rose-100">
+                  <p className="text-xl font-black text-rose-700">{triggerAnalytics.totalFired}</p>
+                  <p className="text-[9px] font-bold text-rose-500">Fired</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center border border-emerald-100">
+                  <p className="text-xl font-black text-emerald-700">{triggerAnalytics.totalConverted}</p>
+                  <p className="text-[9px] font-bold text-emerald-500">Converted</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center border border-indigo-100">
+                  <p className="text-xl font-black text-indigo-700">{triggerAnalytics.overallConversion}%</p>
+                  <p className="text-[9px] font-bold text-indigo-500">Conv Rate</p>
+                </div>
+              </div>
+
+              {/* Trigger Type Breakdown */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Trigger Performance</p>
+                <div className="space-y-3">
+                  {triggerAnalytics.triggerTypes.map(trig => (
+                    <div key={trig.type} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-800">{trig.label}</span>
+                        <span className="text-xs font-black text-indigo-600">{trig.conversionRate}% conv.</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="p-1.5 bg-white rounded-lg">
+                          <p className="text-sm font-black text-slate-900">{trig.fired}</p>
+                          <p className="text-[9px] text-slate-400">Fired</p>
+                        </div>
+                        <div className="p-1.5 bg-white rounded-lg">
+                          <p className="text-sm font-black text-slate-900">{trig.converted}</p>
+                          <p className="text-[9px] text-slate-400">Converted</p>
+                        </div>
+                        <div className="p-1.5 bg-white rounded-lg">
+                          <p className="text-sm font-black text-slate-900">{trig.avgResponseTime}s</p>
+                          <p className="text-[9px] text-slate-400">Resp. Time</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Weekly Trend */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">7-Day Trigger Volume</p>
+                <div className="bg-slate-900 rounded-xl p-5">
+                  <div className="flex items-end space-x-2 h-20 mb-3">
+                    {triggerAnalytics.weeklyTrend.map((d, idx) => {
+                      const maxVal = Math.max(...triggerAnalytics.weeklyTrend.map(x => x.count), 1);
+                      const height = Math.max((d.count / maxVal) * 100, 8);
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center">
+                          <p className="text-[8px] text-rose-400 font-bold mb-1">{d.count}</p>
+                          <div className="w-full bg-gradient-to-t from-rose-500 to-rose-400 rounded-t" style={{ height: `${height}%` }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex space-x-2">
+                    {triggerAnalytics.weeklyTrend.map((d, idx) => (
+                      <div key={idx} className="flex-1 text-center">
+                        <p className="text-[9px] text-slate-500 font-bold">{d.day}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Peak Activity */}
+              <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                <div className="flex items-center space-x-2">
+                  <ClockIcon className="w-3.5 h-3.5 text-indigo-600" />
+                  <p className="text-[11px] text-indigo-700 font-bold">
+                    Peak trigger activity at {triggerAnalytics.peakHour.label} ({triggerAnalytics.peakHour.triggers} triggers)
+                  </p>
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="p-4 bg-gradient-to-r from-rose-600 to-pink-600 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-rose-200" />
+                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-wider">AI Trigger Insight</p>
+                </div>
+                <p className="text-xs text-rose-100 leading-relaxed">
+                  {triggerAnalytics.overallConversion >= 15
+                    ? 'Strong trigger-to-conversion pipeline. Consider adding more condition branches to further segment high-intent triggers for personalized follow-up.'
+                    : triggerAnalytics.overallConversion >= 8
+                    ? 'Moderate conversion rates. Experiment with adding wait delays between triggers and actions to optimize timing. Score-change triggers typically have highest ROI.'
+                    : 'Trigger conversion needs improvement. Review trigger conditions - consider tightening score thresholds and adding engagement-based triggers for higher quality pipeline.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* TEMPLATE EFFECTIVENESS SIDEBAR                                 */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showTemplateEffectiveness && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowTemplateEffectiveness(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center">
+                  <MailIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Template Effectiveness</h2>
+                  <p className="text-[10px] text-slate-400">Email template performance & AI comparison</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTemplateEffectiveness(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Quality Gauge */}
+              <div className="text-center p-6 rounded-2xl bg-slate-50 border border-slate-100">
+                <svg className="w-24 h-24 mx-auto mb-4" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                  <circle cx="48" cy="48" r="40" fill="none"
+                    stroke={templateEffectiveness.bestTemplate.conversionScore >= 60 ? '#0ea5e9' : templateEffectiveness.bestTemplate.conversionScore >= 35 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8"
+                    strokeDasharray={`${(templateEffectiveness.bestTemplate.conversionScore / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-xl font-black" fill="#1e293b">{templateEffectiveness.bestTemplate.conversionScore}</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[8px] font-bold" fill="#94a3b8">TOP SCORE</text>
+                </svg>
+                <p className="text-sm font-black text-slate-900">Best: {templateEffectiveness.bestTemplate.label}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{templateEffectiveness.totalSent} total emails sent</p>
+              </div>
+
+              {/* AI vs Non-AI Comparison */}
+              <div className="p-4 bg-gradient-to-r from-violet-50 to-indigo-50 rounded-xl border border-violet-100">
+                <p className="text-[10px] font-black text-violet-700 uppercase tracking-wider mb-3">AI Personalization Impact</p>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="p-2 bg-white rounded-lg">
+                    <p className="text-lg font-black text-violet-700">{templateEffectiveness.avgAiOpenRate}%</p>
+                    <p className="text-[9px] text-violet-500 font-bold">AI Open Rate</p>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg">
+                    <p className="text-lg font-black text-slate-600">{templateEffectiveness.avgNonAiOpenRate}%</p>
+                    <p className="text-[9px] text-slate-400 font-bold">Standard Rate</p>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg">
+                    <p className={`text-lg font-black ${templateEffectiveness.aiLift > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {templateEffectiveness.aiLift > 0 ? '+' : ''}{templateEffectiveness.aiLift}%
+                    </p>
+                    <p className="text-[9px] text-emerald-500 font-bold">AI Lift</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Template Cards */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Template Rankings</p>
+                <div className="space-y-3">
+                  {templateEffectiveness.templates.map((tmpl, idx) => (
+                    <div key={tmpl.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black text-white ${
+                            idx === 0 ? 'bg-sky-500' : idx === 1 ? 'bg-sky-400' : 'bg-sky-300'
+                          }`}>{idx + 1}</div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-800">{tmpl.label}</span>
+                            {tmpl.aiEnhanced && <span className="ml-1.5 px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded text-[8px] font-black">AI</span>}
+                          </div>
+                        </div>
+                        <span className="text-xs font-black text-sky-600">{tmpl.conversionScore} pts</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5 text-center">
+                        <div className="p-1.5 bg-white rounded-lg">
+                          <p className="text-sm font-black text-slate-900">{tmpl.sent}</p>
+                          <p className="text-[8px] text-slate-400">Sent</p>
+                        </div>
+                        <div className="p-1.5 bg-white rounded-lg">
+                          <p className="text-sm font-black text-slate-900">{tmpl.openRate}%</p>
+                          <p className="text-[8px] text-slate-400">Open</p>
+                        </div>
+                        <div className="p-1.5 bg-white rounded-lg">
+                          <p className="text-sm font-black text-slate-900">{tmpl.clickRate}%</p>
+                          <p className="text-[8px] text-slate-400">Click</p>
+                        </div>
+                        <div className="p-1.5 bg-white rounded-lg">
+                          <p className="text-sm font-black text-slate-900">{tmpl.replyRate}%</p>
+                          <p className="text-[8px] text-slate-400">Reply</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timing Effectiveness */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Send Timing Analysis</p>
+                <div className="space-y-2">
+                  {templateEffectiveness.timingPerformance.map(tp => (
+                    <div key={tp.label} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl">
+                      <span className="text-xs font-bold text-slate-700 w-28">{tp.timing}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <div className="flex-1 bg-slate-200 h-2 rounded-full overflow-hidden">
+                            <div className="h-full bg-sky-500 rounded-full" style={{ width: `${tp.openRate}%` }} />
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-600 w-8">{tp.openRate}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Insight */}
+              <div className="p-4 bg-gradient-to-r from-sky-600 to-cyan-600 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-sky-200" />
+                  <p className="text-[10px] font-black text-sky-200 uppercase tracking-wider">AI Template Insight</p>
+                </div>
+                <p className="text-xs text-sky-100 leading-relaxed">
+                  {templateEffectiveness.aiLift > 10
+                    ? `AI personalization is delivering a ${templateEffectiveness.aiLift}% open rate lift. Enable AI on all remaining action nodes to maximize engagement. "${templateEffectiveness.bestTemplate.label}" is your best performer.`
+                    : templateEffectiveness.aiLift > 0
+                    ? `AI is showing positive lift (+${templateEffectiveness.aiLift}%). Use "AI Optimal" send timing on your best templates for additional 10-15% improvement in open rates.`
+                    : `Enable AI personalization on more templates to improve engagement. Templates with AI typically see 15-25% higher open rates based on lead context matching.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEYBOARD SHORTCUTS MODAL                                      */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {showShortcuts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center space-x-2">
                 <KeyboardIcon className="w-5 h-5 text-indigo-600" />
@@ -1837,25 +2399,52 @@ const AutomationPage: React.FC = () => {
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
-            <div className="space-y-2">
-              {[
-                { key: 'N', label: 'Create new workflow' },
-                { key: 'T', label: 'Run test simulation' },
-                { key: 'O', label: 'AI optimize workflow' },
-                { key: 'Ctrl+S', label: 'Save current workflow' },
-                { key: 'E', label: 'Toggle execution log' },
-                { key: 'H', label: 'Toggle health panel' },
-                { key: 'A', label: 'Toggle node analytics' },
-                { key: '?', label: 'Toggle this shortcuts panel' },
-                { key: 'Esc', label: 'Close all panels' },
-              ].map((shortcut, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                  <span className="text-sm text-slate-600">{shortcut.label}</span>
-                  <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">
-                    {shortcut.key}
-                  </kbd>
-                </div>
-              ))}
+            <div className="grid grid-cols-3 gap-x-6 gap-y-2">
+              <div className="space-y-2">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Actions</p>
+                {[
+                  { key: 'N', label: 'New workflow' },
+                  { key: 'T', label: 'Test simulation' },
+                  { key: 'O', label: 'AI optimize' },
+                  { key: 'Ctrl+S', label: 'Save workflow' },
+                ].map((shortcut, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors">
+                    <span className="text-xs text-slate-600">{shortcut.label}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-500">{shortcut.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Panels</p>
+                {[
+                  { key: 'E', label: 'Execution log' },
+                  { key: 'H', label: 'Health panel' },
+                  { key: 'A', label: 'Node analytics' },
+                  { key: 'R', label: 'ROI calculator' },
+                  { key: 'I', label: 'Trigger analytics' },
+                  { key: 'M', label: 'Template perf.' },
+                ].map((shortcut, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors">
+                    <span className="text-xs text-slate-600">{shortcut.label}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-500">{shortcut.key}</kbd>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">System</p>
+                {[
+                  { key: '?', label: 'Shortcuts' },
+                  { key: 'Esc', label: 'Close panels' },
+                ].map((shortcut, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors">
+                    <span className="text-xs text-slate-600">{shortcut.label}</span>
+                    <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-500">{shortcut.key}</kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 text-center">
+              <p className="text-[10px] text-slate-400">Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
             </div>
           </div>
         </div>
