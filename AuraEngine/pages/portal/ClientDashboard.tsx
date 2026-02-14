@@ -312,7 +312,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       switch (e.key) {
         case 'n': case 'N': e.preventDefault(); setIsAddLeadOpen(true); break;
         case 'i': case 'I': e.preventDefault(); setIsCSVOpen(true); break;
-        case 'g': case 'G': e.preventDefault(); if (leads.length > 0) openGenModal(leads[0]); break;
+        case 'g': case 'G': e.preventDefault(); if (leads.length > 0) openGenModal(); break;
         case 'p': case 'P': e.preventDefault(); setShowPipelineHealth(true); break;
         case 'v': case 'V': e.preventDefault(); setShowLeadVelocity(true); break;
         case 't': case 'T': e.preventDefault(); setShowGoalTracker(true); break;
@@ -414,8 +414,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     }
   };
 
-  const openGenModal = (lead: Lead) => {
-    setSelectedLeadForGen(lead);
+  const openGenModal = (lead?: Lead) => {
+    setSelectedLeadForGen(lead || leads[0] || null);
     setGenResult('');
     setGenError('');
     setIsGenModalOpen(true);
@@ -666,7 +666,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       <div className="flex items-center justify-between">
         <QuickActionsBar
           onImportCSV={() => setIsCSVOpen(true)}
-          onGenerateContent={() => { if (leads.length > 0) openGenModal(leads[0]); }}
+          onGenerateContent={() => { if (leads.length > 0) openGenModal(); }}
         />
         <button
           onClick={() => setIsAddLeadOpen(true)}
@@ -782,7 +782,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <span>Add New Lead</span>
               </button>
               <button
-                onClick={() => { if (leads.length > 0) openGenModal(leads[0]); }}
+                onClick={() => { if (leads.length > 0) openGenModal(); }}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors font-semibold text-sm"
               >
                 <SparklesIcon className="w-4 h-4" />
@@ -1046,9 +1046,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {isGenModalOpen && selectedLeadForGen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => !isGenerating && setIsGenModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="flex flex-col md:flex-row h-full">
-              <div className="w-full md:w-1/2 p-10 border-r border-slate-100">
+          <div className="relative bg-white w-full max-w-4xl max-h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="flex flex-col md:flex-row h-full max-h-[85vh]">
+              <div className="w-full md:w-1/2 p-10 border-r border-slate-100 overflow-y-auto">
                 <div className="flex items-center space-x-3 mb-8">
                   <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
                     <SparklesIcon className="w-6 h-6" />
@@ -1059,6 +1059,24 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                   </div>
                 </div>
                 <div className="space-y-8">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Select Lead</p>
+                    <select
+                      value={selectedLeadForGen.id}
+                      onChange={(e) => {
+                        const picked = leads.find(l => l.id === e.target.value);
+                        if (picked) { setSelectedLeadForGen(picked); setGenResult(''); setGenError(''); }
+                      }}
+                      disabled={isGenerating}
+                      className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 outline-none focus:border-indigo-300 transition-colors appearance-none cursor-pointer disabled:opacity-50"
+                    >
+                      {leads.map(l => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} — {l.company} (Score: {l.score})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Target Context</p>
                     <p className="text-sm font-bold text-slate-800 mb-1">{selectedLeadForGen.company}</p>
