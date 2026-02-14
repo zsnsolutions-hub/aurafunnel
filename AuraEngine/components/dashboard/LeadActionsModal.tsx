@@ -92,7 +92,15 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
     ? Math.floor((new Date().getTime() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60 * 24))
     : null;
 
-  const statuses: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Lost'];
+  const statuses: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted', 'Lost'];
+  const PIPELINE_STAGES: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted'];
+  const STAGE_COLORS: Record<Lead['status'], { bg: string; text: string; ring: string }> = {
+    New: { bg: 'bg-slate-500', text: 'text-slate-700', ring: 'ring-slate-400' },
+    Contacted: { bg: 'bg-blue-500', text: 'text-blue-700', ring: 'ring-blue-400' },
+    Qualified: { bg: 'bg-amber-500', text: 'text-amber-700', ring: 'ring-amber-400' },
+    Converted: { bg: 'bg-emerald-500', text: 'text-emerald-700', ring: 'ring-emerald-400' },
+    Lost: { bg: 'bg-red-500', text: 'text-red-700', ring: 'ring-red-400' },
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-end">
@@ -118,9 +126,10 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
                   </div>
                   <span className="text-xs font-bold text-slate-600">Score: {lead.score}</span>
                   <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${
-                    lead.status === 'Qualified' ? 'bg-indigo-50 text-indigo-600' :
-                    lead.status === 'New' ? 'bg-blue-50 text-blue-600' :
-                    lead.status === 'Contacted' ? 'bg-amber-50 text-amber-600' :
+                    lead.status === 'New' ? 'bg-slate-50 text-slate-600' :
+                    lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
+                    lead.status === 'Qualified' ? 'bg-amber-50 text-amber-600' :
+                    lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-600' :
                     'bg-red-50 text-red-600'
                   }`}>{lead.status}</span>
                 </div>
@@ -130,6 +139,56 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
               <XIcon className="w-5 h-5" />
             </button>
           </div>
+        </div>
+
+        {/* Pipeline Stepper */}
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center">
+            {PIPELINE_STAGES.map((stage, i) => {
+              const currentIdx = PIPELINE_STAGES.indexOf(lead.status);
+              const isLost = lead.status === 'Lost';
+              const isCompleted = !isLost && currentIdx >= 0 && i < currentIdx;
+              const isCurrent = !isLost && i === currentIdx;
+              const colors = STAGE_COLORS[stage];
+              return (
+                <React.Fragment key={stage}>
+                  {i > 0 && (
+                    <div className={`flex-1 h-0.5 mx-1 rounded-full ${
+                      isCompleted || isCurrent ? colors.bg : 'bg-slate-200'
+                    }`} />
+                  )}
+                  <div className="flex flex-col items-center">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                      isCompleted ? `${colors.bg} text-white` :
+                      isCurrent ? `${colors.bg} text-white ring-3 ${colors.ring}/30` :
+                      'bg-slate-200 text-slate-400'
+                    }`}>
+                      {isCompleted ? (
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <span className="text-[8px] font-black">{i + 1}</span>
+                      )}
+                    </div>
+                    <span className={`mt-1 text-[8px] font-bold ${
+                      isCompleted || isCurrent ? colors.text : 'text-slate-400'
+                    }`}>{stage}</span>
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+          {lead.status === 'Lost' && (
+            <div className="flex items-center justify-center mt-2">
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 bg-red-50 text-red-600 rounded text-[9px] font-bold">
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Lost</span>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -238,7 +297,7 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
                     <p className="text-xs text-slate-400">Move through pipeline</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-2">
                   {statuses.map(s => (
                     <button
                       key={s}

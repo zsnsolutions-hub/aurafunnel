@@ -203,10 +203,30 @@ const LeadProfile: React.FC = () => {
     setTimeout(() => setActionFeedback(null), 2500);
   };
 
+  const PIPELINE_STAGES: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted'];
+  const STAGE_COLORS: Record<Lead['status'], { bg: string; text: string; ring: string }> = {
+    New: { bg: 'bg-slate-500', text: 'text-slate-700', ring: 'ring-slate-400' },
+    Contacted: { bg: 'bg-blue-500', text: 'text-blue-700', ring: 'ring-blue-400' },
+    Qualified: { bg: 'bg-amber-500', text: 'text-amber-700', ring: 'ring-amber-400' },
+    Converted: { bg: 'bg-emerald-500', text: 'text-emerald-700', ring: 'ring-emerald-400' },
+    Lost: { bg: 'bg-red-500', text: 'text-red-700', ring: 'ring-red-400' },
+  };
+
+  const getNextStage = (currentStatus: Lead['status']): Lead['status'] | null => {
+    const idx = PIPELINE_STAGES.indexOf(currentStatus);
+    if (idx === -1 || idx >= PIPELINE_STAGES.length - 1) return null;
+    return PIPELINE_STAGES[idx + 1];
+  };
+
   const handleStatusChange = async (newStatus: Lead['status']) => {
     if (!lead) return;
-    await supabase.from('leads').update({ status: newStatus }).eq('id', lead.id);
+    await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', lead.id);
     setLead({ ...lead, status: newStatus });
+    await supabase.from('audit_logs').insert({
+      user_id: user.id,
+      action: 'LEAD_STATUS_UPDATED',
+      details: `${lead.name} moved to ${newStatus}`
+    });
     showFeedback(`Status updated to ${newStatus}`);
     setMenuOpen(false);
   };
@@ -423,7 +443,7 @@ const LeadProfile: React.FC = () => {
           {menuOpen && (
             <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-48 overflow-hidden">
               <p className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Change Status</p>
-              {(['New', 'Contacted', 'Qualified', 'Lost'] as Lead['status'][]).map(s => (
+              {(['New', 'Contacted', 'Qualified', 'Converted', 'Lost'] as Lead['status'][]).map(s => (
                 <button key={s} onClick={() => handleStatusChange(s)} className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-indigo-50 hover:text-indigo-600 transition-colors ${lead.status === s ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-700'}`}>
                   {s}
                 </button>
@@ -446,6 +466,97 @@ const LeadProfile: React.FC = () => {
           <span>{actionFeedback}</span>
         </div>
       )}
+
+      {/* ── Pipeline Stepper ── */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pipeline Progress</h3>
+          {lead.status === 'Lost' && (
+            <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span>Lost</span>
+            </span>
+          )}
+        </div>
+        <div className="flex items-center">
+          {PIPELINE_STAGES.map((stage, i) => {
+            const currentIdx = PIPELINE_STAGES.indexOf(lead.status);
+            const isLost = lead.status === 'Lost';
+            const isCompleted = !isLost && currentIdx >= 0 && i < currentIdx;
+            const isCurrent = !isLost && i === currentIdx;
+            const isFuture = isLost || i > currentIdx;
+            const colors = STAGE_COLORS[stage];
+            return (
+              <React.Fragment key={stage}>
+                {i > 0 && (
+                  <div className={`flex-1 h-0.5 mx-1 rounded-full transition-all ${
+                    isCompleted || isCurrent ? colors.bg : 'bg-slate-200'
+                  }`} />
+                )}
+                <div className="flex flex-col items-center">
+                  <div className={`relative w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                    isCompleted ? `${colors.bg} text-white` :
+                    isCurrent ? `${colors.bg} text-white ring-4 ${colors.ring}/30 animate-pulse` :
+                    'bg-slate-100 text-slate-400'
+                  }`}>
+                    {isCompleted ? (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className="text-[10px] font-black">{i + 1}</span>
+                    )}
+                  </div>
+                  <span className={`mt-1.5 text-[10px] font-bold ${
+                    isCompleted || isCurrent ? colors.text : 'text-slate-400'
+                  }`}>{stage}</span>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+        {/* Advance / Mark Lost Buttons */}
+        <div className="flex items-center space-x-3 mt-5 pt-4 border-t border-slate-100">
+          {(() => {
+            const nextStage = getNextStage(lead.status);
+            if (nextStage) {
+              return (
+                <button
+                  onClick={() => handleStatusChange(nextStage)}
+                  className="inline-flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                  <span>Advance to {nextStage}</span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              );
+            }
+            return null;
+          })()}
+          {lead.status !== 'Lost' && (
+            <button
+              onClick={() => handleStatusChange('Lost')}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span>Mark Lost</span>
+            </button>
+          )}
+          {lead.status === 'Lost' && (
+            <button
+              onClick={() => handleStatusChange('New')}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+            >
+              <span>Re-open as New</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ── Main Layout: Content (left) + Quick Actions (right) ── */}
       <div className="flex flex-col lg:flex-row gap-6">
@@ -486,9 +597,10 @@ const LeadProfile: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Status</span>
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                        lead.status === 'Qualified' ? 'bg-indigo-50 text-indigo-600' :
-                        lead.status === 'New' ? 'bg-blue-50 text-blue-600' :
-                        lead.status === 'Contacted' ? 'bg-amber-50 text-amber-600' :
+                        lead.status === 'New' ? 'bg-slate-50 text-slate-600' :
+                        lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
+                        lead.status === 'Qualified' ? 'bg-amber-50 text-amber-600' :
+                        lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-600' :
                         'bg-red-50 text-red-600'
                       }`}>{lead.status}</span>
                     </div>

@@ -34,7 +34,7 @@ export interface Lead {
   company: string;
   email: string;
   score: number;
-  status: 'New' | 'Contacted' | 'Qualified' | 'Lost';
+  status: 'New' | 'Contacted' | 'Qualified' | 'Converted' | 'Lost';
   lastActivity: string;
   insights: string;
   created_at?: string;

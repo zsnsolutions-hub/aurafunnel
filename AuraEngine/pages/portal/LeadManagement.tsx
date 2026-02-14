@@ -105,7 +105,15 @@ const getScoreAction = (score: number): { tier: string; color: string; actions: 
 };
 
 const ALL_TAGS: LeadTag[] = ['Hot Lead', 'Cold', 'Nurturing', 'Enterprise', 'Critical', 'Warm'];
-const STATUS_OPTIONS: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Lost'];
+const STATUS_OPTIONS: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted', 'Lost'];
+const PIPELINE_STAGES: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted'];
+const STAGE_COLORS: Record<Lead['status'], { dot: string; active: string }> = {
+  New: { dot: 'bg-slate-400', active: 'bg-slate-500' },
+  Contacted: { dot: 'bg-blue-400', active: 'bg-blue-500' },
+  Qualified: { dot: 'bg-amber-400', active: 'bg-amber-500' },
+  Converted: { dot: 'bg-emerald-400', active: 'bg-emerald-500' },
+  Lost: { dot: 'bg-red-400', active: 'bg-red-500' },
+};
 const ACTIVITY_OPTIONS = ['Today', 'This Week', 'This Month', 'All Time'] as const;
 const COMPANY_SIZES = ['1-10', '11-50', '51-200', '201-500', '500+'] as const;
 const CAMPAIGNS = ['Q4 Tech Nurture', 'Enterprise Outreach', 'Product Launch', 'Re-engagement', 'Cold Outreach'] as const;
@@ -350,7 +358,7 @@ const LeadManagement: React.FC = () => {
 
   // ── Kanban Grouped Leads ──
   const kanbanColumns = useMemo(() => {
-    const columns: Record<Lead['status'], Lead[]> = { New: [], Contacted: [], Qualified: [], Lost: [] };
+    const columns: Record<Lead['status'], Lead[]> = { New: [], Contacted: [], Qualified: [], Converted: [], Lost: [] };
     filteredLeads.forEach(l => { if (columns[l.status]) columns[l.status].push(l); });
     return columns;
   }, [filteredLeads]);
@@ -408,13 +416,25 @@ const LeadManagement: React.FC = () => {
   };
 
   const handleStatusUpdate = async (leadId: string, newStatus: Lead['status']) => {
+    const lead = allLeads.find(l => l.id === leadId);
     setAllLeads(prev => prev.map(l =>
       l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
     ));
     if (selectedLead?.id === leadId) {
       setSelectedLead({ ...selectedLead, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
     }
-    await supabase.from('leads').update({ status: newStatus }).eq('id', leadId);
+    await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', leadId);
+    await supabase.from('audit_logs').insert({
+      user_id: user.id,
+      action: 'LEAD_STATUS_UPDATED',
+      details: `${lead?.name || 'Lead'} moved to ${newStatus}`
+    });
+  };
+
+  const getNextStage = (currentStatus: Lead['status']): Lead['status'] | null => {
+    const idx = PIPELINE_STAGES.indexOf(currentStatus);
+    if (idx === -1 || idx >= PIPELINE_STAGES.length - 1) return null;
+    return PIPELINE_STAGES[idx + 1];
   };
 
   const handleExportSelected = () => {
@@ -1234,13 +1254,14 @@ const LeadManagement: React.FC = () => {
 
           {/* Kanban / Pipeline View */}
           {viewMode === 'kanban' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               {(STATUS_OPTIONS as readonly Lead['status'][]).map(status => {
                 const statusColors: Record<string, { bg: string; border: string; badge: string; dot: string }> = {
-                  New: { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+                  New: { bg: 'bg-slate-50', border: 'border-slate-200', badge: 'bg-slate-100 text-slate-700', dot: 'bg-slate-500' },
                   Contacted: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
-                  Qualified: { bg: 'bg-violet-50', border: 'border-violet-200', badge: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
-                  Lost: { bg: 'bg-slate-50', border: 'border-slate-200', badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
+                  Qualified: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+                  Converted: { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+                  Lost: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-600', dot: 'bg-red-400' },
                 };
                 const sc = statusColors[status] || statusColors.New;
                 const leads = kanbanColumns[status] || [];
@@ -1260,30 +1281,48 @@ const LeadManagement: React.FC = () => {
                         <p className="text-xs text-slate-400 italic text-center py-8">No leads</p>
                       ) : leads.map(lead => {
                         const tag = getLeadTag(lead);
+                        const nextStage = getNextStage(lead.status);
                         return (
-                          <button
+                          <div
                             key={lead.id}
-                            onClick={() => navigate(`/portal/leads/${lead.id}`)}
                             className="w-full text-left bg-white rounded-xl border border-slate-100 p-3.5 hover:shadow-md hover:border-indigo-200 transition-all group"
                           >
-                            <div className="flex items-center space-x-2.5 mb-2">
-                              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-[10px] text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors flex-shrink-0">
-                                {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                            <button
+                              onClick={() => navigate(`/portal/leads/${lead.id}`)}
+                              className="w-full text-left"
+                            >
+                              <div className="flex items-center space-x-2.5 mb-2">
+                                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-[10px] text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors flex-shrink-0">
+                                  {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
+                                  <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
+                                </div>
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
-                                <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
+                              <div className="flex items-center justify-between">
+                                <StarRating score={lead.score} />
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${TAG_COLORS[tag]}`}>{tag}</span>
                               </div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <StarRating score={lead.score} />
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${TAG_COLORS[tag]}`}>{tag}</span>
-                            </div>
+                            </button>
                             <div className="mt-2 flex items-center justify-between">
                               <span className="text-[10px] text-slate-400">{formatRelativeTime(lead.created_at || lead.lastActivity)}</span>
-                              <span className="text-[10px] font-black text-slate-600">{lead.score}</span>
+                              {nextStage ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleStatusUpdate(lead.id, nextStage); }}
+                                  className="inline-flex items-center space-x-1 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-colors"
+                                  title={`Advance to ${nextStage}`}
+                                >
+                                  <span>{nextStage}</span>
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </button>
+                              ) : (
+                                <span className="text-[10px] font-black text-slate-600">{lead.score}</span>
+                              )}
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1403,15 +1442,33 @@ const LeadManagement: React.FC = () => {
                             <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border ${TAG_COLORS[tag]}`}>
                               {tag}
                             </span>
+                            {/* Pipeline Mini Dots */}
+                            <div className="flex items-center space-x-0.5" title={lead.status}>
+                              {PIPELINE_STAGES.map((stage, i) => {
+                                const stageIdx = PIPELINE_STAGES.indexOf(lead.status);
+                                const isLost = lead.status === 'Lost';
+                                const isCompleted = !isLost && stageIdx >= 0 && i <= stageIdx;
+                                return (
+                                  <div
+                                    key={stage}
+                                    className={`w-1.5 h-1.5 rounded-full transition-all ${
+                                      isLost ? 'bg-red-300' :
+                                      isCompleted ? STAGE_COLORS[stage].active : 'bg-slate-200'
+                                    }`}
+                                  />
+                                );
+                              })}
+                            </div>
                             {/* Inline Status */}
                             <div className="relative">
                               <button
                                 onClick={(e) => { e.stopPropagation(); setInlineStatusId(inlineStatusId === lead.id ? null : lead.id); }}
                                 className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all ${
-                                  lead.status === 'New' ? 'bg-emerald-50 text-emerald-600' :
+                                  lead.status === 'New' ? 'bg-slate-50 text-slate-600' :
                                   lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
-                                  lead.status === 'Qualified' ? 'bg-violet-50 text-violet-600' :
-                                  'bg-slate-50 text-slate-500'
+                                  lead.status === 'Qualified' ? 'bg-amber-50 text-amber-600' :
+                                  lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-600' :
+                                  'bg-red-50 text-red-500'
                                 } hover:ring-1 hover:ring-indigo-200`}
                               >
                                 {lead.status}
