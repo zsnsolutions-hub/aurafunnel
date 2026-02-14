@@ -7,7 +7,7 @@ import {
   ClockIcon, PlusIcon, XIcon, EditIcon, TagIcon, TargetIcon, FlameIcon,
   BellIcon, CalendarIcon, MessageIcon, ArrowRightIcon, RefreshIcon,
   CogIcon, EyeIcon, TrendUpIcon, TrendDownIcon, ActivityIcon, AlertTriangleIcon, BrainIcon,
-  KeyboardIcon, StarIcon, FilterIcon, LayersIcon
+  KeyboardIcon, StarIcon, FilterIcon, LayersIcon, PieChartIcon, RocketIcon, DocumentIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -236,6 +236,9 @@ const StrategyHub: React.FC = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
   const [showWorkload, setShowWorkload] = useState(false);
+  const [showTeamVelocity, setShowTeamVelocity] = useState(false);
+  const [showCommunicationHub, setShowCommunicationHub] = useState(false);
+  const [showRiskAssessment, setShowRiskAssessment] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'my' | 'urgent' | 'overdue'>('all');
 
   // ─── Routine checklist ───
@@ -383,6 +386,84 @@ const StrategyHub: React.FC = () => {
     });
   }, [tasks, taskFilter]);
 
+  // ─── Team Velocity ───
+  const teamVelocity = useMemo(() => {
+    const completedTasks = tasks.filter(t => t.completed).length;
+    const totalTasks = tasks.length;
+    const velocityScore = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const dailyData = [
+      { day: 'Mon', completed: Math.floor(Math.random() * 4) + 2, created: Math.floor(Math.random() * 3) + 1 },
+      { day: 'Tue', completed: Math.floor(Math.random() * 5) + 1, created: Math.floor(Math.random() * 4) + 2 },
+      { day: 'Wed', completed: Math.floor(Math.random() * 4) + 3, created: Math.floor(Math.random() * 3) + 1 },
+      { day: 'Thu', completed: Math.floor(Math.random() * 6) + 2, created: Math.floor(Math.random() * 4) + 1 },
+      { day: 'Fri', completed: Math.floor(Math.random() * 5) + 2, created: Math.floor(Math.random() * 3) + 2 },
+    ];
+    const avgCompleted = Math.round(dailyData.reduce((s, d) => s + d.completed, 0) / dailyData.length);
+    const avgCreated = Math.round(dailyData.reduce((s, d) => s + d.created, 0) / dailyData.length);
+    const netVelocity = avgCompleted - avgCreated;
+    const sprintBurndown = MOCK_SPRINT_GOALS.map(g => ({
+      name: g.title.substring(0, 15) + (g.title.length > 15 ? '...' : ''),
+      remaining: g.target - g.current,
+      total: g.target,
+      pct: Math.round((g.current / g.target) * 100),
+    }));
+    const daysLeft = 15;
+    const remainingWork = MOCK_SPRINT_GOALS.reduce((s, g) => s + (g.target - g.current), 0);
+    const requiredDailyRate = daysLeft > 0 ? Math.ceil(remainingWork / daysLeft) : 0;
+    return { velocityScore, dailyData, avgCompleted, avgCreated, netVelocity, sprintBurndown, requiredDailyRate, remainingWork, daysLeft };
+  }, [tasks]);
+
+  // ─── Communication Metrics ───
+  const communicationMetrics = useMemo(() => {
+    const totalNotes = notes.length;
+    const totalReplies = notes.reduce((s, n) => s + n.replies.length, 0);
+    const totalMentions = notes.reduce((s, n) => s + n.mentions.length, 0);
+    const mentionsByPerson: Record<string, number> = {};
+    notes.forEach(n => {
+      n.mentions.forEach(m => { mentionsByPerson[m] = (mentionsByPerson[m] || 0) + 1; });
+    });
+    const topMentioned = Object.entries(mentionsByPerson).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const notesByAuthor: Record<string, number> = {};
+    notes.forEach(n => { notesByAuthor[n.author] = (notesByAuthor[n.author] || 0) + 1; });
+    const topAuthors = Object.entries(notesByAuthor).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const avgRepliesPerNote = totalNotes > 0 ? (totalReplies / totalNotes).toFixed(1) : '0';
+    const notesWithLeads = notes.filter(n => n.leadName).length;
+    const collaborationScore = Math.min(Math.round(((totalReplies * 3 + totalMentions * 2 + totalNotes) / Math.max(team.length, 1)) * 10), 100);
+    const hourlyActivity = [
+      { hour: '9am', count: 3 }, { hour: '10am', count: 5 }, { hour: '11am', count: 4 },
+      { hour: '12pm', count: 2 }, { hour: '1pm', count: 3 }, { hour: '2pm', count: 6 },
+      { hour: '3pm', count: 4 }, { hour: '4pm', count: 3 }, { hour: '5pm', count: 1 },
+    ];
+    return { totalNotes, totalReplies, totalMentions, topMentioned, topAuthors, avgRepliesPerNote, notesWithLeads, collaborationScore, hourlyActivity };
+  }, [notes, team]);
+
+  // ─── Risk Assessment ───
+  const riskAssessment = useMemo(() => {
+    const overdueTasks = tasks.filter(t => !t.completed && new Date(t.deadline) < new Date());
+    const urgentUnfinished = tasks.filter(t => !t.completed && t.priority === 'urgent');
+    const highPriorityCount = tasks.filter(t => !t.completed && t.priority === 'high').length;
+    const unresolvedConflicts = conflicts.filter(c => c.status === 'active');
+    const overloadedMembers = workloadDistribution.filter(w => w.loadStatus === 'overloaded');
+    const offlineMembers = team.filter(t => t.status === 'offline');
+    const sprintAtRisk = MOCK_SPRINT_GOALS.filter(g => {
+      const pct = (g.current / g.target) * 100;
+      return pct < 50;
+    });
+
+    const risks: { id: string; severity: 'critical' | 'high' | 'medium' | 'low'; category: string; title: string; description: string; action: string }[] = [];
+    if (overdueTasks.length > 0) risks.push({ id: 'r1', severity: 'critical', category: 'Tasks', title: `${overdueTasks.length} Overdue Task${overdueTasks.length > 1 ? 's' : ''}`, description: `Tasks past deadline: ${overdueTasks.map(t => t.title.substring(0, 30)).join(', ')}`, action: 'Reassign or escalate immediately' });
+    if (urgentUnfinished.length > 0) risks.push({ id: 'r2', severity: 'critical', category: 'Tasks', title: `${urgentUnfinished.length} Urgent Task${urgentUnfinished.length > 1 ? 's' : ''} Pending`, description: 'Urgent priority tasks need immediate attention', action: 'Focus team resources on urgent items' });
+    if (unresolvedConflicts.length > 0) risks.push({ id: 'r3', severity: 'high', category: 'Conflicts', title: `${unresolvedConflicts.length} Unresolved Conflict${unresolvedConflicts.length > 1 ? 's' : ''}`, description: 'Lead conflicts can cause customer confusion', action: 'Resolve in Conflicts tab' });
+    if (overloadedMembers.length > 0) risks.push({ id: 'r4', severity: 'high', category: 'Capacity', title: `${overloadedMembers.length} Team Member${overloadedMembers.length > 1 ? 's' : ''} Overloaded`, description: `${overloadedMembers.map(m => m.name).join(', ')} at capacity`, action: 'Redistribute leads or defer low-priority tasks' });
+    if (offlineMembers.length > 1) risks.push({ id: 'r5', severity: 'medium', category: 'Availability', title: `${offlineMembers.length} Members Offline`, description: 'Reduced team coverage may affect response time', action: 'Verify planned absences or follow up' });
+    if (sprintAtRisk.length > 0) risks.push({ id: 'r6', severity: 'high', category: 'Sprint', title: `${sprintAtRisk.length} Sprint Goal${sprintAtRisk.length > 1 ? 's' : ''} At Risk`, description: `Goals below 50% completion: ${sprintAtRisk.map(g => g.title).join(', ')}`, action: 'Increase daily throughput or adjust targets' });
+    if (highPriorityCount > 3) risks.push({ id: 'r7', severity: 'medium', category: 'Priorities', title: 'High Priority Overload', description: `${highPriorityCount} high-priority tasks competing for attention`, action: 'Re-prioritize or stagger deadlines' });
+    if (risks.length === 0) risks.push({ id: 'r0', severity: 'low', category: 'Status', title: 'All Clear', description: 'No significant risks detected', action: 'Maintain current pace' });
+
+    const riskScore = Math.max(0, 100 - (risks.filter(r => r.severity === 'critical').length * 25) - (risks.filter(r => r.severity === 'high').length * 15) - (risks.filter(r => r.severity === 'medium').length * 8));
+    return { risks, riskScore, overdueTasks, urgentUnfinished, unresolvedConflicts, overloadedMembers, sprintAtRisk };
+  }, [tasks, conflicts, workloadDistribution, team]);
+
   // ─── Keyboard Shortcuts ───
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -394,6 +475,9 @@ const StrategyHub: React.FC = () => {
         if (showShortcuts) { setShowShortcuts(false); return; }
         if (showPerformance) { setShowPerformance(false); return; }
         if (showWorkload) { setShowWorkload(false); return; }
+        if (showTeamVelocity) { setShowTeamVelocity(false); return; }
+        if (showCommunicationHub) { setShowCommunicationHub(false); return; }
+        if (showRiskAssessment) { setShowRiskAssessment(false); return; }
         return;
       }
 
@@ -405,6 +489,9 @@ const StrategyHub: React.FC = () => {
         'n': () => setShowNewTask(true),
         'p': () => setShowPerformance(prev => !prev),
         'w': () => setShowWorkload(prev => !prev),
+        't': () => setShowTeamVelocity(prev => !prev),
+        'm': () => setShowCommunicationHub(prev => !prev),
+        'r': () => setShowRiskAssessment(prev => !prev),
         '?': () => setShowShortcuts(prev => !prev),
       };
 
@@ -416,7 +503,7 @@ const StrategyHub: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showNewTask, showShortcuts, showPerformance, showWorkload]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showNewTask, showShortcuts, showPerformance, showWorkload, showTeamVelocity, showCommunicationHub, showRiskAssessment]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabs: { id: TabView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'dashboard', label: 'Team Dashboard', icon: <UsersIcon className="w-4 h-4" /> },
@@ -463,6 +550,27 @@ const StrategyHub: React.FC = () => {
           >
             <LayersIcon className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Workload</span>
+          </button>
+          <button
+            onClick={() => setShowTeamVelocity(prev => !prev)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTeamVelocity ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <RocketIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Velocity</span>
+          </button>
+          <button
+            onClick={() => setShowCommunicationHub(prev => !prev)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCommunicationHub ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <MailIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Comms</span>
+          </button>
+          <button
+            onClick={() => setShowRiskAssessment(prev => !prev)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showRiskAssessment ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <ShieldIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Risk</span>
           </button>
           <button
             onClick={() => setShowShortcuts(true)}
@@ -1236,6 +1344,373 @@ const StrategyHub: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* TEAM VELOCITY SIDEBAR                                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showTeamVelocity && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowTeamVelocity(false)}>
+          <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-100 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-sm z-10">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <RocketIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 font-heading">Team Velocity</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Task throughput &amp; sprint burndown</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTeamVelocity(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <XIcon className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Velocity Gauge */}
+              <div className="text-center">
+                <svg viewBox="0 0 96 96" className="w-28 h-28 mx-auto">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="8" />
+                  <circle cx="48" cy="48" r="40" fill="none"
+                    stroke={teamVelocity.velocityScore >= 70 ? '#10b981' : teamVelocity.velocityScore >= 40 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${(teamVelocity.velocityScore / 100) * 251.2} 251.2`}
+                    transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="fill-slate-900" style={{ fontSize: '20px', fontWeight: 'bold' }}>{teamVelocity.velocityScore}</text>
+                  <text x="48" y="58" textAnchor="middle" className="fill-slate-400" style={{ fontSize: '8px' }}>VELOCITY</text>
+                </svg>
+                <div className="flex items-center justify-center space-x-4 mt-2">
+                  <div className="text-center">
+                    <p className="text-lg font-black text-emerald-600">{teamVelocity.avgCompleted}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">Avg/Day Done</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-black text-indigo-600">{teamVelocity.avgCreated}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">Avg/Day New</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`text-lg font-black ${teamVelocity.netVelocity >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{teamVelocity.netVelocity > 0 ? '+' : ''}{teamVelocity.netVelocity}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">Net/Day</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Daily Throughput Chart */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Weekly Throughput</h4>
+                <div className="space-y-2">
+                  {teamVelocity.dailyData.map((d, i) => {
+                    const maxVal = Math.max(...teamVelocity.dailyData.map(v => Math.max(v.completed, v.created)), 1);
+                    return (
+                      <div key={i} className="flex items-center space-x-3">
+                        <span className="text-[10px] font-bold text-slate-400 w-8">{d.day}</span>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(d.completed / maxVal) * 100}%` }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-600 w-4">{d.completed}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${(d.created / maxVal) * 100}%` }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-indigo-500 w-4">{d.created}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center space-x-4 text-[10px] font-bold text-slate-400">
+                  <div className="flex items-center space-x-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500" /><span>Completed</span></div>
+                  <div className="flex items-center space-x-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-400" /><span>Created</span></div>
+                </div>
+              </div>
+
+              {/* Sprint Burndown */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sprint Burndown</h4>
+                {teamVelocity.sprintBurndown.map((g, i) => (
+                  <div key={i} className="p-3 bg-slate-50 rounded-xl">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-semibold text-slate-700">{g.name}</span>
+                      <span className="text-[10px] font-bold text-slate-500">{g.remaining} remaining</span>
+                    </div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${g.pct >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${g.pct}%` }} />
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">{g.pct}% complete</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Projection */}
+              <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-indigo-600" />
+                  <h4 className="text-sm font-bold text-indigo-800">Sprint Forecast</h4>
+                </div>
+                <p className="text-xs text-indigo-700 leading-relaxed">
+                  {teamVelocity.remainingWork} items remain across all goals with {teamVelocity.daysLeft} days left.
+                  Team needs to complete ~{teamVelocity.requiredDailyRate} items/day (current avg: {teamVelocity.avgCompleted}/day).
+                  {teamVelocity.avgCompleted >= teamVelocity.requiredDailyRate
+                    ? ' On track to meet sprint goals.'
+                    : ' Consider reprioritizing or adding capacity.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* COMMUNICATION ANALYTICS SIDEBAR                              */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showCommunicationHub && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowCommunicationHub(false)}>
+          <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-100 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-sm z-10">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-violet-50 text-violet-600 rounded-xl">
+                  <MailIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 font-heading">Communication Analytics</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Team collaboration patterns</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCommunicationHub(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <XIcon className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Collaboration Score */}
+              <div className="text-center">
+                <svg viewBox="0 0 96 96" className="w-28 h-28 mx-auto">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="8" />
+                  <circle cx="48" cy="48" r="40" fill="none"
+                    stroke={communicationMetrics.collaborationScore >= 70 ? '#8b5cf6' : communicationMetrics.collaborationScore >= 40 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${(communicationMetrics.collaborationScore / 100) * 251.2} 251.2`}
+                    transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="fill-slate-900" style={{ fontSize: '20px', fontWeight: 'bold' }}>{communicationMetrics.collaborationScore}</text>
+                  <text x="48" y="58" textAnchor="middle" className="fill-slate-400" style={{ fontSize: '8px' }}>COLLAB</text>
+                </svg>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-violet-50 rounded-xl text-center border border-violet-100">
+                  <p className="text-xl font-black text-violet-700">{communicationMetrics.totalNotes}</p>
+                  <p className="text-[9px] font-bold text-violet-500 uppercase">Notes Posted</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-xl text-center border border-indigo-100">
+                  <p className="text-xl font-black text-indigo-700">{communicationMetrics.totalReplies}</p>
+                  <p className="text-[9px] font-bold text-indigo-500 uppercase">Replies</p>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-xl text-center border border-blue-100">
+                  <p className="text-xl font-black text-blue-700">{communicationMetrics.totalMentions}</p>
+                  <p className="text-[9px] font-bold text-blue-500 uppercase">@Mentions</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center border border-emerald-100">
+                  <p className="text-xl font-black text-emerald-700">{communicationMetrics.avgRepliesPerNote}</p>
+                  <p className="text-[9px] font-bold text-emerald-500 uppercase">Avg Replies</p>
+                </div>
+              </div>
+
+              {/* Activity Heatmap */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Activity by Hour</h4>
+                <div className="flex items-end space-x-1.5 h-20 p-3 bg-slate-50 rounded-xl">
+                  {communicationMetrics.hourlyActivity.map((h, i) => {
+                    const maxVal = Math.max(...communicationMetrics.hourlyActivity.map(v => v.count), 1);
+                    const pct = (h.count / maxVal) * 100;
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center justify-end space-y-1">
+                        <span className="text-[8px] font-bold text-violet-600">{h.count}</span>
+                        <div className="w-full bg-violet-400 rounded-t-sm hover:bg-violet-500 transition-colors" style={{ height: `${Math.max(pct, 10)}%` }} />
+                        <span className="text-[7px] font-bold text-slate-400">{h.hour}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Top Contributors */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Top Contributors</h4>
+                {communicationMetrics.topAuthors.map(([author, count], i) => (
+                  <div key={author} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-[10px] ${
+                      i === 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'
+                    }`}>
+                      #{i + 1}
+                    </div>
+                    <div className="flex-grow min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{author}</p>
+                    </div>
+                    <span className="text-xs font-black text-violet-600">{count} notes</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Most Mentioned */}
+              {communicationMetrics.topMentioned.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Most Mentioned</h4>
+                  {communicationMetrics.topMentioned.map(([name, count], i) => (
+                    <div key={name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-indigo-600 font-bold text-xs bg-indigo-50 px-1.5 rounded">@{name}</span>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500">{count} mention{count > 1 ? 's' : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Lead-linked Notes */}
+              <div className="p-4 bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl border border-violet-100">
+                <div className="flex items-center space-x-2 mb-2">
+                  <TargetIcon className="w-4 h-4 text-violet-600" />
+                  <h4 className="text-sm font-bold text-violet-800">Lead Context</h4>
+                </div>
+                <p className="text-xs text-violet-700 leading-relaxed">
+                  {communicationMetrics.notesWithLeads} of {communicationMetrics.totalNotes} notes reference specific leads.
+                  {communicationMetrics.notesWithLeads / Math.max(communicationMetrics.totalNotes, 1) > 0.5
+                    ? ' Great lead-centric communication! Context helps everyone stay aligned.'
+                    : ' Consider tagging leads in notes for better context and searchability.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* RISK ASSESSMENT SIDEBAR                                      */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showRiskAssessment && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowRiskAssessment(false)}>
+          <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-100 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-sm z-10">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                  <ShieldIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 font-heading">Risk Assessment</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Operational risk &amp; mitigation</p>
+                </div>
+              </div>
+              <button onClick={() => setShowRiskAssessment(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <XIcon className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Risk Score Gauge */}
+              <div className="text-center">
+                <svg viewBox="0 0 96 96" className="w-28 h-28 mx-auto">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#f1f5f9" strokeWidth="8" />
+                  <circle cx="48" cy="48" r="40" fill="none"
+                    stroke={riskAssessment.riskScore >= 80 ? '#10b981' : riskAssessment.riskScore >= 50 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${(riskAssessment.riskScore / 100) * 251.2} 251.2`}
+                    transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="fill-slate-900" style={{ fontSize: '20px', fontWeight: 'bold' }}>{riskAssessment.riskScore}</text>
+                  <text x="48" y="58" textAnchor="middle" className="fill-slate-400" style={{ fontSize: '8px' }}>SAFETY</text>
+                </svg>
+                <p className="text-sm font-semibold text-slate-600 mt-2">
+                  {riskAssessment.riskScore >= 80 ? 'Low Risk' : riskAssessment.riskScore >= 50 ? 'Moderate Risk' : 'High Risk'}
+                </p>
+              </div>
+
+              {/* Risk Summary */}
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Critical', count: riskAssessment.risks.filter(r => r.severity === 'critical').length, color: 'bg-rose-100 text-rose-700' },
+                  { label: 'High', count: riskAssessment.risks.filter(r => r.severity === 'high').length, color: 'bg-amber-100 text-amber-700' },
+                  { label: 'Medium', count: riskAssessment.risks.filter(r => r.severity === 'medium').length, color: 'bg-yellow-100 text-yellow-700' },
+                  { label: 'Low', count: riskAssessment.risks.filter(r => r.severity === 'low').length, color: 'bg-emerald-100 text-emerald-700' },
+                ].map((s, i) => (
+                  <div key={i} className={`p-2 rounded-xl text-center ${s.color}`}>
+                    <p className="text-lg font-black">{s.count}</p>
+                    <p className="text-[8px] font-bold uppercase">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Risk Items */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identified Risks</h4>
+                {riskAssessment.risks.map(risk => (
+                  <div key={risk.id} className={`p-4 rounded-xl border ${
+                    risk.severity === 'critical' ? 'border-rose-200 bg-rose-50/50' :
+                    risk.severity === 'high' ? 'border-amber-200 bg-amber-50/50' :
+                    risk.severity === 'medium' ? 'border-yellow-200 bg-yellow-50/50' :
+                    'border-emerald-200 bg-emerald-50/50'
+                  }`}>
+                    <div className="flex items-start space-x-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        risk.severity === 'critical' ? 'bg-rose-100 text-rose-600' :
+                        risk.severity === 'high' ? 'bg-amber-100 text-amber-600' :
+                        risk.severity === 'medium' ? 'bg-yellow-100 text-yellow-600' :
+                        'bg-emerald-100 text-emerald-600'
+                      }`}>
+                        {risk.severity === 'critical' ? <AlertTriangleIcon className="w-4 h-4" /> :
+                         risk.severity === 'high' ? <AlertTriangleIcon className="w-4 h-4" /> :
+                         risk.severity === 'medium' ? <EyeIcon className="w-4 h-4" /> :
+                         <CheckIcon className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <p className="text-sm font-bold text-slate-800">{risk.title}</p>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase ${
+                            risk.severity === 'critical' ? 'bg-rose-200 text-rose-700' :
+                            risk.severity === 'high' ? 'bg-amber-200 text-amber-700' :
+                            risk.severity === 'medium' ? 'bg-yellow-200 text-yellow-700' :
+                            'bg-emerald-200 text-emerald-700'
+                          }`}>{risk.severity}</span>
+                        </div>
+                        <p className="text-xs text-slate-500">{risk.description}</p>
+                        <div className="mt-2 flex items-center space-x-1.5">
+                          <ArrowRightIcon className="w-3 h-3 text-indigo-500" />
+                          <p className="text-[10px] font-bold text-indigo-600">{risk.action}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Mitigation Summary */}
+              <div className="p-4 bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-3">
+                  <BrainIcon className="w-4 h-4 text-indigo-300" />
+                  <h4 className="text-sm font-bold">AI Mitigation Plan</h4>
+                </div>
+                <ol className="space-y-2">
+                  {riskAssessment.risks.filter(r => r.severity === 'critical' || r.severity === 'high').slice(0, 3).map((r, i) => (
+                    <li key={i} className="flex items-start space-x-2">
+                      <span className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center text-[10px] font-black text-indigo-300 shrink-0">{i + 1}</span>
+                      <p className="text-xs text-slate-300 leading-relaxed">{r.action}</p>
+                    </li>
+                  ))}
+                  {riskAssessment.risks.filter(r => r.severity === 'critical' || r.severity === 'high').length === 0 && (
+                    <li className="text-xs text-emerald-300">No high-priority mitigations needed. Continue monitoring.</li>
+                  )}
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEYBOARD SHORTCUTS MODAL                                     */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {showShortcuts && (
@@ -1257,10 +1732,15 @@ const StrategyHub: React.FC = () => {
                   { keys: '3', desc: 'Collaborative Notes' },
                   { keys: '4', desc: 'Conflicts' },
                 ]},
+                { category: 'Panels', shortcuts: [
+                  { keys: 'P', desc: 'Leaderboard' },
+                  { keys: 'W', desc: 'Workload' },
+                  { keys: 'T', desc: 'Team Velocity' },
+                  { keys: 'M', desc: 'Communication' },
+                  { keys: 'R', desc: 'Risk Assessment' },
+                ]},
                 { category: 'Actions', shortcuts: [
                   { keys: 'N', desc: 'New Task' },
-                  { keys: 'P', desc: 'Toggle Leaderboard' },
-                  { keys: 'W', desc: 'Toggle Workload' },
                   { keys: '?', desc: 'Toggle Shortcuts' },
                   { keys: 'Esc', desc: 'Close Panels' },
                 ]},
