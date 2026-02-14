@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Lead, User, ContentType } from '../../types';
+import { Lead, KnowledgeBase, User, ContentType } from '../../types';
 import {
   TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, ChartIcon,
   TagIcon, UsersIcon, ClockIcon, TrendUpIcon, BoltIcon, CalendarIcon,
   ArrowLeftIcon, CheckIcon, EditIcon, LinkIcon, GlobeIcon, XIcon,
-  BrainIcon, AlertTriangleIcon, TrendDownIcon
+  BrainIcon, AlertTriangleIcon, TrendDownIcon,
+  LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon,
+  StickyNoteIcon, PencilIcon, PlusIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
@@ -183,6 +185,11 @@ const LeadProfile: React.FC = () => {
   const [showEngagementMap, setShowEngagementMap] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
+  // ── Knowledge Base ──
+  const [kbDrawerOpen, setKbDrawerOpen] = useState(false);
+  const [kbForm, setKbForm] = useState<KnowledgeBase>({});
+  const [kbNotesExpanded, setKbNotesExpanded] = useState(false);
+
   useEffect(() => {
     if (leadId) fetchLead();
   }, [leadId]);
@@ -202,6 +209,45 @@ const LeadProfile: React.FC = () => {
     setActionFeedback(msg);
     setTimeout(() => setActionFeedback(null), 2500);
   };
+
+  const normalizeUrl = (url: string): string => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const openKbDrawer = () => {
+    setKbForm({ ...(lead?.knowledgeBase || {}) });
+    setKbDrawerOpen(true);
+  };
+
+  const handleKbSave = async () => {
+    if (!lead) return;
+    const cleaned: KnowledgeBase = {};
+    if (kbForm.website?.trim()) cleaned.website = normalizeUrl(kbForm.website);
+    if (kbForm.linkedin?.trim()) cleaned.linkedin = normalizeUrl(kbForm.linkedin);
+    if (kbForm.instagram?.trim()) cleaned.instagram = normalizeUrl(kbForm.instagram);
+    if (kbForm.facebook?.trim()) cleaned.facebook = normalizeUrl(kbForm.facebook);
+    if (kbForm.twitter?.trim()) cleaned.twitter = normalizeUrl(kbForm.twitter);
+    if (kbForm.youtube?.trim()) cleaned.youtube = normalizeUrl(kbForm.youtube);
+    if (kbForm.extraNotes?.trim()) cleaned.extraNotes = kbForm.extraNotes.trim();
+    const kb = Object.keys(cleaned).length > 0 ? cleaned : null;
+    await supabase.from('leads').update({ knowledgeBase: kb }).eq('id', lead.id);
+    setLead({ ...lead, knowledgeBase: kb || undefined });
+    setKbDrawerOpen(false);
+    showFeedback('Knowledge Base updated');
+  };
+
+  const KB_SOCIAL_LINKS: { key: keyof KnowledgeBase; label: string; icon: React.ReactNode; color: string }[] = [
+    { key: 'website', label: 'Website', icon: <GlobeIcon className="w-3.5 h-3.5" />, color: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
+    { key: 'linkedin', label: 'LinkedIn', icon: <LinkedInIcon className="w-3.5 h-3.5" />, color: 'bg-blue-50 text-blue-700 hover:bg-blue-100' },
+    { key: 'instagram', label: 'Instagram', icon: <InstagramIcon className="w-3.5 h-3.5" />, color: 'bg-pink-50 text-pink-700 hover:bg-pink-100' },
+    { key: 'facebook', label: 'Facebook', icon: <FacebookIcon className="w-3.5 h-3.5" />, color: 'bg-blue-50 text-blue-800 hover:bg-blue-100' },
+    { key: 'twitter', label: 'X / Twitter', icon: <TwitterIcon className="w-3.5 h-3.5" />, color: 'bg-slate-100 text-slate-800 hover:bg-slate-200' },
+    { key: 'youtube', label: 'YouTube', icon: <YoutubeIcon className="w-3.5 h-3.5" />, color: 'bg-red-50 text-red-700 hover:bg-red-100' },
+  ];
 
   const PIPELINE_STAGES: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted'];
   const STAGE_COLORS: Record<Lead['status'], { bg: string; text: string; ring: string }> = {
@@ -964,6 +1010,72 @@ const LeadProfile: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* ── Knowledge Base Card ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-800 font-heading text-sm">Knowledge Base</h3>
+              {lead.knowledgeBase && Object.values(lead.knowledgeBase).some(v => v) && (
+                <button onClick={openKbDrawer} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Edit">
+                  <PencilIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {!lead.knowledgeBase || !Object.values(lead.knowledgeBase).some(v => v) ? (
+              <div className="text-center py-4">
+                <p className="text-xs text-slate-400 italic mb-3">No knowledge added yet</p>
+                <button
+                  onClick={openKbDrawer}
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  <span>Add info</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Social Link Chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  {KB_SOCIAL_LINKS.map(({ key, label, icon, color }) => {
+                    const value = lead.knowledgeBase?.[key];
+                    if (!value) return null;
+                    return (
+                      <a
+                        key={key}
+                        href={value}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${color}`}
+                      >
+                        {icon}
+                        <span>{label}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+                {/* Notes Preview */}
+                {lead.knowledgeBase?.extraNotes && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="flex items-center space-x-1.5 mb-1.5">
+                      <StickyNoteIcon className="w-3 h-3 text-slate-400" />
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Notes</span>
+                    </div>
+                    <p className={`text-xs text-slate-600 leading-relaxed ${!kbNotesExpanded ? 'line-clamp-3' : ''}`}>
+                      {lead.knowledgeBase.extraNotes}
+                    </p>
+                    {lead.knowledgeBase.extraNotes.length > 120 && (
+                      <button
+                        onClick={() => setKbNotesExpanded(!kbNotesExpanded)}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 mt-1 transition-colors"
+                      >
+                        {kbNotesExpanded ? 'Show less' : 'View more'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1399,6 +1511,75 @@ const LeadProfile: React.FC = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Knowledge Base Drawer ── */}
+      {kbDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setKbDrawerOpen(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-500">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-5 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 font-heading">Knowledge Base</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Website, socials & notes for {lead.name}</p>
+                </div>
+                <button onClick={() => setKbDrawerOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <GlobeIcon className="w-3.5 h-3.5" /><span>Website</span>
+                </label>
+                <input type="url" value={kbForm.website || ''} onChange={e => setKbForm({ ...kbForm, website: e.target.value })} placeholder="https://example.com" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <LinkedInIcon className="w-3.5 h-3.5" /><span>LinkedIn</span>
+                </label>
+                <input type="url" value={kbForm.linkedin || ''} onChange={e => setKbForm({ ...kbForm, linkedin: e.target.value })} placeholder="linkedin.com/in/..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <InstagramIcon className="w-3.5 h-3.5" /><span>Instagram</span>
+                </label>
+                <input type="url" value={kbForm.instagram || ''} onChange={e => setKbForm({ ...kbForm, instagram: e.target.value })} placeholder="instagram.com/..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <FacebookIcon className="w-3.5 h-3.5" /><span>Facebook</span>
+                </label>
+                <input type="url" value={kbForm.facebook || ''} onChange={e => setKbForm({ ...kbForm, facebook: e.target.value })} placeholder="facebook.com/..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <TwitterIcon className="w-3.5 h-3.5" /><span>X / Twitter</span>
+                </label>
+                <input type="url" value={kbForm.twitter || ''} onChange={e => setKbForm({ ...kbForm, twitter: e.target.value })} placeholder="x.com/..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <YoutubeIcon className="w-3.5 h-3.5" /><span>YouTube</span>
+                </label>
+                <input type="url" value={kbForm.youtube || ''} onChange={e => setKbForm({ ...kbForm, youtube: e.target.value })} placeholder="youtube.com/@..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <StickyNoteIcon className="w-3.5 h-3.5" /><span>Extra Notes</span>
+                </label>
+                <textarea rows={4} value={kbForm.extraNotes || ''} onChange={e => setKbForm({ ...kbForm, extraNotes: e.target.value })} placeholder="Additional context, research notes..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none resize-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <button
+                onClick={handleKbSave}
+                className="w-full py-3.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+              >
+                Save Knowledge Base
+              </button>
             </div>
           </div>
         </div>

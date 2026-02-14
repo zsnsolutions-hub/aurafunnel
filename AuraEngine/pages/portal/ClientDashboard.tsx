@@ -4,7 +4,8 @@ import {
   FlameIcon, BoltIcon, SparklesIcon, TargetIcon, ChartIcon, TrendUpIcon, CreditCardIcon,
   KeyboardIcon, XIcon, TrendDownIcon, ActivityIcon, ShieldIcon, CheckIcon,
   AlertTriangleIcon, ClockIcon, UsersIcon, LayersIcon, BrainIcon, PieChartIcon,
-  StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon
+  StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
+  ChevronDownIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon
 } from '../../components/Icons';
 import { generateLeadContent, generateDashboardInsights } from '../../lib/gemini';
 import { supabase } from '../../lib/supabase';
@@ -94,6 +95,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
   // Form states for adding lead
   const [newLead, setNewLead] = useState({ name: '', email: '', company: '', insights: '' });
+  const [showKBFields, setShowKBFields] = useState(false);
+  const [newLeadKB, setNewLeadKB] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
 
   // Content Generation States
   const [contentType, setContentType] = useState<ContentType>(ContentType.EMAIL);
@@ -472,9 +475,30 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     }
   };
 
+  const normalizeUrl = (url: string): string => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const buildKnowledgeBase = (kb: typeof newLeadKB) => {
+    const result: Record<string, string> = {};
+    if (kb.website.trim()) result.website = normalizeUrl(kb.website);
+    if (kb.linkedin.trim()) result.linkedin = normalizeUrl(kb.linkedin);
+    if (kb.instagram.trim()) result.instagram = normalizeUrl(kb.instagram);
+    if (kb.facebook.trim()) result.facebook = normalizeUrl(kb.facebook);
+    if (kb.twitter.trim()) result.twitter = normalizeUrl(kb.twitter);
+    if (kb.youtube.trim()) result.youtube = normalizeUrl(kb.youtube);
+    if (kb.extraNotes.trim()) result.extraNotes = kb.extraNotes.trim();
+    return Object.keys(result).length > 0 ? result : undefined;
+  };
+
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
     const mockScore = Math.floor(Math.random() * 40) + 60;
+    const kb = buildKnowledgeBase(newLeadKB);
 
     const { data } = await supabase
       .from('leads')
@@ -483,7 +507,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         client_id: user.id,
         score: mockScore,
         status: 'New',
-        lastActivity: 'Just now'
+        lastActivity: 'Just now',
+        ...(kb ? { knowledgeBase: kb } : {})
       }])
       .select()
       .single();
@@ -495,6 +520,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       setActiveSegmentId(null);
       setIsAddLeadOpen(false);
       setNewLead({ name: '', email: '', company: '', insights: '' });
+      setNewLeadKB({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
+      setShowKBFields(false);
       fetchQuickStats();
     }
   };
@@ -1152,6 +1179,49 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Key Insights</label>
                 <textarea rows={4} value={newLead.insights} onChange={e => setNewLead({...newLead, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none"></textarea>
+              </div>
+              {/* KB Accordion */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowKBFields(!showKBFields)}
+                  className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center space-x-2">
+                    <GlobeIcon className="w-4 h-4 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-600">Add website & social profiles (optional)</span>
+                  </div>
+                  <ChevronDownIcon className={`w-4 h-4 text-slate-400 transition-transform ${showKBFields ? 'rotate-180' : ''}`} />
+                </button>
+                {showKBFields && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3 animate-in fade-in duration-200">
+                    <div className="flex items-center space-x-2">
+                      <GlobeIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <input type="url" value={newLeadKB.website} onChange={e => setNewLeadKB({...newLeadKB, website: e.target.value})} placeholder="Website URL" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <LinkedInIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <input type="url" value={newLeadKB.linkedin} onChange={e => setNewLeadKB({...newLeadKB, linkedin: e.target.value})} placeholder="LinkedIn profile" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <InstagramIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <input type="url" value={newLeadKB.instagram} onChange={e => setNewLeadKB({...newLeadKB, instagram: e.target.value})} placeholder="Instagram profile" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <FacebookIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <input type="url" value={newLeadKB.facebook} onChange={e => setNewLeadKB({...newLeadKB, facebook: e.target.value})} placeholder="Facebook page" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <TwitterIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <input type="url" value={newLeadKB.twitter} onChange={e => setNewLeadKB({...newLeadKB, twitter: e.target.value})} placeholder="X / Twitter profile" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <YoutubeIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <input type="url" value={newLeadKB.youtube} onChange={e => setNewLeadKB({...newLeadKB, youtube: e.target.value})} placeholder="YouTube channel" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                    </div>
+                    <textarea rows={2} value={newLeadKB.extraNotes} onChange={e => setNewLeadKB({...newLeadKB, extraNotes: e.target.value})} placeholder="Extra notes..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none resize-none focus:border-indigo-300" />
+                  </div>
+                )}
               </div>
               <div className="pt-6 flex flex-col space-y-3">
                 <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-xl">Create Lead Profile</button>

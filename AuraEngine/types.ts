@@ -27,6 +27,16 @@ export interface User {
   subscription?: Subscription;
 }
 
+export interface KnowledgeBase {
+  website?: string;
+  linkedin?: string;
+  instagram?: string;
+  facebook?: string;
+  twitter?: string;
+  youtube?: string;
+  extraNotes?: string;
+}
+
 export interface Lead {
   id: string;
   client_id: string;
@@ -38,6 +48,7 @@ export interface Lead {
   lastActivity: string;
   insights: string;
   created_at?: string;
+  knowledgeBase?: KnowledgeBase;
 }
 
 export interface Plan {
