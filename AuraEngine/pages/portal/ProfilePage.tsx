@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User, NotificationPreferences, DashboardPreferences, ApiKey } from '../../types';
-import { ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon } from '../../components/Icons';
+import {
+  ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon,
+  TrendUpIcon, TrendDownIcon, KeyboardIcon, ActivityIcon, BrainIcon, LayersIcon, UsersIcon,
+  ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon
+} from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 
 const PREFS_STORAGE_KEY = 'aurafunnel_dashboard_prefs';
@@ -132,6 +136,111 @@ const ProfilePage: React.FC = () => {
     navigator.clipboard.writeText(key);
   };
 
+  // ─── New Enhancement State ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showAccountHealth, setShowAccountHealth] = useState(false);
+  const [showSessionActivity, setShowSessionActivity] = useState(false);
+  const [showDataExport, setShowDataExport] = useState(false);
+
+  // ─── KPI Stats ───
+  const kpiStats = useMemo(() => {
+    const activeKeyCount = apiKeys.filter(k => k.status === 'active').length;
+    const enabledNotifs = Object.values(notifications).filter(Boolean).length;
+    const totalNotifs = Object.keys(notifications).length;
+
+    return [
+      { label: 'Account Status', value: 'Active', sub: user?.role === 'ADMIN' ? 'Administrator' : 'Client Node', trend: 'up' as const, color: 'emerald' },
+      { label: 'API Keys', value: activeKeyCount.toString(), sub: `${apiKeys.length} total generated`, trend: activeKeyCount > 0 ? 'up' as const : 'down' as const, color: 'indigo' },
+      { label: 'Notifications', value: `${enabledNotifs}/${totalNotifs}`, sub: 'Channels active', trend: enabledNotifs > 3 ? 'up' as const : 'down' as const, color: 'violet' },
+      { label: 'Security Score', value: twoFactorEnabled ? '95%' : '60%', sub: twoFactorEnabled ? '2FA enabled' : '2FA disabled', trend: twoFactorEnabled ? 'up' as const : 'down' as const, color: twoFactorEnabled ? 'emerald' : 'amber' },
+      { label: 'Theme', value: preferences.theme === 'light' ? 'Light' : preferences.theme === 'dark' ? 'Dark' : 'System', sub: `${preferences.defaultView} view`, trend: 'up' as const, color: 'slate' },
+      { label: 'Session Age', value: 'Active', sub: new Date().toLocaleDateString(), trend: 'up' as const, color: 'rose' },
+    ];
+  }, [apiKeys, notifications, twoFactorEnabled, preferences, user]);
+
+  // ─── Account Health Data ───
+  const accountHealth = useMemo(() => {
+    const checks = [
+      { label: 'Profile Complete', passed: !!name.trim(), weight: 15 },
+      { label: 'Email Verified', passed: true, weight: 20 },
+      { label: '2FA Enabled', passed: twoFactorEnabled, weight: 25 },
+      { label: 'API Key Generated', passed: apiKeys.some(k => k.status === 'active'), weight: 10 },
+      { label: 'Notifications Configured', passed: Object.values(notifications).some(Boolean), weight: 10 },
+      { label: 'Dashboard Customized', passed: preferences.theme !== 'light' || preferences.defaultView !== 'grid', weight: 5 },
+      { label: 'Lead Score Alerts', passed: notifications.leadScoreAlerts, weight: 10 },
+      { label: 'Weekly Digest Active', passed: notifications.weeklyDigest, weight: 5 },
+    ];
+    const score = checks.reduce((s, c) => s + (c.passed ? c.weight : 0), 0);
+    return { checks, score };
+  }, [name, twoFactorEnabled, apiKeys, notifications, preferences]);
+
+  // ─── Session Activity Mock ───
+  const sessionActivity = useMemo(() => [
+    { time: 'Just now', action: 'Viewed Account Architecture', type: 'navigation' },
+    { time: '2 min ago', action: 'Updated notification preferences', type: 'settings' },
+    { time: '5 min ago', action: 'Viewed Lead Management', type: 'navigation' },
+    { time: '12 min ago', action: 'Generated AI content', type: 'ai' },
+    { time: '18 min ago', action: 'Exported analytics report', type: 'export' },
+    { time: '25 min ago', action: 'Updated lead score for TechCorp', type: 'leads' },
+    { time: '32 min ago', action: 'Logged in via password', type: 'auth' },
+    { time: '1 hour ago', action: 'Previous session ended', type: 'auth' },
+  ], []);
+
+  const SESSION_TYPE_STYLES: Record<string, { bg: string; text: string }> = {
+    navigation: { bg: 'bg-indigo-50', text: 'text-indigo-600' },
+    settings: { bg: 'bg-violet-50', text: 'text-violet-600' },
+    ai: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+    export: { bg: 'bg-amber-50', text: 'text-amber-600' },
+    leads: { bg: 'bg-rose-50', text: 'text-rose-600' },
+    auth: { bg: 'bg-slate-100', text: 'text-slate-600' },
+  };
+
+  // ─── Data Export Options ───
+  const exportOptions = useMemo(() => [
+    { id: 'profile', label: 'Profile Data', desc: 'Name, email, role, preferences', icon: <UsersIcon className="w-4 h-4" />, size: '~2 KB' },
+    { id: 'leads', label: 'All Leads', desc: 'Complete lead database with scores', icon: <TargetIcon className="w-4 h-4" />, size: '~500 KB' },
+    { id: 'content', label: 'Generated Content', desc: 'All AI-generated content history', icon: <DocumentIcon className="w-4 h-4" />, size: '~1.2 MB' },
+    { id: 'analytics', label: 'Analytics Data', desc: 'Performance metrics and reports', icon: <ActivityIcon className="w-4 h-4" />, size: '~800 KB' },
+    { id: 'audit', label: 'Audit Logs', desc: 'Complete activity history', icon: <ClockIcon className="w-4 h-4" />, size: '~300 KB' },
+    { id: 'api', label: 'API Usage Logs', desc: 'Request history and rate limits', icon: <KeyIcon className="w-4 h-4" />, size: '~150 KB' },
+  ], []);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      const overlayOpen = showShortcuts || showAccountHealth || showSessionActivity || showDataExport || isDeleteModalOpen;
+
+      if (e.key === 'Escape') {
+        if (showShortcuts) setShowShortcuts(false);
+        if (showAccountHealth) setShowAccountHealth(false);
+        if (showSessionActivity) setShowSessionActivity(false);
+        if (showDataExport) setShowDataExport(false);
+        return;
+      }
+
+      if (overlayOpen) return;
+
+      switch (e.key) {
+        case '1': e.preventDefault(); setActiveTab('profile'); break;
+        case '2': e.preventDefault(); setActiveTab('notifications'); break;
+        case '3': e.preventDefault(); setActiveTab('preferences'); break;
+        case '4': e.preventDefault(); setActiveTab('api_keys'); break;
+        case '5': e.preventDefault(); setActiveTab('security'); break;
+        case 'h': case 'H': e.preventDefault(); setShowAccountHealth(true); break;
+        case 'a': case 'A': e.preventDefault(); setShowSessionActivity(true); break;
+        case 'e': case 'E': e.preventDefault(); setShowDataExport(true); break;
+        case '?': e.preventDefault(); setShowShortcuts(true); break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showShortcuts, showAccountHealth, showSessionActivity, showDataExport, isDeleteModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const notificationItems = [
     { key: 'emailAlerts' as const, label: 'Email Alerts', desc: 'Receive email notifications for important events' },
     { key: 'leadScoreAlerts' as const, label: 'Lead Score Changes', desc: 'Notify when a lead score changes significantly' },
@@ -143,9 +252,48 @@ const ProfilePage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-heading">Account Architecture</h1>
-        <p className="text-slate-500 mt-1">Manage your profile, preferences, security, and API access.</p>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight font-heading">Account Architecture</h1>
+          <p className="text-slate-500 mt-1 text-sm">Manage your profile, preferences, security, and API access</p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button onClick={() => setShowAccountHealth(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
+            <ShieldIcon className="w-3.5 h-3.5" />
+            <span>Health</span>
+          </button>
+          <button onClick={() => setShowSessionActivity(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
+            <ActivityIcon className="w-3.5 h-3.5" />
+            <span>Activity</span>
+          </button>
+          <button onClick={() => setShowDataExport(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
+            <DownloadIcon className="w-3.5 h-3.5" />
+            <span>Export</span>
+          </button>
+          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <span>?</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── KPI Stats Banner ─── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {kpiStats.map((stat, idx) => (
+          <div key={idx} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{stat.label}</p>
+              {stat.trend === 'up' ? (
+                <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" />
+              ) : (
+                <TrendDownIcon className="w-3.5 h-3.5 text-red-400" />
+              )}
+            </div>
+            <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{stat.sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* Tab Navigation */}
@@ -518,6 +666,343 @@ const ProfilePage: React.FC = () => {
                 className="w-full py-4 bg-white text-slate-500 rounded-2xl font-bold hover:bg-slate-50 transition-all border border-slate-100">
                 Abort
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Account Health Dashboard Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showAccountHealth && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowAccountHealth(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <ShieldIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Account Health</h2>
+                  <p className="text-[10px] text-slate-400">Security & completeness score</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAccountHealth(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Health Score Gauge */}
+              <div className="text-center p-6 rounded-2xl bg-slate-50 border border-slate-100">
+                <svg className="w-24 h-24 mx-auto mb-4" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                  <circle cx="48" cy="48" r="40" fill="none"
+                    stroke={accountHealth.score >= 80 ? '#10b981' : accountHealth.score >= 50 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8"
+                    strokeDasharray={`${(accountHealth.score / 100) * 251.3} 251.3`}
+                    strokeLinecap="round" transform="rotate(-90 48 48)" />
+                  <text x="48" y="44" textAnchor="middle" className="text-xl font-black" fill="#1e293b">{accountHealth.score}%</text>
+                  <text x="48" y="58" textAnchor="middle" className="text-[8px] font-bold" fill="#94a3b8">HEALTH</text>
+                </svg>
+                <p className="text-sm font-black text-slate-900">
+                  {accountHealth.score >= 80 ? 'Excellent' : accountHealth.score >= 50 ? 'Needs Improvement' : 'At Risk'}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {accountHealth.checks.filter(c => c.passed).length}/{accountHealth.checks.length} checks passed
+                </p>
+              </div>
+
+              {/* Health Checks */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Security Checklist</p>
+                <div className="space-y-2">
+                  {accountHealth.checks.map((check, idx) => (
+                    <div key={idx} className={`flex items-center justify-between p-3 rounded-xl ${check.passed ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                      <div className="flex items-center space-x-3">
+                        {check.passed ? (
+                          <CheckIcon className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <AlertTriangleIcon className="w-4 h-4 text-red-500" />
+                        )}
+                        <span className="text-xs font-bold text-slate-700">{check.label}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-bold text-slate-400">+{check.weight}%</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${check.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                          {check.passed ? 'Pass' : 'Fix'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recommendations */}
+              {accountHealth.score < 100 && (
+                <div className="p-4 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl text-white">
+                  <p className="text-[10px] font-black text-indigo-200 uppercase tracking-wider mb-3">Recommendations</p>
+                  <div className="space-y-2">
+                    {accountHealth.checks.filter(c => !c.passed).map((check, idx) => (
+                      <div key={idx} className="flex items-center space-x-2">
+                        <SparklesIcon className="w-3.5 h-3.5 text-indigo-300" />
+                        <span className="text-xs font-medium text-indigo-100">Enable: {check.label} (+{check.weight}%)</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Account Summary */}
+              <div className="p-4 bg-slate-900 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider mb-3">Account Summary</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-lg font-black">{user?.role === 'ADMIN' ? 'Admin' : 'Client'}</p>
+                    <p className="text-[10px] text-slate-400">Account Type</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">{apiKeys.filter(k => k.status === 'active').length}</p>
+                    <p className="text-[10px] text-slate-400">Active API Keys</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">{twoFactorEnabled ? 'On' : 'Off'}</p>
+                    <p className="text-[10px] text-slate-400">2FA Status</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black">{Object.values(notifications).filter(Boolean).length}</p>
+                    <p className="text-[10px] text-slate-400">Active Alerts</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Session Activity Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showSessionActivity && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowSessionActivity(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <ActivityIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Session Activity</h2>
+                  <p className="text-[10px] text-slate-400">Your recent actions this session</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSessionActivity(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Session Summary */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-xl font-black text-indigo-700">{sessionActivity.length}</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Actions</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-xl font-black text-emerald-700">32m</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Duration</p>
+                </div>
+                <div className="p-3 bg-violet-50 rounded-xl text-center">
+                  <p className="text-xl font-black text-violet-700">4</p>
+                  <p className="text-[10px] font-bold text-violet-500">Pages</p>
+                </div>
+              </div>
+
+              {/* Activity Timeline */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Activity Timeline</p>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-slate-200" />
+                  <div className="space-y-3">
+                    {sessionActivity.map((item, idx) => {
+                      const style = SESSION_TYPE_STYLES[item.type] || SESSION_TYPE_STYLES.navigation;
+                      return (
+                        <div key={idx} className="relative pl-10">
+                          <div className={`absolute left-1.5 top-2 w-4 h-4 rounded-full border-2 border-white shadow ${style.bg}`}>
+                            <div className={`w-full h-full rounded-full ${idx === 0 ? 'animate-pulse bg-indigo-500' : ''}`} />
+                          </div>
+                          <div className="p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${style.bg} ${style.text} capitalize`}>{item.type}</span>
+                              <span className="text-[10px] text-slate-400 font-bold">{item.time}</span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-700">{item.action}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Device Info */}
+              <div className="p-4 bg-slate-900 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider mb-3">Device Information</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Browser</span>
+                    <span className="text-xs font-bold text-white">Chrome / Desktop</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">IP Address</span>
+                    <span className="text-xs font-bold text-white">192.168.1.***</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Location</span>
+                    <span className="text-xs font-bold text-white">United States</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Login Method</span>
+                    <span className="text-xs font-bold text-white">Password + {twoFactorEnabled ? '2FA' : 'No 2FA'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Data Export Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showDataExport && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowDataExport(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center">
+                  <DownloadIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Data Export</h2>
+                  <p className="text-[10px] text-slate-400">Download your account data</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDataExport(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Export Options */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Available Exports</p>
+                <div className="space-y-2">
+                  {exportOptions.map(opt => (
+                    <div key={opt.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors group cursor-pointer">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-50 transition-colors">
+                          {opt.icon}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{opt.label}</p>
+                          <p className="text-[10px] text-slate-400">{opt.desc}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-[10px] font-bold text-slate-400">{opt.size}</span>
+                        <div className="flex items-center space-x-1">
+                          <button className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">CSV</button>
+                          <button className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">JSON</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bulk Export */}
+              <div className="p-4 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-indigo-200 uppercase tracking-wider mb-3">Complete Data Export</p>
+                <p className="text-xs text-indigo-100 mb-4">Download all your account data in a single archive. GDPR-compliant full data export.</p>
+                <button className="w-full py-3 bg-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/20 transition-colors flex items-center justify-center space-x-2">
+                  <DownloadIcon className="w-4 h-4" />
+                  <span>Export All Data (ZIP)</span>
+                </button>
+              </div>
+
+              {/* Export History */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Recent Exports</p>
+                <div className="space-y-2">
+                  {[
+                    { name: 'leads_export_jan2024.csv', date: '2024-01-15', size: '482 KB' },
+                    { name: 'analytics_q4_2023.json', date: '2024-01-02', size: '1.1 MB' },
+                    { name: 'full_backup_dec2023.zip', date: '2023-12-28', size: '4.7 MB' },
+                  ].map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center space-x-3">
+                        <DocumentIcon className="w-4 h-4 text-slate-400" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-700">{file.name}</p>
+                          <p className="text-[10px] text-slate-400">{file.date}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400">{file.size}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Data Retention Notice */}
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangleIcon className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-amber-800">Data Retention Policy</p>
+                    <p className="text-[10px] text-amber-600 mt-0.5">Exports are available for 30 days. Data is retained per your plan terms. Contact support for extended retention options.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Keyboard Shortcuts Modal ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                  <KeyboardIcon className="w-4 h-4" />
+                </div>
+                <h2 className="text-sm font-black text-slate-900">Account Shortcuts</h2>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
+              {[
+                { key: '1', action: 'Profile tab' },
+                { key: '2', action: 'Notifications tab' },
+                { key: '3', action: 'Preferences tab' },
+                { key: '4', action: 'API Keys tab' },
+                { key: '5', action: 'Security tab' },
+                { key: 'H', action: 'Account Health' },
+                { key: 'A', action: 'Session Activity' },
+                { key: 'E', action: 'Data Export' },
+                { key: '?', action: 'This shortcuts panel' },
+                { key: 'Esc', action: 'Close panels' },
+              ].map((sc, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <span className="text-xs text-slate-600">{sc.action}</span>
+                  <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
+              <p className="text-[10px] text-slate-400">Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
             </div>
           </div>
         </div>
