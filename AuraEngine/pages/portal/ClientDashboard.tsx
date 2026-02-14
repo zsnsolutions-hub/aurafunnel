@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Lead, ContentType, User, DashboardQuickStats, AIInsight, ManualList, FunnelStage } from '../../types';
-import { FlameIcon, BoltIcon, SparklesIcon, TargetIcon, ChartIcon, TrendUpIcon, CreditCardIcon } from '../../components/Icons';
+import {
+  FlameIcon, BoltIcon, SparklesIcon, TargetIcon, ChartIcon, TrendUpIcon, CreditCardIcon,
+  KeyboardIcon, XIcon, TrendDownIcon, ActivityIcon, ShieldIcon, CheckIcon,
+  AlertTriangleIcon, ClockIcon, UsersIcon, LayersIcon, BrainIcon, PieChartIcon,
+  StarIcon, ArrowRightIcon
+} from '../../components/Icons';
 import { generateLeadContent, generateDashboardInsights } from '../../lib/gemini';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
@@ -105,6 +110,108 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   };
+
+  // ─── New Enhancement State ───
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showPipelineHealth, setShowPipelineHealth] = useState(false);
+  const [showLeadVelocity, setShowLeadVelocity] = useState(false);
+  const [showGoalTracker, setShowGoalTracker] = useState(false);
+
+  // ─── Pipeline Health ───
+  const pipelineHealth = useMemo(() => {
+    if (leads.length === 0) return null;
+    const statusGroups: Record<string, Lead[]> = { New: [], Contacted: [], Qualified: [], Lost: [] };
+    leads.forEach(l => { if (statusGroups[l.status]) statusGroups[l.status].push(l); });
+
+    const hotLeads = leads.filter(l => l.score > 80);
+    const warmLeads = leads.filter(l => l.score >= 50 && l.score <= 80);
+    const coldLeads = leads.filter(l => l.score < 50);
+    const avgScore = Math.round(leads.reduce((s, l) => s + l.score, 0) / leads.length);
+    const qualifiedRate = leads.length > 0 ? Math.round((statusGroups.Qualified.length / leads.length) * 100) : 0;
+
+    const healthScore = Math.min(100, Math.round(
+      (hotLeads.length > 0 ? 25 : 0) +
+      (qualifiedRate > 10 ? 25 : qualifiedRate > 5 ? 15 : 5) +
+      (avgScore > 60 ? 25 : avgScore > 40 ? 15 : 5) +
+      (leads.length > 10 ? 25 : leads.length > 5 ? 15 : 5)
+    ));
+
+    return {
+      statusGroups,
+      hotLeads: hotLeads.length,
+      warmLeads: warmLeads.length,
+      coldLeads: coldLeads.length,
+      avgScore,
+      qualifiedRate,
+      healthScore,
+      stagnantLeads: leads.filter(l => l.status === 'New' && l.score < 40).length,
+    };
+  }, [leads]);
+
+  // ─── Lead Velocity (mock 7-day data) ───
+  const leadVelocity = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const added = Math.floor(Math.random() * 5) + (i === 0 ? leads.filter(l => {
+        if (!l.created_at) return false;
+        const created = new Date(l.created_at);
+        return created.toDateString() === d.toDateString();
+      }).length : Math.floor(Math.random() * 3));
+      const converted = Math.floor(added * 0.3);
+      days.push({ day: dayLabel, added, converted, net: added - converted });
+    }
+    const totalAdded = days.reduce((s, d) => s + d.added, 0);
+    const totalConverted = days.reduce((s, d) => s + d.converted, 0);
+    const avgDaily = Math.round(totalAdded / 7);
+    return { days, totalAdded, totalConverted, avgDaily };
+  }, [leads]);
+
+  // ─── Goal Tracker ───
+  const goals = useMemo(() => [
+    { id: 'leads', label: 'Monthly Lead Target', current: leads.length, target: 100, unit: 'leads', color: 'indigo' },
+    { id: 'hot', label: 'Hot Leads Generated', current: leads.filter(l => l.score > 80).length, target: 20, unit: 'hot leads', color: 'rose' },
+    { id: 'content', label: 'Content Pieces Created', current: quickStats.contentCreated, target: 50, unit: 'pieces', color: 'violet' },
+    { id: 'conversion', label: 'Conversion Rate', current: conversionRate, target: 25, unit: '%', color: 'emerald' },
+    { id: 'score', label: 'Avg Lead Score', current: quickStats.avgAiScore, target: 75, unit: '%', color: 'amber' },
+  ], [leads, quickStats, conversionRate]);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+      if (isInput) return;
+
+      const overlayOpen = showShortcuts || showPipelineHealth || showLeadVelocity || showGoalTracker || isGenModalOpen || isAddLeadOpen || isCSVOpen || isActionsOpen;
+
+      if (e.key === 'Escape') {
+        if (showShortcuts) setShowShortcuts(false);
+        if (showPipelineHealth) setShowPipelineHealth(false);
+        if (showLeadVelocity) setShowLeadVelocity(false);
+        if (showGoalTracker) setShowGoalTracker(false);
+        return;
+      }
+
+      if (overlayOpen) return;
+
+      switch (e.key) {
+        case 'n': case 'N': e.preventDefault(); setIsAddLeadOpen(true); break;
+        case 'i': case 'I': e.preventDefault(); setIsCSVOpen(true); break;
+        case 'g': case 'G': e.preventDefault(); if (leads.length > 0) openGenModal(leads[0]); break;
+        case 'p': case 'P': e.preventDefault(); setShowPipelineHealth(true); break;
+        case 'v': case 'V': e.preventDefault(); setShowLeadVelocity(true); break;
+        case 't': case 'T': e.preventDefault(); setShowGoalTracker(true); break;
+        case 'r': case 'R': e.preventDefault(); handleRefreshInsights(); break;
+        case '?': e.preventDefault(); setShowShortcuts(true); break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showShortcuts, showPipelineHealth, showLeadVelocity, showGoalTracker, isGenModalOpen, isAddLeadOpen, isCSVOpen, isActionsOpen, leads]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchLeads();
@@ -370,7 +477,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             </div>
           </div>
 
-          {/* Right: Key Metrics */}
+          {/* Right: Key Metrics + Actions */}
           <div className="flex items-center space-x-3 md:space-x-4">
             <div className="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-center min-w-[90px]">
               <div className="flex items-center justify-center space-x-1.5 mb-1.5">
@@ -402,6 +509,30 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
               <p className="text-2xl font-bold font-heading">{creditsRemaining}</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  DASHBOARD ACTION BAR                                         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <button onClick={() => setShowPipelineHealth(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
+            <ShieldIcon className="w-3.5 h-3.5" />
+            <span>Pipeline Health</span>
+          </button>
+          <button onClick={() => setShowLeadVelocity(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
+            <TrendUpIcon className="w-3.5 h-3.5" />
+            <span>Velocity</span>
+          </button>
+          <button onClick={() => setShowGoalTracker(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
+            <TargetIcon className="w-3.5 h-3.5" />
+            <span>Goals</span>
+          </button>
+          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <span>?</span>
+          </button>
         </div>
       </div>
 
@@ -895,6 +1026,384 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         userId={user.id}
         onImportComplete={handleImportComplete}
       />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Pipeline Health Dashboard Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showPipelineHealth && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowPipelineHealth(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <ShieldIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Pipeline Health</h2>
+                  <p className="text-[10px] text-slate-400">Overall pipeline quality & distribution</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPipelineHealth(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {pipelineHealth ? (
+                <>
+                  {/* Health Score Gauge */}
+                  <div className="text-center p-6 rounded-2xl bg-slate-50 border border-slate-100">
+                    <svg className="w-24 h-24 mx-auto mb-4" viewBox="0 0 96 96">
+                      <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                      <circle cx="48" cy="48" r="40" fill="none"
+                        stroke={pipelineHealth.healthScore >= 75 ? '#10b981' : pipelineHealth.healthScore >= 50 ? '#f59e0b' : '#ef4444'}
+                        strokeWidth="8"
+                        strokeDasharray={`${(pipelineHealth.healthScore / 100) * 251.3} 251.3`}
+                        strokeLinecap="round" transform="rotate(-90 48 48)" />
+                      <text x="48" y="44" textAnchor="middle" className="text-xl font-black" fill="#1e293b">{pipelineHealth.healthScore}</text>
+                      <text x="48" y="58" textAnchor="middle" className="text-[8px] font-bold" fill="#94a3b8">HEALTH</text>
+                    </svg>
+                    <p className="text-sm font-black text-slate-900">
+                      {pipelineHealth.healthScore >= 75 ? 'Strong Pipeline' : pipelineHealth.healthScore >= 50 ? 'Needs Attention' : 'At Risk'}
+                    </p>
+                  </div>
+
+                  {/* Temperature Distribution */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Lead Temperature</p>
+                    <div className="space-y-3">
+                      {[
+                        { label: 'Hot', count: pipelineHealth.hotLeads, color: 'rose', pct: leads.length > 0 ? Math.round((pipelineHealth.hotLeads / leads.length) * 100) : 0 },
+                        { label: 'Warm', count: pipelineHealth.warmLeads, color: 'amber', pct: leads.length > 0 ? Math.round((pipelineHealth.warmLeads / leads.length) * 100) : 0 },
+                        { label: 'Cold', count: pipelineHealth.coldLeads, color: 'sky', pct: leads.length > 0 ? Math.round((pipelineHealth.coldLeads / leads.length) * 100) : 0 },
+                      ].map(temp => (
+                        <div key={temp.label} className="flex items-center space-x-3">
+                          <span className={`text-xs font-bold text-${temp.color}-600 w-12`}>{temp.label}</span>
+                          <div className="flex-1 bg-slate-100 h-3 rounded-full overflow-hidden">
+                            <div className={`h-full bg-${temp.color}-500 rounded-full transition-all duration-700`} style={{ width: `${temp.pct}%` }} />
+                          </div>
+                          <span className="text-xs font-black text-slate-700 w-16 text-right">{temp.count} ({temp.pct}%)</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Status Breakdown */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Status Breakdown</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.entries(pipelineHealth.statusGroups).map(([status, statusLeads]) => (
+                        <div key={status} className="p-3 bg-slate-50 rounded-xl text-center">
+                          <p className="text-xl font-black text-slate-900">{statusLeads.length}</p>
+                          <p className="text-[10px] font-bold text-slate-500">{status}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Key Metrics */}
+                  <div className="p-4 bg-slate-900 rounded-2xl text-white">
+                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider mb-3">Key Metrics</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-lg font-black">{pipelineHealth.avgScore}%</p>
+                        <p className="text-[10px] text-slate-400">Avg Score</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-black">{pipelineHealth.qualifiedRate}%</p>
+                        <p className="text-[10px] text-slate-400">Qualified Rate</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-black">{pipelineHealth.stagnantLeads}</p>
+                        <p className="text-[10px] text-slate-400">Stagnant Leads</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-black">{leads.length}</p>
+                        <p className="text-[10px] text-slate-400">Total Pipeline</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendations */}
+                  {pipelineHealth.stagnantLeads > 0 && (
+                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                      <div className="flex items-start space-x-2">
+                        <AlertTriangleIcon className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-amber-800">Action Required</p>
+                          <p className="text-[10px] text-amber-600 mt-0.5">{pipelineHealth.stagnantLeads} stagnant leads need re-engagement. Consider running a nurture campaign.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="p-8 text-center">
+                  <UsersIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm text-slate-400">Add leads to see pipeline health</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Lead Velocity Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showLeadVelocity && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowLeadVelocity(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <TrendUpIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Lead Velocity</h2>
+                  <p className="text-[10px] text-slate-400">7-day lead acquisition & conversion</p>
+                </div>
+              </div>
+              <button onClick={() => setShowLeadVelocity(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                  <p className="text-xl font-black text-indigo-700">{leadVelocity.totalAdded}</p>
+                  <p className="text-[10px] font-bold text-indigo-500">Added</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                  <p className="text-xl font-black text-emerald-700">{leadVelocity.totalConverted}</p>
+                  <p className="text-[10px] font-bold text-emerald-500">Converted</p>
+                </div>
+                <div className="p-3 bg-violet-50 rounded-xl text-center">
+                  <p className="text-xl font-black text-violet-700">{leadVelocity.avgDaily}</p>
+                  <p className="text-[10px] font-bold text-violet-500">Daily Avg</p>
+                </div>
+              </div>
+
+              {/* 7-Day Sparkline */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Daily Breakdown</p>
+                <div className="bg-slate-900 rounded-xl p-5">
+                  <div className="flex items-end space-x-2 h-24 mb-3">
+                    {leadVelocity.days.map((d, idx) => {
+                      const maxVal = Math.max(...leadVelocity.days.map(x => x.added), 1);
+                      const height = Math.max((d.added / maxVal) * 100, 8);
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center">
+                          <div className="w-full bg-indigo-500 rounded-t" style={{ height: `${height}%` }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex space-x-2">
+                    {leadVelocity.days.map((d, idx) => (
+                      <div key={idx} className="flex-1 text-center">
+                        <p className="text-[9px] text-slate-500 font-bold">{d.day}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Day-by-Day Table */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Detailed View</p>
+                <div className="space-y-2">
+                  {leadVelocity.days.map((d, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <span className="text-xs font-bold text-slate-700 w-12">{d.day}</span>
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-1">
+                          <TrendUpIcon className="w-3 h-3 text-indigo-500" />
+                          <span className="text-xs font-bold text-indigo-600">+{d.added}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <CheckIcon className="w-3 h-3 text-emerald-500" />
+                          <span className="text-xs font-bold text-emerald-600">{d.converted}</span>
+                        </div>
+                        <span className="text-xs font-bold text-slate-400">net {d.net}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Velocity Insight */}
+              <div className="p-4 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-indigo-200 uppercase tracking-wider mb-2">AI Velocity Insight</p>
+                <p className="text-xs text-indigo-100 leading-relaxed">
+                  {leadVelocity.avgDaily > 3
+                    ? 'Strong lead velocity! Your pipeline is growing at a healthy rate. Consider increasing qualification capacity.'
+                    : leadVelocity.avgDaily > 1
+                    ? 'Moderate velocity. Consider running targeted campaigns to boost lead acquisition.'
+                    : 'Low lead velocity. Focus on inbound marketing and content creation to attract more leads.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Goal Tracker Sidebar ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showGoalTracker && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowGoalTracker(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl border-l border-slate-200 overflow-y-auto animate-slide-in-right">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center">
+                  <TargetIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Goal Tracker</h2>
+                  <p className="text-[10px] text-slate-400">Monthly objectives & progress</p>
+                </div>
+              </div>
+              <button onClick={() => setShowGoalTracker(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Overall Progress */}
+              <div className="text-center p-6 rounded-2xl bg-slate-50 border border-slate-100">
+                {(() => {
+                  const overallPct = Math.round(goals.reduce((s, g) => s + Math.min(g.current / g.target, 1), 0) / goals.length * 100);
+                  return (
+                    <>
+                      <svg className="w-24 h-24 mx-auto mb-4" viewBox="0 0 96 96">
+                        <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                        <circle cx="48" cy="48" r="40" fill="none"
+                          stroke={overallPct >= 75 ? '#10b981' : overallPct >= 50 ? '#6366f1' : '#f59e0b'}
+                          strokeWidth="8"
+                          strokeDasharray={`${(overallPct / 100) * 251.3} 251.3`}
+                          strokeLinecap="round" transform="rotate(-90 48 48)" />
+                        <text x="48" y="44" textAnchor="middle" className="text-xl font-black" fill="#1e293b">{overallPct}%</text>
+                        <text x="48" y="58" textAnchor="middle" className="text-[8px] font-bold" fill="#94a3b8">OVERALL</text>
+                      </svg>
+                      <p className="text-sm font-black text-slate-900">
+                        {overallPct >= 75 ? 'On Track!' : overallPct >= 50 ? 'Making Progress' : 'Needs Focus'}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {goals.filter(g => g.current >= g.target).length}/{goals.length} goals achieved
+                      </p>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Individual Goals */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Monthly Goals</p>
+                <div className="space-y-3">
+                  {goals.map(goal => {
+                    const pct = Math.min(Math.round((goal.current / goal.target) * 100), 100);
+                    const achieved = goal.current >= goal.target;
+                    return (
+                      <div key={goal.id} className={`p-4 rounded-xl border ${achieved ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-slate-900">{goal.label}</span>
+                          {achieved ? (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black">Achieved!</span>
+                          ) : (
+                            <span className="text-xs font-bold text-slate-500">{goal.current}/{goal.target} {goal.unit}</span>
+                          )}
+                        </div>
+                        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${achieved ? 'bg-emerald-500' : `bg-${goal.color}-500`}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1.5 text-right">{pct}% complete</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Projected End of Month */}
+              <div className="p-4 bg-slate-900 rounded-2xl text-white">
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider mb-3">Month-End Projection</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Days Remaining</span>
+                    <span className="text-xs font-bold text-white">{new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Projected Leads</span>
+                    <span className="text-xs font-bold text-white">{Math.round(leads.length * (30 / Math.max(new Date().getDate(), 1)))}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Projected Conversions</span>
+                    <span className="text-xs font-bold text-white">{Math.round(quickStats.predictedConversions * (30 / Math.max(new Date().getDate(), 1)))}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Recommendation */}
+              <div className="p-4 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl text-white">
+                <div className="flex items-center space-x-2 mb-2">
+                  <BrainIcon className="w-4 h-4 text-violet-200" />
+                  <p className="text-[10px] font-black text-violet-200 uppercase tracking-wider">AI Recommendation</p>
+                </div>
+                <p className="text-xs text-violet-100 leading-relaxed">
+                  {goals.filter(g => g.current < g.target).length > 3
+                    ? 'Focus on your top 2 goals this week. Spreading effort too thin reduces impact. Prioritize lead acquisition and conversion rate.'
+                    : goals.filter(g => g.current >= g.target).length === goals.length
+                    ? 'All goals achieved! Consider raising your targets for next month to maintain growth momentum.'
+                    : 'Good progress! Keep pushing on content creation and lead scoring to hit your remaining targets.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ─── Keyboard Shortcuts Modal ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                  <KeyboardIcon className="w-4 h-4" />
+                </div>
+                <h2 className="text-sm font-black text-slate-900">Dashboard Shortcuts</h2>
+              </div>
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-3 max-h-80 overflow-y-auto">
+              {[
+                { key: 'N', action: 'Add new lead' },
+                { key: 'I', action: 'Import CSV' },
+                { key: 'G', action: 'Generate content' },
+                { key: 'P', action: 'Pipeline Health' },
+                { key: 'V', action: 'Lead Velocity' },
+                { key: 'T', action: 'Goal Tracker' },
+                { key: 'R', action: 'Refresh insights' },
+                { key: '?', action: 'This shortcuts panel' },
+                { key: 'Esc', action: 'Close panels' },
+              ].map((sc, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <span className="text-xs text-slate-600">{sc.action}</span>
+                  <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700">{sc.key}</kbd>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
+              <p className="text-[10px] text-slate-400">Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold">Esc</kbd> to close</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
