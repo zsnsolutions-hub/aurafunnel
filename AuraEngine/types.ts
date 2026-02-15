@@ -39,6 +39,22 @@ export interface BusinessProfile {
   salesApproach?: string;
 }
 
+export interface BusinessAnalysisField {
+  value: string;
+  confidence: number; // 0-100
+}
+
+export interface BusinessAnalysisResult {
+  companyName: BusinessAnalysisField;
+  industry: BusinessAnalysisField;
+  productsServices: BusinessAnalysisField;
+  targetAudience: BusinessAnalysisField;
+  valueProp: BusinessAnalysisField;
+  pricingModel: BusinessAnalysisField;
+  salesApproach: BusinessAnalysisField;
+  followUpQuestions: string[];
+}
+
 export interface KnowledgeBase {
   website?: string;
   linkedin?: string;

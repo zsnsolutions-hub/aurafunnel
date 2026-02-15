@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile } from '../../types';
+import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile, BusinessAnalysisResult } from '../../types';
 import {
   ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon,
   TrendUpIcon, TrendDownIcon, KeyboardIcon, ActivityIcon, BrainIcon, LayersIcon, UsersIcon,
-  ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon, BriefcaseIcon
+  ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon, BriefcaseIcon,
+  GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, BoltIcon, RefreshIcon, ChevronDownIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
 
 const PREFS_STORAGE_KEY = 'aurafunnel_dashboard_prefs';
 const NOTIF_STORAGE_KEY = 'aurafunnel_notification_prefs';
@@ -15,7 +17,7 @@ const APIKEYS_STORAGE_KEY = 'aurafunnel_api_keys';
 type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferences' | 'api_keys' | 'security';
 
 const ProfilePage: React.FC = () => {
-  const { user } = useOutletContext<{ user: User }>();
+  const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
 
   // Profile
@@ -65,6 +67,27 @@ const ProfilePage: React.FC = () => {
   // Business Profile
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(user?.businessProfile || {});
   const [isSavingBusiness, setIsSavingBusiness] = useState(false);
+
+  // Business Profile Wizard
+  type WizardPhase = 'input' | 'analyzing' | 'results' | 'questions' | 'manual';
+  type AnalysisStage = 'searching' | 'reading' | 'extracting' | 'structuring' | 'complete';
+  const [wizardPhase, setWizardPhase] = useState<WizardPhase>(() => {
+    // If profile already has data, show results view; otherwise start with input
+    const hasData = user?.businessProfile && Object.values(user.businessProfile).some(v => v);
+    return hasData ? 'manual' : 'input';
+  });
+  const [analysisStage, setAnalysisStage] = useState<AnalysisStage>('searching');
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [websiteUrl, setWebsiteUrl] = useState(user?.businessProfile?.companyWebsite || '');
+  const [socialUrls, setSocialUrls] = useState({ linkedin: '', twitter: '', instagram: '', facebook: '' });
+  const [showSocialInputs, setShowSocialInputs] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<BusinessAnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState('');
+  const [followUpQuestions, setFollowUpQuestions] = useState<{ field: string; question: string; placeholder: string }[]>([]);
+  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+  const [questionAnswer, setQuestionAnswer] = useState('');
+  const [urlError, setUrlError] = useState('');
+  const stageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const tabs = [
     { id: 'profile' as SettingsTab, label: 'Profile', icon: <CogIcon className="w-4 h-4" /> },
@@ -116,12 +139,137 @@ const ProfilePage: React.FC = () => {
         .update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null })
         .eq('id', user.id);
       if (updateError) throw updateError;
+      if (refreshProfile) await refreshProfile();
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to save business profile.');
     } finally {
       setIsSavingBusiness(false);
+    }
+  };
+
+  // Wizard: validate URL
+  const validateUrl = (url: string): boolean => {
+    if (!url.trim()) return false;
+    try {
+      const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+      return !!u.hostname.includes('.');
+    } catch {
+      return false;
+    }
+  };
+
+  // Wizard: run AI analysis
+  const handleAnalyze = async () => {
+    if (!validateUrl(websiteUrl)) {
+      setUrlError('Please enter a valid website URL');
+      return;
+    }
+    setUrlError('');
+    setAnalysisError('');
+    setWizardPhase('analyzing');
+    setAnalysisStage('searching');
+    setAnalysisProgress(0);
+
+    // Animate stages with timeouts
+    const stages: { stage: AnalysisStage; progress: number; delay: number }[] = [
+      { stage: 'searching', progress: 15, delay: 0 },
+      { stage: 'reading', progress: 40, delay: 2500 },
+      { stage: 'extracting', progress: 65, delay: 5000 },
+      { stage: 'structuring', progress: 85, delay: 7500 },
+    ];
+
+    stages.forEach(({ stage, progress, delay }) => {
+      const timer = setTimeout(() => {
+        setAnalysisStage(stage);
+        setAnalysisProgress(progress);
+      }, delay);
+      if (delay === 0) stageTimerRef.current = timer;
+    });
+
+    try {
+      const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
+      const result = await analyzeBusinessFromWeb(fullUrl, socialUrls);
+
+      // Clear animation timers
+      if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
+      setAnalysisStage('complete');
+      setAnalysisProgress(100);
+
+      if (result.analysis) {
+        setAnalysisResult(result.analysis);
+        // Auto-populate businessProfile from analysis
+        const populated: BusinessProfile = { ...businessProfile };
+        const fields = ['companyName', 'industry', 'productsServices', 'targetAudience', 'valueProp', 'pricingModel', 'salesApproach'] as const;
+        fields.forEach(f => {
+          const field = result.analysis![f];
+          if (field?.value) {
+            populated[f] = field.value;
+          }
+        });
+        populated.companyWebsite = fullUrl;
+        setBusinessProfile(populated);
+
+        // Generate follow-up questions for low-confidence fields
+        const lowConfidenceFields = fields.filter(f => (result.analysis![f]?.confidence || 0) < 70);
+        if (lowConfidenceFields.length > 0) {
+          try {
+            const fqResult = await generateFollowUpQuestions(populated);
+            setFollowUpQuestions(fqResult.questions);
+          } catch {
+            // Follow-up question generation is optional
+            setFollowUpQuestions([]);
+          }
+        }
+
+        setTimeout(() => setWizardPhase('results'), 500);
+      } else {
+        setAnalysisError('Could not analyze the website. Please try again or use manual entry.');
+        setTimeout(() => setWizardPhase('manual'), 1500);
+      }
+    } catch (err: any) {
+      setAnalysisError(err.message || 'Analysis failed');
+      setTimeout(() => setWizardPhase('manual'), 1500);
+    }
+  };
+
+  // Wizard: save profile (reused for all phases)
+  const handleWizardSave = async () => {
+    setIsSavingBusiness(true);
+    setError('');
+    setSuccess(false);
+    try {
+      const cleaned: Record<string, string> = {};
+      for (const [k, v] of Object.entries(businessProfile)) {
+        if (typeof v === 'string' && v.trim()) cleaned[k] = v.trim();
+      }
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null })
+        .eq('id', user.id);
+      if (updateError) throw updateError;
+      if (refreshProfile) await refreshProfile();
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save business profile.');
+    } finally {
+      setIsSavingBusiness(false);
+    }
+  };
+
+  // Wizard: handle follow-up answer
+  const handleFollowUpAnswer = (answer: string) => {
+    if (answer.trim() && followUpQuestions[currentQuestionIdx]) {
+      const { field } = followUpQuestions[currentQuestionIdx];
+      setBusinessProfile(p => ({ ...p, [field]: answer.trim() }));
+    }
+    if (currentQuestionIdx < followUpQuestions.length - 1) {
+      setCurrentQuestionIdx(idx => idx + 1);
+      setQuestionAnswer('');
+    } else {
+      handleWizardSave();
     }
   };
 
@@ -677,115 +825,507 @@ const ProfilePage: React.FC = () => {
       {/* Business Profile Tab */}
       {activeTab === 'business_profile' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <form onSubmit={handleBusinessProfileUpdate} className="space-y-6">
-            {/* Company Info */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 font-heading">Company Information</h3>
-                <p className="text-sm text-slate-500 mt-1">Tell the AI about your business so all generated content is personalized.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Company Name</label>
-                  <input type="text" value={businessProfile.companyName || ''} onChange={e => setBusinessProfile(p => ({ ...p, companyName: e.target.value }))}
-                    placeholder="e.g. Acme Corp"
-                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Industry</label>
-                  <input type="text" value={businessProfile.industry || ''} onChange={e => setBusinessProfile(p => ({ ...p, industry: e.target.value }))}
-                    placeholder="e.g. B2B SaaS, Healthcare, Fintech"
-                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
-                </div>
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Company Website</label>
-                  <input type="text" value={businessProfile.companyWebsite || ''} onChange={e => setBusinessProfile(p => ({ ...p, companyWebsite: e.target.value }))}
-                    placeholder="e.g. https://acmecorp.com"
-                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
-                </div>
-              </div>
-            </div>
 
-            {/* Products & Value Prop */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 font-heading">Products & Services</h3>
-                <p className="text-sm text-slate-500 mt-1">What does your company sell or offer?</p>
-              </div>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">What You Sell</label>
-                  <textarea value={businessProfile.productsServices || ''} onChange={e => setBusinessProfile(p => ({ ...p, productsServices: e.target.value }))}
-                    placeholder="Describe your main products or services..."
-                    rows={3}
-                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Value Proposition</label>
-                  <textarea value={businessProfile.valueProp || ''} onChange={e => setBusinessProfile(p => ({ ...p, valueProp: e.target.value }))}
-                    placeholder="What makes your offering unique? Why should prospects choose you?"
-                    rows={3}
-                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Target Market */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 font-heading">Target Market</h3>
-                <p className="text-sm text-slate-500 mt-1">Who is your ideal customer?</p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ideal Customer Profile</label>
-                <textarea value={businessProfile.targetAudience || ''} onChange={e => setBusinessProfile(p => ({ ...p, targetAudience: e.target.value }))}
-                  placeholder="Describe your ideal customer — role, company size, industry, pain points..."
-                  rows={3}
-                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
-              </div>
-            </div>
-
-            {/* Sales Strategy */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 font-heading">Sales Strategy</h3>
-                <p className="text-sm text-slate-500 mt-1">How do you sell and price your offering?</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pricing Model</label>
-                  <input type="text" value={businessProfile.pricingModel || ''} onChange={e => setBusinessProfile(p => ({ ...p, pricingModel: e.target.value }))}
-                    placeholder="e.g. Subscription, Per-seat, Usage-based"
-                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Sales Approach</label>
-                  <input type="text" value={businessProfile.salesApproach || ''} onChange={e => setBusinessProfile(p => ({ ...p, salesApproach: e.target.value }))}
-                    placeholder="e.g. Product-led, Enterprise sales, Freemium"
-                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
-                </div>
-              </div>
-            </div>
-
-            {/* Save Button */}
-            <div className="flex items-center justify-between">
-              <div className="flex-grow">
-                {success && (
-                  <span className="text-emerald-600 text-xs font-black uppercase tracking-widest flex items-center space-x-2 animate-in slide-in-from-left-2 duration-300">
-                    <div className="w-5 h-5 bg-emerald-100 rounded-lg flex items-center justify-center text-[10px]">
-                      <CheckIcon className="w-3 h-3" />
+          {/* ═══ Phase 1: URL Input ═══ */}
+          {wizardPhase === 'input' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-indigo-200 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+                <div className="relative">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                      <SparklesIcon className="w-5 h-5" />
                     </div>
-                    <span>Business Profile Saved</span>
-                  </span>
-                )}
-                {error && <span className="text-red-600 text-xs font-black uppercase tracking-widest truncate max-w-[300px]">Error: {error}</span>}
+                    <h3 className="text-2xl font-black font-heading tracking-tight">Let AI Discover Your Business</h3>
+                  </div>
+                  <p className="text-indigo-100 text-sm max-w-lg leading-relaxed">
+                    Enter your website URL and we'll use AI to analyze your online presence, extract business intelligence, and auto-fill your profile in seconds.
+                  </p>
+                </div>
               </div>
-              <button type="submit" disabled={isSavingBusiness}
-                className={`px-10 py-4 font-bold rounded-2xl shadow-2xl transition-all active:scale-95 ${isSavingBusiness ? 'bg-slate-100 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100 hover:scale-[1.02]'}`}>
-                {isSavingBusiness ? 'Saving...' : 'Save Business Profile'}
-              </button>
+
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Website URL</label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      <GlobeIcon className="w-5 h-5" />
+                    </div>
+                    <input
+                      type="text"
+                      value={websiteUrl}
+                      onChange={e => { setWebsiteUrl(e.target.value); setUrlError(''); }}
+                      placeholder="https://yourcompany.com"
+                      className={`w-full pl-12 pr-5 py-4 rounded-2xl border ${urlError ? 'border-red-300 focus:ring-red-100 focus:border-red-500' : 'border-slate-200 focus:ring-indigo-100 focus:border-indigo-500'} focus:ring-4 outline-none transition-all font-bold text-slate-800 text-lg`}
+                    />
+                  </div>
+                  {urlError && <p className="text-xs font-bold text-red-500 mt-1">{urlError}</p>}
+                </div>
+
+                {/* Expandable Social Handles */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSocialInputs(!showSocialInputs)}
+                    className="flex items-center space-x-2 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
+                  >
+                    <ChevronDownIcon className={`w-4 h-4 transition-transform ${showSocialInputs ? 'rotate-180' : ''}`} />
+                    <span>Add social media profiles (optional)</span>
+                  </button>
+
+                  {showSocialInputs && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      {[
+                        { key: 'linkedin' as const, icon: <LinkedInIcon className="w-4 h-4" />, placeholder: 'https://linkedin.com/company/...' },
+                        { key: 'twitter' as const, icon: <TwitterIcon className="w-4 h-4" />, placeholder: 'https://twitter.com/...' },
+                        { key: 'instagram' as const, icon: <InstagramIcon className="w-4 h-4" />, placeholder: 'https://instagram.com/...' },
+                        { key: 'facebook' as const, icon: <FacebookIcon className="w-4 h-4" />, placeholder: 'https://facebook.com/...' },
+                      ].map(s => (
+                        <div key={s.key} className="relative">
+                          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">{s.icon}</div>
+                          <input
+                            type="text"
+                            value={socialUrls[s.key]}
+                            onChange={e => setSocialUrls(p => ({ ...p, [s.key]: e.target.value }))}
+                            placeholder={s.placeholder}
+                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-800"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setWizardPhase('manual')}
+                    className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors"
+                  >
+                    Skip to manual entry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAnalyze}
+                    disabled={!websiteUrl.trim()}
+                    className={`flex items-center space-x-2 px-8 py-4 rounded-2xl font-bold text-sm shadow-2xl transition-all active:scale-95 ${
+                      websiteUrl.trim()
+                        ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100 hover:scale-[1.02]'
+                        : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
+                    }`}
+                  >
+                    <SparklesIcon className="w-4 h-4" />
+                    <span>Analyze My Business</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </form>
+          )}
+
+          {/* ═══ Phase 2: AI Analysis Loading ═══ */}
+          {wizardPhase === 'analyzing' && (
+            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 space-y-8">
+              <div className="text-center">
+                <div className="relative inline-flex items-center justify-center w-20 h-20 mb-6">
+                  <div className="absolute inset-0 bg-indigo-100 rounded-[2rem] animate-pulse" />
+                  <div className="relative z-10 animate-spin [animation-duration:3s]">
+                    <SparklesIcon className="w-8 h-8 text-indigo-600" />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-violet-100 rounded-xl flex items-center justify-center animate-bounce">
+                    <BoltIcon className="w-4 h-4 text-violet-600" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-black text-slate-900 font-heading">Analyzing Your Business</h3>
+                <p className="text-sm text-slate-500 mt-2">Our AI is researching your company online...</p>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-3">
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${analysisProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs font-bold text-slate-400 text-center">{analysisProgress}% complete</p>
+              </div>
+
+              {/* Stage Checklist */}
+              <div className="space-y-3">
+                {([
+                  { stage: 'searching' as const, label: 'Searching the web...' },
+                  { stage: 'reading' as const, label: 'Analyzing website & socials...' },
+                  { stage: 'extracting' as const, label: 'Extracting business intelligence...' },
+                  { stage: 'structuring' as const, label: 'Building your profile...' },
+                ] as const).map((item, idx) => {
+                  const stageOrder: AnalysisStage[] = ['searching', 'reading', 'extracting', 'structuring', 'complete'];
+                  const currentIdx = stageOrder.indexOf(analysisStage);
+                  const itemIdx = stageOrder.indexOf(item.stage);
+                  const isDone = currentIdx > itemIdx;
+                  const isActive = currentIdx === itemIdx;
+
+                  return (
+                    <div key={item.stage} className={`flex items-center space-x-3 p-3 rounded-xl transition-all ${isActive ? 'bg-indigo-50' : isDone ? 'bg-emerald-50' : 'bg-slate-50'}`}>
+                      {isDone ? (
+                        <div className="w-6 h-6 bg-emerald-100 rounded-lg flex items-center justify-center">
+                          <CheckIcon className="w-3.5 h-3.5 text-emerald-600" />
+                        </div>
+                      ) : isActive ? (
+                        <div className="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center">
+                          <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-pulse" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 bg-slate-100 rounded-lg flex items-center justify-center">
+                          <span className="text-[10px] font-black text-slate-400">{idx + 1}</span>
+                        </div>
+                      )}
+                      <span className={`text-sm font-bold ${isDone ? 'text-emerald-700' : isActive ? 'text-indigo-700' : 'text-slate-400'}`}>
+                        {item.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {analysisError && (
+                <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                  <p className="text-xs font-bold text-red-600">{analysisError}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ Phase 3: Auto-Populated Results ═══ */}
+          {wizardPhase === 'results' && analysisResult && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                <div className="flex items-center space-x-3 mb-2">
+                  <div className="w-8 h-8 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <CheckIcon className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 font-heading">Here's What We Found</h3>
+                </div>
+                <p className="text-sm text-slate-500 ml-11">Review and edit any fields below. Confidence scores show how certain the AI is about each field.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  { key: 'companyName' as const, label: 'Company Name', icon: <BriefcaseIcon className="w-4 h-4" />, type: 'input' },
+                  { key: 'industry' as const, label: 'Industry', icon: <LayersIcon className="w-4 h-4" />, type: 'input' },
+                  { key: 'productsServices' as const, label: 'Products & Services', icon: <TargetIcon className="w-4 h-4" />, type: 'textarea' },
+                  { key: 'targetAudience' as const, label: 'Target Audience', icon: <UsersIcon className="w-4 h-4" />, type: 'textarea' },
+                  { key: 'valueProp' as const, label: 'Value Proposition', icon: <SparklesIcon className="w-4 h-4" />, type: 'textarea' },
+                  { key: 'pricingModel' as const, label: 'Pricing Model', icon: <DocumentIcon className="w-4 h-4" />, type: 'input' },
+                  { key: 'salesApproach' as const, label: 'Sales Approach', icon: <BoltIcon className="w-4 h-4" />, type: 'input' },
+                ]).map(field => {
+                  const confidence = analysisResult[field.key]?.confidence || 0;
+                  const confidenceColor = confidence >= 80 ? 'emerald' : confidence >= 50 ? 'amber' : 'rose';
+                  const confidenceLabel = confidence >= 80 ? 'High confidence' : confidence >= 50 ? 'Medium' : 'Low — please review';
+
+                  return (
+                    <div key={field.key} className={`bg-white rounded-2xl border shadow-sm p-5 space-y-3 ${
+                      field.type === 'textarea' ? 'md:col-span-2' : ''
+                    } ${confidence < 50 ? 'border-rose-200' : 'border-slate-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center bg-${confidenceColor}-50 text-${confidenceColor}-600`}>
+                            {field.icon}
+                          </div>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{field.label}</span>
+                        </div>
+                        <div className={`flex items-center space-x-1 px-2 py-1 rounded-full bg-${confidenceColor}-50`}>
+                          {confidence >= 80 ? (
+                            <CheckIcon className={`w-3 h-3 text-${confidenceColor}-600`} />
+                          ) : confidence < 50 ? (
+                            <AlertTriangleIcon className={`w-3 h-3 text-${confidenceColor}-600`} />
+                          ) : null}
+                          <span className={`text-[9px] font-black text-${confidenceColor}-600`}>{confidenceLabel}</span>
+                        </div>
+                      </div>
+                      {field.type === 'textarea' ? (
+                        <textarea
+                          value={businessProfile[field.key] || ''}
+                          onChange={e => setBusinessProfile(p => ({ ...p, [field.key]: e.target.value }))}
+                          rows={3}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium text-slate-800 text-sm resize-none"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={businessProfile[field.key] || ''}
+                          onChange={e => setBusinessProfile(p => ({ ...p, [field.key]: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium text-slate-800 text-sm"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Results Actions */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => { setWizardPhase('input'); setAnalysisResult(null); }}
+                    className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  >
+                    <RefreshIcon className="w-3.5 h-3.5" />
+                    <span>Re-analyze</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWizardPhase('manual')}
+                    className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors px-3 py-2.5"
+                  >
+                    Switch to manual entry
+                  </button>
+                </div>
+                <div className="flex items-center space-x-3">
+                  {success && (
+                    <span className="text-emerald-600 text-xs font-black uppercase tracking-widest flex items-center space-x-2 animate-in slide-in-from-left-2 duration-300">
+                      <CheckIcon className="w-3 h-3" />
+                      <span>Saved</span>
+                    </span>
+                  )}
+                  {error && <span className="text-red-600 text-xs font-bold truncate max-w-[200px]">{error}</span>}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (followUpQuestions.length > 0) {
+                        setCurrentQuestionIdx(0);
+                        setQuestionAnswer('');
+                        setWizardPhase('questions');
+                      } else {
+                        handleWizardSave();
+                      }
+                    }}
+                    disabled={isSavingBusiness}
+                    className={`px-8 py-4 font-bold rounded-2xl shadow-2xl transition-all active:scale-95 ${
+                      isSavingBusiness ? 'bg-slate-100 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100 hover:scale-[1.02]'
+                    }`}
+                  >
+                    {isSavingBusiness ? 'Saving...' : followUpQuestions.length > 0 ? 'Continue' : 'Save Business Profile'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ Phase 4: AI Follow-Up Questions ═══ */}
+          {wizardPhase === 'questions' && followUpQuestions.length > 0 && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 space-y-8">
+                <div className="text-center">
+                  <div className="inline-flex items-center space-x-2 px-4 py-2 bg-violet-50 rounded-full mb-4">
+                    <span className="text-[10px] font-black text-violet-600 uppercase tracking-widest">
+                      Question {currentQuestionIdx + 1} of {followUpQuestions.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center space-x-3 mb-4">
+                    <div className="w-10 h-10 bg-violet-100 rounded-2xl flex items-center justify-center">
+                      <BrainIcon className="w-5 h-5 text-violet-600" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 font-heading max-w-lg mx-auto">
+                    {followUpQuestions[currentQuestionIdx]?.question}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 font-bold uppercase tracking-widest">
+                    Maps to: {followUpQuestions[currentQuestionIdx]?.field}
+                  </p>
+                </div>
+
+                <textarea
+                  value={questionAnswer}
+                  onChange={e => setQuestionAnswer(e.target.value)}
+                  placeholder={followUpQuestions[currentQuestionIdx]?.placeholder || 'Type your answer...'}
+                  rows={4}
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-violet-100 focus:border-violet-500 outline-none transition-all font-medium text-slate-800 text-sm resize-none"
+                  autoFocus
+                />
+
+                {/* Progress dots */}
+                <div className="flex items-center justify-center space-x-2">
+                  {followUpQuestions.map((_, idx) => (
+                    <div key={idx} className={`w-2 h-2 rounded-full transition-all ${
+                      idx === currentQuestionIdx ? 'w-6 bg-violet-600' : idx < currentQuestionIdx ? 'bg-emerald-400' : 'bg-slate-200'
+                    }`} />
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Skip this question
+                      if (currentQuestionIdx < followUpQuestions.length - 1) {
+                        setCurrentQuestionIdx(idx => idx + 1);
+                        setQuestionAnswer('');
+                      } else {
+                        handleWizardSave();
+                      }
+                    }}
+                    className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors px-4 py-2"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFollowUpAnswer(questionAnswer)}
+                    disabled={isSavingBusiness}
+                    className={`flex items-center space-x-2 px-8 py-4 rounded-2xl font-bold text-sm shadow-2xl transition-all active:scale-95 ${
+                      isSavingBusiness ? 'bg-slate-100 text-slate-400' : 'bg-violet-600 text-white hover:bg-violet-700 shadow-violet-100 hover:scale-[1.02]'
+                    }`}
+                  >
+                    <span>{currentQuestionIdx < followUpQuestions.length - 1 ? 'Next' : 'Save Profile'}</span>
+                    {currentQuestionIdx < followUpQuestions.length - 1 && <span>&rarr;</span>}
+                  </button>
+                </div>
+              </div>
+
+              {success && (
+                <div className="flex items-center justify-center space-x-2 text-emerald-600 text-xs font-black uppercase tracking-widest animate-in fade-in duration-300">
+                  <CheckIcon className="w-4 h-4" />
+                  <span>Business Profile Saved Successfully</span>
+                </div>
+              )}
+              {error && (
+                <p className="text-center text-red-600 text-xs font-bold">{error}</p>
+              )}
+            </div>
+          )}
+
+          {/* ═══ Manual Fallback: Existing Static Form ═══ */}
+          {wizardPhase === 'manual' && (
+            <div className="space-y-6">
+              {/* AI setup banner */}
+              <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                <div className="flex items-center space-x-3">
+                  <SparklesIcon className="w-5 h-5 text-indigo-600" />
+                  <p className="text-xs font-bold text-indigo-700">Want AI to fill this out for you? Try the AI-powered setup instead.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWizardPhase('input')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors whitespace-nowrap"
+                >
+                  Try AI Setup
+                </button>
+              </div>
+
+              <form onSubmit={handleBusinessProfileUpdate} className="space-y-6">
+                {/* Company Info */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-heading">Company Information</h3>
+                    <p className="text-sm text-slate-500 mt-1">Tell the AI about your business so all generated content is personalized.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Company Name</label>
+                      <input type="text" value={businessProfile.companyName || ''} onChange={e => setBusinessProfile(p => ({ ...p, companyName: e.target.value }))}
+                        placeholder="e.g. Acme Corp"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Industry</label>
+                      <input type="text" value={businessProfile.industry || ''} onChange={e => setBusinessProfile(p => ({ ...p, industry: e.target.value }))}
+                        placeholder="e.g. B2B SaaS, Healthcare, Fintech"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Company Website</label>
+                      <input type="text" value={businessProfile.companyWebsite || ''} onChange={e => setBusinessProfile(p => ({ ...p, companyWebsite: e.target.value }))}
+                        placeholder="e.g. https://acmecorp.com"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Products & Value Prop */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-heading">Products & Services</h3>
+                    <p className="text-sm text-slate-500 mt-1">What does your company sell or offer?</p>
+                  </div>
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">What You Sell</label>
+                      <textarea value={businessProfile.productsServices || ''} onChange={e => setBusinessProfile(p => ({ ...p, productsServices: e.target.value }))}
+                        placeholder="Describe your main products or services..."
+                        rows={3}
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Value Proposition</label>
+                      <textarea value={businessProfile.valueProp || ''} onChange={e => setBusinessProfile(p => ({ ...p, valueProp: e.target.value }))}
+                        placeholder="What makes your offering unique? Why should prospects choose you?"
+                        rows={3}
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Target Market */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-heading">Target Market</h3>
+                    <p className="text-sm text-slate-500 mt-1">Who is your ideal customer?</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ideal Customer Profile</label>
+                    <textarea value={businessProfile.targetAudience || ''} onChange={e => setBusinessProfile(p => ({ ...p, targetAudience: e.target.value }))}
+                      placeholder="Describe your ideal customer — role, company size, industry, pain points..."
+                      rows={3}
+                      className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+                  </div>
+                </div>
+
+                {/* Sales Strategy */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-heading">Sales Strategy</h3>
+                    <p className="text-sm text-slate-500 mt-1">How do you sell and price your offering?</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pricing Model</label>
+                      <input type="text" value={businessProfile.pricingModel || ''} onChange={e => setBusinessProfile(p => ({ ...p, pricingModel: e.target.value }))}
+                        placeholder="e.g. Subscription, Per-seat, Usage-based"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Sales Approach</label>
+                      <input type="text" value={businessProfile.salesApproach || ''} onChange={e => setBusinessProfile(p => ({ ...p, salesApproach: e.target.value }))}
+                        placeholder="e.g. Product-led, Enterprise sales, Freemium"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <div className="flex items-center justify-between">
+                  <div className="flex-grow">
+                    {success && (
+                      <span className="text-emerald-600 text-xs font-black uppercase tracking-widest flex items-center space-x-2 animate-in slide-in-from-left-2 duration-300">
+                        <div className="w-5 h-5 bg-emerald-100 rounded-lg flex items-center justify-center text-[10px]">
+                          <CheckIcon className="w-3 h-3" />
+                        </div>
+                        <span>Business Profile Saved</span>
+                      </span>
+                    )}
+                    {error && <span className="text-red-600 text-xs font-black uppercase tracking-widest truncate max-w-[300px]">Error: {error}</span>}
+                  </div>
+                  <button type="submit" disabled={isSavingBusiness}
+                    className={`px-10 py-4 font-bold rounded-2xl shadow-2xl transition-all active:scale-95 ${isSavingBusiness ? 'bg-slate-100 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100 hover:scale-[1.02]'}`}>
+                    {isSavingBusiness ? 'Saving...' : 'Save Business Profile'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
         </div>
       )}
 

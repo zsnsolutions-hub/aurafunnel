@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead, BusinessProfile } from "../types";
+import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead, BusinessProfile, BusinessAnalysisResult } from "../types";
 import { supabase } from "./supabase";
 
 const buildBusinessContext = (profile?: BusinessProfile): string => {
@@ -492,6 +492,215 @@ Keep the total response under 250 words. Be specific and actionable, not generic
   }
 
   return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'lead_research', prompt_version: 1 };
+};
+
+// === Business Profile AI Analysis ===
+
+const parseAnalysisJSON = (text: string): BusinessAnalysisResult | null => {
+  try {
+    // Try direct parse first
+    return JSON.parse(text);
+  } catch {
+    // Strip markdown code fences
+    const stripped = text.replace(/```(?:json)?\s*/g, '').replace(/```/g, '').trim();
+    try {
+      return JSON.parse(stripped);
+    } catch {
+      // Regex extract first JSON object
+      const match = stripped.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          return JSON.parse(match[0]);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+};
+
+export const analyzeBusinessFromWeb = async (
+  websiteUrl: string,
+  socialUrls?: { linkedin?: string; twitter?: string; instagram?: string; facebook?: string }
+): Promise<AIResponse & { analysis: BusinessAnalysisResult | null }> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const socialContext = socialUrls
+    ? Object.entries(socialUrls)
+        .filter(([_, v]) => v)
+        .map(([k, v]) => `- ${k}: ${v}`)
+        .join('\n')
+    : '';
+
+  const prompt = `Research the following company and extract structured business intelligence.
+
+COMPANY WEBSITE: ${websiteUrl}
+${socialContext ? `\nSOCIAL MEDIA PROFILES:\n${socialContext}` : ''}
+
+Analyze the company's website and any available online information. Return a JSON object with the following structure. Each field must have a "value" (string) and "confidence" (number 0-100, how certain you are about this information).
+
+{
+  "companyName": { "value": "...", "confidence": 0-100 },
+  "industry": { "value": "...", "confidence": 0-100 },
+  "productsServices": { "value": "...", "confidence": 0-100 },
+  "targetAudience": { "value": "...", "confidence": 0-100 },
+  "valueProp": { "value": "...", "confidence": 0-100 },
+  "pricingModel": { "value": "...", "confidence": 0-100 },
+  "salesApproach": { "value": "...", "confidence": 0-100 },
+  "followUpQuestions": ["question1", "question2"]
+}
+
+Guidelines:
+- For fields you can confidently determine from the website, set confidence 80-100
+- For fields you can reasonably infer, set confidence 50-79
+- For fields you're uncertain about, set confidence below 50 and provide your best guess
+- Generate 2-4 follow-up questions for fields with confidence below 70
+- Return ONLY valid JSON, no markdown or explanation`;
+
+  const systemInstruction = 'You are a business intelligence analyst. Extract structured company data from websites and online presence. Always respond with valid JSON only.';
+
+  // Try with Google Search grounding first
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            temperature: 0.3,
+            topP: 0.9,
+            tools: [{ googleSearch: {} }],
+          }
+        });
+      } catch (groundingError: any) {
+        // Google Search grounding failed, fall back to inference-only
+        console.warn('Google Search grounding failed, falling back to inference:', groundingError.message);
+        response = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            temperature: 0.3,
+            topP: 0.9,
+          }
+        });
+      }
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error("Empty response from business analysis.");
+
+      const analysis = parseAnalysisJSON(text);
+
+      return {
+        text: text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: 'business_analysis_web',
+        prompt_version: 1,
+        analysis
+      };
+    } catch (error: any) {
+      attempt++;
+      console.warn(`Business analysis attempt ${attempt} failed:`, error.message);
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `ANALYSIS FAILED: ${error.message}`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: 'business_analysis_web',
+          prompt_version: 1,
+          analysis: null
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return {
+    text: 'CRITICAL FAILURE: Business analysis could not be completed.',
+    tokens_used: 0,
+    model_name: MODEL_NAME,
+    prompt_name: 'business_analysis_web',
+    prompt_version: 1,
+    analysis: null
+  };
+};
+
+export const generateFollowUpQuestions = async (
+  currentProfile: BusinessProfile,
+  previousQA?: { field: string; question: string; answer: string }[]
+): Promise<{ questions: { field: string; question: string; placeholder: string }[]; tokens_used: number }> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const profileContext = Object.entries(currentProfile)
+    .filter(([_, v]) => v)
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join('\n');
+
+  const previousContext = previousQA?.length
+    ? `\nALREADY ANSWERED:\n${previousQA.map(qa => `- Q: ${qa.question}\n  A: ${qa.answer} (field: ${qa.field})`).join('\n')}`
+    : '';
+
+  const emptyFields = ['companyName', 'industry', 'productsServices', 'targetAudience', 'valueProp', 'pricingModel', 'salesApproach']
+    .filter(f => !currentProfile[f as keyof BusinessProfile]);
+
+  const prompt = `Based on this partially-filled business profile, generate 2-4 targeted follow-up questions to fill in the gaps.
+
+CURRENT PROFILE:
+${profileContext || 'No fields filled yet'}
+
+EMPTY/MISSING FIELDS: ${emptyFields.join(', ') || 'None'}
+${previousContext}
+
+Return a JSON object with this structure:
+{
+  "questions": [
+    { "field": "productsServices", "question": "What are the main products or services your company offers?", "placeholder": "e.g. Cloud-based CRM platform for small businesses" }
+  ]
+}
+
+Guidelines:
+- Only ask about fields that are empty or vague
+- Don't repeat questions already answered
+- Each question should map to exactly one BusinessProfile field (companyName, industry, productsServices, targetAudience, valueProp, pricingModel, salesApproach)
+- Make questions conversational and specific, not generic
+- Provide helpful placeholder text
+- Return ONLY valid JSON`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: prompt,
+      config: {
+        systemInstruction: 'You are a business strategy consultant. Ask insightful questions to understand a company. Always respond with valid JSON only.',
+        temperature: 0.5,
+        topP: 0.9,
+      }
+    });
+
+    clearTimeout(timeoutId);
+    const text = response.text || '';
+    const parsed = parseAnalysisJSON(text) as any;
+
+    return {
+      questions: parsed?.questions || [],
+      tokens_used: response.usageMetadata?.totalTokenCount || 0
+    };
+  } catch (error: any) {
+    console.warn('Follow-up question generation failed:', error.message);
+    return { questions: [], tokens_used: 0 };
+  }
 };
 
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
