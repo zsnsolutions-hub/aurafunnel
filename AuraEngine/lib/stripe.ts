@@ -5,6 +5,7 @@ export interface CheckoutSessionParams {
   amount: string;
   credits: number;
   userId: string;
+  paymentMethodId?: string;
 }
 
 export const getStripeConfig = async () => {

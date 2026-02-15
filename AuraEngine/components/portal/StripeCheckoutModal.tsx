@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { loadStripe, StripeCardElement } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { Plan, User } from '../../types';
 import { BoltIcon, ShieldIcon, SparklesIcon, CheckIcon, CreditCardIcon, LockIcon } from '../Icons';
 import { processStripePayment, getStripeConfig } from '../../lib/stripe';
@@ -10,34 +12,67 @@ interface StripeCheckoutModalProps {
   onSuccess: () => void;
 }
 
-const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({ plan, user, onClose, onSuccess }) => {
-  const [step, setStep] = useState<'checkout' | 'processing' | 'success'>('checkout');
-  const [stripeKey, setStripeKey] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  
-  // Form States
-  const [cardName, setCardName] = useState(user.name || '');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvc, setCvc] = useState('');
+const CARD_ELEMENT_OPTIONS = {
+  style: {
+    base: {
+      fontSize: '16px',
+      fontWeight: '600',
+      color: '#1e293b',
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+      '::placeholder': { color: '#cbd5e1' },
+    },
+    invalid: {
+      color: '#dc2626',
+    },
+  },
+};
 
-  useEffect(() => {
-    getStripeConfig().then(setStripeKey);
-  }, []);
+const CheckoutForm: React.FC<{
+  plan: Plan;
+  user: User;
+  onClose: () => void;
+  onSuccess: () => void;
+}> = ({ plan, user, onClose, onSuccess }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [step, setStep] = useState<'checkout' | 'processing' | 'success'>('checkout');
+  const [error, setError] = useState<string | null>(null);
+  const [cardName, setCardName] = useState(user.name || '');
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cardNumber.length < 16 || expiry.length < 4 || cvc.length < 3) {
-      setError("Please enter valid card details.");
+    if (!stripe || !elements) {
+      setError('Stripe has not loaded yet. Please try again.');
       return;
     }
 
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      setError('Card element not found.');
+      return;
+    }
+
+    setError(null);
     setStep('processing');
+
+    const { error: stripeError, paymentMethod } = await stripe.createPaymentMethod({
+      type: 'card',
+      card: cardElement as unknown as StripeCardElement,
+      billing_details: { name: cardName },
+    });
+
+    if (stripeError) {
+      setStep('checkout');
+      setError(stripeError.message || 'Payment method creation failed.');
+      return;
+    }
+
     const success = await processStripePayment({
       planName: plan.name,
       amount: plan.price,
       credits: plan.credits,
-      userId: user.id
+      userId: user.id,
+      paymentMethodId: paymentMethod.id,
     });
 
     if (success) {
@@ -48,28 +83,16 @@ const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({ plan, user, o
       }, 2500);
     } else {
       setStep('checkout');
-      setError("Payment authorization failed. Please verify your billing details or contact support.");
+      setError('Payment authorization failed. Please verify your billing details or contact support.');
     }
-  };
-
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = matches && matches[0] || '';
-    const parts = [];
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-    if (parts.length) return parts.join(' ');
-    return value;
   };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-6 overflow-y-auto">
       <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity duration-500" onClick={() => step !== 'processing' && onClose()}></div>
-      
+
       <div className="relative bg-white w-full max-w-5xl md:rounded-[3rem] shadow-3xl overflow-hidden flex flex-col md:flex-row min-h-screen md:min-h-0 animate-in zoom-in-95 duration-500">
-        
+
         {/* Left Side: Professional Order Summary */}
         <div className="w-full md:w-[40%] bg-slate-50 p-8 md:p-12 flex flex-col border-r border-slate-200">
           <div className="flex items-center space-x-3 mb-12">
@@ -116,7 +139,7 @@ const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({ plan, user, o
           <div className="mt-12 p-5 bg-white rounded-2xl border border-slate-200 flex items-start space-x-3 shadow-sm">
             <ShieldIcon className="w-5 h-5 text-emerald-500 mt-0.5" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight leading-relaxed">
-              Payments are secured by Stripe. AuraFunnel does not store full card information. 
+              Payments are secured by Stripe. AuraFunnel does not store full card information.
               <br />
               <span className="text-indigo-600">Encrypted AES-256 GCM</span>
             </p>
@@ -125,7 +148,7 @@ const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({ plan, user, o
 
         {/* Right Side: High-Fidelity Checkout Form */}
         <div className="w-full md:w-[60%] p-8 md:p-16 bg-white flex flex-col justify-center relative">
-          
+
           {step === 'checkout' && (
             <div className="space-y-10 animate-in fade-in duration-500">
               <div className="flex justify-between items-start">
@@ -150,64 +173,33 @@ const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({ plan, user, o
               <form onSubmit={handleCheckout} className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Name on Card</label>
-                  <input 
-                    type="text" 
-                    required 
+                  <input
+                    type="text"
+                    required
                     value={cardName}
                     onChange={(e) => setCardName(e.target.value)}
-                    placeholder="Full Name" 
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all placeholder:text-slate-300" 
+                    placeholder="Full Name"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all placeholder:text-slate-300"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Card Information</label>
-                  <div className="relative group">
-                    <input 
-                      type="text" 
-                      required 
-                      maxLength={19}
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                      placeholder="0000 0000 0000 0000" 
-                      className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all placeholder:text-slate-300" 
-                    />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                      <CreditCardIcon className="w-5 h-5" />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <input 
-                      type="text" 
-                      required 
-                      maxLength={5}
-                      value={expiry}
-                      onChange={(e) => setExpiry(e.target.value)}
-                      placeholder="MM / YY" 
-                      className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all placeholder:text-slate-300" 
-                    />
-                    <input 
-                      type="text" 
-                      required 
-                      maxLength={3}
-                      value={cvc}
-                      onChange={(e) => setCvc(e.target.value)}
-                      placeholder="CVC" 
-                      className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all placeholder:text-slate-300" 
-                    />
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl focus-within:ring-4 focus-within:ring-indigo-100 focus-within:border-indigo-500 transition-all">
+                    <CardElement options={CARD_ELEMENT_OPTIONS} />
                   </div>
                 </div>
 
                 <div className="pt-8 space-y-4">
-                  <button 
+                  <button
                     type="submit"
-                    className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-indigo-100 hover:bg-indigo-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center space-x-3"
+                    disabled={!stripe}
+                    className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-indigo-100 hover:bg-indigo-700 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <LockIcon className="w-5 h-5" />
                     <span>Pay {plan.price} Now</span>
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={onClose}
                     className="w-full py-4 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:text-slate-600 transition-colors"
@@ -257,6 +249,33 @@ const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({ plan, user, o
         </div>
       </div>
     </div>
+  );
+};
+
+const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = (props) => {
+  const [stripeKey, setStripeKey] = useState<string>(
+    import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
+  );
+
+  useEffect(() => {
+    if (!stripeKey) {
+      getStripeConfig().then(setStripeKey);
+    }
+  }, [stripeKey]);
+
+  const stripePromise = useMemo(
+    () => (stripeKey ? loadStripe(stripeKey) : null),
+    [stripeKey]
+  );
+
+  if (!stripePromise) {
+    return null;
+  }
+
+  return (
+    <Elements stripe={stripePromise}>
+      <CheckoutForm {...props} />
+    </Elements>
   );
 };
 
