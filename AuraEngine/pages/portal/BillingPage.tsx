@@ -10,6 +10,17 @@ import { User, Plan, UsageMetrics } from '../../types';
 import { supabase } from '../../lib/supabase';
 import StripeCheckoutModal from '../../components/portal/StripeCheckoutModal';
 
+const COLOR_CLASSES: Record<string, { bg50: string; text600: string; bg500: string }> = {
+  indigo:  { bg50: 'bg-indigo-50',  text600: 'text-indigo-600',  bg500: 'bg-indigo-500' },
+  emerald: { bg50: 'bg-emerald-50', text600: 'text-emerald-600', bg500: 'bg-emerald-500' },
+  blue:    { bg50: 'bg-blue-50',    text600: 'text-blue-600',    bg500: 'bg-blue-500' },
+  violet:  { bg50: 'bg-violet-50',  text600: 'text-violet-600',  bg500: 'bg-violet-500' },
+  amber:   { bg50: 'bg-amber-50',   text600: 'text-amber-600',   bg500: 'bg-amber-500' },
+  fuchsia: { bg50: 'bg-fuchsia-50', text600: 'text-fuchsia-600', bg500: 'bg-fuchsia-500' },
+  rose:    { bg50: 'bg-rose-50',    text600: 'text-rose-600',    bg500: 'bg-rose-500' },
+  purple:  { bg50: 'bg-purple-50',  text600: 'text-purple-600',  bg500: 'bg-purple-500' },
+};
+
 const BillingPage: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -371,7 +382,7 @@ const BillingPage: React.FC = () => {
         {kpiStats.map((stat, i) => (
           <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-all group">
             <div className="flex items-center justify-between mb-2">
-              <div className={`w-9 h-9 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}>
+              <div className={`w-9 h-9 rounded-xl ${COLOR_CLASSES[stat.color]?.bg50} ${COLOR_CLASSES[stat.color]?.text600} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                 {stat.icon}
               </div>
               {stat.up !== null && (
@@ -473,7 +484,7 @@ const BillingPage: React.FC = () => {
             return (
               <div key={metric.label} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-100 transition-all group/m">
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`p-2 bg-${metric.color}-50 text-${metric.color}-600 rounded-xl group-hover/m:scale-110 transition-transform`}>
+                  <div className={`p-2 ${COLOR_CLASSES[metric.color]?.bg50} ${COLOR_CLASSES[metric.color]?.text600} rounded-xl group-hover/m:scale-110 transition-transform`}>
                     {metric.icon}
                   </div>
                   <span className={`text-[10px] font-black uppercase tracking-widest ${isHigh ? 'text-red-500' : 'text-slate-400'}`}>
@@ -487,7 +498,7 @@ const BillingPage: React.FC = () => {
                 </p>
                 <div className="mt-3 w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-1000 ${isHigh ? 'bg-red-500' : `bg-${metric.color}-500`}`}
+                    className={`h-full rounded-full transition-all duration-1000 ${isHigh ? 'bg-red-500' : COLOR_CLASSES[metric.color]?.bg500}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -679,7 +690,7 @@ const BillingPage: React.FC = () => {
                     { label: 'Priority Support', value: costBreakdown.support, pct: 15, color: 'amber' },
                   ].map((item, i) => (
                     <div key={i} className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-slate-100">
-                      <div className={`w-8 h-8 rounded-lg bg-${item.color}-50 text-${item.color}-600 flex items-center justify-center`}>
+                      <div className={`w-8 h-8 rounded-lg ${COLOR_CLASSES[item.color]?.bg50} ${COLOR_CLASSES[item.color]?.text600} flex items-center justify-center`}>
                         <span className="text-xs font-black">{item.pct}%</span>
                       </div>
                       <div className="flex-1">
@@ -688,7 +699,7 @@ const BillingPage: React.FC = () => {
                           <span className="text-xs font-black text-slate-800">${item.value}</span>
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-1">
-                          <div className={`h-full rounded-full bg-${item.color}-500`} style={{ width: `${item.pct}%` }} />
+                          <div className={`h-full rounded-full ${COLOR_CLASSES[item.color]?.bg500}`} style={{ width: `${item.pct}%` }} />
                         </div>
                       </div>
                     </div>
@@ -774,7 +785,7 @@ const BillingPage: React.FC = () => {
                     <div key={i} className="p-3 bg-white rounded-xl border border-slate-100 mb-2">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          <div className={`w-7 h-7 rounded-lg bg-${resource.color}-50 text-${resource.color}-600 flex items-center justify-center`}>
+                          <div className={`w-7 h-7 rounded-lg ${COLOR_CLASSES[resource.color]?.bg50} ${COLOR_CLASSES[resource.color]?.text600} flex items-center justify-center`}>
                             {resource.icon}
                           </div>
                           <span className="text-xs font-bold text-slate-700">{resource.label}</span>
@@ -785,7 +796,7 @@ const BillingPage: React.FC = () => {
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2">
                         <div
-                          className={`h-full rounded-full transition-all ${isHigh ? 'bg-rose-500' : `bg-${resource.color}-500`}`}
+                          className={`h-full rounded-full transition-all ${isHigh ? 'bg-rose-500' : COLOR_CLASSES[resource.color]?.bg500}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -1115,7 +1126,7 @@ const BillingPage: React.FC = () => {
                         </div>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-1.5">
-                        <div className={`h-full rounded-full bg-${feat.color}-500`} style={{ width: `${feat.pct}%` }} />
+                        <div className={`h-full rounded-full ${COLOR_CLASSES[feat.color]?.bg500}`} style={{ width: `${feat.pct}%` }} />
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1">{feat.pct}% of total credits</p>
                     </div>

@@ -44,7 +44,8 @@ export const processStripePayment = async (params: CheckoutSessionParams): Promi
       .update({ 
         plan_name: params.planName,
         status: 'active',
-        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       })
       .eq('user_id', params.userId);
 

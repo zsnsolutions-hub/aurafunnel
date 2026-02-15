@@ -18,6 +18,7 @@ import AIOperations from './pages/admin/AIOperations';
 import PromptLab from './pages/admin/PromptLab';
 import AuditLogs from './pages/admin/AuditLogs';
 import BlogManager from './pages/admin/BlogManager';
+import PricingManagement from './pages/admin/PricingManagement';
 
 // Client Pages
 import ClientDashboard from './pages/portal/ClientDashboard';
@@ -188,6 +189,7 @@ const App: React.FC = () => {
         <Route path="health" element={<SystemHealth />} />
         <Route path="audit" element={<AuditLogs />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="pricing" element={<PricingManagement />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" />} />

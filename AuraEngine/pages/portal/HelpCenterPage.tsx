@@ -313,8 +313,10 @@ const HelpCenterPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('troubleshoot');
   const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem(`aura_checklist_${user?.id}`);
-    return saved ? JSON.parse(saved) : {};
+    try {
+      const saved = localStorage.getItem(`aura_checklist_${user?.id}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
   });
 
   // ─── New Enhancement State ───

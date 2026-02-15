@@ -183,8 +183,10 @@ const AutomationPage: React.FC = () => {
 
   // ─── Workflow State ───
   const [workflow, setWorkflow] = useState<Workflow>(() => {
-    const saved = localStorage.getItem(`aura_workflow_${user?.id}`);
-    return saved ? JSON.parse(saved) : DEFAULT_WORKFLOW;
+    try {
+      const saved = localStorage.getItem(`aura_workflow_${user?.id}`);
+      return saved ? JSON.parse(saved) : DEFAULT_WORKFLOW;
+    } catch { return DEFAULT_WORKFLOW; }
   });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [testRunning, setTestRunning] = useState(false);
@@ -205,8 +207,10 @@ const AutomationPage: React.FC = () => {
 
   // ─── Saved Workflows ───
   const [workflows, setWorkflows] = useState<Workflow[]>(() => {
-    const saved = localStorage.getItem(`aura_workflows_list_${user?.id}`);
-    return saved ? JSON.parse(saved) : [DEFAULT_WORKFLOW];
+    try {
+      const saved = localStorage.getItem(`aura_workflows_list_${user?.id}`);
+      return saved ? JSON.parse(saved) : [DEFAULT_WORKFLOW];
+    } catch { return [DEFAULT_WORKFLOW]; }
   });
   const [showWorkflowList, setShowWorkflowList] = useState(false);
 

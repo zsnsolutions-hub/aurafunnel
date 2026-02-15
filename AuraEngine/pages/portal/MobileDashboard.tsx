@@ -196,14 +196,18 @@ const MobileDashboard: React.FC = () => {
 
   // ─── Checklist State (session-persisted) ───
   const [dailyChecked, setDailyChecked] = useState<Set<string>>(() => {
-    const key = `mobile_daily_${new Date().toISOString().split('T')[0]}`;
-    const saved = sessionStorage.getItem(key);
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    try {
+      const key = `mobile_daily_${new Date().toISOString().split('T')[0]}`;
+      const saved = sessionStorage.getItem(key);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
   });
   const [weeklyChecked, setWeeklyChecked] = useState<Set<string>>(() => {
-    const key = `mobile_weekly_${new Date().toISOString().split('T')[0]}`;
-    const saved = sessionStorage.getItem(key);
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    try {
+      const key = `mobile_weekly_${new Date().toISOString().split('T')[0]}`;
+      const saved = sessionStorage.getItem(key);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
   });
   const [activeDailyPeriod, setActiveDailyPeriod] = useState<ChecklistPeriod>(() => {
     const h = new Date().getHours();
@@ -220,8 +224,10 @@ const MobileDashboard: React.FC = () => {
 
   // ─── Onboarding State ───
   const [onboardingChecked, setOnboardingChecked] = useState<Set<string>>(() => {
-    const saved = localStorage.getItem('mobile_onboarding');
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    try {
+      const saved = localStorage.getItem('mobile_onboarding');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
   });
   const [expandedWeek, setExpandedWeek] = useState<OnboardingWeek>(1);
 

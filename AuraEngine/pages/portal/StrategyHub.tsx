@@ -243,8 +243,10 @@ const StrategyHub: React.FC = () => {
 
   // ─── Routine checklist ───
   const [checkedItems, setCheckedItems] = useState<Set<string>>(() => {
-    const saved = sessionStorage.getItem('aura_routine_checks');
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    try {
+      const saved = sessionStorage.getItem('aura_routine_checks');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
   });
 
   useEffect(() => {

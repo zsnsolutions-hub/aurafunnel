@@ -172,8 +172,10 @@ const AnalyticsPage: React.FC = () => {
   // Alert modal
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alerts, setAlerts] = useState<AlertRule[]>(() => {
-    const saved = localStorage.getItem(`aura_alerts_${user?.id}`);
-    return saved ? JSON.parse(saved) : DEFAULT_ALERTS;
+    try {
+      const saved = localStorage.getItem(`aura_alerts_${user?.id}`);
+      return saved ? JSON.parse(saved) : DEFAULT_ALERTS;
+    } catch { return DEFAULT_ALERTS; }
   });
   const [editingAlert, setEditingAlert] = useState<string | null>(null);
 
