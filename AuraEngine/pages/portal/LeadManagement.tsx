@@ -195,12 +195,16 @@ const LeadManagement: React.FC = () => {
 
   const fetchLeads = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('leads')
       .select('*')
       .eq('client_id', user.id)
       .order('score', { ascending: false });
-    if (data) setAllLeads(data);
+    if (error) {
+      console.error('LeadManagement fetch error:', error.message);
+    } else if (data) {
+      setAllLeads(data);
+    }
     setLoading(false);
   };
 
@@ -211,9 +215,9 @@ const LeadManagement: React.FC = () => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(l =>
-        l.name.toLowerCase().includes(q) ||
-        l.email.toLowerCase().includes(q) ||
-        l.company.toLowerCase().includes(q)
+        (l.name || '').toLowerCase().includes(q) ||
+        (l.email || '').toLowerCase().includes(q) ||
+        (l.company || '').toLowerCase().includes(q)
       );
     }
     if (statusFilter !== 'All') result = result.filter(l => l.status === statusFilter);
@@ -427,12 +431,14 @@ const LeadManagement: React.FC = () => {
     if (selectedLead?.id === leadId) {
       setSelectedLead({ ...selectedLead, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
     }
-    await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', leadId);
-    await supabase.from('audit_logs').insert({
+    const { error: updateError } = await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', leadId);
+    if (updateError) console.error('Lead status update error:', updateError.message);
+    const { error: logError } = await supabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'LEAD_STATUS_UPDATED',
       details: `${lead?.name || 'Lead'} moved to ${newStatus}`
     });
+    if (logError) console.error('Audit log error:', logError.message);
   };
 
   const getNextStage = (currentStatus: Lead['status']): Lead['status'] | null => {
@@ -561,7 +567,8 @@ const LeadManagement: React.FC = () => {
 
   const handleBulkStatusChange = async (status: Lead['status']) => {
     const ids = Array.from(selectedIds);
-    await supabase.from('leads').update({ status }).in('id', ids);
+    const { error } = await supabase.from('leads').update({ status }).in('id', ids);
+    if (error) console.error('Bulk status update error:', error.message);
     setAllLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, status } : l));
     executeBulkAction(`Change status to ${status}`);
     setSelectedIds(new Set());

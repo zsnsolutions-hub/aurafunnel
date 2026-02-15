@@ -11,7 +11,8 @@ const PromptLab: React.FC = () => {
 
   const fetchPrompts = async () => {
     setLoading(true);
-    const { data } = await supabase.from('ai_prompts').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('ai_prompts').select('*').order('created_at', { ascending: false });
+    if (error) console.error('PromptLab fetch error:', error.message);
     if (data) setPrompts(data);
     setLoading(false);
   };

@@ -254,14 +254,15 @@ const MobileDashboard: React.FC = () => {
     }
     setLoading(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('leads')
         .select('*')
         .eq('client_id', user.id)
         .order('score', { ascending: false });
+      if (error) throw error;
       setLeads((data || []) as Lead[]);
-    } catch (err) {
-      console.error('Mobile fetch error:', err);
+    } catch (err: any) {
+      console.error('Mobile fetch error:', err?.message || err);
     } finally {
       setLoading(false);
     }

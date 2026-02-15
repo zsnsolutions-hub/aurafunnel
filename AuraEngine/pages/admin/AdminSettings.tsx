@@ -106,7 +106,8 @@ const AdminSettings: React.FC = () => {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.from('config_settings').select('key, value');
+      const { data, error } = await supabase.from('config_settings').select('key, value');
+      if (error) throw error;
       if (data) {
         const mappedConfig: any = { ...config };
         data.forEach((item: any) => {
@@ -124,7 +125,8 @@ const AdminSettings: React.FC = () => {
   const fetchTeam = async () => {
     setLoadingTeam(true);
     try {
-      const { data } = await supabase.from('profiles').select('id, name, email, role, status, created_at').order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('profiles').select('id, name, email, role, status, created_at').order('created_at', { ascending: true });
+      if (error) throw error;
       if (data) {
         setTeamMembers(data.map((m: any) => ({
           id: m.id,

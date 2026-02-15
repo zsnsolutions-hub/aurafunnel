@@ -150,14 +150,15 @@ const AICommandCenter: React.FC = () => {
     }
     setLoading(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('leads')
         .select('*')
         .eq('client_id', user.id)
         .order('score', { ascending: false });
+      if (error) throw error;
       setLeads((data || []) as Lead[]);
-    } catch (err) {
-      console.error('AI Command fetch error:', err);
+    } catch (err: any) {
+      console.error('AI Command fetch error:', err?.message || err);
     } finally {
       setLoading(false);
     }

@@ -199,12 +199,16 @@ const LeadProfile: React.FC = () => {
 
   const fetchLead = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('leads')
       .select('*')
       .eq('id', leadId)
       .single();
-    if (data) setLead(data);
+    if (error) {
+      console.error('LeadProfile fetch error:', error.message);
+    } else if (data) {
+      setLead(data);
+    }
     setLoading(false);
   };
 
@@ -351,13 +355,15 @@ const LeadProfile: React.FC = () => {
 
   const handleStatusChange = async (newStatus: Lead['status']) => {
     if (!lead) return;
-    await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', lead.id);
+    const { error: updateError } = await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', lead.id);
+    if (updateError) console.error('Lead status update error:', updateError.message);
     setLead({ ...lead, status: newStatus });
-    await supabase.from('audit_logs').insert({
+    const { error: logError } = await supabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'LEAD_STATUS_UPDATED',
       details: `${lead.name} moved to ${newStatus}`
     });
+    if (logError) console.error('Audit log error:', logError.message);
     showFeedback(`Status updated to ${newStatus}`);
     setMenuOpen(false);
   };
@@ -365,7 +371,11 @@ const LeadProfile: React.FC = () => {
   const handleScoreUpdate = async () => {
     if (!lead) return;
     const newScore = Math.min(100, lead.score + 5);
-    await supabase.from('leads').update({ score: newScore }).eq('id', lead.id);
+    const { error } = await supabase.from('leads').update({ score: newScore }).eq('id', lead.id);
+    if (error) {
+      console.error('Score update error:', error.message);
+      return;
+    }
     setLead({ ...lead, score: newScore });
     showFeedback(`Score updated to ${newScore}`);
   };

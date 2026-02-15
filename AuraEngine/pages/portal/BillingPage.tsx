@@ -65,7 +65,7 @@ const BillingPage: React.FC = () => {
     fetchUsage();
   }, []);
 
-  const fetchUsage = async () => {
+  const fetchUsage = useCallback(async () => {
     try {
       const [tokensRes, leadsRes, emailRes] = await Promise.all([
         supabase.from('ai_usage_logs').select('tokens_used').eq('user_id', user.id),
@@ -91,7 +91,7 @@ const BillingPage: React.FC = () => {
     } catch (err) {
       console.error("Usage fetch error:", err);
     }
-  };
+  }, [user.id, currentPlanName]);
 
   const invoices = useMemo(() => {
     const history = [];
@@ -300,7 +300,7 @@ const BillingPage: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchUsage]);
 
   const handleUpgradeClick = (plan: Plan) => {
     setSelectedPlan(plan);

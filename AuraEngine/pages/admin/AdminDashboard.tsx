@@ -371,7 +371,8 @@ const AdminDashboard: React.FC = () => {
   const handleDeepAnalysis = async () => {
     setDeepAnalysisLoading(true);
     try {
-      const { data: allLeads } = await supabase.from('leads').select('*').order('score', { ascending: false }).limit(50);
+      const { data: allLeads, error } = await supabase.from('leads').select('*').order('score', { ascending: false }).limit(50);
+      if (error) throw error;
       const result = await generateDashboardInsights(allLeads || []);
       setDeepAnalysisResult(result);
     } catch (err: any) {

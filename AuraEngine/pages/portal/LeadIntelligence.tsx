@@ -152,18 +152,19 @@ const LeadIntelligence: React.FC = () => {
     }
     setLoading(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('leads')
         .select('*')
         .eq('client_id', user.id)
         .order('score', { ascending: false });
+      if (error) throw error;
       const fetchedLeads = (data || []) as Lead[];
       setLeads(fetchedLeads);
       if (fetchedLeads.length > 0 && !selectedLeadId) {
         setSelectedLeadId(fetchedLeads[0].id);
       }
-    } catch (err) {
-      console.error('Intelligence fetch error:', err);
+    } catch (err: any) {
+      console.error('Intelligence fetch error:', err?.message || err);
     } finally {
       setLoading(false);
     }

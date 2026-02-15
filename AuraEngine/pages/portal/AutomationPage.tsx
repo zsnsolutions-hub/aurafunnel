@@ -229,10 +229,14 @@ const AutomationPage: React.FC = () => {
   useEffect(() => {
     const fetchLeads = async () => {
       if (!user?.id) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('leads')
         .select('*')
         .eq('client_id', user.id);
+      if (error) {
+        console.error('AutomationPage fetch error:', error.message);
+        return;
+      }
       setLeads((data || []) as Lead[]);
     };
     fetchLeads();

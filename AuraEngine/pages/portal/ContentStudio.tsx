@@ -351,10 +351,11 @@ const ContentStudio: React.FC = () => {
     }
     setLoading(true);
     try {
-      const { data } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
+      const { data, error } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
+      if (error) throw error;
       setLeads((data || []) as Lead[]);
-    } catch (err) {
-      console.error('Studio fetch error:', err);
+    } catch (err: any) {
+      console.error('Studio fetch error:', err?.message || err);
     } finally {
       setLoading(false);
     }

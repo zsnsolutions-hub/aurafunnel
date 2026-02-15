@@ -10,15 +10,15 @@ const AuditLogs: React.FC = () => {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('audit_logs')
         .select('*, profiles(email, name)')
         .order('created_at', { ascending: false })
         .limit(100);
-      
+      if (error) throw error;
       if (data) setLogs(data);
-    } catch (e) {
-      console.error("Forensic vault sync error:", e);
+    } catch (e: any) {
+      console.error("Forensic vault sync error:", e?.message || e);
     } finally {
       setLoading(false);
     }

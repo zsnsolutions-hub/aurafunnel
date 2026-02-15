@@ -216,11 +216,12 @@ const AnalyticsPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      const { data: leadsData } = await supabase
+      const { data: leadsData, error } = await supabase
         .from('leads')
         .select('*')
         .eq('client_id', user.id)
         .order('created_at', { ascending: false });
+      if (error) throw error;
 
       const fetchedLeads = (leadsData || []) as Lead[];
       setLeads(fetchedLeads);
@@ -228,8 +229,8 @@ const AnalyticsPage: React.FC = () => {
 
       const newInsights = generateProgrammaticInsights(fetchedLeads);
       setInsights(newInsights);
-    } catch (err) {
-      console.error('Analytics fetch error:', err);
+    } catch (err: any) {
+      console.error('Analytics fetch error:', err?.message || err);
     } finally {
       setLoading(false);
     }
@@ -689,11 +690,12 @@ const AnalyticsPage: React.FC = () => {
   };
 
   const handleScheduleReport = async () => {
-    await supabase.from('audit_logs').insert({
+    const { error } = await supabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'REPORT_SCHEDULED',
       details: `Scheduled ${reportSchedule.frequency} report: ${REPORT_TYPES.find(r => r.type === selectedReportType)?.label}. Metrics: ${selectedMetrics.join(', ')}.`,
     });
+    if (error) console.error('Schedule report log error:', error.message);
     setReportSchedule(prev => ({ ...prev, enabled: true }));
   };
 

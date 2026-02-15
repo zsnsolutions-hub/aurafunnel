@@ -16,19 +16,19 @@ const AIOperations: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: logs } = await supabase
+      const { data: logs, error: logsError } = await supabase
         .from('ai_usage_logs')
         .select('*, profiles(email, name, plan)')
         .order('created_at', { ascending: false })
         .limit(200);
-      
+      if (logsError) console.error('AI usage logs fetch error:', logsError.message);
       if (logs) setUsageLogs(logs);
 
-      const { data: promptData } = await supabase
+      const { data: promptData, error: promptError } = await supabase
         .from('ai_prompts')
         .select('*')
         .order('version', { ascending: false });
-      
+      if (promptError) console.error('AI prompts fetch error:', promptError.message);
       if (promptData) setPrompts(promptData);
 
       const userMap: Record<string, any> = {};
