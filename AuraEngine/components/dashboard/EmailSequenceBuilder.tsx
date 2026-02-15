@@ -95,8 +95,8 @@ const EmailSequenceBuilder: React.FC<EmailSequenceBuilderProps> = ({
         }]);
         setStep(4);
       }
-    } catch (err: any) {
-      setError(err.message || 'Generation failed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
       setIsGenerating(false);
     }

@@ -511,14 +511,14 @@ const HelpCenterPage: React.FC = () => {
   const toggleCheck = (key: string) => {
     setCheckedItems(prev => {
       const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem(`aura_checklist_${user?.id}`, JSON.stringify(next));
+      try { localStorage.setItem(`aura_checklist_${user?.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
   };
 
   const resetChecklist = () => {
     setCheckedItems({});
-    localStorage.removeItem(`aura_checklist_${user?.id}`);
+    try { localStorage.removeItem(`aura_checklist_${user?.id}`); } catch {}
   };
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [

@@ -715,16 +715,16 @@ const ContentGen: React.FC = () => {
         setIsGenerating(false);
         setWizardStep(4);
       }, 600);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (generationRef.current) clearTimeout(generationRef.current);
-      setError(err.message || 'Generation failed.');
+      setError(err instanceof Error ? err.message : 'Generation failed.');
       setIsGenerating(false);
       setWizardStep(2);
     }
   };
 
   const handleSave = () => {
-    localStorage.setItem('aura_studio_draft', JSON.stringify({ contentType, blocks, tone, focus, length, goal }));
+    try { localStorage.setItem('aura_studio_draft', JSON.stringify({ contentType, blocks, tone, focus, length, goal })); } catch {}
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

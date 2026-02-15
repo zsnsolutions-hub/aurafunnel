@@ -163,8 +163,8 @@ const LeadIntelligence: React.FC = () => {
       if (fetchedLeads.length > 0 && !selectedLeadId) {
         setSelectedLeadId(fetchedLeads[0].id);
       }
-    } catch (err: any) {
-      console.error('Intelligence fetch error:', err?.message || err);
+    } catch (err: unknown) {
+      console.error('Intelligence fetch error:', err instanceof Error ? err.message : err);
     } finally {
       setLoading(false);
     }

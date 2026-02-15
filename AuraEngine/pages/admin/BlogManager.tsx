@@ -116,8 +116,8 @@ const BlogManager: React.FC = () => {
         .getPublicUrl(filePath);
 
       setFormData(prev => ({ ...prev, featured_image: data.publicUrl }));
-    } catch (err: any) {
-      alert("Asset Transmission Failure: " + err.message);
+    } catch (err: unknown) {
+      alert("Asset Transmission Failure: " + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setUploadingImage(false);
     }
@@ -159,8 +159,8 @@ const BlogManager: React.FC = () => {
       const { error } = await supabase.from('blog_categories').delete().eq('id', cat.id);
       if (error) throw error;
       await fetchData();
-    } catch (err: any) {
-      alert("Deletion Blocked: " + err.message);
+    } catch (err: unknown) {
+      alert("Deletion Blocked: " + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsSyncing(false);
     }
@@ -218,8 +218,8 @@ const BlogManager: React.FC = () => {
 
       await fetchData();
       setIsEditorOpen(false);
-    } catch (err: any) {
-      alert("Transmission Failure: " + err.message);
+    } catch (err: unknown) {
+      alert("Transmission Failure: " + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsSyncing(false);
     }

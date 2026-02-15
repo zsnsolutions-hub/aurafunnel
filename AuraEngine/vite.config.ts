@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
       },
       build: {
         target: 'es2020',
+        minify: 'esbuild',
         rollupOptions: {
           output: {
             manualChunks: {
@@ -32,6 +33,9 @@ export default defineConfig(({ mode }) => {
             },
           },
         },
+      },
+      esbuild: {
+        drop: mode === 'production' ? ['console', 'debugger'] : [],
       },
     };
 });

@@ -33,9 +33,9 @@ const PricingManagement: React.FC = () => {
       if (error) throw error;
       if (data) setPlans(data);
       setSchemaError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Plan fetch failed:", err);
-      if (err.message?.includes('description')) {
+      if (err instanceof Error && err.message?.includes('description')) {
         setSchemaError("The 'description' column is missing from your 'plans' table in Supabase.");
       }
     } finally {
@@ -81,9 +81,9 @@ const PricingManagement: React.FC = () => {
       setEditingPlan(null);
       setSuccessMsg(`Successfully updated DNA for ${editingPlan.name}`);
       setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Plan update failed:", err);
-      const errorMsg = err?.message || (typeof err === 'string' ? err : 'Unknown network error');
+      const errorMsg = err instanceof Error ? err.message : (typeof err === 'string' ? err : 'Unknown network error');
       if (!errorMsg.includes('Schema sync required')) {
         alert(`System failed to update plan DNA: ${errorMsg}`);
       }

@@ -467,9 +467,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       if (refreshProfile) await refreshProfile();
       fetchQuickStats();
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Quick Gen Error:", err);
-      setGenError(err.message || "An error occurred during generation.");
+      setGenError(err instanceof Error ? err.message : "An error occurred during generation.");
     } finally {
       setIsGenerating(false);
     }
@@ -604,7 +604,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       list.id === listId ? { ...list, leadIds: [...list.leadIds, leadId] } : list
     );
     setManualLists(updated);
-    localStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
   };
 
   const handleRefreshInsights = () => {
@@ -619,8 +619,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     try {
       const result = await generateDashboardInsights(leads, user.businessProfile);
       setDeepAnalysisResult(result);
-    } catch (err: any) {
-      setDeepAnalysisResult(`Deep analysis unavailable: ${err.message}`);
+    } catch (err: unknown) {
+      setDeepAnalysisResult(`Deep analysis unavailable: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setDeepAnalysisLoading(false);
     }

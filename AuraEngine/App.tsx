@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { UserRole, User } from './types';
 import { supabase } from './lib/supabase';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Layouts — kept eager since they wrap all child routes
 import MarketingLayout from './components/layout/MarketingLayout';
@@ -140,70 +141,72 @@ const App: React.FC = () => {
   }
 
   return (
-    <Suspense fallback={<PageFallback />}>
-      <Routes>
-        <Route element={<MarketingLayout />}>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/features" element={<FeaturesPage />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/blog" element={<BlogPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-        </Route>
+    <ErrorBoundary>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route element={<MarketingLayout />}>
+            <Route path="/" element={<ErrorBoundary><LandingPage /></ErrorBoundary>} />
+            <Route path="/features" element={<ErrorBoundary><FeaturesPage /></ErrorBoundary>} />
+            <Route path="/pricing" element={<ErrorBoundary><PricingPage /></ErrorBoundary>} />
+            <Route path="/blog" element={<ErrorBoundary><BlogPage /></ErrorBoundary>} />
+            <Route path="/about" element={<ErrorBoundary><AboutPage /></ErrorBoundary>} />
+            <Route path="/contact" element={<ErrorBoundary><ContactPage /></ErrorBoundary>} />
+          </Route>
 
-        <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
+          <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
 
-        <Route
-          path="/portal"
-          element={
-            user?.role === UserRole.CLIENT ?
-            <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} /> :
-            <Navigate to="/auth" state={{ from: location }} />
-          }
-        >
-          <Route index element={<ClientDashboard user={user!} />} />
-          <Route path="leads" element={<LeadManagement />} />
-          <Route path="leads/:leadId" element={<LeadProfile />} />
-          <Route path="content" element={<ContentGen />} />
-          <Route path="strategy" element={<StrategyHub />} />
-          <Route path="blog" element={<BlogDrafts />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="automation" element={<AutomationPage />} />
-          <Route path="billing" element={<BillingPage />} />
-          <Route path="help" element={<HelpCenterPage />} />
-          <Route path="manual" element={<UserManualPage />} />
-          <Route path="settings" element={<ProfilePage />} />
-          <Route path="intelligence" element={<LeadIntelligence />} />
-          <Route path="ai" element={<AICommandCenter />} />
-          <Route path="content-studio" element={<ContentStudio />} />
-          <Route path="mobile" element={<MobileDashboard />} />
-          <Route path="model-training" element={<ModelTraining />} />
-          <Route path="integrations" element={<IntegrationHub />} />
-        </Route>
+          <Route
+            path="/portal"
+            element={
+              user?.role === UserRole.CLIENT ?
+              <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} /> :
+              <Navigate to="/auth" state={{ from: location }} />
+            }
+          >
+            <Route index element={<ErrorBoundary><ClientDashboard user={user!} /></ErrorBoundary>} />
+            <Route path="leads" element={<ErrorBoundary><LeadManagement /></ErrorBoundary>} />
+            <Route path="leads/:leadId" element={<ErrorBoundary><LeadProfile /></ErrorBoundary>} />
+            <Route path="content" element={<ErrorBoundary><ContentGen /></ErrorBoundary>} />
+            <Route path="strategy" element={<ErrorBoundary><StrategyHub /></ErrorBoundary>} />
+            <Route path="blog" element={<ErrorBoundary><BlogDrafts /></ErrorBoundary>} />
+            <Route path="analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
+            <Route path="automation" element={<ErrorBoundary><AutomationPage /></ErrorBoundary>} />
+            <Route path="billing" element={<ErrorBoundary><BillingPage /></ErrorBoundary>} />
+            <Route path="help" element={<ErrorBoundary><HelpCenterPage /></ErrorBoundary>} />
+            <Route path="manual" element={<ErrorBoundary><UserManualPage /></ErrorBoundary>} />
+            <Route path="settings" element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
+            <Route path="intelligence" element={<ErrorBoundary><LeadIntelligence /></ErrorBoundary>} />
+            <Route path="ai" element={<ErrorBoundary><AICommandCenter /></ErrorBoundary>} />
+            <Route path="content-studio" element={<ErrorBoundary><ContentStudio /></ErrorBoundary>} />
+            <Route path="mobile" element={<ErrorBoundary><MobileDashboard /></ErrorBoundary>} />
+            <Route path="model-training" element={<ErrorBoundary><ModelTraining /></ErrorBoundary>} />
+            <Route path="integrations" element={<ErrorBoundary><IntegrationHub /></ErrorBoundary>} />
+          </Route>
 
-        <Route
-          path="/admin"
-          element={
-            user?.role === UserRole.ADMIN ?
-            <AdminLayout user={user!} onLogout={handleLogout} /> :
-            <Navigate to="/auth" state={{ from: location }} />
-          }
-        >
-          <Route index element={<AdminDashboard />} />
-          <Route path="users" element={<UserManagement />} />
-          <Route path="ai" element={<AIOperations />} />
-          <Route path="prompts" element={<PromptLab />} />
-          <Route path="leads" element={<LeadsManagement />} />
-          <Route path="blog" element={<BlogManager />} />
-          <Route path="health" element={<SystemHealth />} />
-          <Route path="audit" element={<AuditLogs />} />
-          <Route path="settings" element={<AdminSettings />} />
-          <Route path="pricing" element={<PricingManagement />} />
-        </Route>
+          <Route
+            path="/admin"
+            element={
+              user?.role === UserRole.ADMIN ?
+              <AdminLayout user={user!} onLogout={handleLogout} /> :
+              <Navigate to="/auth" state={{ from: location }} />
+            }
+          >
+            <Route index element={<ErrorBoundary><AdminDashboard /></ErrorBoundary>} />
+            <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
+            <Route path="ai" element={<ErrorBoundary><AIOperations /></ErrorBoundary>} />
+            <Route path="prompts" element={<ErrorBoundary><PromptLab /></ErrorBoundary>} />
+            <Route path="leads" element={<ErrorBoundary><LeadsManagement /></ErrorBoundary>} />
+            <Route path="blog" element={<ErrorBoundary><BlogManager /></ErrorBoundary>} />
+            <Route path="health" element={<ErrorBoundary><SystemHealth /></ErrorBoundary>} />
+            <Route path="audit" element={<ErrorBoundary><AuditLogs /></ErrorBoundary>} />
+            <Route path="settings" element={<ErrorBoundary><AdminSettings /></ErrorBoundary>} />
+            <Route path="pricing" element={<ErrorBoundary><PricingManagement /></ErrorBoundary>} />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Suspense>
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   );
 };
 

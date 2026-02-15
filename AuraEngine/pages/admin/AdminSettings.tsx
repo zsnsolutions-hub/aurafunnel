@@ -195,7 +195,7 @@ const AdminSettings: React.FC = () => {
       i.id === setupModalId ? { ...i, status: 'connected' as const, apiKey: setupApiKey, webhookUrl: setupWebhook, lastSync: new Date().toISOString() } : i
     );
     setIntegrations(updated);
-    localStorage.setItem(INTEGRATIONS_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(INTEGRATIONS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
     supabase.from('audit_logs').insert({ action: 'INTEGRATION_CONNECTED', details: `Integration ${setupModalId} activated` });
     setSetupModalId(null);
     setSetupApiKey('');
@@ -208,7 +208,7 @@ const AdminSettings: React.FC = () => {
       i.id === id ? { ...i, status: 'disconnected' as const, apiKey: undefined, webhookUrl: undefined, lastSync: undefined } : i
     );
     setIntegrations(updated);
-    localStorage.setItem(INTEGRATIONS_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(INTEGRATIONS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
     supabase.from('audit_logs').insert({ action: 'INTEGRATION_DISCONNECTED', details: `Integration ${id} disconnected` });
   };
 

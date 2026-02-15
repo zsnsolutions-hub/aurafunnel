@@ -157,8 +157,8 @@ const AICommandCenter: React.FC = () => {
         .order('score', { ascending: false });
       if (error) throw error;
       setLeads((data || []) as Lead[]);
-    } catch (err: any) {
-      console.error('AI Command fetch error:', err?.message || err);
+    } catch (err: unknown) {
+      console.error('AI Command fetch error:', err instanceof Error ? err.message : err);
     } finally {
       setLoading(false);
     }

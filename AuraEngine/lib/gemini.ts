@@ -104,12 +104,13 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
         prompt_name: pName,
         prompt_version: pVersion
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       attempt++;
-      console.warn(`Gemini Attempt ${attempt} failed:`, error.message);
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Gemini Attempt ${attempt} failed:`, errMsg);
       if (attempt === MAX_RETRIES) {
         return {
-          text: `NEURAL TIMEOUT: The intelligence engine is currently overloaded. Please try again in 30 seconds. (Error: ${error.message})`,
+          text: `NEURAL TIMEOUT: The intelligence engine is currently overloaded. Please try again in 30 seconds. (Error: ${errMsg})`,
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: pName,
@@ -179,8 +180,8 @@ Keep response under 300 words. Be specific, not generic.${buildBusinessContext(b
 
     clearTimeout(timeoutId);
     return response.text || 'No insights generated.';
-  } catch (error: any) {
-    throw new Error(`Gemini analysis failed: ${error.message}`);
+  } catch (error: unknown) {
+    throw new Error(`Gemini analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
@@ -273,11 +274,12 @@ BODY:
         prompt_name: 'email_sequence_builder',
         prompt_version: 1
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
       if (attempt === MAX_RETRIES) {
         return {
-          text: `SEQUENCE GENERATION FAILED: ${error.message}`,
+          text: `SEQUENCE GENERATION FAILED: ${errMsg}`,
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: 'email_sequence_builder',
@@ -393,11 +395,12 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
         prompt_name: `content_${category.toLowerCase().replace(/\s+/g, '_')}`,
         prompt_version: 1
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
       if (attempt === MAX_RETRIES) {
         return {
-          text: `GENERATION FAILED: ${error.message}`,
+          text: `GENERATION FAILED: ${errMsg}`,
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: `content_${category.toLowerCase().replace(/\s+/g, '_')}`,
@@ -475,9 +478,9 @@ Keep the total response under 250 words. Be specific and actionable, not generic
         prompt_name: 'lead_research',
         prompt_version: 1
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       attempt++;
-      console.warn(`Lead research attempt ${attempt} failed:`, error.message);
+      console.warn(`Lead research attempt ${attempt} failed:`, error instanceof Error ? error.message : 'Unknown error');
       if (attempt === MAX_RETRIES) {
         return {
           text: '',
@@ -579,9 +582,9 @@ Guidelines:
             tools: [{ googleSearch: {} }],
           }
         });
-      } catch (groundingError: any) {
+      } catch (groundingError: unknown) {
         // Google Search grounding failed, fall back to inference-only
-        console.warn('Google Search grounding failed, falling back to inference:', groundingError.message);
+        console.warn('Google Search grounding failed, falling back to inference:', groundingError instanceof Error ? groundingError.message : 'Unknown error');
         response = await ai.models.generateContent({
           model: MODEL_NAME,
           contents: prompt,
@@ -607,12 +610,13 @@ Guidelines:
         prompt_version: 1,
         analysis
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       attempt++;
-      console.warn(`Business analysis attempt ${attempt} failed:`, error.message);
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Business analysis attempt ${attempt} failed:`, errMsg);
       if (attempt === MAX_RETRIES) {
         return {
-          text: `ANALYSIS FAILED: ${error.message}`,
+          text: `ANALYSIS FAILED: ${errMsg}`,
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: 'business_analysis_web',
@@ -697,8 +701,8 @@ Guidelines:
       questions: parsed?.questions || [],
       tokens_used: response.usageMetadata?.totalTokenCount || 0
     };
-  } catch (error: any) {
-    console.warn('Follow-up question generation failed:', error.message);
+  } catch (error: unknown) {
+    console.warn('Follow-up question generation failed:', error instanceof Error ? error.message : 'Unknown error');
     return { questions: [], tokens_used: 0 };
   }
 };

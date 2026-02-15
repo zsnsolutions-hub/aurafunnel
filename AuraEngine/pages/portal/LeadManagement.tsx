@@ -523,9 +523,9 @@ const LeadManagement: React.FC = () => {
       } else {
         setAddLeadError('Insert returned no data. The lead may not have been created.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Lead insert exception:', err);
-      setAddLeadError(err.message || 'An unexpected error occurred.');
+      setAddLeadError(err instanceof Error ? err.message : 'An unexpected error occurred.');
     } finally {
       setIsAddingLead(false);
     }

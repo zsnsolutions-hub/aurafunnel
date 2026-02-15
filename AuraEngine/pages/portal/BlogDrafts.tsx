@@ -183,7 +183,7 @@ const BlogDrafts: React.FC = () => {
 
       if (d) setDrafts(d);
       if (c) setCategories(c);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Sync error:", err);
     } finally {
       setLoading(false);
@@ -213,8 +213,8 @@ const BlogDrafts: React.FC = () => {
         .getPublicUrl(filePath);
 
       setNewPost(prev => ({ ...prev, featured_image: publicUrl }));
-    } catch (err: any) {
-      setError("Asset upload failure: " + err.message);
+    } catch (err: unknown) {
+      setError("Asset upload failure: " + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setUploadingImage(false);
     }
@@ -246,8 +246,8 @@ const BlogDrafts: React.FC = () => {
       setSuccess(status === 'draft' ? "Draft archived." : "Insight transmitted for review.");
       await fetchData();
       setTimeout(() => setSuccess(null), 5000);
-    } catch (err: any) {
-      setError(err.message || "Transmission error.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Transmission error.");
     } finally {
       setIsCreating(false);
     }

@@ -354,8 +354,8 @@ const ContentStudio: React.FC = () => {
       const { data, error } = await supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase').eq('client_id', user.id).order('score', { ascending: false });
       if (error) throw error;
       setLeads((data || []) as Lead[]);
-    } catch (err: any) {
-      console.error('Studio fetch error:', err?.message || err);
+    } catch (err: unknown) {
+      console.error('Studio fetch error:', err instanceof Error ? err.message : err);
     } finally {
       setLoading(false);
     }

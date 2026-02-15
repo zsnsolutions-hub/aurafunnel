@@ -114,7 +114,7 @@ const LeadSegmentation: React.FC<LeadSegmentationProps> = ({
     };
     const updated = [...manualLists, newList];
     onManualListsChange(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
     setNewListName('');
     setIsCreating(false);
   };
@@ -122,7 +122,7 @@ const LeadSegmentation: React.FC<LeadSegmentationProps> = ({
   const handleDeleteList = (listId: string) => {
     const updated = manualLists.filter(l => l.id !== listId);
     onManualListsChange(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
     if (activeSegmentId === `manual-${listId}`) {
       onSegmentSelect(null, leads);
     }

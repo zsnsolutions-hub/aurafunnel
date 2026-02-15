@@ -80,9 +80,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         throw new Error(rpcData.message || 'Verification failed.');
       }
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Quick Gen Error:", err);
-      setGenError(err.message || "An error occurred.");
+      setGenError(err instanceof Error ? err.message : "An error occurred.");
     } finally {
       setIsGenerating(false);
     }

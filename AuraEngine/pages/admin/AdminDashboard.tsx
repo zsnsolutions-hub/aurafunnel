@@ -356,9 +356,9 @@ const AdminDashboard: React.FC = () => {
         }
       });
       setChartData(Object.values(trendMap));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Dashboard Fetch Error:", err);
-      setError(err.message || "Failed to load dashboard telemetry.");
+      setError(err instanceof Error ? err.message : "Failed to load dashboard telemetry.");
     } finally {
       setLoading(false);
     }
@@ -375,8 +375,8 @@ const AdminDashboard: React.FC = () => {
       if (error) throw error;
       const result = await generateDashboardInsights(allLeads || []);
       setDeepAnalysisResult(result);
-    } catch (err: any) {
-      setDeepAnalysisResult(`Deep analysis unavailable: ${err.message}`);
+    } catch (err: unknown) {
+      setDeepAnalysisResult(`Deep analysis unavailable: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setDeepAnalysisLoading(false);
     }

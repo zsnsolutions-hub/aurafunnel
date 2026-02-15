@@ -94,7 +94,7 @@ const LeadsManagement: React.FC = () => {
       list.id === listId ? { ...list, leadIds: [...list.leadIds, leadId] } : list
     );
     setManualLists(updated);
-    localStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
   };
 
   const openActionsModal = (lead: Lead) => {
@@ -133,7 +133,7 @@ const LeadsManagement: React.FC = () => {
             manualLists={manualLists}
             onManualListsChange={(lists) => {
               setManualLists(lists);
-              localStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(lists));
+              try { localStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(lists)); } catch {}
             }}
           />
         </div>

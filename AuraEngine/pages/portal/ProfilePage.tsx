@@ -109,8 +109,8 @@ const ProfilePage: React.FC = () => {
       if (updateError) throw updateError;
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to update configuration.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update configuration.');
     } finally {
       setIsUpdating(false);
     }
@@ -142,8 +142,8 @@ const ProfilePage: React.FC = () => {
       if (refreshProfile) await refreshProfile();
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to save business profile.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save business profile.');
     } finally {
       setIsSavingBusiness(false);
     }
@@ -228,8 +228,8 @@ const ProfilePage: React.FC = () => {
         setAnalysisError('Could not analyze the website. Please try again or use manual entry.');
         setTimeout(() => setWizardPhase('manual'), 1500);
       }
-    } catch (err: any) {
-      setAnalysisError(err.message || 'Analysis failed');
+    } catch (err: unknown) {
+      setAnalysisError(err instanceof Error ? err.message : 'Analysis failed');
       setTimeout(() => setWizardPhase('manual'), 1500);
     }
   };
@@ -252,8 +252,8 @@ const ProfilePage: React.FC = () => {
       if (refreshProfile) await refreshProfile();
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to save business profile.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save business profile.');
     } finally {
       setIsSavingBusiness(false);
     }
@@ -277,14 +277,14 @@ const ProfilePage: React.FC = () => {
   const toggleNotification = (key: keyof NotificationPreferences) => {
     const updated = { ...notifications, [key]: !notifications[key] };
     setNotifications(updated);
-    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(updated)); } catch {}
   };
 
   // Preferences handlers
   const updatePreference = <K extends keyof DashboardPreferences>(key: K, value: DashboardPreferences[K]) => {
     const updated = { ...preferences, [key]: value };
     setPreferences(updated);
-    localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
   };
 
   // API Key handlers
@@ -299,7 +299,7 @@ const ProfilePage: React.FC = () => {
     };
     const updated = [...apiKeys, key];
     setApiKeys(updated);
-    localStorage.setItem(APIKEYS_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(APIKEYS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
     setNewKeyName('');
     setShowKeyId(key.id);
   };
@@ -307,7 +307,7 @@ const ProfilePage: React.FC = () => {
   const revokeApiKey = (id: string) => {
     const updated = apiKeys.map(k => k.id === id ? { ...k, status: 'revoked' as const } : k);
     setApiKeys(updated);
-    localStorage.setItem(APIKEYS_STORAGE_KEY, JSON.stringify(updated));
+    try { localStorage.setItem(APIKEYS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
   };
 
   const copyKey = (key: string) => {

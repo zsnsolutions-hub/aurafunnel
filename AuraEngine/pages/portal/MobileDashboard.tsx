@@ -243,7 +243,7 @@ const MobileDashboard: React.FC = () => {
   }, [weeklyChecked]);
 
   useEffect(() => {
-    localStorage.setItem('mobile_onboarding', JSON.stringify([...onboardingChecked]));
+    try { localStorage.setItem('mobile_onboarding', JSON.stringify([...onboardingChecked])); } catch {}
   }, [onboardingChecked]);
 
   // ─── Fetch Data ───
@@ -261,8 +261,8 @@ const MobileDashboard: React.FC = () => {
         .order('score', { ascending: false });
       if (error) throw error;
       setLeads((data || []) as Lead[]);
-    } catch (err: any) {
-      console.error('Mobile fetch error:', err?.message || err);
+    } catch (err: unknown) {
+      console.error('Mobile fetch error:', err instanceof Error ? err.message : err);
     } finally {
       setLoading(false);
     }
@@ -1177,7 +1177,7 @@ const MobileDashboard: React.FC = () => {
 
           {/* Reset Onboarding */}
           <button
-            onClick={() => { setOnboardingChecked(new Set()); localStorage.removeItem('mobile_onboarding'); }}
+            onClick={() => { setOnboardingChecked(new Set()); try { localStorage.removeItem('mobile_onboarding'); } catch {} }}
             className="w-full py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all active:scale-95"
           >
             Reset Onboarding Progress

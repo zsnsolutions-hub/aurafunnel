@@ -17,8 +17,8 @@ const AuditLogs: React.FC = () => {
         .limit(100);
       if (error) throw error;
       if (data) setLogs(data);
-    } catch (e: any) {
-      console.error("Forensic vault sync error:", e?.message || e);
+    } catch (e: unknown) {
+      console.error("Forensic vault sync error:", e instanceof Error ? e.message : e);
     } finally {
       setLoading(false);
     }

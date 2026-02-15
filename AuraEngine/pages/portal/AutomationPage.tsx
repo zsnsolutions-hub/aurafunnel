@@ -243,11 +243,11 @@ const AutomationPage: React.FC = () => {
   }, [user?.id]);
 
   useEffect(() => {
-    localStorage.setItem(`aura_workflow_${user?.id}`, JSON.stringify(workflow));
+    try { localStorage.setItem(`aura_workflow_${user?.id}`, JSON.stringify(workflow)); } catch {}
   }, [workflow, user?.id]);
 
   useEffect(() => {
-    localStorage.setItem(`aura_workflows_list_${user?.id}`, JSON.stringify(workflows));
+    try { localStorage.setItem(`aura_workflows_list_${user?.id}`, JSON.stringify(workflows)); } catch {}
   }, [workflows, user?.id]);
 
   const selectedNode = useMemo(() => {

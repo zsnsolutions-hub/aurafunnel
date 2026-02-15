@@ -229,8 +229,8 @@ const AnalyticsPage: React.FC = () => {
 
       const newInsights = generateProgrammaticInsights(fetchedLeads);
       setInsights(newInsights);
-    } catch (err: any) {
-      console.error('Analytics fetch error:', err?.message || err);
+    } catch (err: unknown) {
+      console.error('Analytics fetch error:', err instanceof Error ? err.message : err);
     } finally {
       setLoading(false);
     }
@@ -239,7 +239,7 @@ const AnalyticsPage: React.FC = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
-    localStorage.setItem(`aura_alerts_${user?.id}`, JSON.stringify(alerts));
+    try { localStorage.setItem(`aura_alerts_${user?.id}`, JSON.stringify(alerts)); } catch {}
   }, [alerts, user?.id]);
 
   // ─── Computed Metrics ───

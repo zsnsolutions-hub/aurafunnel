@@ -74,9 +74,9 @@ const ContentGen: React.FC = () => {
         throw new Error(rpcData.message || 'Credit verification failed.');
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Generation Lifecycle Error:", err);
-      setError(err.message || 'Critical system failure. No credits billed.');
+      setError(err instanceof Error ? err.message : 'Critical system failure. No credits billed.');
     } finally {
       setIsGenerating(false);
     }

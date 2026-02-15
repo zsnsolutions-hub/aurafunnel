@@ -63,7 +63,7 @@ Focus on pain points and company context. Avoid generic jargon.`;
     .replace('{{type}}', type);
 
   let attempt = 0;
-  let lastError: any = null;
+  let lastError: unknown = null;
 
   while (attempt <= MAX_RETRIES) {
     try {
@@ -112,9 +112,9 @@ Focus on pain points and company context. Avoid generic jargon.`;
         estimated_cost: cost
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       lastError = error;
-      console.warn(`Attempt ${attempt + 1} failed: ${error.message}`);
+      console.warn(`Attempt ${attempt + 1} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       
       if (attempt < MAX_RETRIES) {
         const backoff = 1000 * Math.pow(2, attempt);
@@ -128,7 +128,7 @@ Focus on pain points and company context. Avoid generic jargon.`;
 
   // 4. Terminal Failure Logging
   const failureLatency = Math.round(performance.now() - startTime);
-  const gracefulMessage = lastError?.name === 'AbortError' 
+  const gracefulMessage = lastError instanceof Error && lastError.name === 'AbortError'
     ? "NEURAL TIMEOUT: The intelligence engine didn't respond in time."
     : `SYSTEM ERROR: Connection failed after ${MAX_RETRIES + 1} attempts.`;
 
@@ -143,7 +143,7 @@ Focus on pain points and company context. Avoid generic jargon.`;
     status: 'error',
     latency_ms: failureLatency,
     estimated_cost: 0,
-    error_message: lastError?.message || "Unknown Failure"
+    error_message: lastError instanceof Error ? lastError.message : "Unknown Failure"
   });
 
   return {
