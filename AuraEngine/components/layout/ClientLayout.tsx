@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  Target, Users, Brain, MessageSquare, Sparkles, PenSquare, Zap,
+  PieChart, GitBranch, SlidersHorizontal, Plug, CreditCard,
+  HelpCircle, BookOpen, Settings, LogOut, Search, Bell
+} from 'lucide-react';
 import { User } from '../../types';
-import { TargetIcon, SparklesIcon, CreditCardIcon, CogIcon, LogoutIcon, BoltIcon, EditIcon, PieChartIcon, GitBranchIcon, HelpCircleIcon, BookOpenIcon, UsersIcon, BrainIcon, MessageIcon, SlidersIcon, PlugIcon, FilterIcon, BellIcon } from '../Icons';
 import CommandPalette from '../dashboard/CommandPalette';
 import DailyBriefing from '../dashboard/DailyBriefing';
+import { AppShell } from './AppShell';
+import { Sidebar } from './Sidebar';
+import { Topbar } from './Topbar';
 
 interface ClientLayoutProps {
   user: User;
@@ -17,26 +24,27 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [briefingShown, setBriefingShown] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gPressedRef = useRef(false);
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const navItems = [
-    { label: 'Main Dashboard', path: '/portal', icon: <TargetIcon className="w-5 h-5" /> },
-    { label: 'Lead Management', path: '/portal/leads', icon: <UsersIcon className="w-5 h-5" /> },
-    { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <BrainIcon className="w-5 h-5" /> },
-    { label: 'AI Command Center', path: '/portal/ai', icon: <MessageIcon className="w-5 h-5" /> },
-    { label: 'Neural Studio', path: '/portal/content', icon: <SparklesIcon className="w-5 h-5" /> },
-    { label: 'Content Studio', path: '/portal/content-studio', icon: <EditIcon className="w-5 h-5" /> },
-    { label: 'Strategy Hub', path: '/portal/strategy', icon: <BoltIcon className="w-5 h-5" /> },
-    { label: 'Guest Posts', path: '/portal/blog', icon: <EditIcon className="w-5 h-5" /> },
-    { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChartIcon className="w-5 h-5" /> },
-    { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranchIcon className="w-5 h-5" /> },
-    { label: 'Model Training', path: '/portal/model-training', icon: <SlidersIcon className="w-5 h-5" /> },
-    { label: 'Integration Hub', path: '/portal/integrations', icon: <PlugIcon className="w-5 h-5" /> },
-    { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCardIcon className="w-5 h-5" /> },
-    { label: 'Help Center', path: '/portal/help', icon: <HelpCircleIcon className="w-5 h-5" /> },
-    { label: 'User Manual', path: '/portal/manual', icon: <BookOpenIcon className="w-5 h-5" /> },
-    { label: 'Account Architecture', path: '/portal/settings', icon: <CogIcon className="w-5 h-5" /> },
+    { label: 'Main Dashboard', path: '/portal', icon: <Target size={20} /> },
+    { label: 'Lead Management', path: '/portal/leads', icon: <Users size={20} /> },
+    { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <Brain size={20} /> },
+    { label: 'AI Command Center', path: '/portal/ai', icon: <MessageSquare size={20} /> },
+    { label: 'Neural Studio', path: '/portal/content', icon: <Sparkles size={20} /> },
+    { label: 'Content Studio', path: '/portal/content-studio', icon: <PenSquare size={20} /> },
+    { label: 'Strategy Hub', path: '/portal/strategy', icon: <Zap size={20} /> },
+    { label: 'Guest Posts', path: '/portal/blog', icon: <PenSquare size={20} /> },
+    { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChart size={20} /> },
+    { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranch size={20} /> },
+    { label: 'Model Training', path: '/portal/model-training', icon: <SlidersHorizontal size={20} /> },
+    { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} /> },
+    { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCard size={20} /> },
+    { label: 'Help Center', path: '/portal/help', icon: <HelpCircle size={20} /> },
+    { label: 'User Manual', path: '/portal/manual', icon: <BookOpen size={20} /> },
+    { label: 'Account Architecture', path: '/portal/settings', icon: <Settings size={20} /> },
   ];
 
   const creditsTotal = user.credits_total || 500;
@@ -138,97 +146,105 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   }, [navigate, commandPaletteOpen, briefingOpen]);
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col lg:flex-row font-body">
-      <aside className="w-72 hidden lg:flex flex-col bg-white border-r border-slate-200 fixed inset-y-0 shadow-sm">
-        <div className="h-16 flex items-center px-8 border-b border-slate-100">
-          <Link to="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black font-heading text-lg">A</div>
-            <span className="text-xl font-bold tracking-tight text-slate-900 font-heading uppercase tracking-tighter">AuraFunnel</span>
-          </Link>
-        </div>
-
-        <div className="flex-grow py-4 px-4 space-y-0.5 overflow-y-auto">
-          {/* Command Palette Trigger */}
-          <button
-            onClick={() => setCommandPaletteOpen(true)}
-            className="w-full flex items-center space-x-3 px-5 py-2.5 rounded-xl mb-3 bg-slate-50 border border-slate-100 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all group"
-          >
-            <FilterIcon className="w-4 h-4" />
-            <span className="text-xs font-medium flex-1 text-left">Search...</span>
-            <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-400 group-hover:text-slate-500">⌘K</kbd>
-          </button>
-
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center space-x-3 px-5 py-3 rounded-2xl transition-all duration-300 group ${
-                location.pathname === item.path
-                  ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 font-bold'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 font-medium'
-              }`}
-            >
-              <span className="transition-transform group-hover:scale-110">{item.icon}</span>
-              <span className="text-sm">{item.label}</span>
-            </Link>
-          ))}
-        </div>
-
-        <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-          <div className="p-5 bg-slate-900 rounded-3xl text-white shadow-2xl">
-            <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-3">Compute Allocation</p>
-            <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden mb-3 shadow-inner">
-              <div className="bg-indigo-50 h-full rounded-full transition-all duration-1000" style={{ width: `${usagePercentage}%` }}></div>
-            </div>
-            <p className="text-[10px] font-bold text-slate-400">{(creditsTotal - creditsUsed).toLocaleString()} Gen Available</p>
-          </div>
-
-          <div className="mt-6 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black">
-                {user.name?.charAt(0) || 'U'}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-900 truncate">{user.name || 'User'}</p>
-                <p className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">Verified Node</p>
-              </div>
-            </div>
-            <button onClick={onLogout} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-              <LogoutIcon className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex-grow lg:pl-72 flex flex-col">
-        {/* Top bar with briefing button */}
-        <div className="h-12 border-b border-slate-100 bg-white/80 backdrop-blur-sm flex items-center justify-end px-8 space-x-2">
-          <button
-            onClick={() => setBriefingOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 text-slate-500 rounded-lg text-[11px] font-bold hover:bg-slate-100 hover:text-slate-700 transition-all"
-          >
-            <BellIcon className="w-3.5 h-3.5" />
-            <span>Briefing</span>
-          </button>
-          <button
-            onClick={() => setCommandPaletteOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 text-slate-500 rounded-lg text-[11px] font-bold hover:bg-slate-100 hover:text-slate-700 transition-all"
-          >
-            <FilterIcon className="w-3.5 h-3.5" />
-            <span>Search</span>
-            <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded text-[9px]">/</kbd>
-          </button>
-        </div>
-
-        <main className="p-8 max-w-7xl mx-auto w-full flex-grow">
-          <Outlet context={{ user, refreshProfile }} />
-        </main>
-      </div>
+    <>
+      <AppShell
+        sidebarCollapsed={sidebarCollapsed}
+        sidebar={
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed(prev => !prev)}
+            navItems={navItems}
+            activePath={location.pathname}
+            header={
+              <Link to="/" className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-lg">A</div>
+                <span className="text-lg font-bold tracking-tight text-gray-900">AuraFunnel</span>
+              </Link>
+            }
+            headerCollapsed={
+              <Link to="/">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-lg">A</div>
+              </Link>
+            }
+            topSlot={
+              <button
+                onClick={() => setCommandPaletteOpen(true)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out group"
+              >
+                <Search size={16} />
+                <span className="text-xs font-medium flex-1 text-left">Search...</span>
+                <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px] font-bold text-gray-400">⌘K</kbd>
+              </button>
+            }
+            footer={
+              sidebarCollapsed ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
+                    {user.name?.charAt(0) || 'U'}
+                  </div>
+                  <button onClick={onLogout} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors duration-150">
+                    <LogOut size={16} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="p-4 bg-gray-900 rounded-2xl text-white mb-4">
+                    <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">Compute Allocation</p>
+                    <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mb-2">
+                      <div className="bg-indigo-400 h-full rounded-full transition-all duration-1000" style={{ width: `${usagePercentage}%` }}></div>
+                    </div>
+                    <p className="text-[10px] font-bold text-gray-400">{(creditsTotal - creditsUsed).toLocaleString()} Gen Available</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
+                        {user.name?.charAt(0) || 'U'}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{user.name || 'User'}</p>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Verified</p>
+                      </div>
+                    </div>
+                    <button onClick={onLogout} className="p-2 text-gray-300 hover:text-red-500 transition-colors duration-150">
+                      <LogOut size={16} />
+                    </button>
+                  </div>
+                </>
+              )
+            }
+          />
+        }
+        topbar={
+          <Topbar
+            actions={
+              <>
+                <button
+                  onClick={() => setBriefingOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-500 rounded-lg text-xs font-semibold hover:bg-gray-100 hover:text-gray-700 transition-all duration-150 ease-out"
+                >
+                  <Bell size={16} />
+                  <span>Briefing</span>
+                </button>
+                <button
+                  onClick={() => setCommandPaletteOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-500 rounded-lg text-xs font-semibold hover:bg-gray-100 hover:text-gray-700 transition-all duration-150 ease-out"
+                >
+                  <Search size={16} />
+                  <span>Search</span>
+                  <kbd className="px-1 py-0.5 bg-white border border-gray-200 rounded text-[9px]">/</kbd>
+                </button>
+              </>
+            }
+          />
+        }
+      >
+        <Outlet context={{ user, refreshProfile }} />
+      </AppShell>
 
       {/* Global Overlays */}
       <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
       <DailyBriefing user={user} open={briefingOpen} onClose={() => setBriefingOpen(false)} />
-    </div>
+    </>
   );
 };
 
