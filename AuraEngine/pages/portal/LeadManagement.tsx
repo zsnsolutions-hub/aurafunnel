@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Lead, User, ContentType } from '../../types';
-import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon } from '../../components/Icons';
+import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
@@ -148,6 +148,10 @@ const LeadManagement: React.FC = () => {
   const [isCSVOpen, setIsCSVOpen] = useState(false);
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [newLead, setNewLead] = useState({ name: '', email: '', company: '', insights: '' });
+  const [newLeadKb, setNewLeadKb] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
+  const [showNewLeadSocials, setShowNewLeadSocials] = useState(false);
+  const [addLeadError, setAddLeadError] = useState('');
+  const [isAddingLead, setIsAddingLead] = useState(false);
 
   // ── Bulk Actions ──
   const [bulkActionOpen, setBulkActionOpen] = useState<BulkAction | null>(null);
@@ -454,17 +458,70 @@ const LeadManagement: React.FC = () => {
 
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    const mockScore = Math.floor(Math.random() * 40) + 60;
-    const { data } = await supabase
-      .from('leads')
-      .insert([{ ...newLead, client_id: user.id, score: mockScore, status: 'New', lastActivity: 'Just now' }])
-      .select()
-      .single();
-    if (data) {
-      setAllLeads(prev => [data, ...prev]);
-      setIsAddLeadOpen(false);
-      setNewLead({ name: '', email: '', company: '', insights: '' });
-      setQuickInsightLead(data);
+    setAddLeadError('');
+    setIsAddingLead(true);
+    try {
+      // Verify we have a valid user session
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        setAddLeadError('Session expired. Please refresh and log in again.');
+        return;
+      }
+
+      const mockScore = Math.floor(Math.random() * 40) + 60;
+
+      // Build knowledgeBase from social/website fields
+      const normalizeUrl = (url: string) => {
+        const trimmed = url.trim();
+        if (!trimmed) return '';
+        return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      };
+      const kbCleaned: Record<string, string> = {};
+      if (newLeadKb.website.trim()) kbCleaned.website = normalizeUrl(newLeadKb.website);
+      if (newLeadKb.linkedin.trim()) kbCleaned.linkedin = normalizeUrl(newLeadKb.linkedin);
+      if (newLeadKb.instagram.trim()) kbCleaned.instagram = normalizeUrl(newLeadKb.instagram);
+      if (newLeadKb.facebook.trim()) kbCleaned.facebook = normalizeUrl(newLeadKb.facebook);
+      if (newLeadKb.twitter.trim()) kbCleaned.twitter = normalizeUrl(newLeadKb.twitter);
+      if (newLeadKb.youtube.trim()) kbCleaned.youtube = normalizeUrl(newLeadKb.youtube);
+      const knowledgeBase = Object.keys(kbCleaned).length > 0 ? kbCleaned : null;
+
+      const payload: Record<string, any> = {
+        name: newLead.name.trim(),
+        email: newLead.email.trim(),
+        company: newLead.company.trim(),
+        insights: newLead.insights.trim() || '',
+        client_id: user.id,
+        score: mockScore,
+        status: 'New',
+      };
+      if (knowledgeBase) payload.knowledgeBase = knowledgeBase;
+
+      const { data, error } = await supabase
+        .from('leads')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Lead insert error:', error.code, error.message, error.details, error.hint);
+        setAddLeadError(`${error.message}${error.hint ? ` (Hint: ${error.hint})` : ''}`);
+        return;
+      }
+      if (data) {
+        setAllLeads(prev => [data, ...prev]);
+        setIsAddLeadOpen(false);
+        setNewLead({ name: '', email: '', company: '', insights: '' });
+        setNewLeadKb({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
+        setShowNewLeadSocials(false);
+        setQuickInsightLead(data);
+      } else {
+        setAddLeadError('Insert returned no data. The lead may not have been created.');
+      }
+    } catch (err: any) {
+      console.error('Lead insert exception:', err);
+      setAddLeadError(err.message || 'An unexpected error occurred.');
+    } finally {
+      setIsAddingLead(false);
     }
   };
 
@@ -572,7 +629,7 @@ const LeadManagement: React.FC = () => {
         e.preventDefault(); navigate(`/portal/leads/${paginatedLeads[focusedIndex].id}`); return;
       }
       if (e.key === 'v') { setViewMode(prev => prev === 'table' ? 'kanban' : 'table'); return; }
-      if (e.key === 'n') { e.preventDefault(); setIsAddLeadOpen(true); return; }
+      if (e.key === 'n') { e.preventDefault(); { setIsAddLeadOpen(true); setAddLeadError(''); }; return; }
       if (e.key === 'i') { e.preventDefault(); setIsCSVOpen(true); return; }
       if (e.key === 'x' && focusedIndex >= 0 && focusedIndex < paginatedLeads.length) {
         toggleSelect(paginatedLeads[focusedIndex].id); return;
@@ -637,7 +694,7 @@ const LeadManagement: React.FC = () => {
             <span>Export</span>
           </button>
           <button
-            onClick={() => setIsAddLeadOpen(true)}
+            onClick={() => { setIsAddLeadOpen(true); setAddLeadError(''); }}
             className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
           >
             <PlusIcon className="w-4 h-4" />
@@ -1726,7 +1783,7 @@ const LeadManagement: React.FC = () => {
       {isAddLeadOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-end">
           <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsAddLeadOpen(false)}></div>
-          <div className="relative w-full max-w-md h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 p-10 flex flex-col">
+          <div className="relative w-full max-w-md h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 p-10 flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between mb-10">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 font-heading">New Lead Profile</h2>
@@ -1753,15 +1810,57 @@ const LeadManagement: React.FC = () => {
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Key Insights</label>
                 <textarea rows={4} value={newLead.insights} onChange={e => setNewLead({...newLead, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none focus:border-indigo-300 transition-colors"></textarea>
               </div>
+              {/* Website & Social Links */}
+              <div>
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    <GlobeIcon className="w-3.5 h-3.5" /><span>Website</span>
+                  </label>
+                  <input type="text" value={newLeadKb.website} onChange={e => setNewLeadKb({...newLeadKb, website: e.target.value})} placeholder="https://company.com" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+                </div>
+              </div>
+              <div>
+                <button type="button" onClick={() => setShowNewLeadSocials(!showNewLeadSocials)} className="flex items-center space-x-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors">
+                  <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${showNewLeadSocials ? 'rotate-180' : ''}`} />
+                  <span>Social media profiles (optional)</span>
+                </button>
+                {showNewLeadSocials && (
+                  <div className="space-y-3 mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><LinkedInIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKb.linkedin} onChange={e => setNewLeadKb({...newLeadKb, linkedin: e.target.value})} placeholder="linkedin.com/in/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><TwitterIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKb.twitter} onChange={e => setNewLeadKb({...newLeadKb, twitter: e.target.value})} placeholder="x.com/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><InstagramIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKb.instagram} onChange={e => setNewLeadKb({...newLeadKb, instagram: e.target.value})} placeholder="instagram.com/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><FacebookIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKb.facebook} onChange={e => setNewLeadKb({...newLeadKb, facebook: e.target.value})} placeholder="facebook.com/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="bg-indigo-50 rounded-2xl p-4 flex items-start space-x-3">
                 <SparklesIcon className="w-5 h-5 text-indigo-500 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-xs font-bold text-indigo-700">AI Auto-Research</p>
-                  <p className="text-[11px] text-indigo-600 mt-0.5">After saving, AI will automatically research the company and enrich the lead profile with scoring insights.</p>
+                  <p className="text-[11px] text-indigo-600 mt-0.5">After saving, AI will automatically research the company using the website and social links to enrich the lead profile.</p>
                 </div>
               </div>
+              {addLeadError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <p className="text-xs font-bold text-red-600">{addLeadError}</p>
+                </div>
+              )}
               <div className="pt-6">
-                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-xl hover:bg-indigo-700 transition-colors">Create Lead Profile</button>
+                <button type="submit" disabled={isAddingLead} className={`w-full py-4 rounded-2xl font-bold shadow-xl transition-colors ${isAddingLead ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+                  {isAddingLead ? 'Saving...' : 'Create Lead Profile'}
+                </button>
               </div>
             </form>
           </div>

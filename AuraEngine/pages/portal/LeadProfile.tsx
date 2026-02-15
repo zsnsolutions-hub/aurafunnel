@@ -190,6 +190,8 @@ const LeadProfile: React.FC = () => {
   const [kbForm, setKbForm] = useState<KnowledgeBase>({});
   const [kbNotesExpanded, setKbNotesExpanded] = useState(false);
   const [kbResearching, setKbResearching] = useState(false);
+  const [kbSaving, setKbSaving] = useState(false);
+  const [kbError, setKbError] = useState('');
 
   useEffect(() => {
     if (leadId) fetchLead();
@@ -234,6 +236,9 @@ const LeadProfile: React.FC = () => {
 
   const handleKbSave = async () => {
     if (!lead) return;
+    setKbSaving(true);
+    setKbError('');
+
     const cleaned: KnowledgeBase = {};
     if (kbForm.website?.trim()) cleaned.website = normalizeUrl(kbForm.website);
     if (kbForm.linkedin?.trim()) cleaned.linkedin = normalizeUrl(kbForm.linkedin);
@@ -243,9 +248,35 @@ const LeadProfile: React.FC = () => {
     if (kbForm.youtube?.trim()) cleaned.youtube = normalizeUrl(kbForm.youtube);
     if (kbForm.extraNotes?.trim()) cleaned.extraNotes = kbForm.extraNotes.trim();
     const kb = Object.keys(cleaned).length > 0 ? cleaned : null;
-    await supabase.from('leads').update({ knowledgeBase: kb }).eq('id', lead.id);
+
+    console.log('[KB Save] lead.id:', lead.id, 'user.id:', user.id, 'payload:', JSON.stringify(kb));
+
+    const { data: updateData, error: saveErr, count, status, statusText } = await supabase
+      .from('leads')
+      .update({ knowledgeBase: kb })
+      .eq('id', lead.id)
+      .eq('client_id', user.id)
+      .select();
+
+    console.log('[KB Save] status:', status, statusText, 'error:', saveErr, 'data:', updateData, 'count:', count);
+
+    if (saveErr) {
+      console.error('[KB Save] FAILED:', saveErr.code, saveErr.message, saveErr.details, saveErr.hint);
+      setKbError(`${saveErr.message}${saveErr.hint ? ` — ${saveErr.hint}` : ''}`);
+      setKbSaving(false);
+      return;
+    }
+
+    if (!updateData || updateData.length === 0) {
+      console.error('[KB Save] No rows returned — update may have matched 0 rows (RLS or wrong id)');
+      setKbError('Update returned no data — the lead may not belong to your account or the session expired.');
+      setKbSaving(false);
+      return;
+    }
+
     setLead({ ...lead, knowledgeBase: kb || undefined });
     setKbDrawerOpen(false);
+    setKbSaving(false);
     showFeedback('Knowledge Base updated');
 
     // Fire background AI research if social URLs are present
@@ -273,10 +304,14 @@ const LeadProfile: React.FC = () => {
       const updatedKb: KnowledgeBase = { ...cleaned, extraNotes: merged };
       const newInsights = res.text.substring(0, 200);
 
-      await supabase.from('leads').update({
+      const { error: researchError } = await supabase.from('leads').update({
         knowledgeBase: updatedKb,
         insights: newInsights,
-      }).eq('id', lead.id);
+      }).eq('id', lead.id).eq('client_id', user.id);
+
+      if (researchError) {
+        console.error('AI research save error:', researchError.message);
+      }
 
       setLead(prev => prev ? {
         ...prev,
@@ -284,7 +319,7 @@ const LeadProfile: React.FC = () => {
         insights: newInsights,
       } : prev);
       setKbResearching(false);
-      showFeedback('AI research complete');
+      showFeedback(researchError ? 'Research done but save failed' : 'AI research complete');
     }).catch(() => {
       setKbResearching(false);
     });
@@ -1630,11 +1665,17 @@ const LeadProfile: React.FC = () => {
                 </label>
                 <textarea rows={4} value={kbForm.extraNotes || ''} onChange={e => setKbForm({ ...kbForm, extraNotes: e.target.value })} placeholder="Additional context, research notes..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none resize-none focus:border-indigo-300 transition-colors" />
               </div>
+              {kbError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <p className="text-xs font-bold text-red-600">{kbError}</p>
+                </div>
+              )}
               <button
                 onClick={handleKbSave}
-                className="w-full py-3.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+                disabled={kbSaving}
+                className={`w-full py-3.5 rounded-xl text-sm font-bold transition-colors shadow-sm ${kbSaving ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
               >
-                Save Knowledge Base
+                {kbSaving ? 'Saving...' : 'Save Knowledge Base'}
               </button>
             </div>
           </div>
