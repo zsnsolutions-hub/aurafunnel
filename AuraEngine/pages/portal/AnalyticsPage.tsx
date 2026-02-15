@@ -210,7 +210,10 @@ const AnalyticsPage: React.FC = () => {
 
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data: leadsData } = await supabase

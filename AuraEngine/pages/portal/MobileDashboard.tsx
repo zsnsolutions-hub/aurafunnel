@@ -248,7 +248,10 @@ const MobileDashboard: React.FC = () => {
 
   // ─── Fetch Data ───
   const fetchData = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await supabase
