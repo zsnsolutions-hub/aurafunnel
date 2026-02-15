@@ -1,55 +1,63 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { UserRole, User } from './types';
 import { supabase } from './lib/supabase';
 
-// Layouts
+// Layouts — kept eager since they wrap all child routes
 import MarketingLayout from './components/layout/MarketingLayout';
 import AdminLayout from './components/layout/AdminLayout';
 import ClientLayout from './components/layout/ClientLayout';
 
-// Admin Pages
-import AdminDashboard from './pages/admin/AdminDashboard';
-import UserManagement from './pages/admin/UserManagement';
-import SystemHealth from './pages/admin/SystemHealth';
-import LeadsManagement from './pages/admin/LeadsManagement';
-import AdminSettings from './pages/admin/AdminSettings';
-import AIOperations from './pages/admin/AIOperations';
-import PromptLab from './pages/admin/PromptLab';
-import AuditLogs from './pages/admin/AuditLogs';
-import BlogManager from './pages/admin/BlogManager';
-import PricingManagement from './pages/admin/PricingManagement';
-
-// Client Pages
-import ClientDashboard from './pages/portal/ClientDashboard';
-import ContentGen from './pages/portal/ContentGen';
-import BillingPage from './pages/portal/BillingPage';
-import ProfilePage from './pages/portal/ProfilePage';
-import AuthPage from './pages/portal/AuthPage';
-import StrategyHub from './pages/portal/StrategyHub';
-import BlogDrafts from './pages/portal/BlogDrafts';
-import AnalyticsPage from './pages/portal/AnalyticsPage';
-import AutomationPage from './pages/portal/AutomationPage';
-import HelpCenterPage from './pages/portal/HelpCenterPage';
-import UserManualPage from './pages/portal/UserManualPage';
-import LeadManagement from './pages/portal/LeadManagement';
-import LeadProfile from './pages/portal/LeadProfile';
-import MobileDashboard from './pages/portal/MobileDashboard';
-import LeadIntelligence from './pages/portal/LeadIntelligence';
-import AICommandCenter from './pages/portal/AICommandCenter';
-import ContentStudio from './pages/portal/ContentStudio';
-import ModelTraining from './pages/portal/ModelTraining';
-import IntegrationHub from './pages/portal/IntegrationHub';
+// ─── Lazy-loaded pages ───
 
 // Marketing
-import LandingPage from './pages/marketing/LandingPage';
-import FeaturesPage from './pages/marketing/FeaturesPage';
-import PricingPage from './pages/marketing/PricingPage';
-import AboutPage from './pages/marketing/AboutPage';
-import ContactPage from './pages/marketing/ContactPage';
-import BlogPage from './pages/marketing/BlogPage';
+const LandingPage = lazy(() => import('./pages/marketing/LandingPage'));
+const FeaturesPage = lazy(() => import('./pages/marketing/FeaturesPage'));
+const PricingPage = lazy(() => import('./pages/marketing/PricingPage'));
+const AboutPage = lazy(() => import('./pages/marketing/AboutPage'));
+const ContactPage = lazy(() => import('./pages/marketing/ContactPage'));
+const BlogPage = lazy(() => import('./pages/marketing/BlogPage'));
 
-import { SparklesIcon } from './components/Icons';
+// Auth
+const AuthPage = lazy(() => import('./pages/portal/AuthPage'));
+
+// Client Portal
+const ClientDashboard = lazy(() => import('./pages/portal/ClientDashboard'));
+const LeadManagement = lazy(() => import('./pages/portal/LeadManagement'));
+const LeadProfile = lazy(() => import('./pages/portal/LeadProfile'));
+const ContentGen = lazy(() => import('./pages/portal/ContentGen'));
+const StrategyHub = lazy(() => import('./pages/portal/StrategyHub'));
+const BlogDrafts = lazy(() => import('./pages/portal/BlogDrafts'));
+const AnalyticsPage = lazy(() => import('./pages/portal/AnalyticsPage'));
+const AutomationPage = lazy(() => import('./pages/portal/AutomationPage'));
+const BillingPage = lazy(() => import('./pages/portal/BillingPage'));
+const HelpCenterPage = lazy(() => import('./pages/portal/HelpCenterPage'));
+const UserManualPage = lazy(() => import('./pages/portal/UserManualPage'));
+const ProfilePage = lazy(() => import('./pages/portal/ProfilePage'));
+const LeadIntelligence = lazy(() => import('./pages/portal/LeadIntelligence'));
+const AICommandCenter = lazy(() => import('./pages/portal/AICommandCenter'));
+const ContentStudio = lazy(() => import('./pages/portal/ContentStudio'));
+const MobileDashboard = lazy(() => import('./pages/portal/MobileDashboard'));
+const ModelTraining = lazy(() => import('./pages/portal/ModelTraining'));
+const IntegrationHub = lazy(() => import('./pages/portal/IntegrationHub'));
+
+// Admin
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
+const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
+const LeadsManagement = lazy(() => import('./pages/admin/LeadsManagement'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+const AIOperations = lazy(() => import('./pages/admin/AIOperations'));
+const PromptLab = lazy(() => import('./pages/admin/PromptLab'));
+const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
+const BlogManager = lazy(() => import('./pages/admin/BlogManager'));
+const PricingManagement = lazy(() => import('./pages/admin/PricingManagement'));
+
+const PageFallback = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="w-8 h-8 border-3 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -65,7 +73,7 @@ const App: React.FC = () => {
         .select('*, subscription:subscriptions(*)')
         .eq('id', userId)
         .maybeSingle();
-      
+
       if (error) {
         setDbError("Database Schema Sync Required. Please visit Auth page for script.");
         return null;
@@ -132,68 +140,70 @@ const App: React.FC = () => {
   }
 
   return (
-    <Routes>
-      <Route element={<MarketingLayout />}>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/features" element={<FeaturesPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/blog" element={<BlogPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/contact" element={<ContactPage />} />
-      </Route>
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route element={<MarketingLayout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/features" element={<FeaturesPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/blog" element={<BlogPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+        </Route>
 
-      <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
+        <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
 
-      <Route 
-        path="/portal" 
-        element={
-          user?.role === UserRole.CLIENT ? 
-          <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} /> : 
-          <Navigate to="/auth" state={{ from: location }} />
-        }
-      >
-        <Route index element={<ClientDashboard user={user!} />} />
-        <Route path="leads" element={<LeadManagement />} />
-        <Route path="leads/:leadId" element={<LeadProfile />} />
-        <Route path="content" element={<ContentGen />} />
-        <Route path="strategy" element={<StrategyHub />} />
-        <Route path="blog" element={<BlogDrafts />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
-        <Route path="automation" element={<AutomationPage />} />
-        <Route path="billing" element={<BillingPage />} />
-        <Route path="help" element={<HelpCenterPage />} />
-        <Route path="manual" element={<UserManualPage />} />
-        <Route path="settings" element={<ProfilePage />} />
-        <Route path="intelligence" element={<LeadIntelligence />} />
-        <Route path="ai" element={<AICommandCenter />} />
-        <Route path="content-studio" element={<ContentStudio />} />
-        <Route path="mobile" element={<MobileDashboard />} />
-        <Route path="model-training" element={<ModelTraining />} />
-        <Route path="integrations" element={<IntegrationHub />} />
-      </Route>
+        <Route
+          path="/portal"
+          element={
+            user?.role === UserRole.CLIENT ?
+            <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} /> :
+            <Navigate to="/auth" state={{ from: location }} />
+          }
+        >
+          <Route index element={<ClientDashboard user={user!} />} />
+          <Route path="leads" element={<LeadManagement />} />
+          <Route path="leads/:leadId" element={<LeadProfile />} />
+          <Route path="content" element={<ContentGen />} />
+          <Route path="strategy" element={<StrategyHub />} />
+          <Route path="blog" element={<BlogDrafts />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="automation" element={<AutomationPage />} />
+          <Route path="billing" element={<BillingPage />} />
+          <Route path="help" element={<HelpCenterPage />} />
+          <Route path="manual" element={<UserManualPage />} />
+          <Route path="settings" element={<ProfilePage />} />
+          <Route path="intelligence" element={<LeadIntelligence />} />
+          <Route path="ai" element={<AICommandCenter />} />
+          <Route path="content-studio" element={<ContentStudio />} />
+          <Route path="mobile" element={<MobileDashboard />} />
+          <Route path="model-training" element={<ModelTraining />} />
+          <Route path="integrations" element={<IntegrationHub />} />
+        </Route>
 
-      <Route 
-        path="/admin" 
-        element={
-          user?.role === UserRole.ADMIN ? 
-          <AdminLayout user={user!} onLogout={handleLogout} /> : 
-          <Navigate to="/auth" state={{ from: location }} />
-        }
-      >
-        <Route index element={<AdminDashboard />} />
-        <Route path="users" element={<UserManagement />} />
-        <Route path="ai" element={<AIOperations />} />
-        <Route path="prompts" element={<PromptLab />} />
-        <Route path="leads" element={<LeadsManagement />} />
-        <Route path="blog" element={<BlogManager />} />
-        <Route path="health" element={<SystemHealth />} />
-        <Route path="audit" element={<AuditLogs />} />
-        <Route path="settings" element={<AdminSettings />} />
-        <Route path="pricing" element={<PricingManagement />} />
-      </Route>
+        <Route
+          path="/admin"
+          element={
+            user?.role === UserRole.ADMIN ?
+            <AdminLayout user={user!} onLogout={handleLogout} /> :
+            <Navigate to="/auth" state={{ from: location }} />
+          }
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="ai" element={<AIOperations />} />
+          <Route path="prompts" element={<PromptLab />} />
+          <Route path="leads" element={<LeadsManagement />} />
+          <Route path="blog" element={<BlogManager />} />
+          <Route path="health" element={<SystemHealth />} />
+          <Route path="audit" element={<AuditLogs />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="pricing" element={<PricingManagement />} />
+        </Route>
 
-      <Route path="*" element={<Navigate to="/" />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </Suspense>
   );
 };
 

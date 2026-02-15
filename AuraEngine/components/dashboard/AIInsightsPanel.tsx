@@ -136,4 +136,4 @@ const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({
   );
 };
 
-export default AIInsightsPanel;
+export default React.memo(AIInsightsPanel);

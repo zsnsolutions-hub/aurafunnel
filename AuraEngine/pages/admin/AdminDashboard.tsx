@@ -240,15 +240,15 @@ const AdminDashboard: React.FC = () => {
         { data: latestUsers },
         { data: adminProfile }
       ] = await Promise.all([
-        supabase.from('leads').select('*', { count: 'exact', head: true }),
-        supabase.from('leads').select('*').order('score', { ascending: false }),
-        supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', todayStart),
-        supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', yesterdayStart).lt('created_at', todayStart),
-        supabase.from('ai_usage_logs').select('*', { count: 'exact', head: true }),
+        supabase.from('leads').select('id', { count: 'exact', head: true }),
+        supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at').order('score', { ascending: false }),
+        supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
+        supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', yesterdayStart).lt('created_at', todayStart),
+        supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }),
         supabase.from('subscriptions').select('plan_name').eq('status', 'active'),
         supabase.from('profiles').select('id, plan, createdAt').gte('createdAt', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()),
         supabase.auth.getSession(),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('profiles').select('id, name, email, plan, createdAt').order('createdAt', { ascending: false }).limit(5),
         supabase.auth.getSession().then(async ({ data: s }) => {
           if (s?.session?.user?.id) {
@@ -371,7 +371,7 @@ const AdminDashboard: React.FC = () => {
   const handleDeepAnalysis = async () => {
     setDeepAnalysisLoading(true);
     try {
-      const { data: allLeads, error } = await supabase.from('leads').select('*').order('score', { ascending: false }).limit(50);
+      const { data: allLeads, error } = await supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at').order('score', { ascending: false }).limit(50);
       if (error) throw error;
       const result = await generateDashboardInsights(allLeads || []);
       setDeepAnalysisResult(result);

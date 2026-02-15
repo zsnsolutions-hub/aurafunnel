@@ -18,6 +18,20 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      build: {
+        target: 'es2020',
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+              'vendor-supabase': ['@supabase/supabase-js'],
+              'vendor-charts': ['recharts'],
+              'vendor-stripe': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+              'vendor-query': ['@tanstack/react-query'],
+            },
+          },
+        },
+      },
     };
 });

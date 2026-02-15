@@ -40,4 +40,4 @@ const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onImportCSV, onGenera
   );
 };
 
-export default QuickActionsBar;
+export default React.memo(QuickActionsBar);

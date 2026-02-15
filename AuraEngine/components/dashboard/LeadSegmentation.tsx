@@ -253,4 +253,4 @@ const LeadSegmentation: React.FC<LeadSegmentationProps> = ({
   );
 };
 
-export default LeadSegmentation;
+export default React.memo(LeadSegmentation);

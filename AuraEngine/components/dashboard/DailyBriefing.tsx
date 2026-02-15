@@ -287,4 +287,4 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
   );
 };
 
-export default DailyBriefing;
+export default React.memo(DailyBriefing);

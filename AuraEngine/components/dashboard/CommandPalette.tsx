@@ -224,4 +224,4 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
   );
 };
 
-export default CommandPalette;
+export default React.memo(CommandPalette);

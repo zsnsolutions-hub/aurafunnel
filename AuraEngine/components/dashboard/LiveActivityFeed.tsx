@@ -134,4 +134,4 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
   );
 };
 
-export default LiveActivityFeed;
+export default React.memo(LiveActivityFeed);

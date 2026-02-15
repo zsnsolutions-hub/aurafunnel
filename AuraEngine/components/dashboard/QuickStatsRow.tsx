@@ -58,4 +58,4 @@ const QuickStatsRow: React.FC<QuickStatsRowProps> = ({ stats, loading }) => {
   );
 };
 
-export default QuickStatsRow;
+export default React.memo(QuickStatsRow);

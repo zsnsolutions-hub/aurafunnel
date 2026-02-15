@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom';
 import { User, Lead, ToneType } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { useLeads } from '../../lib/queries';
 import {
   SparklesIcon, MailIcon, CheckIcon, XIcon, PlusIcon, CopyIcon,
   EditIcon, EyeIcon, ChartIcon, RefreshIcon, FilterIcon,
@@ -257,8 +258,7 @@ Either way, wishing you and the {{company}} team all the best.
 
 const ContentStudio: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: leads = [], isLoading: loading } = useLeads(user?.id);
 
   // ─── Content Mode ───
   const [contentMode, setContentMode] = useState<ContentMode>('email');
@@ -343,25 +343,7 @@ const ContentStudio: React.FC = () => {
     { id: 'sh-5', label: 'Trial Nurture Drip', sentAt: new Date(Date.now() + 86400000), recipients: 185, openRate: 0, status: 'scheduled' },
   ]);
 
-  // ─── Fetch ───
-  const fetchData = useCallback(async () => {
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
-      if (error) throw error;
-      setLeads((data || []) as Lead[]);
-    } catch (err: any) {
-      console.error('Studio fetch error:', err?.message || err);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Data fetched by useLeads() React Query hook — cached + deduplicated
 
   // ─── Keyboard Shortcuts ───
   useEffect(() => {

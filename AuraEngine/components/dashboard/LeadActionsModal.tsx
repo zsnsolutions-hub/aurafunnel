@@ -507,4 +507,4 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
   );
 };
 
-export default LeadActionsModal;
+export default React.memo(LeadActionsModal);

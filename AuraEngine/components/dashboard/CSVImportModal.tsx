@@ -259,4 +259,4 @@ const CSVImportModal: React.FC<CSVImportModalProps> = ({ isOpen, onClose, userId
   );
 };
 
-export default CSVImportModal;
+export default React.memo(CSVImportModal);
