@@ -210,7 +210,7 @@ const AdminSettings: React.FC = () => {
     supabase.from('audit_logs').insert({ action: 'INTEGRATION_DISCONNECTED', details: `Integration ${id} disconnected` });
   };
 
-  const categories = Array.from(new Set(integrations.map(i => i.category)));
+  const categories: string[] = Array.from(new Set(integrations.map(i => i.category)));
 
   return (
     <div className="max-w-5xl space-y-8 animate-in fade-in duration-500">

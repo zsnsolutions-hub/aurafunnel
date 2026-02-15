@@ -488,7 +488,7 @@ const SystemHealth: React.FC = () => {
               {/* Category Breakdown */}
               <div className="space-y-3">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">By Category</h4>
-                {Object.entries(serviceHealthData.byCategory).map(([cat, services]) => {
+                {Object.entries(serviceHealthData.byCategory).map(([cat, services]: [string, typeof metrics]) => {
                   const allOp = services.every(s => s.status === 'Operational');
                   return (
                     <div key={cat} className="p-3 bg-slate-50 rounded-xl">

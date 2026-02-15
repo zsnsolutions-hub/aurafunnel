@@ -1326,7 +1326,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Status Breakdown</p>
                     <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(pipelineHealth.statusGroups).map(([status, statusLeads]) => (
+                      {Object.entries(pipelineHealth.statusGroups).map(([status, statusLeads]: [string, Lead[]]) => (
                         <div key={status} className="p-3 bg-slate-50 rounded-xl text-center">
                           <p className="text-xl font-black text-slate-900">{statusLeads.length}</p>
                           <p className="text-[10px] font-bold text-slate-500">{status}</p>

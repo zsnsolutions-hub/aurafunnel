@@ -157,7 +157,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
               <p className="text-xs text-slate-300 mt-1">Try a different search term</p>
             </div>
           ) : (
-            Object.entries(grouped).map(([category, items]) => (
+            Object.entries(grouped).map(([category, items]: [string, CommandItem[]]) => (
               <div key={category}>
                 <p className="px-5 pt-3 pb-1 text-[10px] font-black text-slate-400 uppercase tracking-wider">
                   {categoryLabels[category] || category}

@@ -142,7 +142,9 @@ export enum ToneType {
   PROFESSIONAL = 'Professional',
   CONVERSATIONAL = 'Conversational',
   TECHNICAL = 'Technical',
-  CASUAL = 'Casual'
+  CASUAL = 'Casual',
+  PERSUASIVE = 'Persuasive',
+  EMPATHETIC = 'Empathetic'
 }
 
 export interface PersonalizationTag {

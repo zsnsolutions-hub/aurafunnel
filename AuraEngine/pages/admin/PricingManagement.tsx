@@ -128,7 +128,7 @@ const PricingManagement: React.FC = () => {
                    <ol className="list-decimal ml-5 mt-2 space-y-1">
                      <li>Run the updated SQL script (v6.3) from the Login page in your Supabase SQL Editor.</li>
                      <li>Go to your <strong>Supabase Dashboard</strong>.</li>
-                     <li>Settings -> API -> PostgREST -> <strong>Reload Schema</strong>.</li>
+                     <li>Settings &rarr; API &rarr; PostgREST &rarr; <strong>Reload Schema</strong>.</li>
                    </ol>
                  </p>
               </div>
