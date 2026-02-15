@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
-  Shield, Lock, Settings, LogOut
+  Shield, Lock, Settings, LogOut, DollarSign
 } from 'lucide-react';
 import { User } from '../../types';
 import { AppShell } from './AppShell';
@@ -27,6 +27,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
     { label: 'Blog Engine', path: '/admin/blog', icon: <PenSquare size={20} /> },
     { label: 'System Integrity', path: '/admin/health', icon: <Shield size={20} /> },
     { label: 'Audit Vault', path: '/admin/audit', icon: <Lock size={20} /> },
+    { label: 'Pricing Management', path: '/admin/pricing', icon: <DollarSign size={20} /> },
     { label: 'Platform Settings', path: '/admin/settings', icon: <Settings size={20} /> },
   ];
 
