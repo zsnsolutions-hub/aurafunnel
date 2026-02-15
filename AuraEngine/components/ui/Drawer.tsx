@@ -9,7 +9,7 @@ interface DrawerProps {
   width?: string;
 }
 
-export const Drawer: React.FC<DrawerProps> = ({ open, onClose, title, children, width = 'w-[480px]' }) => {
+export const Drawer: React.FC<DrawerProps> = ({ open, onClose, title, children, width = 'w-[520px]' }) => {
   useEffect(() => {
     if (!open) return;
     const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -20,17 +20,25 @@ export const Drawer: React.FC<DrawerProps> = ({ open, onClose, title, children, 
   return (
     <>
       <div
-        className={`fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px] transition-opacity duration-150 ease-out ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 z-40 bg-black/15 backdrop-blur-[2px] transition-opacity duration-150 ease-out ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
+        aria-hidden="true"
       />
       <aside
-        className={`fixed top-0 right-0 z-50 h-full ${width} max-w-full bg-white border-l border-gray-200 shadow-xl flex flex-col transition-transform duration-150 ease-out ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title || 'Side panel'}
+        className={`fixed top-0 right-0 z-50 h-full ${width} max-w-[calc(100vw-48px)] bg-white border-l border-gray-200 shadow-xl flex flex-col transition-transform duration-150 ease-out rounded-l-2xl ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
-            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors duration-150">
-              <X size={20} />
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+            <button
+              onClick={onClose}
+              aria-label="Close panel"
+              className="p-1.5 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100 transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-indigo-200"
+            >
+              <X size={18} />
             </button>
           </div>
         )}

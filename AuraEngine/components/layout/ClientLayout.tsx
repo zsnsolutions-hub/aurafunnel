@@ -216,24 +216,24 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
         }
         topbar={
           <Topbar
+            search={
+              <button
+                onClick={() => setCommandPaletteOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-400 text-sm hover:bg-gray-100 hover:border-gray-300 transition-all duration-150 ease-out"
+              >
+                <Search size={14} />
+                <span className="text-xs">Search...</span>
+                <kbd className="ml-auto px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] font-medium text-gray-400">⌘K</kbd>
+              </button>
+            }
             actions={
-              <>
-                <button
-                  onClick={() => setBriefingOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-500 rounded-lg text-xs font-semibold hover:bg-gray-100 hover:text-gray-700 transition-all duration-150 ease-out"
-                >
-                  <Bell size={16} />
-                  <span>Briefing</span>
-                </button>
-                <button
-                  onClick={() => setCommandPaletteOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-500 rounded-lg text-xs font-semibold hover:bg-gray-100 hover:text-gray-700 transition-all duration-150 ease-out"
-                >
-                  <Search size={16} />
-                  <span>Search</span>
-                  <kbd className="px-1 py-0.5 bg-white border border-gray-200 rounded text-[9px]">/</kbd>
-                </button>
-              </>
+              <button
+                onClick={() => setBriefingOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 rounded-xl text-xs font-medium hover:bg-gray-100 hover:border-gray-300 transition-all duration-150 ease-out"
+              >
+                <Bell size={16} />
+                <span>Briefing</span>
+              </button>
             }
           />
         }

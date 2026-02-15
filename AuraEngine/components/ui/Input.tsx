@@ -15,11 +15,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({ label, error, i
       )}
       <input
         ref={ref}
-        className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-150 ease-out disabled:bg-gray-50 disabled:text-gray-500 ${icon ? 'pl-10' : ''} ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-100' : ''} ${className}`}
+        className={`w-full h-9 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-all duration-150 ease-out focus:border-indigo-300 focus:ring-2 focus:ring-indigo-200 disabled:bg-gray-50 disabled:text-gray-500 ${icon ? 'pl-10' : ''} ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''} ${className}`}
         {...props}
       />
     </div>
-    {error && <p className="text-xs text-red-600">{error}</p>}
+    {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
   </div>
 ));
 

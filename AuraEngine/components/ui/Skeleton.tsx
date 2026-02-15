@@ -6,17 +6,17 @@ interface SkeletonProps {
 }
 
 const variantClasses = {
-  text: 'h-4 rounded',
+  text: 'h-4 rounded-lg',
   circular: 'rounded-full',
-  rectangular: 'rounded-xl',
+  rectangular: 'rounded-2xl',
 };
 
 export const Skeleton: React.FC<SkeletonProps> = ({ className = '', variant = 'text' }) => (
-  <div className={`animate-pulse bg-gray-200 ${variantClasses[variant]} ${className}`} />
+  <div className={`animate-pulse bg-gray-100 ${variantClasses[variant]} ${className}`} />
 );
 
 export const SkeletonCard: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div className={`bg-white border border-gray-200 rounded-xl p-6 space-y-4 ${className}`}>
+  <div className={`bg-white border border-gray-200 rounded-2xl p-6 space-y-4 ${className}`}>
     <Skeleton variant="text" className="w-1/3 h-5" />
     <Skeleton variant="text" className="w-full" />
     <Skeleton variant="text" className="w-2/3" />
