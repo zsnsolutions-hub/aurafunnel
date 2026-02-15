@@ -3,7 +3,6 @@ import { useOutletContext } from 'react-router-dom';
 import { User, Lead, ReportType, ExportFormat, AlertRule, AlertType, AlertNotifyMethod } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { generateProgrammaticInsights } from '../../lib/insights';
-import { useLeads } from '../../lib/queries';
 import {
   ChartIcon, TrendUpIcon, TrendDownIcon, TargetIcon, SparklesIcon, CreditCardIcon,
   PieChartIcon, DownloadIcon, FilterIcon, AlertTriangleIcon, BellIcon, RefreshIcon,
@@ -159,7 +158,8 @@ const AI_PERFORMANCE_DATA = [
 
 const AnalyticsPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
-  const { data: leads = [], isLoading: loading, refetch: refetchLeads } = useLeads(user?.id);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
 
@@ -203,21 +203,40 @@ const AnalyticsPage: React.FC = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showBenchmarks, setShowBenchmarks] = useState(true);
   const [comparisonMode, setComparisonMode] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [showCohortAnalysis, setShowCohortAnalysis] = useState(false);
   const [showPredictiveForecast, setShowPredictiveForecast] = useState(false);
   const [showChannelAttribution, setShowChannelAttribution] = useState(false);
 
-  // Data fetched by useLeads() React Query hook — cached + deduplicated
-  const [lastRefreshed, setLastRefreshedState] = useState<Date>(new Date());
-
-  // Derive insights from leads
-  useEffect(() => {
-    if (leads.length > 0) {
-      const newInsights = generateProgrammaticInsights(leads);
-      setInsights(newInsights);
-      setLastRefreshedState(new Date());
+  // ─── Fetch ───
+  const fetchData = useCallback(async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
     }
-  }, [leads]);
+    setLoading(true);
+    try {
+      const { data: leadsData, error } = await supabase
+        .from('leads')
+        .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase')
+        .eq('client_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      const fetchedLeads = (leadsData || []) as Lead[];
+      setLeads(fetchedLeads);
+      setLastRefreshed(new Date());
+
+      const newInsights = generateProgrammaticInsights(fetchedLeads);
+      setInsights(newInsights);
+    } catch (err: any) {
+      console.error('Analytics fetch error:', err?.message || err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     localStorage.setItem(`aura_alerts_${user?.id}`, JSON.stringify(alerts));
@@ -359,7 +378,7 @@ const AnalyticsPage: React.FC = () => {
   const leadSourceBreakdown = useMemo(() => {
     const sourceMap: Record<string, number> = {};
     leads.forEach(l => {
-      const source = (l as any).source || 'Unknown';
+      const source = l.source || 'Unknown';
       sourceMap[source] = (sourceMap[source] || 0) + 1;
     });
     const entries = Object.entries(sourceMap).map(([name, value]) => ({ name, value }));
@@ -477,7 +496,7 @@ const AnalyticsPage: React.FC = () => {
       }
 
       const shortcuts: Record<string, () => void> = {
-        'r': () => refetchLeads(),
+        'r': () => fetchData(),
         'g': () => openReportBuilder(),
         'a': () => setShowAlertModal(true),
         'b': () => setShowBenchmarks(prev => !prev),
@@ -728,7 +747,7 @@ const AnalyticsPage: React.FC = () => {
             <span className="text-[10px] font-bold text-slate-400">
               Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
-            <button onClick={() => refetchLeads()} className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors">
+            <button onClick={fetchData} className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors">
               <RefreshIcon className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>

@@ -10,7 +10,6 @@ import {
   KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { useLeads } from '../../lib/queries';
 
 // ═══════════════════════════════════════════════
 // TYPES
@@ -334,8 +333,9 @@ const ContentGen: React.FC = () => {
   const query = new URLSearchParams(useLocation().search);
   const initialLeadId = query.get('leadId');
 
-  // ── State — React Query replaces manual fetch ──
-  const { data: leads = [], isLoading: loadingLeads } = useLeads(user?.id);
+  // ── State ──
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(true);
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
   const [contentType, setContentType] = useState<ContentCategory>(ContentCategory.EMAIL_SEQUENCE);
   const [selectedSegments, setSelectedSegments] = useState<string[]>(['hot']);
@@ -376,7 +376,16 @@ const ContentGen: React.FC = () => {
   const creditsTotal = user.credits_total ?? 500;
   const creditsUsed = user.credits_used ?? 0;
 
-  // Data fetched by useLeads() React Query hook — cached + deduplicated
+  // ── Effects ──
+  useEffect(() => {
+    const fetchLeads = async () => {
+      setLoadingLeads(true);
+      const { data } = await supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase').eq('client_id', user.id).order('score', { ascending: false });
+      if (data) setLeads(data);
+      setLoadingLeads(false);
+    };
+    if (user) fetchLeads();
+  }, [user]);
 
   // ── Derived ──
   const segments = useMemo(() => [

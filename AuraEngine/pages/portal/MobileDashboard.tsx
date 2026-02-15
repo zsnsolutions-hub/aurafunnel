@@ -256,7 +256,7 @@ const MobileDashboard: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('leads')
-        .select('*')
+        .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase')
         .eq('client_id', user.id)
         .order('score', { ascending: false });
       if (error) throw error;

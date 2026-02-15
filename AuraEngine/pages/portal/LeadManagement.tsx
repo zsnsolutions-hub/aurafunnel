@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon } from '../../components/Icons';
+import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
-import { useLeads } from '../../lib/queries';
-import { supabase } from '../../lib/supabase';
-import { useQueryClient } from '@tanstack/react-query';
 
 // ── Helpers ──
 const formatRelativeTime = (dateStr: string): string => {
@@ -126,12 +124,9 @@ const LeadManagement: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
   const navigate = useNavigate();
 
-  // ── Data State — React Query replaces manual fetch ──
-  const queryClient = useQueryClient();
-  const { data: allLeads = [], isLoading: loading } = useLeads(user?.id);
-  const invalidateLeads = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['leads', user?.id] });
-  }, [queryClient, user?.id]);
+  // ── Data State ──
+  const [allLeads, setAllLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // ── Filter State ──
   const [statusFilter, setStatusFilter] = useState<Lead['status'] | 'All'>('All');
@@ -193,7 +188,25 @@ const LeadManagement: React.FC = () => {
   const [showScoreIntelligence, setShowScoreIntelligence] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
-  // Data is fetched by useLeads() React Query hook — cached + deduplicated
+  // ── Fetch ──
+  useEffect(() => {
+    fetchLeads();
+  }, [user]);
+
+  const fetchLeads = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase')
+      .eq('client_id', user.id)
+      .order('score', { ascending: false });
+    if (error) {
+      console.error('LeadManagement fetch error:', error.message);
+    } else if (data) {
+      setAllLeads(data);
+    }
+    setLoading(false);
+  };
 
   // ── Filtering ──
   const filteredLeads = useMemo(() => {
@@ -412,12 +425,14 @@ const LeadManagement: React.FC = () => {
 
   const handleStatusUpdate = async (leadId: string, newStatus: Lead['status']) => {
     const lead = allLeads.find(l => l.id === leadId);
+    setAllLeads(prev => prev.map(l =>
+      l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
+    ));
     if (selectedLead?.id === leadId) {
       setSelectedLead({ ...selectedLead, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
     }
     const { error: updateError } = await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', leadId);
     if (updateError) console.error('Lead status update error:', updateError.message);
-    invalidateLeads();
     const { error: logError } = await supabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'LEAD_STATUS_UPDATED',
@@ -499,7 +514,7 @@ const LeadManagement: React.FC = () => {
         return;
       }
       if (data) {
-        invalidateLeads();
+        setAllLeads(prev => [data, ...prev]);
         setIsAddLeadOpen(false);
         setNewLead({ name: '', email: '', company: '', insights: '' });
         setNewLeadKb({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
@@ -554,7 +569,7 @@ const LeadManagement: React.FC = () => {
     const ids = Array.from(selectedIds);
     const { error } = await supabase.from('leads').update({ status }).in('id', ids);
     if (error) console.error('Bulk status update error:', error.message);
-    invalidateLeads();
+    setAllLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, status } : l));
     executeBulkAction(`Change status to ${status}`);
     setSelectedIds(new Set());
   };
@@ -593,7 +608,13 @@ const LeadManagement: React.FC = () => {
     setActivityOutcome('');
 
     if (activityLogLead) {
-      invalidateLeads();
+      setAllLeads(prev => prev.map(l =>
+        l.id === activityLogLead.id ? {
+          ...l,
+          score: Math.min(100, l.score + (activityType === 'meeting' ? 5 : activityType === 'call' ? 3 : 1)),
+          lastActivity: `${activityType.charAt(0).toUpperCase() + activityType.slice(1)} logged`,
+        } : l
+      ));
     }
   };
 
@@ -1654,7 +1675,7 @@ const LeadManagement: React.FC = () => {
         isOpen={isCSVOpen}
         onClose={() => setIsCSVOpen(false)}
         userId={user.id}
-        onImportComplete={invalidateLeads}
+        onImportComplete={fetchLeads}
       />
 
       {/* Activity Log Modal */}

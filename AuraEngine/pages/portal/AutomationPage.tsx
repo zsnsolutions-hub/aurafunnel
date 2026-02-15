@@ -231,7 +231,7 @@ const AutomationPage: React.FC = () => {
       if (!user?.id) return;
       const { data, error } = await supabase
         .from('leads')
-        .select('*')
+        .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase')
         .eq('client_id', user.id);
       if (error) {
         console.error('AutomationPage fetch error:', error.message);
