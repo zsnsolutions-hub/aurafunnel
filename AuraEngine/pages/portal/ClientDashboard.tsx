@@ -7,7 +7,7 @@ import {
   StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
   ChevronDownIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon
 } from '../../components/Icons';
-import { generateLeadContent, generateDashboardInsights } from '../../lib/gemini';
+import { generateLeadContent, generateDashboardInsights, generateLeadResearch } from '../../lib/gemini';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
@@ -495,6 +495,57 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     return Object.keys(result).length > 0 ? result : undefined;
   };
 
+  const AI_RESEARCH_HEADER = '--- AI Research Brief ---';
+
+  const onLeadCreated = (createdLead: Lead, kb: Record<string, string> | undefined) => {
+    const updated = [createdLead, ...leads];
+    setLeads(updated);
+    setFilteredLeads(updated);
+    setActiveSegmentId(null);
+    setIsAddLeadOpen(false);
+    setNewLead({ name: '', email: '', company: '', insights: '' });
+    setNewLeadKB({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
+    setShowKBFields(false);
+    fetchQuickStats();
+
+    // Fire background AI research if social URLs are present
+    if (!kb) return;
+    const socialUrls: Record<string, string> = {};
+    if (kb.website) socialUrls.website = kb.website;
+    if (kb.linkedin) socialUrls.linkedin = kb.linkedin;
+    if (kb.instagram) socialUrls.instagram = kb.instagram;
+    if (kb.facebook) socialUrls.facebook = kb.facebook;
+    if (kb.twitter) socialUrls.twitter = kb.twitter;
+    if (kb.youtube) socialUrls.youtube = kb.youtube;
+
+    if (Object.keys(socialUrls).length === 0) return;
+
+    generateLeadResearch(createdLead, socialUrls).then(async (res) => {
+      if (!res.text) return;
+      const userNotes = kb.extraNotes || '';
+      const merged = userNotes
+        ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${res.text}`
+        : `${AI_RESEARCH_HEADER}\n${res.text}`;
+
+      const updatedKb = { ...kb, extraNotes: merged };
+      const newInsights = res.text.substring(0, 200);
+
+      await supabase.from('leads').update({
+        knowledgeBase: updatedKb,
+        insights: newInsights,
+      }).eq('id', createdLead.id);
+
+      setLeads(prev => prev.map(l =>
+        l.id === createdLead.id ? { ...l, knowledgeBase: updatedKb, insights: newInsights } : l
+      ));
+      setFilteredLeads(prev => prev.map(l =>
+        l.id === createdLead.id ? { ...l, knowledgeBase: updatedKb, insights: newInsights } : l
+      ));
+    }).catch((err) => {
+      console.warn('Background lead research failed:', err);
+    });
+  };
+
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
     const mockScore = Math.floor(Math.random() * 40) + 60;
@@ -521,32 +572,12 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       if (error.message?.includes('knowledgeBase') || error.code === 'PGRST204') {
         delete payload.knowledgeBase;
         const { data: retryData } = await supabase.from('leads').insert([payload]).select().single();
-        if (retryData) {
-          const updated = [retryData, ...leads];
-          setLeads(updated);
-          setFilteredLeads(updated);
-          setActiveSegmentId(null);
-          setIsAddLeadOpen(false);
-          setNewLead({ name: '', email: '', company: '', insights: '' });
-          setNewLeadKB({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
-          setShowKBFields(false);
-          fetchQuickStats();
-        }
+        if (retryData) onLeadCreated(retryData, undefined);
         return;
       }
     }
 
-    if (data) {
-      const updated = [data, ...leads];
-      setLeads(updated);
-      setFilteredLeads(updated);
-      setActiveSegmentId(null);
-      setIsAddLeadOpen(false);
-      setNewLead({ name: '', email: '', company: '', insights: '' });
-      setNewLeadKB({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
-      setShowKBFields(false);
-      fetchQuickStats();
-    }
+    if (data) onLeadCreated(data, kb);
   };
 
   const handleStatusUpdate = (leadId: string, newStatus: Lead['status']) => {

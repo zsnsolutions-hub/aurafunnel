@@ -10,7 +10,7 @@ import {
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
-import { generateLeadContent } from '../../lib/gemini';
+import { generateLeadContent, generateLeadResearch } from '../../lib/gemini';
 
 // ── Helpers ──
 const scoreToStars = (score: number): number => {
@@ -189,6 +189,7 @@ const LeadProfile: React.FC = () => {
   const [kbDrawerOpen, setKbDrawerOpen] = useState(false);
   const [kbForm, setKbForm] = useState<KnowledgeBase>({});
   const [kbNotesExpanded, setKbNotesExpanded] = useState(false);
+  const [kbResearching, setKbResearching] = useState(false);
 
   useEffect(() => {
     if (leadId) fetchLead();
@@ -223,6 +224,14 @@ const LeadProfile: React.FC = () => {
     setKbDrawerOpen(true);
   };
 
+  const AI_RESEARCH_HEADER = '--- AI Research Brief ---';
+
+  const stripPreviousAIResearch = (notes: string | undefined): string => {
+    if (!notes) return '';
+    const idx = notes.indexOf(AI_RESEARCH_HEADER);
+    return idx === -1 ? notes : notes.substring(0, idx).trim();
+  };
+
   const handleKbSave = async () => {
     if (!lead) return;
     const cleaned: KnowledgeBase = {};
@@ -238,6 +247,47 @@ const LeadProfile: React.FC = () => {
     setLead({ ...lead, knowledgeBase: kb || undefined });
     setKbDrawerOpen(false);
     showFeedback('Knowledge Base updated');
+
+    // Fire background AI research if social URLs are present
+    const socialUrls: Record<string, string> = {};
+    if (cleaned.website) socialUrls.website = cleaned.website;
+    if (cleaned.linkedin) socialUrls.linkedin = cleaned.linkedin;
+    if (cleaned.instagram) socialUrls.instagram = cleaned.instagram;
+    if (cleaned.facebook) socialUrls.facebook = cleaned.facebook;
+    if (cleaned.twitter) socialUrls.twitter = cleaned.twitter;
+    if (cleaned.youtube) socialUrls.youtube = cleaned.youtube;
+
+    if (Object.keys(socialUrls).length === 0) return;
+
+    setKbResearching(true);
+    generateLeadResearch(lead, socialUrls).then(async (res) => {
+      if (!res.text) {
+        setKbResearching(false);
+        return;
+      }
+      const userNotes = stripPreviousAIResearch(cleaned.extraNotes);
+      const merged = userNotes
+        ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${res.text}`
+        : `${AI_RESEARCH_HEADER}\n${res.text}`;
+
+      const updatedKb: KnowledgeBase = { ...cleaned, extraNotes: merged };
+      const newInsights = res.text.substring(0, 200);
+
+      await supabase.from('leads').update({
+        knowledgeBase: updatedKb,
+        insights: newInsights,
+      }).eq('id', lead.id);
+
+      setLead(prev => prev ? {
+        ...prev,
+        knowledgeBase: updatedKb,
+        insights: newInsights,
+      } : prev);
+      setKbResearching(false);
+      showFeedback('AI research complete');
+    }).catch(() => {
+      setKbResearching(false);
+    });
   };
 
   const KB_SOCIAL_LINKS: { key: keyof KnowledgeBase; label: string; icon: React.ReactNode; color: string }[] = [
@@ -1021,6 +1071,12 @@ const LeadProfile: React.FC = () => {
                 </button>
               )}
             </div>
+            {kbResearching && (
+              <div className="flex items-center space-x-2 mb-3 px-3 py-2 bg-indigo-50 rounded-xl">
+                <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs font-medium text-indigo-600">AI is researching this lead...</span>
+              </div>
+            )}
             {!lead.knowledgeBase || !Object.values(lead.knowledgeBase).some(v => v) ? (
               <div className="text-center py-4">
                 <p className="text-xs text-slate-400 italic mb-3">No knowledge added yet</p>

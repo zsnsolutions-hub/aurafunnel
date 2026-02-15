@@ -392,6 +392,88 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
   return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'content_gen', prompt_version: 1 };
 };
 
+export const generateLeadResearch = async (
+  lead: Pick<Lead, 'name' | 'company' | 'email' | 'insights'>,
+  socialUrls: Record<string, string>
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const urlContext = Object.entries(socialUrls)
+    .filter(([_, v]) => v)
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join('\n');
+
+  const emailDomain = lead.email?.includes('@') ? lead.email.split('@')[1] : '';
+
+  const prompt = `Analyze the following B2B lead and produce a concise research brief.
+
+LEAD DATA:
+- Name: ${lead.name}
+- Company: ${lead.company}
+${emailDomain ? `- Email Domain: ${emailDomain}` : ''}
+${lead.insights ? `- Existing Insights: ${lead.insights}` : ''}
+
+SOCIAL / WEB PRESENCE:
+${urlContext || 'None provided'}
+
+Based on the company name, email domain, and social profile URLs (use them as inference signals about the company's size, industry, and positioning), produce exactly these four sections:
+
+**Company Overview** — What this company likely does, approximate size/stage, and industry positioning (2-3 sentences).
+
+**Key Talking Points** — 3-4 bullet points a sales rep can reference in outreach to show genuine research and relevance.
+
+**Outreach Angle** — The single best angle to open a conversation with this lead, considering their role and company profile (2-3 sentences).
+
+**Risk Factors** — 1-2 potential objections or challenges to be aware of when approaching this lead.
+
+Keep the total response under 250 words. Be specific and actionable, not generic.`;
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction: 'You are a senior B2B research analyst. Produce concise, actionable intelligence briefs from limited data signals. Infer what you can from company names, domains, and social presence. Be direct and useful.',
+          temperature: 0.7,
+          topP: 0.9,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error("Empty research response.");
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: 'lead_research',
+        prompt_version: 1
+      };
+    } catch (error: any) {
+      attempt++;
+      console.warn(`Lead research attempt ${attempt} failed:`, error.message);
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: '',
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: 'lead_research',
+          prompt_version: 1
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'lead_research', prompt_version: 1 };
+};
+
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
   const steps: EmailStep[] = [];
   const emailBlocks = rawText.split('===EMAIL_START===').filter(b => b.trim());
