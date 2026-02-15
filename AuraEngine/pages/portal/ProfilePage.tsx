@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { User, NotificationPreferences, DashboardPreferences, ApiKey } from '../../types';
+import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile } from '../../types';
 import {
   ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon,
   TrendUpIcon, TrendDownIcon, KeyboardIcon, ActivityIcon, BrainIcon, LayersIcon, UsersIcon,
-  ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon
+  ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon, BriefcaseIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 
@@ -12,7 +12,7 @@ const PREFS_STORAGE_KEY = 'aurafunnel_dashboard_prefs';
 const NOTIF_STORAGE_KEY = 'aurafunnel_notification_prefs';
 const APIKEYS_STORAGE_KEY = 'aurafunnel_api_keys';
 
-type SettingsTab = 'profile' | 'notifications' | 'preferences' | 'api_keys' | 'security';
+type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferences' | 'api_keys' | 'security';
 
 const ProfilePage: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
@@ -62,8 +62,13 @@ const ProfilePage: React.FC = () => {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [showQRCode, setShowQRCode] = useState(false);
 
+  // Business Profile
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(user?.businessProfile || {});
+  const [isSavingBusiness, setIsSavingBusiness] = useState(false);
+
   const tabs = [
     { id: 'profile' as SettingsTab, label: 'Profile', icon: <CogIcon className="w-4 h-4" /> },
+    { id: 'business_profile' as SettingsTab, label: 'Business Profile', icon: <BriefcaseIcon className="w-4 h-4" /> },
     { id: 'notifications' as SettingsTab, label: 'Notifications', icon: <BellIcon className="w-4 h-4" /> },
     { id: 'preferences' as SettingsTab, label: 'Preferences', icon: <LayoutIcon className="w-4 h-4" /> },
     { id: 'api_keys' as SettingsTab, label: 'API Keys', icon: <KeyIcon className="w-4 h-4" /> },
@@ -93,6 +98,31 @@ const ProfilePage: React.FC = () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
     await supabase.auth.signOut();
     window.location.href = '/';
+  };
+
+  // Business Profile handler
+  const handleBusinessProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingBusiness(true);
+    setError('');
+    setSuccess(false);
+    try {
+      const cleaned: Record<string, string> = {};
+      for (const [k, v] of Object.entries(businessProfile)) {
+        if (typeof v === 'string' && v.trim()) cleaned[k] = v.trim();
+      }
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null })
+        .eq('id', user.id);
+      if (updateError) throw updateError;
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save business profile.');
+    } finally {
+      setIsSavingBusiness(false);
+    }
   };
 
   // Notification handlers
@@ -294,10 +324,11 @@ const ProfilePage: React.FC = () => {
 
       switch (e.key) {
         case '1': e.preventDefault(); setActiveTab('profile'); break;
-        case '2': e.preventDefault(); setActiveTab('notifications'); break;
-        case '3': e.preventDefault(); setActiveTab('preferences'); break;
-        case '4': e.preventDefault(); setActiveTab('api_keys'); break;
-        case '5': e.preventDefault(); setActiveTab('security'); break;
+        case '2': e.preventDefault(); setActiveTab('business_profile'); break;
+        case '3': e.preventDefault(); setActiveTab('notifications'); break;
+        case '4': e.preventDefault(); setActiveTab('preferences'); break;
+        case '5': e.preventDefault(); setActiveTab('api_keys'); break;
+        case '6': e.preventDefault(); setActiveTab('security'); break;
         case 'h': case 'H': e.preventDefault(); setShowAccountHealth(true); break;
         case 'a': case 'A': e.preventDefault(); setShowSessionActivity(true); break;
         case 'e': case 'E': e.preventDefault(); setShowDataExport(true); break;
@@ -643,6 +674,121 @@ const ProfilePage: React.FC = () => {
       )}
 
       {/* Security Tab */}
+      {/* Business Profile Tab */}
+      {activeTab === 'business_profile' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <form onSubmit={handleBusinessProfileUpdate} className="space-y-6">
+            {/* Company Info */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 font-heading">Company Information</h3>
+                <p className="text-sm text-slate-500 mt-1">Tell the AI about your business so all generated content is personalized.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Company Name</label>
+                  <input type="text" value={businessProfile.companyName || ''} onChange={e => setBusinessProfile(p => ({ ...p, companyName: e.target.value }))}
+                    placeholder="e.g. Acme Corp"
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Industry</label>
+                  <input type="text" value={businessProfile.industry || ''} onChange={e => setBusinessProfile(p => ({ ...p, industry: e.target.value }))}
+                    placeholder="e.g. B2B SaaS, Healthcare, Fintech"
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Company Website</label>
+                  <input type="text" value={businessProfile.companyWebsite || ''} onChange={e => setBusinessProfile(p => ({ ...p, companyWebsite: e.target.value }))}
+                    placeholder="e.g. https://acmecorp.com"
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                </div>
+              </div>
+            </div>
+
+            {/* Products & Value Prop */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 font-heading">Products & Services</h3>
+                <p className="text-sm text-slate-500 mt-1">What does your company sell or offer?</p>
+              </div>
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">What You Sell</label>
+                  <textarea value={businessProfile.productsServices || ''} onChange={e => setBusinessProfile(p => ({ ...p, productsServices: e.target.value }))}
+                    placeholder="Describe your main products or services..."
+                    rows={3}
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Value Proposition</label>
+                  <textarea value={businessProfile.valueProp || ''} onChange={e => setBusinessProfile(p => ({ ...p, valueProp: e.target.value }))}
+                    placeholder="What makes your offering unique? Why should prospects choose you?"
+                    rows={3}
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* Target Market */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 font-heading">Target Market</h3>
+                <p className="text-sm text-slate-500 mt-1">Who is your ideal customer?</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ideal Customer Profile</label>
+                <textarea value={businessProfile.targetAudience || ''} onChange={e => setBusinessProfile(p => ({ ...p, targetAudience: e.target.value }))}
+                  placeholder="Describe your ideal customer — role, company size, industry, pain points..."
+                  rows={3}
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+              </div>
+            </div>
+
+            {/* Sales Strategy */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 font-heading">Sales Strategy</h3>
+                <p className="text-sm text-slate-500 mt-1">How do you sell and price your offering?</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pricing Model</label>
+                  <input type="text" value={businessProfile.pricingModel || ''} onChange={e => setBusinessProfile(p => ({ ...p, pricingModel: e.target.value }))}
+                    placeholder="e.g. Subscription, Per-seat, Usage-based"
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Sales Approach</label>
+                  <input type="text" value={businessProfile.salesApproach || ''} onChange={e => setBusinessProfile(p => ({ ...p, salesApproach: e.target.value }))}
+                    placeholder="e.g. Product-led, Enterprise sales, Freemium"
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex items-center justify-between">
+              <div className="flex-grow">
+                {success && (
+                  <span className="text-emerald-600 text-xs font-black uppercase tracking-widest flex items-center space-x-2 animate-in slide-in-from-left-2 duration-300">
+                    <div className="w-5 h-5 bg-emerald-100 rounded-lg flex items-center justify-center text-[10px]">
+                      <CheckIcon className="w-3 h-3" />
+                    </div>
+                    <span>Business Profile Saved</span>
+                  </span>
+                )}
+                {error && <span className="text-red-600 text-xs font-black uppercase tracking-widest truncate max-w-[300px]">Error: {error}</span>}
+              </div>
+              <button type="submit" disabled={isSavingBusiness}
+                className={`px-10 py-4 font-bold rounded-2xl shadow-2xl transition-all active:scale-95 ${isSavingBusiness ? 'bg-slate-100 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100 hover:scale-[1.02]'}`}>
+                {isSavingBusiness ? 'Saving...' : 'Save Business Profile'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {activeTab === 'security' && (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">

@@ -1,6 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
-import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead } from "../types";
+import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead, BusinessProfile } from "../types";
 import { supabase } from "./supabase";
+
+const buildBusinessContext = (profile?: BusinessProfile): string => {
+  if (!profile) return '';
+  const parts: string[] = [];
+  if (profile.companyName) parts.push(`Company: ${profile.companyName}`);
+  if (profile.industry) parts.push(`Industry: ${profile.industry}`);
+  if (profile.companyWebsite) parts.push(`Website: ${profile.companyWebsite}`);
+  if (profile.productsServices) parts.push(`Products/Services: ${profile.productsServices}`);
+  if (profile.valueProp) parts.push(`Value Proposition: ${profile.valueProp}`);
+  if (profile.targetAudience) parts.push(`Target Audience: ${profile.targetAudience}`);
+  if (profile.pricingModel) parts.push(`Pricing Model: ${profile.pricingModel}`);
+  if (profile.salesApproach) parts.push(`Sales Approach: ${profile.salesApproach}`);
+  if (parts.length === 0) return '';
+  return `\n\nYOUR BUSINESS CONTEXT:\n${parts.join('\n')}`;
+};
 
 const MAX_RETRIES = 3;
 const TIMEOUT_MS = 15000;
@@ -14,7 +29,7 @@ export interface AIResponse {
   prompt_version: number;
 }
 
-export const generateLeadContent = async (lead: Lead, type: ContentType): Promise<AIResponse> => {
+export const generateLeadContent = async (lead: Lead, type: ContentType, businessProfile?: BusinessProfile): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   // 1. Fetch Latest Active Prompt
@@ -57,7 +72,8 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
     .replace('{{score}}', lead.score.toString())
     .replace('{{insights}}', lead.insights)
     .replace('{{type}}', type)
-    .replace('{{tone}}', lead.score > 80 ? 'high-priority and urgent' : 'helpful and consultative');
+    .replace('{{tone}}', lead.score > 80 ? 'high-priority and urgent' : 'helpful and consultative')
+    + buildBusinessContext(businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -114,7 +130,7 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
   };
 };
 
-export const generateDashboardInsights = async (leads: Lead[]): Promise<string> => {
+export const generateDashboardInsights = async (leads: Lead[], businessProfile?: BusinessProfile): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const leadSummary = leads.slice(0, 20).map(l =>
@@ -145,7 +161,7 @@ Provide concise, data-driven recommendations. Focus on:
 3. Suggested next actions
 4. Timing recommendations
 
-Keep response under 300 words. Be specific, not generic.`;
+Keep response under 300 words. Be specific, not generic.${buildBusinessContext(businessProfile)}`;
 
   try {
     const controller = new AbortController();
@@ -187,7 +203,8 @@ const GOAL_LABELS: Record<string, string> = {
 
 export const generateEmailSequence = async (
   leads: Lead[],
-  config: EmailSequenceConfig
+  config: EmailSequenceConfig,
+  businessProfile?: BusinessProfile
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -218,7 +235,7 @@ REQUIREMENTS:
 5. Final email: Break-up email with last chance CTA
 6. Keep each email under 200 words.
 7. Match the ${config.tone} tone consistently.
-
+${buildBusinessContext(businessProfile)}
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS (repeat for each email):
 ===EMAIL_START===
 STEP: [number]
@@ -278,7 +295,8 @@ export const generateContentByCategory = async (
   lead: Lead,
   category: ContentCategory,
   tone: ToneType,
-  additionalContext?: string
+  additionalContext?: string,
+  businessProfile?: BusinessProfile
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -344,7 +362,8 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
     }
   };
 
-  const config = categoryPrompts[category];
+  const catConfig = categoryPrompts[category];
+  const finalCategoryPrompt = catConfig.prompt + buildBusinessContext(businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -354,9 +373,9 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
 
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
-        contents: config.prompt,
+        contents: finalCategoryPrompt,
         config: {
-          systemInstruction: config.system,
+          systemInstruction: catConfig.system,
           temperature: 0.8,
           topP: 0.9,
           topK: 40,
@@ -394,7 +413,8 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
 
 export const generateLeadResearch = async (
   lead: Pick<Lead, 'name' | 'company' | 'email' | 'insights'>,
-  socialUrls: Record<string, string>
+  socialUrls: Record<string, string>,
+  businessProfile?: BusinessProfile
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -426,7 +446,7 @@ Based on the company name, email domain, and social profile URLs (use them as in
 
 **Risk Factors** — 1-2 potential objections or challenges to be aware of when approaching this lead.
 
-Keep the total response under 250 words. Be specific and actionable, not generic.`;
+Keep the total response under 250 words. Be specific and actionable, not generic.${buildBusinessContext(businessProfile)}`;
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {

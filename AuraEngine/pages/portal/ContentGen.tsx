@@ -653,7 +653,7 @@ const ContentGen: React.FC = () => {
           cadence: 'every_2_days',
           tone,
         };
-        const response = await generateEmailSequence(targetLeads.length > 0 ? targetLeads : leads.slice(0, 5), config);
+        const response = await generateEmailSequence(targetLeads.length > 0 ? targetLeads : leads.slice(0, 5), config, user.businessProfile);
         const parsed = parseEmailSequenceResponse(response.text, config);
 
         if (parsed.length > 0) {
@@ -677,7 +677,7 @@ const ContentGen: React.FC = () => {
           prompt_version: response.prompt_version,
         });
       } else {
-        const aiResponse = await generateContentByCategory(representative, contentType, tone, contextParts.join('. '));
+        const aiResponse = await generateContentByCategory(representative, contentType, tone, contextParts.join('. '), user.businessProfile);
         const lines = aiResponse.text.split('\n');
         const firstLine = lines[0]?.replace(/^#+\s*/, '').replace(/^\*+/, '').trim() || contentType;
         setBlocks([{

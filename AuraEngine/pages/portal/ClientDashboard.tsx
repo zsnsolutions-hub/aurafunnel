@@ -445,7 +445,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         return;
       }
 
-      const aiResponse = await generateLeadContent(selectedLeadForGen, contentType);
+      const aiResponse = await generateLeadContent(selectedLeadForGen, contentType, user.businessProfile);
       setGenResult(aiResponse.text);
 
       await supabase.from('ai_usage_logs').insert({
@@ -520,7 +520,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
     if (Object.keys(socialUrls).length === 0) return;
 
-    generateLeadResearch(createdLead, socialUrls).then(async (res) => {
+    generateLeadResearch(createdLead, socialUrls, user.businessProfile).then(async (res) => {
       if (!res.text) return;
       const userNotes = kb.extraNotes || '';
       const merged = userNotes
@@ -617,7 +617,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const handleDeepAnalysis = async () => {
     setDeepAnalysisLoading(true);
     try {
-      const result = await generateDashboardInsights(leads);
+      const result = await generateDashboardInsights(leads, user.businessProfile);
       setDeepAnalysisResult(result);
     } catch (err: any) {
       setDeepAnalysisResult(`Deep analysis unavailable: ${err.message}`);

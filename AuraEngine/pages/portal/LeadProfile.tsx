@@ -260,7 +260,7 @@ const LeadProfile: React.FC = () => {
     if (Object.keys(socialUrls).length === 0) return;
 
     setKbResearching(true);
-    generateLeadResearch(lead, socialUrls).then(async (res) => {
+    generateLeadResearch(lead, socialUrls, user.businessProfile).then(async (res) => {
       if (!res.text) {
         setKbResearching(false);
         return;

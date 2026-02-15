@@ -25,6 +25,18 @@ export interface User {
   credits_used: number;
   createdAt: string;
   subscription?: Subscription;
+  businessProfile?: BusinessProfile;
+}
+
+export interface BusinessProfile {
+  companyName?: string;
+  industry?: string;
+  companyWebsite?: string;
+  productsServices?: string;
+  targetAudience?: string;
+  valueProp?: string;
+  pricingModel?: string;
+  salesApproach?: string;
 }
 
 export interface KnowledgeBase {
