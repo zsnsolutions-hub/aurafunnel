@@ -99,6 +99,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [newLeadKB, setNewLeadKB] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
   const [addLeadError, setAddLeadError] = useState('');
   const [isAddingLead, setIsAddingLead] = useState(false);
+  const [researchingLeadIds, setResearchingLeadIds] = useState<Set<string>>(new Set());
 
   // Content Generation States
   const [contentType, setContentType] = useState<ContentType>(ContentType.EMAIL);
@@ -522,6 +523,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
     if (Object.keys(socialUrls).length === 0) return;
 
+    setResearchingLeadIds(prev => new Set(prev).add(createdLead.id));
+
     generateLeadResearch(createdLead, socialUrls, user.businessProfile).then(async (res) => {
       if (!res.text) return;
       const userNotes = kb.extraNotes || '';
@@ -543,8 +546,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       setFilteredLeads(prev => prev.map(l =>
         l.id === createdLead.id ? { ...l, knowledgeBase: updatedKb, insights: newInsights } : l
       ));
-    }).catch((err) => {
-      console.warn('Background lead research failed:', err);
+    }).finally(() => {
+      setResearchingLeadIds(prev => { const next = new Set(prev); next.delete(createdLead.id); return next; });
     });
   };
 
@@ -1104,6 +1107,12 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                             <p className="text-sm font-bold text-slate-900 truncate hover:text-indigo-600 transition-colors">{lead.name}</p>
                             <p className="text-xs text-slate-500 truncate">{lead.email}</p>
                           </div>
+                          {researchingLeadIds.has(lead.id) && (
+                            <div className="flex items-center space-x-1.5 ml-2 px-2.5 py-1 bg-indigo-50 rounded-lg shrink-0">
+                              <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                              <span className="text-[10px] font-bold text-indigo-600 whitespace-nowrap">Researching KB</span>
+                            </div>
+                          )}
                         </button>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 font-medium">{lead.company}</td>
