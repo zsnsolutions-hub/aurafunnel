@@ -52,19 +52,19 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
           supabase
             .from('leads')
             .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
+            .eq('client_id', user.id)
             .gte('created_at', todayStart.toISOString()),
           supabase
             .from('leads')
             .select('name, company, score')
-            .eq('user_id', user.id)
+            .eq('client_id', user.id)
             .gte('score', 75)
             .order('score', { ascending: false })
             .limit(5),
           supabase
             .from('leads')
             .select('score, status')
-            .eq('user_id', user.id),
+            .eq('client_id', user.id),
         ]);
 
         const totalToday = leadsRes.count || 0;

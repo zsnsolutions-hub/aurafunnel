@@ -54,8 +54,21 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
       query = query.eq('user_id', userId);
     }
 
-    const { data } = await query;
-    if (data) {
+    const { data, error } = await query;
+    if (error) {
+      // Fallback: fetch without the profiles join
+      const fallback = await supabase
+        .from('audit_logs')
+        .select('id, action, details, created_at, user_id')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (fallback.data) {
+        setEvents(fallback.data.map((d: any) => ({
+          id: d.id, action: d.action, details: d.details,
+          created_at: d.created_at, user_email: undefined, user_name: undefined
+        })));
+      }
+    } else if (data) {
       setEvents(data.map((d: any) => ({
         id: d.id,
         action: d.action,
