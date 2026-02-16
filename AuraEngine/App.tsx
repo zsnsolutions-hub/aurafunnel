@@ -101,15 +101,22 @@ const App: React.FC = () => {
   }, [user?.id, fetchProfile]);
 
   useEffect(() => {
+    let cancelled = false;
     const checkUser = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Session check timeout')), 5000)
+        );
+        const sessionPromise = supabase.auth.getSession();
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+        if (session && !cancelled) {
           const profile = await fetchProfile(session.user.id);
-          if (profile) setUser(profile);
+          if (profile && !cancelled) setUser(profile);
         }
+      } catch (err) {
+        console.warn('Session check failed:', err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     checkUser();
@@ -123,7 +130,10 @@ const App: React.FC = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
 
   const handleLogout = async () => {
