@@ -20,7 +20,23 @@ ALTER TABLE audit_logs
   ADD CONSTRAINT audit_logs_user_id_fkey
   FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE SET NULL;
 
--- 3. Fix leads FK: point client_id to profiles(id)
+-- 3. Fix ai_usage_logs FK: point to profiles(id) instead of auth.users(id)
+--    This allows PostgREST to detect the join for:
+--    .from('ai_usage_logs').select('*, profiles(email, name, plan)')
+ALTER TABLE ai_usage_logs DROP CONSTRAINT IF EXISTS ai_usage_logs_user_id_fkey;
+ALTER TABLE ai_usage_logs
+  ADD CONSTRAINT ai_usage_logs_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+-- 4. Fix blog_posts FK: point author_id to profiles(id) instead of auth.users(id)
+--    This allows PostgREST to detect the join for:
+--    .from('blog_posts').select('*, profiles(email, name)')
+ALTER TABLE blog_posts DROP CONSTRAINT IF EXISTS blog_posts_author_id_fkey;
+ALTER TABLE blog_posts
+  ADD CONSTRAINT blog_posts_author_id_fkey
+  FOREIGN KEY (author_id) REFERENCES profiles(id) ON DELETE SET NULL;
+
+-- 5. Fix leads FK: point client_id to profiles(id)
 ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_client_id_fkey;
 ALTER TABLE leads
   ADD CONSTRAINT leads_client_id_fkey
