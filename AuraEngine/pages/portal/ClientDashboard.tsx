@@ -1108,9 +1108,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                             <p className="text-xs text-slate-500 truncate">{lead.email}</p>
                           </div>
                           {researchingLeadIds.has(lead.id) && (
-                            <div className="flex items-center space-x-1.5 ml-2 px-2.5 py-1 bg-indigo-50 rounded-lg shrink-0">
-                              <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                              <span className="text-[10px] font-bold text-indigo-600 whitespace-nowrap">Researching KB</span>
+                            <div className="flex items-center space-x-1 ml-2 px-1.5 py-0.5 bg-indigo-50/60 rounded-md shrink-0" title="Researching Knowledge Base">
+                              <div className="w-2.5 h-2.5 border-[1.5px] border-indigo-300 border-t-transparent rounded-full animate-spin" />
+                              <span className="text-[8px] font-medium text-indigo-400 whitespace-nowrap">KB</span>
                             </div>
                           )}
                         </button>
