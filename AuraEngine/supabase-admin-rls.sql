@@ -4,14 +4,27 @@
 -- Run in Supabase SQL Editor
 -- =============================================
 
+-- ── HELPER FUNCTION ───────────────────────────
+-- SECURITY DEFINER bypasses RLS, avoiding infinite recursion
+-- when admin policies on the profiles table query profiles itself.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'
+  );
+$$;
+
 -- ── LEADS ─────────────────────────────────────
 -- Admins can view all leads (for admin dashboard, lead analytics)
 DO $$ BEGIN
   CREATE POLICY "Admins can view all leads"
     ON leads FOR SELECT
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -19,9 +32,7 @@ END $$;
 DO $$ BEGIN
   CREATE POLICY "Admins can update all leads"
     ON leads FOR UPDATE
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -29,9 +40,7 @@ END $$;
 DO $$ BEGIN
   CREATE POLICY "Admins can delete all leads"
     ON leads FOR DELETE
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -39,30 +48,25 @@ END $$;
 DO $$ BEGIN
   CREATE POLICY "Admins can insert leads"
     ON leads FOR INSERT
-    WITH CHECK (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    WITH CHECK (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- ── PROFILES ──────────────────────────────────
--- Admins can view all user profiles (user management, dashboard stats)
+-- Uses is_admin() to avoid infinite recursion (policy on profiles querying profiles)
+DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
 DO $$ BEGIN
   CREATE POLICY "Admins can view all profiles"
     ON profiles FOR SELECT
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- Admins can update any profile (role changes, status toggles)
+DROP POLICY IF EXISTS "Admins can update all profiles" ON profiles;
 DO $$ BEGIN
   CREATE POLICY "Admins can update all profiles"
     ON profiles FOR UPDATE
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -71,9 +75,7 @@ END $$;
 DO $$ BEGIN
   CREATE POLICY "Admins can view all subscriptions"
     ON subscriptions FOR SELECT
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -81,9 +83,7 @@ END $$;
 DO $$ BEGIN
   CREATE POLICY "Admins can update all subscriptions"
     ON subscriptions FOR UPDATE
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -92,9 +92,7 @@ END $$;
 DO $$ BEGIN
   CREATE POLICY "Admins can view all ai_usage_logs"
     ON ai_usage_logs FOR SELECT
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -103,8 +101,6 @@ END $$;
 DO $$ BEGIN
   CREATE POLICY "Admins can manage all blog posts"
     ON blog_posts FOR ALL
-    USING (
-      EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN')
-    );
+    USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
