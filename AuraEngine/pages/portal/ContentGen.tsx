@@ -380,7 +380,7 @@ const ContentGen: React.FC = () => {
   useEffect(() => {
     const fetchLeads = async () => {
       setLoadingLeads(true);
-      const { data } = await supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase').eq('client_id', user.id).order('score', { ascending: false });
+      const { data } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
       if (data) setLeads(data);
       setLoadingLeads(false);
     };

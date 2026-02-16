@@ -351,7 +351,7 @@ const ContentStudio: React.FC = () => {
     }
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase').eq('client_id', user.id).order('score', { ascending: false });
+      const { data, error } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
       if (error) throw error;
       setLeads((data || []) as Lead[]);
     } catch (err: unknown) {
@@ -1866,8 +1866,7 @@ const ContentStudio: React.FC = () => {
             {/* ═══════════════════════════════════════════════════════ */}
             {/* PERSONALIZATION ENGINE                                  */}
             {/* ═══════════════════════════════════════════════════════ */}
-            {viewTab !== 'templates' && (
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
@@ -1943,8 +1942,7 @@ const ContentStudio: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* ─── Right Sidebar (35%) ─── */}

@@ -75,6 +75,7 @@ export interface Lead {
   status: 'New' | 'Contacted' | 'Qualified' | 'Converted' | 'Lost';
   lastActivity: string;
   insights: string;
+  source?: string;
   created_at?: string;
   knowledgeBase?: KnowledgeBase;
 }

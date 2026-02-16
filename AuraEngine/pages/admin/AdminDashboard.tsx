@@ -241,7 +241,7 @@ const AdminDashboard: React.FC = () => {
         { data: adminProfile }
       ] = await Promise.all([
         supabase.from('leads').select('id', { count: 'exact', head: true }),
-        supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase').order('score', { ascending: false }),
+        supabase.from('leads').select('*').order('score', { ascending: false }),
         supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
         supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', yesterdayStart).lt('created_at', todayStart),
         supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }),
@@ -371,7 +371,7 @@ const AdminDashboard: React.FC = () => {
   const handleDeepAnalysis = async () => {
     setDeepAnalysisLoading(true);
     try {
-      const { data: allLeads, error } = await supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase').order('score', { ascending: false }).limit(50);
+      const { data: allLeads, error } = await supabase.from('leads').select('*').order('score', { ascending: false }).limit(50);
       if (error) throw error;
       const result = await generateDashboardInsights(allLeads || []);
       setDeepAnalysisResult(result);

@@ -94,10 +94,18 @@ const CSVImportModal: React.FC<CSVImportModalProps> = ({ isOpen, onClose, userId
       lastActivity: 'Imported'
     }));
 
-    const { data, error: insertErr } = await supabase
+    let { data, error: insertErr } = await supabase
       .from('leads')
       .insert(leadsToInsert)
       .select();
+
+    // If lastActivity column doesn't exist, retry without it
+    if (insertErr && insertErr.message?.includes('lastActivity')) {
+      const withoutLastActivity = leadsToInsert.map(({ lastActivity, ...rest }) => rest);
+      const retry = await supabase.from('leads').insert(withoutLastActivity).select();
+      data = retry.data;
+      insertErr = retry.error;
+    }
 
     if (insertErr) {
       setError(insertErr.message);

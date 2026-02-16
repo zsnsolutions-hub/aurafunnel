@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import { Lead } from '../types';
 
 // Columns actually used by the app — avoids SELECT *
-const LEAD_COLUMNS = 'id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase' as const;
+const LEAD_COLUMNS = 'id,client_id,name,company,email,score,status,lastActivity,insights,source,created_at,knowledgeBase' as const;
 
 /** Fetches all leads for a client with only the columns used by the UI */
 export function useLeads(userId: string | undefined) {
@@ -11,12 +11,16 @@ export function useLeads(userId: string | undefined) {
     queryKey: ['leads', userId],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
-        .from('leads')
-        .select(LEAD_COLUMNS)
-        .eq('client_id', userId)
-        .order('score', { ascending: false });
-      if (error) throw error;
+      const query = supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId).order('score', { ascending: false });
+      const { data, error } = await query;
+
+      if (error) {
+        // Column may not exist — fall back to SELECT *
+        const fallback = await supabase.from('leads').select('*').eq('client_id', userId).order('score', { ascending: false });
+        if (fallback.error) throw fallback.error;
+        return (fallback.data || []) as Lead[];
+      }
+
       return (data || []) as Lead[];
     },
     enabled: !!userId,
@@ -54,13 +58,19 @@ export function useAllLeads(limit?: number) {
   return useQuery<Lead[]>({
     queryKey: ['allLeads', limit],
     queryFn: async () => {
-      let query = supabase
-        .from('leads')
-        .select(LEAD_COLUMNS)
-        .order('score', { ascending: false });
+      let query = supabase.from('leads').select(LEAD_COLUMNS).order('score', { ascending: false });
       if (limit) query = query.limit(limit);
       const { data, error } = await query;
-      if (error) throw error;
+
+      if (error) {
+        // Column may not exist — fall back to SELECT *
+        let fallbackQuery = supabase.from('leads').select('*').order('score', { ascending: false });
+        if (limit) fallbackQuery = fallbackQuery.limit(limit);
+        const fallback = await fallbackQuery;
+        if (fallback.error) throw fallback.error;
+        return (fallback.data || []) as Lead[];
+      }
+
       return (data || []) as Lead[];
     },
   });

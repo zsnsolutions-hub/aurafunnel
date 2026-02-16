@@ -502,14 +502,21 @@ const LeadManagement: React.FC = () => {
       };
       if (knowledgeBase) payload.knowledgeBase = knowledgeBase;
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('leads')
         .insert([payload])
         .select()
         .single();
 
+      // If knowledgeBase column doesn't exist, retry without it
+      if (error && (error.message?.includes('knowledgeBase') || error.code === 'PGRST204')) {
+        delete payload.knowledgeBase;
+        const retry = await supabase.from('leads').insert([payload]).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
+
       if (error) {
-        console.error('Lead insert error:', error.code, error.message, error.details, error.hint);
         setAddLeadError(`${error.message}${error.hint ? ` (Hint: ${error.hint})` : ''}`);
         return;
       }

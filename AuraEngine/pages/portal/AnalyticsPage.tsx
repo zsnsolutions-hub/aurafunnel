@@ -1627,7 +1627,7 @@ const AnalyticsPage: React.FC = () => {
                       <div className="flex items-center justify-center">
                         <ResponsiveContainer width="100%" height={220}>
                           <PieChart>
-                            <Pie data={funnelStages} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={85} label={({ label, count }) => `${label}: ${count}`}>
+                            <Pie data={funnelStages} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={85} label={(props: any) => `${props.label}: ${props.count}`}>
                               {funnelStages.map((_, i) => (
                                 <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                               ))}

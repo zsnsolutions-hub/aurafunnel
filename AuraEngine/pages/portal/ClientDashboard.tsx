@@ -97,6 +97,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [newLead, setNewLead] = useState({ name: '', email: '', company: '', insights: '' });
   const [showKBFields, setShowKBFields] = useState(false);
   const [newLeadKB, setNewLeadKB] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
+  const [addLeadError, setAddLeadError] = useState('');
+  const [isAddingLead, setIsAddingLead] = useState(false);
 
   // Content Generation States
   const [contentType, setContentType] = useState<ContentType>(ContentType.EMAIL);
@@ -340,7 +342,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     setLoadingLeads(true);
     const { data } = await supabase
       .from('leads')
-      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase')
+      .select('*')
       .eq('client_id', user.id)
       .order('score', { ascending: false });
 
@@ -381,7 +383,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         { count: leadsYesterday },
         { count: contentCreated }
       ] = await Promise.all([
-        supabase.from('leads').select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase').eq('client_id', user.id),
+        supabase.from('leads').select('*').eq('client_id', user.id),
         supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', user.id).gte('created_at', todayStart),
         supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', user.id).gte('created_at', yesterdayStart).lt('created_at', todayStart),
         supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
@@ -548,39 +550,73 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    const mockScore = Math.floor(Math.random() * 40) + 60;
-    const kb = buildKnowledgeBase(newLeadKB);
+    setAddLeadError('');
+    setIsAddingLead(true);
 
-    const payload: Record<string, any> = {
-      ...newLead,
-      client_id: user.id,
-      score: mockScore,
-      status: 'New',
-      lastActivity: 'Just now',
-    };
-    if (kb) payload.knowledgeBase = kb;
-
-    const { data, error } = await supabase
-      .from('leads')
-      .insert([payload])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Lead creation failed:', error);
-      // If knowledgeBase column doesn't exist, retry without it
-      if (error.message?.includes('knowledgeBase') || error.code === 'PGRST204') {
-        delete payload.knowledgeBase;
-        const { data: retryData } = await supabase.from('leads').insert([payload]).select().single();
-        if (retryData) onLeadCreated(retryData, undefined);
+    try {
+      // Verify session is still valid
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        setAddLeadError('Session expired. Please refresh and log in again.');
         return;
       }
-    }
 
-    if (data) onLeadCreated(data, kb);
+      const mockScore = Math.floor(Math.random() * 40) + 60;
+      const kb = buildKnowledgeBase(newLeadKB);
+
+      const payload: Record<string, any> = {
+        name: newLead.name.trim(),
+        email: newLead.email.trim(),
+        company: newLead.company.trim(),
+        insights: newLead.insights.trim() || '',
+        client_id: user.id,
+        score: mockScore,
+        status: 'New',
+        lastActivity: 'Just now',
+      };
+      if (kb) payload.knowledgeBase = kb;
+
+      let { data, error } = await supabase
+        .from('leads')
+        .insert([payload])
+        .select()
+        .single();
+
+      // If knowledgeBase column doesn't exist, retry without it
+      if (error && (error.message?.includes('knowledgeBase') || error.code === 'PGRST204')) {
+        delete payload.knowledgeBase;
+        const retry = await supabase.from('leads').insert([payload]).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
+
+      // If lastActivity column doesn't exist, retry without it
+      if (error && error.message?.includes('lastActivity')) {
+        delete payload.lastActivity;
+        const retry = await supabase.from('leads').insert([payload]).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
+
+      if (error) {
+        setAddLeadError(`${error.message}${error.hint ? ` (Hint: ${error.hint})` : ''}`);
+        return;
+      }
+
+      if (data) {
+        onLeadCreated(data, kb ? kb : undefined);
+      } else {
+        setAddLeadError('Insert returned no data. The lead may not have been created.');
+      }
+    } catch (err: unknown) {
+      setAddLeadError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+    } finally {
+      setIsAddingLead(false);
+    }
   };
 
-  const handleStatusUpdate = (leadId: string, newStatus: Lead['status']) => {
+  const handleStatusUpdate = async (leadId: string, newStatus: Lead['status']) => {
+    // Optimistically update local state
     const updatedLeads = leads.map(l =>
       l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
     );
@@ -592,6 +628,26 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       setSelectedLeadForActions({ ...selectedLeadForActions, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
     }
     fetchQuickStats();
+
+    // Persist to Supabase
+    const { error } = await supabase
+      .from('leads')
+      .update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` })
+      .eq('id', leadId);
+
+    if (error) {
+      // Revert optimistic update on failure
+      setLeads(leads);
+      setFilteredLeads(filteredLeads);
+    }
+
+    // Audit log
+    const lead = leads.find(l => l.id === leadId);
+    await supabase.from('audit_logs').insert({
+      user_id: user.id,
+      action: 'LEAD_STATUS_UPDATED',
+      details: `${lead?.name || 'Lead'} moved to ${newStatus}`
+    });
   };
 
   const handleSegmentSelect = (segmentId: string | null, filtered: Lead[]) => {
@@ -1277,8 +1333,15 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                   </div>
                 )}
               </div>
+              {addLeadError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <p className="text-xs font-bold text-red-600">{addLeadError}</p>
+                </div>
+              )}
               <div className="pt-6 flex flex-col space-y-3">
-                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-xl">Create Lead Profile</button>
+                <button type="submit" disabled={isAddingLead} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isAddingLead ? 'Creating...' : 'Create Lead Profile'}
+                </button>
               </div>
             </form>
           </div>
