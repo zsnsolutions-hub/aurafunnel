@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Lead, User, ContentType } from '../../types';
-import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon } from '../../components/Icons';
+import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
@@ -152,6 +152,15 @@ const LeadManagement: React.FC = () => {
   const [visibleKbFields, setVisibleKbFields] = useState<Set<string>>(new Set());
   const [addLeadError, setAddLeadError] = useState('');
   const [isAddingLead, setIsAddingLead] = useState(false);
+
+  // ── Edit Lead Modal ──
+  const [isEditLeadOpen, setIsEditLeadOpen] = useState(false);
+  const [editLeadId, setEditLeadId] = useState<string | null>(null);
+  const [editLead, setEditLead] = useState({ name: '', email: '', company: '', phone: '', insights: '' });
+  const [editLeadKb, setEditLeadKb] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
+  const [editVisibleKbFields, setEditVisibleKbFields] = useState<Set<string>>(new Set());
+  const [editLeadError, setEditLeadError] = useState('');
+  const [isEditingLead, setIsEditingLead] = useState(false);
 
   // ── Bulk Actions ──
   const [bulkActionOpen, setBulkActionOpen] = useState<BulkAction | null>(null);
@@ -539,6 +548,96 @@ const LeadManagement: React.FC = () => {
     }
   };
 
+  const openEditLead = (lead: Lead) => {
+    setEditLeadId(lead.id);
+    const kb = lead.knowledgeBase || {};
+    setEditLead({
+      name: lead.name || '',
+      email: lead.email || '',
+      company: lead.company || '',
+      phone: (kb as Record<string, string>).phone || '',
+      insights: lead.insights || '',
+    });
+    setEditLeadKb({
+      website: kb.website || '',
+      linkedin: kb.linkedin || '',
+      instagram: kb.instagram || '',
+      facebook: kb.facebook || '',
+      twitter: kb.twitter || '',
+      youtube: kb.youtube || '',
+    });
+    const visible = new Set<string>();
+    if (kb.website) visible.add('website');
+    if (kb.linkedin) visible.add('linkedin');
+    if (kb.twitter) visible.add('twitter');
+    if (kb.instagram) visible.add('instagram');
+    if (kb.facebook) visible.add('facebook');
+    setEditVisibleKbFields(visible);
+    setEditLeadError('');
+    setIsEditLeadOpen(true);
+  };
+
+  const handleEditLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editLeadId) return;
+    setEditLeadError('');
+    setIsEditingLead(true);
+    try {
+      const normalizeUrl = (url: string) => {
+        const trimmed = url.trim();
+        if (!trimmed) return '';
+        return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      };
+      const kbCleaned: Record<string, string> = {};
+      if (editLeadKb.website.trim()) kbCleaned.website = normalizeUrl(editLeadKb.website);
+      if (editLeadKb.linkedin.trim()) kbCleaned.linkedin = normalizeUrl(editLeadKb.linkedin);
+      if (editLeadKb.instagram.trim()) kbCleaned.instagram = normalizeUrl(editLeadKb.instagram);
+      if (editLeadKb.facebook.trim()) kbCleaned.facebook = normalizeUrl(editLeadKb.facebook);
+      if (editLeadKb.twitter.trim()) kbCleaned.twitter = normalizeUrl(editLeadKb.twitter);
+      if (editLeadKb.youtube.trim()) kbCleaned.youtube = normalizeUrl(editLeadKb.youtube);
+      if (editLead.phone.trim()) kbCleaned.phone = editLead.phone.trim();
+      const knowledgeBase = Object.keys(kbCleaned).length > 0 ? kbCleaned : null;
+
+      const payload: Record<string, any> = {
+        name: editLead.name.trim(),
+        email: editLead.email.trim(),
+        company: editLead.company.trim(),
+        insights: editLead.insights.trim() || '',
+      };
+      if (knowledgeBase !== undefined) payload.knowledgeBase = knowledgeBase;
+
+      let { error } = await supabase
+        .from('leads')
+        .update(payload)
+        .eq('id', editLeadId);
+
+      // If knowledgeBase column doesn't exist, retry without it
+      if (error && (error.message?.includes('knowledgeBase') || error.code === 'PGRST204')) {
+        delete payload.knowledgeBase;
+        const retry = await supabase.from('leads').update(payload).eq('id', editLeadId);
+        error = retry.error;
+      }
+
+      if (error) {
+        setEditLeadError(`${error.message}${error.hint ? ` (Hint: ${error.hint})` : ''}`);
+        return;
+      }
+
+      setAllLeads(prev => prev.map(l =>
+        l.id === editLeadId
+          ? { ...l, ...payload, knowledgeBase: knowledgeBase || l.knowledgeBase }
+          : l
+      ));
+      setIsEditLeadOpen(false);
+      setEditLeadId(null);
+    } catch (err: unknown) {
+      console.error('Lead update exception:', err);
+      setEditLeadError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+    } finally {
+      setIsEditingLead(false);
+    }
+  };
+
   const toggleCompanySize = (size: string) => {
     const next = new Set(companySizeFilter);
     next.has(size) ? next.delete(size) : next.add(size);
@@ -636,7 +735,7 @@ const LeadManagement: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
-      if (isInput || isActionsOpen || isCSVOpen || isAddLeadOpen || activityLogOpen) return;
+      if (isInput || isActionsOpen || isCSVOpen || isAddLeadOpen || isEditLeadOpen || activityLogOpen) return;
 
       if (e.key === 'j') { setFocusedIndex(prev => Math.min(prev + 1, paginatedLeads.length - 1)); return; }
       if (e.key === 'k') { setFocusedIndex(prev => Math.max(prev - 1, 0)); return; }
@@ -663,7 +762,7 @@ const LeadManagement: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate, paginatedLeads.length, focusedIndex, isActionsOpen, isCSVOpen, isAddLeadOpen, activityLogOpen]);
+  }, [navigate, paginatedLeads.length, focusedIndex, isActionsOpen, isCSVOpen, isAddLeadOpen, isEditLeadOpen, activityLogOpen]);
 
   const activeFilterCount = [
     statusFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
@@ -1386,20 +1485,29 @@ const LeadManagement: React.FC = () => {
                             </button>
                             <div className="mt-2 flex items-center justify-between">
                               <span className="text-[10px] text-slate-400">{formatRelativeTime(lead.created_at || lead.lastActivity)}</span>
-                              {nextStage ? (
+                              <div className="flex items-center space-x-1">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleStatusUpdate(lead.id, nextStage); }}
-                                  className="inline-flex items-center space-x-1 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-colors"
-                                  title={`Advance to ${nextStage}`}
+                                  onClick={(e) => { e.stopPropagation(); openEditLead(lead); }}
+                                  className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                  title="Edit Lead"
                                 >
-                                  <span>{nextStage}</span>
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                                  </svg>
+                                  <PencilIcon className="w-3.5 h-3.5" />
                                 </button>
-                              ) : (
-                                <span className="text-[10px] font-black text-slate-600">{lead.score}</span>
-                              )}
+                                {nextStage ? (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleStatusUpdate(lead.id, nextStage); }}
+                                    className="inline-flex items-center space-x-1 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-colors"
+                                    title={`Advance to ${nextStage}`}
+                                  >
+                                    <span>{nextStage}</span>
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] font-black text-slate-600">{lead.score}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
@@ -1572,6 +1680,13 @@ const LeadManagement: React.FC = () => {
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(ev) => { ev.stopPropagation(); openEditLead(lead); }}
+                              title="Edit Lead"
+                              className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => navigate(`/portal/leads/${lead.id}`)}
                               title="View"
@@ -1917,6 +2032,122 @@ const LeadManagement: React.FC = () => {
               <div className="pt-6">
                 <button type="submit" disabled={isAddingLead} className={`w-full py-4 rounded-2xl font-bold shadow-xl transition-colors ${isAddingLead ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
                   {isAddingLead ? 'Saving...' : 'Create Lead Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lead Drawer */}
+      {isEditLeadOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-end">
+          <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsEditLeadOpen(false)}></div>
+          <div className="relative w-full max-w-md h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 p-10 flex flex-col overflow-y-auto">
+            <div className="flex items-center justify-between mb-10">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 font-heading">Edit Lead</h2>
+                <p className="text-sm text-slate-500 mt-1">Update lead details and enrichment data.</p>
+              </div>
+              <button onClick={() => setIsEditLeadOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <form className="space-y-6 flex-grow" onSubmit={handleEditLead}>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Full Name</label>
+                <input required type="text" value={editLead.name} onChange={e => setEditLead({...editLead, name: e.target.value})} placeholder="e.g. Robert Fox" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Work Email</label>
+                <input required type="email" value={editLead.email} onChange={e => setEditLead({...editLead, email: e.target.value})} placeholder="robert@stripe.com" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Company Name</label>
+                <input required type="text" value={editLead.company} onChange={e => setEditLead({...editLead, company: e.target.value})} placeholder="e.g. Stripe" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Phone Number</label>
+                <input type="tel" value={editLead.phone} onChange={e => setEditLead({...editLead, phone: e.target.value})} placeholder="+1 (555) 123-4567" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Key Insights</label>
+                <textarea rows={3} value={editLead.insights} onChange={e => setEditLead({...editLead, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none focus:border-indigo-300 transition-colors"></textarea>
+              </div>
+              {/* Website & Social Links */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Websites & Social Profiles</label>
+                <div className="flex items-center gap-2 mb-3">
+                  {([
+                    { key: 'website', icon: <GlobeIcon className="w-4 h-4" />, tip: 'Website' },
+                    { key: 'linkedin', icon: <LinkedInIcon className="w-4 h-4" />, tip: 'LinkedIn' },
+                    { key: 'twitter', icon: <TwitterIcon className="w-4 h-4" />, tip: 'X / Twitter' },
+                    { key: 'instagram', icon: <InstagramIcon className="w-4 h-4" />, tip: 'Instagram' },
+                    { key: 'facebook', icon: <FacebookIcon className="w-4 h-4" />, tip: 'Facebook' },
+                  ] as const).map(s => {
+                    const isActive = editVisibleKbFields.has(s.key) || editLeadKb[s.key].trim() !== '';
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        title={s.tip}
+                        onClick={() => setEditVisibleKbFields(prev => {
+                          const next = new Set(prev);
+                          if (next.has(s.key)) { next.delete(s.key); } else { next.add(s.key); }
+                          return next;
+                        })}
+                        className={`p-2.5 rounded-xl border transition-all ${
+                          isActive
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {s.icon}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="space-y-2.5">
+                  {(editVisibleKbFields.has('website') || editLeadKb.website.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><GlobeIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editLeadKb.website} onChange={e => setEditLeadKb({...editLeadKb, website: e.target.value})} placeholder="https://company.com" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editVisibleKbFields.has('linkedin') || editLeadKb.linkedin.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><LinkedInIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editLeadKb.linkedin} onChange={e => setEditLeadKb({...editLeadKb, linkedin: e.target.value})} placeholder="linkedin.com/in/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editVisibleKbFields.has('twitter') || editLeadKb.twitter.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><TwitterIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editLeadKb.twitter} onChange={e => setEditLeadKb({...editLeadKb, twitter: e.target.value})} placeholder="x.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editVisibleKbFields.has('instagram') || editLeadKb.instagram.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><InstagramIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editLeadKb.instagram} onChange={e => setEditLeadKb({...editLeadKb, instagram: e.target.value})} placeholder="instagram.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editVisibleKbFields.has('facebook') || editLeadKb.facebook.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><FacebookIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editLeadKb.facebook} onChange={e => setEditLeadKb({...editLeadKb, facebook: e.target.value})} placeholder="facebook.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                </div>
+              </div>
+              {editLeadError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <p className="text-xs font-bold text-red-600">{editLeadError}</p>
+                </div>
+              )}
+              <div className="pt-6">
+                <button type="submit" disabled={isEditingLead} className={`w-full py-4 rounded-2xl font-bold shadow-xl transition-colors ${isEditingLead ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+                  {isEditingLead ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
