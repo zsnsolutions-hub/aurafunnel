@@ -765,6 +765,10 @@ const IntegrationHub: React.FC = () => {
               Connected systems, APIs &amp; webhooks &middot; {integrations.filter(i => i.status === 'connected').length} active
             </p>
           </div>
+          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+            <KeyboardIcon className="w-3.5 h-3.5" />
+            <span>?</span>
+          </button>
         </div>
         <div className="flex items-center space-x-2">
           <button
@@ -808,13 +812,6 @@ const IntegrationHub: React.FC = () => {
           >
             <TargetIcon className="w-3.5 h-3.5" />
             <span>Costs</span>
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <span>Shortcuts</span>
           </button>
           <button
             onClick={() => setShowAddIntegration(!showAddIntegration)}
