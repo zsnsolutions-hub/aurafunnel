@@ -37,7 +37,7 @@ const StatCard = ({ title, value, icon, trend, loading }: {
   </div>
 );
 
-const QuickStatsRow: React.FC<QuickStatsRowProps> = ({ stats, loading }) => {
+const QuickStatsRow: React.FC<QuickStatsRowProps & { children?: React.ReactNode }> = ({ stats, loading, children }) => {
   const leadsTrend = stats.leadsYesterday !== undefined && stats.leadsYesterday > 0
     ? { value: stats.leadsToday - stats.leadsYesterday, label: `${stats.leadsToday > stats.leadsYesterday ? '+' : ''}${stats.leadsToday - stats.leadsYesterday} today` }
     : null;
@@ -47,13 +47,14 @@ const QuickStatsRow: React.FC<QuickStatsRowProps> = ({ stats, loading }) => {
     : null;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
       <StatCard title="Leads Today" value={stats.leadsToday.toString()} icon={<TargetIcon className="w-5 h-5" />} trend={leadsTrend} loading={loading} />
       <StatCard title="Hot Leads" value={`${stats.hotLeads} Active`} icon={<FlameIcon className="w-5 h-5" />} trend={hotTrend} loading={loading} />
       <StatCard title="Content Created" value={stats.contentCreated.toString()} icon={<SparklesIcon className="w-5 h-5" />} trend={null} loading={loading} />
       <StatCard title="Avg AI Score" value={`${stats.avgAiScore}%`} icon={<BoltIcon className="w-5 h-5" />} trend={null} loading={loading} />
       <StatCard title="Predicted Conv." value={stats.predictedConversions.toString()} icon={<ChartIcon className="w-5 h-5" />} trend={null} loading={loading} />
       <StatCard title="Recommendations" value={stats.recommendations.toString()} icon={<CheckIcon className="w-5 h-5" />} trend={null} loading={loading} />
+      {children}
     </div>
   );
 };

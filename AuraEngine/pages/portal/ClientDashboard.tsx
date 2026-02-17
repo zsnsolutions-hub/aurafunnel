@@ -19,6 +19,7 @@ import LiveActivityFeed from '../../components/dashboard/LiveActivityFeed';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import LeadSegmentation from '../../components/dashboard/LeadSegmentation';
+import EmailPerformanceCard from '../../components/dashboard/EmailPerformanceCard';
 
 const LISTS_STORAGE_KEY = 'aurafunnel_manual_lists';
 
@@ -818,9 +819,11 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/*  QUICK STATS ROW (6 cards with trends)                        */}
+      {/*  QUICK STATS ROW + EMAIL PERFORMANCE (inline grid)             */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <QuickStatsRow stats={quickStats} loading={statsLoading} />
+      <QuickStatsRow stats={quickStats} loading={statsLoading}>
+        <EmailPerformanceCard />
+      </QuickStatsRow>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  TWO-PANEL LAYOUT: Left (30%) + Right (70%)                   */}

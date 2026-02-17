@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { useOutletContext, useNavigate } from 'react-router-dom';
+import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchBatchEmailSummary } from '../../lib/emailTracking';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
@@ -125,6 +125,7 @@ const PER_PAGE = 50;
 const LeadManagement: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // ── Data State ──
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
@@ -202,6 +203,16 @@ const LeadManagement: React.FC = () => {
   const [showEngagementMetrics, setShowEngagementMetrics] = useState(false);
   const [showScoreIntelligence, setShowScoreIntelligence] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // ── Seed email filter from query params ──
+  useEffect(() => {
+    const ef = searchParams.get('emailFilter');
+    if (ef && ['sent', 'opened', 'clicked'].includes(ef)) {
+      setEmailEngagementFilter(new Set([ef as 'sent' | 'opened' | 'clicked']));
+      searchParams.delete('emailFilter');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   // ── Fetch ──
   useEffect(() => {
