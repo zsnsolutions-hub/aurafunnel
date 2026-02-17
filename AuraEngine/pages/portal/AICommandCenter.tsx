@@ -3,7 +3,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { generateProgrammaticInsights, generateLeadInsights } from '../../lib/insights';
-import { generateDashboardInsights } from '../../lib/gemini';
+import { generateDashboardInsights, generateCommandCenterResponse } from '../../lib/gemini';
 import {
   SparklesIcon, TargetIcon, FlameIcon, TrendUpIcon, TrendDownIcon,
   BrainIcon, RefreshIcon, BoltIcon, UsersIcon, MailIcon, ChartIcon,
@@ -368,6 +368,21 @@ const AICommandCenter: React.FC = () => {
     }
   }, [aiMode]);
 
+  // ─── Conversation History for Gemini ───
+  const getConversationHistory = useCallback(() => {
+    return messages
+      .filter(m => m.role === 'user' || m.role === 'ai')
+      .slice(-10)
+      .map(m => ({ role: m.role as 'user' | 'ai', content: m.content }));
+  }, [messages]);
+
+  const THINKING_LABELS: Record<AIMode, string> = {
+    analyst: 'AuraAI (Analyst) is crunching the numbers...',
+    strategist: 'AuraAI (Strategist) is building your plan...',
+    coach: 'AuraAI (Coach) is reviewing your pipeline...',
+    creative: 'AuraAI (Creative) is generating content...',
+  };
+
   // ─── AI Response Generation ───
   const generateResponse = useCallback(async (prompt: string) => {
     setThinking(true);
@@ -387,59 +402,8 @@ const AICommandCenter: React.FC = () => {
 
     const lowerPrompt = prompt.toLowerCase();
 
-    // ─── Programmatic Responses (instant) ───
-    if (lowerPrompt.includes('pipeline health') || lowerPrompt.includes('overview')) {
-      const insights = generateProgrammaticInsights(leads);
-      const hotPct = stats.total > 0 ? Math.round((stats.hot / stats.total) * 100) : 0;
-      const newPct = stats.total > 0 ? Math.round((stats.newCount / stats.total) * 100) : 0;
-
-      const responseText = `**Pipeline Health Report**
-
-Your pipeline has **${stats.total} leads** with an average AI score of **${stats.avgScore}/100**.
-
-**Distribution:**
-- 🔥 Hot leads (80+): **${stats.hot}** (${hotPct}%)
-- ✅ Qualified: **${stats.qualified}** (${stats.convRate}% conversion)
-- 🆕 New/untouched: **${stats.newCount}** (${newPct}%)
-
-**Health Score: ${stats.avgScore > 65 ? 'Strong' : stats.avgScore > 45 ? 'Moderate' : 'Needs Attention'}** ${stats.avgScore > 65 ? '💪' : stats.avgScore > 45 ? '⚠️' : '🚨'}
-
-${insights.length > 0 ? `**Top Insight:** ${insights[0].title} - ${insights[0].description}` : ''}
-
-${stats.newCount > 0 ? `**Action Required:** ${stats.newCount} leads haven't been contacted. Would you like me to suggest outreach priorities?` : 'All leads have been contacted. Focus on moving Contacted leads to Qualified.'}`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 94,
-        type: 'insight',
-      }]);
-    }
-
-    else if (lowerPrompt.includes('hot lead') || lowerPrompt.includes('priority')) {
-      const hotLeads = leads.filter(l => l.score > 80);
-      const topActions = hotLeads.slice(0, 5).map((l, i) => {
-        const insight = generateLeadInsights(l, leads);
-        return `**${i + 1}. ${l.name}** (${l.company}) — Score: ${l.score}\n   Status: ${l.status} | ${insight[0]?.description || 'High-intent prospect'}${insight.length > 1 ? `\n   → ${insight[1].action || 'Follow up'}` : ''}`;
-      });
-
-      const responseText = hotLeads.length > 0
-        ? `**🔥 Hot Lead Action Plan**\n\nYou have **${hotLeads.length} hot leads** that need attention today:\n\n${topActions.join('\n\n')}\n\n**Recommended Sequence:**\n1. Call ${hotLeads[0]?.name || 'top lead'} first (highest priority)\n2. Send personalized content to remaining hot leads\n3. Schedule demos for qualified prospects\n\nWant me to generate outreach content for any of these?`
-        : `No hot leads (score 80+) detected yet. Your highest-scoring lead is **${leads[0]?.name || 'N/A'}** at ${leads[0]?.score || 0}. Consider enriching lead data or adjusting scoring weights.`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 91,
-        type: 'insight',
-      }]);
-    }
-
-    else if (lowerPrompt.includes('score breakdown') || lowerPrompt.includes('distribution')) {
+    // ─── Programmatic-only data tables (instant, no Gemini needed) ───
+    if (lowerPrompt.includes('score breakdown') || lowerPrompt.includes('distribution')) {
       const hot = leads.filter(l => l.score > 75).length;
       const warm = leads.filter(l => l.score > 50 && l.score <= 75).length;
       const cool = leads.filter(l => l.score > 25 && l.score <= 50).length;
@@ -468,99 +432,12 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
         confidence: 96,
         type: 'insight',
       }]);
+      setThinking(false);
+      setResponseCount(prev => prev + 1);
+      return;
     }
 
-    else if (lowerPrompt.includes('stale') || lowerPrompt.includes('re-engage') || lowerPrompt.includes('inactive')) {
-      const now = new Date();
-      const staleLeads = leads.filter(l => {
-        if (!l.created_at) return false;
-        const days = Math.floor((now.getTime() - new Date(l.created_at).getTime()) / (1000 * 60 * 60 * 24));
-        return days > 14 && l.status !== 'Qualified';
-      });
-
-      const responseText = staleLeads.length > 0
-        ? `**⏰ Stale Lead Report**\n\n${staleLeads.length} lead${staleLeads.length > 1 ? 's' : ''} need re-engagement (inactive 14+ days):\n\n${staleLeads.slice(0, 5).map((l, i) => {
-          const days = Math.floor((now.getTime() - new Date(l.created_at!).getTime()) / (1000 * 60 * 60 * 24));
-          return `**${i + 1}. ${l.name}** (${l.company})\n   Score: ${l.score} | Status: ${l.status} | ${days} days idle\n   → ${l.score > 60 ? 'Send case study or demo invite' : 'Try value-first re-engagement email'}`;
-        }).join('\n\n')}\n\n**Recommendation:** ${staleLeads.length > 3 ? 'Consider a batch re-engagement campaign.' : 'Personalized follow-ups will be most effective.'}`
-        : `**No stale leads detected!** All leads have been active within the last 14 days. Great pipeline management. 🎉`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 88,
-        type: 'insight',
-      }]);
-    }
-
-    else if (lowerPrompt.includes('best time') || lowerPrompt.includes('outreach time') || lowerPrompt.includes('when')) {
-      const responseText = `**⏰ Optimal Outreach Timing**
-
-Based on engagement patterns and industry benchmarks:
-
-**Best Days:** Tuesday & Thursday
-**Best Time Blocks:**
-- 🟢 **9:00-11:00 AM** — Highest open rates (42% avg)
-- 🟢 **1:00-3:00 PM** — Best for LinkedIn outreach
-- 🟡 **4:00-5:00 PM** — Good for follow-ups
-- 🔴 **Before 8 AM / After 6 PM** — Low engagement
-
-**Your Heatmap Data Suggests:**
-- Midday outreach gets ${Math.round(1.5 + Math.random())}x more responses
-- Weekend messages have 70% lower open rates
-- Tuesday emails convert ${Math.round(30 + Math.random() * 15)}% better than Monday
-
-**Action:** Schedule your next batch of outreach for Tuesday at 10 AM for maximum impact.`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 82,
-        type: 'text',
-      }]);
-    }
-
-    else if (lowerPrompt.includes('weekly summary') || lowerPrompt.includes('summary')) {
-      const recent = leads.filter(l => {
-        if (!l.created_at) return false;
-        const d = new Date(l.created_at);
-        return (new Date().getTime() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
-      });
-
-      const responseText = `**📋 Weekly Activity Summary**
-
-**This Week's Metrics:**
-- New leads added: **${recent.length}**
-- Total pipeline: **${stats.total}** leads
-- Hot leads: **${stats.hot}** (${stats.total > 0 ? Math.round(stats.hot / stats.total * 100) : 0}%)
-- Qualification rate: **${stats.convRate}%**
-- Average AI score: **${stats.avgScore}/100**
-
-**Highlights:**
-${recent.length > 0 ? `- ${recent.length} new leads this week with avg score of ${Math.round(recent.reduce((a, b) => a + b.score, 0) / recent.length)}` : '- No new leads added this week'}
-${stats.hot > 0 ? `- ${stats.hot} hot leads ready for outreach` : '- No hot leads yet — focus on lead enrichment'}
-${stats.qualified > 0 ? `- ${stats.qualified} leads are qualified and in conversion path` : ''}
-
-**Next Week Priority:**
-${stats.newCount > 0 ? `Contact ${stats.newCount} untouched leads` : 'Follow up with contacted leads'}
-
-Would you like me to prepare outreach content for your top priorities?`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 90,
-        type: 'insight',
-      }]);
-    }
-
-    else if (lowerPrompt.includes('company') || lowerPrompt.includes('cluster') || lowerPrompt.includes('multi')) {
+    if (lowerPrompt.includes('company') && (lowerPrompt.includes('cluster') || lowerPrompt.includes('multi'))) {
       const companyMap: Record<string, Lead[]> = {};
       leads.forEach(l => {
         const key = l.company.trim();
@@ -586,10 +463,124 @@ Would you like me to prepare outreach content for your top priorities?`;
         confidence: 87,
         type: 'insight',
       }]);
+      setThinking(false);
+      setResponseCount(prev => prev + 1);
+      return;
     }
 
-    else if (lowerPrompt.includes('deep analysis') || lowerPrompt.includes('deep ai') || lowerPrompt.includes('gemini')) {
-      // Attempt real Gemini call
+    // ─── Template fallback generator (preserves all original templates) ───
+    const generateTemplateResponse = (): string | null => {
+      if (lowerPrompt.includes('pipeline health') || lowerPrompt.includes('overview')) {
+        const insights = generateProgrammaticInsights(leads);
+        const hotPct = stats.total > 0 ? Math.round((stats.hot / stats.total) * 100) : 0;
+        const newPct = stats.total > 0 ? Math.round((stats.newCount / stats.total) * 100) : 0;
+        return `**Pipeline Health Report**\n\nYour pipeline has **${stats.total} leads** with an average AI score of **${stats.avgScore}/100**.\n\n**Distribution:**\n- 🔥 Hot leads (80+): **${stats.hot}** (${hotPct}%)\n- ✅ Qualified: **${stats.qualified}** (${stats.convRate}% conversion)\n- 🆕 New/untouched: **${stats.newCount}** (${newPct}%)\n\n**Health Score: ${stats.avgScore > 65 ? 'Strong' : stats.avgScore > 45 ? 'Moderate' : 'Needs Attention'}** ${stats.avgScore > 65 ? '💪' : stats.avgScore > 45 ? '⚠️' : '🚨'}\n\n${insights.length > 0 ? `**Top Insight:** ${insights[0].title} - ${insights[0].description}` : ''}\n\n${stats.newCount > 0 ? `**Action Required:** ${stats.newCount} leads haven't been contacted. Would you like me to suggest outreach priorities?` : 'All leads have been contacted. Focus on moving Contacted leads to Qualified.'}`;
+      }
+
+      if (lowerPrompt.includes('hot lead') || lowerPrompt.includes('priority')) {
+        const hotLeads = leads.filter(l => l.score > 80);
+        const topActions = hotLeads.slice(0, 5).map((l, i) => {
+          const insight = generateLeadInsights(l, leads);
+          return `**${i + 1}. ${l.name}** (${l.company}) — Score: ${l.score}\n   Status: ${l.status} | ${insight[0]?.description || 'High-intent prospect'}${insight.length > 1 ? `\n   → ${insight[1].action || 'Follow up'}` : ''}`;
+        });
+        return hotLeads.length > 0
+          ? `**🔥 Hot Lead Action Plan**\n\nYou have **${hotLeads.length} hot leads** that need attention today:\n\n${topActions.join('\n\n')}\n\n**Recommended Sequence:**\n1. Call ${hotLeads[0]?.name || 'top lead'} first (highest priority)\n2. Send personalized content to remaining hot leads\n3. Schedule demos for qualified prospects\n\nWant me to generate outreach content for any of these?`
+          : `No hot leads (score 80+) detected yet. Your highest-scoring lead is **${leads[0]?.name || 'N/A'}** at ${leads[0]?.score || 0}. Consider enriching lead data or adjusting scoring weights.`;
+      }
+
+      if (lowerPrompt.includes('stale') || lowerPrompt.includes('re-engage') || lowerPrompt.includes('inactive')) {
+        const now = new Date();
+        const staleLeads = leads.filter(l => {
+          if (!l.created_at) return false;
+          const days = Math.floor((now.getTime() - new Date(l.created_at).getTime()) / (1000 * 60 * 60 * 24));
+          return days > 14 && l.status !== 'Qualified';
+        });
+        return staleLeads.length > 0
+          ? `**⏰ Stale Lead Report**\n\n${staleLeads.length} lead${staleLeads.length > 1 ? 's' : ''} need re-engagement (inactive 14+ days):\n\n${staleLeads.slice(0, 5).map((l, i) => { const days = Math.floor((now.getTime() - new Date(l.created_at!).getTime()) / (1000 * 60 * 60 * 24)); return `**${i + 1}. ${l.name}** (${l.company})\n   Score: ${l.score} | Status: ${l.status} | ${days} days idle\n   → ${l.score > 60 ? 'Send case study or demo invite' : 'Try value-first re-engagement email'}`; }).join('\n\n')}\n\n**Recommendation:** ${staleLeads.length > 3 ? 'Consider a batch re-engagement campaign.' : 'Personalized follow-ups will be most effective.'}`
+          : `**No stale leads detected!** All leads have been active within the last 14 days. Great pipeline management. 🎉`;
+      }
+
+      if (lowerPrompt.includes('best time') || lowerPrompt.includes('outreach time')) {
+        return `**⏰ Optimal Outreach Timing**\n\nBased on engagement patterns and industry benchmarks:\n\n**Best Days:** Tuesday & Thursday\n**Best Time Blocks:**\n- 🟢 **9:00-11:00 AM** — Highest open rates (42% avg)\n- 🟢 **1:00-3:00 PM** — Best for LinkedIn outreach\n- 🟡 **4:00-5:00 PM** — Good for follow-ups\n- 🔴 **Before 8 AM / After 6 PM** — Low engagement\n\n**Action:** Schedule your next batch of outreach for Tuesday at 10 AM for maximum impact.`;
+      }
+
+      if (lowerPrompt.includes('weekly summary') || lowerPrompt.includes('summary')) {
+        const recent = leads.filter(l => { if (!l.created_at) return false; return (new Date().getTime() - new Date(l.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000; });
+        return `**📋 Weekly Activity Summary**\n\n**This Week's Metrics:**\n- New leads added: **${recent.length}**\n- Total pipeline: **${stats.total}** leads\n- Hot leads: **${stats.hot}** (${stats.total > 0 ? Math.round(stats.hot / stats.total * 100) : 0}%)\n- Qualification rate: **${stats.convRate}%**\n- Average AI score: **${stats.avgScore}/100**\n\n**Highlights:**\n${recent.length > 0 ? `- ${recent.length} new leads this week with avg score of ${Math.round(recent.reduce((a, b) => a + b.score, 0) / recent.length)}` : '- No new leads added this week'}\n${stats.hot > 0 ? `- ${stats.hot} hot leads ready for outreach` : '- No hot leads yet — focus on lead enrichment'}\n${stats.qualified > 0 ? `- ${stats.qualified} leads are qualified and in conversion path` : ''}\n\n**Next Week Priority:**\n${stats.newCount > 0 ? `Contact ${stats.newCount} untouched leads` : 'Follow up with contacted leads'}\n\nWould you like me to prepare outreach content for your top priorities?`;
+      }
+
+      if (aiMode === 'creative' && (lowerPrompt.includes('email') || lowerPrompt.includes('outreach') || lowerPrompt.includes('template'))) {
+        const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
+        const templates = topLeads.map((l, i) =>
+          `**${i + 1}. Email for ${l.name} (${l.company}) — Score ${l.score}**\n\nSubject: Quick question about ${l.company}'s growth\n\nHi ${l.name.split(' ')[0]},\n\nI noticed ${l.company} is ${l.score > 80 ? 'scaling rapidly' : 'making great strides'} in your space. I work with similar companies to help them ${l.score > 70 ? 'accelerate pipeline and close deals faster' : 'build a more predictable revenue engine'}.\n\nWould you be open to a quick 15-min chat this week?\n\nBest,\n[Your Name]`
+        );
+        return topLeads.length > 0
+          ? `**✉️ Cold Outreach Templates**\n\nHere are personalized emails for your top leads:\n\n${templates.join('\n\n---\n\n')}`
+          : `**✉️ Email Templates**\n\nNo high-scoring leads found to personalize. Here's a generic template:\n\n**Subject:** Quick question about [Company]\n\nHi [First Name],\n\nI help companies like yours [value prop]. Would you be open to a quick 15-min chat?\n\nBest,\n[Your Name]`;
+      }
+
+      if (aiMode === 'creative' && (lowerPrompt.includes('linkedin') || lowerPrompt.includes('connection'))) {
+        const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
+        const msgs = topLeads.map((l, i) =>
+          `**${i + 1}. LinkedIn for ${l.name} (${l.company})**\n\nHi ${l.name.split(' ')[0]}, I came across your work at ${l.company} — really impressive what you're building. I work with ${l.score > 80 ? 'high-growth' : 'ambitious'} teams in the ${l.company} space and thought it'd be great to connect. No pitch, just genuine interest in swapping notes. Cheers!`
+        );
+        return `**💼 LinkedIn Connection Messages**\n\n${msgs.length > 0 ? msgs.join('\n\n---\n\n') : 'Add some leads first so I can personalize messages for you.'}`;
+      }
+
+      if (aiMode === 'creative' && (lowerPrompt.includes('sequence') || lowerPrompt.includes('follow'))) {
+        return `**📧 3-Step Follow-up Sequence**\n\n**Email 1 — Day 0 (Initial Touch)**\nSubject: Quick thought about [Company]\nBody: Short, value-first message. Reference something specific about their company. End with a soft CTA (reply, not a meeting link).\n\n**Email 2 — Day 3 (Value Add)**\nSubject: Re: Quick thought about [Company]\nBody: Share a relevant case study, stat, or resource. Position it as "saw this and thought of you." No hard ask.\n\n**Email 3 — Day 7 (Breakup)**\nSubject: Should I close the loop?\nBody: Acknowledge they're busy. Offer to reconnect later or be removed. Creates urgency without being pushy.\n\n**Timing:** Send Email 1 on Tuesday 10am, Email 2 on Friday 1pm, Email 3 on following Tuesday 10am.`;
+      }
+
+      if (aiMode === 'creative' && (lowerPrompt.includes('objection') || lowerPrompt.includes('response'))) {
+        return `**🛡️ Objection Handling Playbook**\n\n**"We're not interested right now"**\n→ "Totally understand. Out of curiosity, is that because timing is off, or because [product type] isn't a priority? Happy to reconnect when it makes sense."\n\n**"We already use [competitor]"**\n→ "Great choice! Many of our best clients switched from [competitor] because of [differentiator]. Would it be helpful to see a quick side-by-side?"\n\n**"Send me more info"**\n→ "Of course! To make sure I send the most relevant stuff — what's your biggest challenge with [topic] right now?" (Re-engages instead of dead-end)\n\n**"It's too expensive"**\n→ "I hear you. Our clients typically see [ROI metric] within [timeframe]. Would it help to see a quick ROI breakdown based on your numbers?"\n\n**"I need to talk to my team"**\n→ "Absolutely — would it help if I put together a one-pager your team can review? I can also join a quick call to answer questions."`;
+      }
+
+      if (aiMode === 'coach' && (lowerPrompt.includes('coach') || lowerPrompt.includes('review') || lowerPrompt.includes('doing right') || lowerPrompt.includes('doing wrong'))) {
+        const hotPct = stats.total > 0 ? Math.round((stats.hot / stats.total) * 100) : 0;
+        const goods: string[] = [];
+        const improvements: string[] = [];
+        if (hotPct > 20) goods.push(`Your hot lead percentage (${hotPct}%) is above average — good lead quality`);
+        if (stats.qualified > 0) goods.push(`You have ${stats.qualified} qualified leads in the pipeline — active qualification is happening`);
+        if (stats.avgScore > 55) goods.push(`Average score of ${stats.avgScore} shows a healthy pipeline`);
+        if (goods.length === 0) goods.push('You have leads in your pipeline — that\'s the first step!');
+        if (stats.newCount > 3) improvements.push(`${stats.newCount} leads are untouched — contact within 48hrs for best conversion`);
+        if (stats.avgScore < 50) improvements.push(`Average score of ${stats.avgScore} is below target. Enrich lead data or tighten your ICP`);
+        if (hotPct < 15) improvements.push(`Only ${hotPct}% hot leads — focus on nurturing warm leads with targeted content`);
+        if (improvements.length === 0) improvements.push('Keep up the momentum and track your conversion rates weekly');
+        return `**📋 Pipeline Review**\n\n**What you're doing well:**\n${goods.map(g => `✅ ${g}`).join('\n')}\n\n**Where to improve:**\n${improvements.map(im => `⚠️ ${im}`).join('\n')}\n\n**Overall Grade: ${stats.avgScore > 65 ? 'A' : stats.avgScore > 50 ? 'B' : stats.avgScore > 35 ? 'C' : 'D'}** — ${stats.avgScore > 65 ? 'Excellent work. Stay consistent.' : stats.avgScore > 50 ? 'Good foundation. Small tweaks will make a big difference.' : 'Room for growth. Focus on the basics — contact speed and lead quality.'}`;
+      }
+
+      if (aiMode === 'coach' && (lowerPrompt.includes('mistake') || lowerPrompt.includes('avoid'))) {
+        return `**🚫 Top B2B Pipeline Mistakes to Avoid**\n\n**1. Slow Response Time**\nLeads contacted within 5 minutes are 21x more likely to convert. Every hour you wait, odds drop sharply.\n\n**2. No Follow-up System**\n80% of sales require 5+ touchpoints. Most reps stop after 2. Build a consistent follow-up sequence.\n\n**3. Treating All Leads the Same**\nA hot lead (80+) needs a different approach than a cold one (25). Segment and personalize.\n\n**4. Ignoring Lead Scoring**\nYour AI scores are there for a reason. Trust the data and prioritize accordingly.\n\n**5. Not Qualifying Early**\nSpending time on leads that will never convert wastes your best resource — time. Qualify or disqualify fast.\n\n**6. Skipping Discovery**\nDon't pitch before understanding their pain. Ask questions first, present solutions second.\n\n**7. No Pipeline Hygiene**\nClean your pipeline monthly. Archive cold leads, update statuses, and keep your data fresh.`;
+      }
+
+      if (aiMode === 'strategist' && (lowerPrompt.includes('prioritize') || lowerPrompt.includes('focus'))) {
+        const tiers = [
+          { label: 'Tier 1 — Act Now', leads: leads.filter(l => l.score > 80 && l.status !== 'Qualified'), action: 'Call or send personalized demo invite today' },
+          { label: 'Tier 2 — Nurture This Week', leads: leads.filter(l => l.score > 55 && l.score <= 80), action: 'Send case study or value-add content' },
+          { label: 'Tier 3 — Re-engage Next Week', leads: leads.filter(l => l.score > 30 && l.score <= 55), action: 'Add to email nurture sequence' },
+          { label: 'Tier 4 — Low Priority', leads: leads.filter(l => l.score <= 30), action: 'Batch outreach or archive if stale' },
+        ];
+        return `**🎯 Lead Prioritization Matrix**\n\n${tiers.map(t => `**${t.label}** (${t.leads.length} leads)\n${t.leads.slice(0, 3).map(l => `  • ${l.name} (${l.company}) — ${l.score}`).join('\n') || '  No leads in this tier'}\n  → **Action:** ${t.action}`).join('\n\n')}\n\n**Rule of thumb:** Spend 60% of your time on Tier 1, 25% on Tier 2, 10% on Tier 3, and batch Tier 4.`;
+      }
+
+      if (aiMode === 'strategist' && (lowerPrompt.includes('game plan') || lowerPrompt.includes('day-by-day') || lowerPrompt.includes('action plan'))) {
+        const hot = leads.filter(l => l.score > 80).slice(0, 3);
+        const warm = leads.filter(l => l.score > 55 && l.score <= 80).slice(0, 3);
+        const newLeads = leads.filter(l => l.status === 'New').slice(0, 2);
+        return `**📅 Weekly Action Plan**\n\n**Monday — Pipeline Review**\n- Review this week's priorities using AI Command Center\n- Update stale lead statuses\n- Block 2 hours for outreach\n\n**Tuesday — High-Priority Outreach**\n${hot.map(l => `- Call/email ${l.name} (${l.company}, score ${l.score})`).join('\n') || '- No hot leads — focus on warm leads'}\n- Follow up on any pending demos\n\n**Wednesday — Content & Nurture**\n${warm.map(l => `- Send case study to ${l.name} (${l.company})`).join('\n') || '- Prepare content for next batch'}\n- Schedule LinkedIn engagement for top prospects\n\n**Thursday — New Lead Response**\n${newLeads.map(l => `- First touch: ${l.name} (${l.company}, score ${l.score})`).join('\n') || '- All new leads contacted — follow up instead'}\n- Research 3 new target accounts\n\n**Friday — Review & Prep**\n- Update pipeline statuses\n- Run "Weekly Summary" in AI Command Center\n- Prep next week's priority list`;
+      }
+
+      // Generic fallback
+      const insights = generateProgrammaticInsights(leads);
+      const topLead = leads[0];
+      const modeLabel = AI_MODES.find(m => m.key === aiMode)?.label || 'AI';
+      const modeChips = MODE_CHIPS[aiMode];
+      return `I analyzed your request as your **${modeLabel}**. Here's what I found:\n\n${insights.length > 0 ? insights.slice(0, 2).map((ins, i) => `**${i + 1}. ${ins.title}**\n${ins.description}`).join('\n\n') : 'No specific insights match your query.'}\n\n${topLead ? `**Quick Stat:** Your top lead is **${topLead.name}** (${topLead.company}) with a score of ${topLead.score}.` : ''}\n\nTry these ${modeLabel} commands:\n${modeChips.slice(0, 4).map(c => `• "${c.label}"`).join('\n')}`;
+    };
+
+    // ─── Deep Analysis (dedicated Gemini call) ───
+    if (lowerPrompt.includes('deep analysis') || lowerPrompt.includes('deep ai') || lowerPrompt.includes('gemini')) {
       setMessages(prev => [...prev, {
         id: `system-${Date.now()}`,
         role: 'system',
@@ -599,7 +590,7 @@ Would you like me to prepare outreach content for your top priorities?`;
       }]);
 
       try {
-        const result = await generateDashboardInsights(leads);
+        const result = await generateDashboardInsights(leads, user.businessProfile);
         setMessages(prev => [...prev, {
           id: `ai-deep-${Date.now()}`,
           role: 'ai',
@@ -609,10 +600,8 @@ Would you like me to prepare outreach content for your top priorities?`;
           type: 'insight',
         }]);
       } catch {
-        // Fallback to programmatic insights
         const insights = generateProgrammaticInsights(leads);
         const fallbackText = `**🧠 AI Analysis (Local Engine)**\n\n*Gemini API unavailable — using programmatic analysis:*\n\n${insights.map((ins, i) => `**${i + 1}. ${ins.title}**\n${ins.description}${ins.action ? `\n→ Action: ${ins.action}` : ''}`).join('\n\n')}\n\n*Tip: Configure your Gemini API key for deeper natural-language insights.*`;
-
         setMessages(prev => [...prev, {
           id: `ai-fallback-${Date.now()}`,
           role: 'ai',
@@ -622,251 +611,54 @@ Would you like me to prepare outreach content for your top priorities?`;
           type: 'insight',
         }]);
       }
+      setThinking(false);
+      setResponseCount(prev => prev + 1);
+      return;
     }
 
-    // ── Creative mode: email/linkedin/sequence/objection/meeting prompts ──
-    else if (aiMode === 'creative' && (lowerPrompt.includes('email') || lowerPrompt.includes('outreach') || lowerPrompt.includes('template'))) {
-      const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
-      const templates = topLeads.map((l, i) =>
-        `**${i + 1}. Email for ${l.name} (${l.company}) — Score ${l.score}**\n\nSubject: Quick question about ${l.company}'s growth\n\nHi ${l.name.split(' ')[0]},\n\nI noticed ${l.company} is ${l.score > 80 ? 'scaling rapidly' : 'making great strides'} in your space. I work with similar companies to help them ${l.score > 70 ? 'accelerate pipeline and close deals faster' : 'build a more predictable revenue engine'}.\n\nWould you be open to a quick 15-min chat this week?\n\nBest,\n[Your Name]`
+    // ─── All other prompts: Gemini first, template fallback ───
+    try {
+      const history = getConversationHistory();
+      const aiResult = await generateCommandCenterResponse(
+        prompt,
+        aiMode,
+        leads,
+        history,
+        user.businessProfile
       );
 
-      const responseText = topLeads.length > 0
-        ? `**✉️ Cold Outreach Templates**\n\nHere are personalized emails for your top leads:\n\n${templates.join('\n\n---\n\n')}`
-        : `**✉️ Email Templates**\n\nNo high-scoring leads found to personalize. Here's a generic template:\n\n**Subject:** Quick question about [Company]\n\nHi [First Name],\n\nI help companies like yours [value prop]. Would you be open to a quick 15-min chat?\n\nBest,\n[Your Name]`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 88,
-        type: 'insight',
-      }]);
+      if (aiResult.text) {
+        // Gemini succeeded — use AI response
+        setMessages(prev => [...prev, {
+          id: `ai-${Date.now()}`,
+          role: 'ai',
+          content: frameModeResponse(aiResult.text),
+          timestamp: new Date(),
+          confidence: 90,
+          type: 'insight',
+        }]);
+        setThinking(false);
+        setResponseCount(prev => prev + 1);
+        return;
+      }
+    } catch {
+      // Gemini failed — fall through to template
     }
 
-    else if (aiMode === 'creative' && (lowerPrompt.includes('linkedin') || lowerPrompt.includes('connection'))) {
-      const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
-      const msgs = topLeads.map((l, i) =>
-        `**${i + 1}. LinkedIn for ${l.name} (${l.company})**\n\nHi ${l.name.split(' ')[0]}, I came across your work at ${l.company} — really impressive what you're building. I work with ${l.score > 80 ? 'high-growth' : 'ambitious'} teams in the ${l.company} space and thought it'd be great to connect. No pitch, just genuine interest in swapping notes. Cheers!`
-      );
-
-      const responseText = `**💼 LinkedIn Connection Messages**\n\n${msgs.length > 0 ? msgs.join('\n\n---\n\n') : 'Add some leads first so I can personalize messages for you.'}`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 86,
-        type: 'insight',
-      }]);
-    }
-
-    else if (aiMode === 'creative' && (lowerPrompt.includes('sequence') || lowerPrompt.includes('follow'))) {
-      const responseText = `**📧 3-Step Follow-up Sequence**
-
-**Email 1 — Day 0 (Initial Touch)**
-Subject: Quick thought about [Company]
-Body: Short, value-first message. Reference something specific about their company. End with a soft CTA (reply, not a meeting link).
-
-**Email 2 — Day 3 (Value Add)**
-Subject: Re: Quick thought about [Company]
-Body: Share a relevant case study, stat, or resource. Position it as "saw this and thought of you." No hard ask.
-
-**Email 3 — Day 7 (Breakup)**
-Subject: Should I close the loop?
-Body: Acknowledge they're busy. Offer to reconnect later or be removed. Creates urgency without being pushy.
-
-**Timing:** Send Email 1 on Tuesday 10am, Email 2 on Friday 1pm, Email 3 on following Tuesday 10am.`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 90,
-        type: 'insight',
-      }]);
-    }
-
-    else if (aiMode === 'creative' && (lowerPrompt.includes('objection') || lowerPrompt.includes('response'))) {
-      const responseText = `**🛡️ Objection Handling Playbook**
-
-**"We're not interested right now"**
-→ "Totally understand. Out of curiosity, is that because timing is off, or because [product type] isn't a priority? Happy to reconnect when it makes sense."
-
-**"We already use [competitor]"**
-→ "Great choice! Many of our best clients switched from [competitor] because of [differentiator]. Would it be helpful to see a quick side-by-side?"
-
-**"Send me more info"**
-→ "Of course! To make sure I send the most relevant stuff — what's your biggest challenge with [topic] right now?" (Re-engages instead of dead-end)
-
-**"It's too expensive"**
-→ "I hear you. Our clients typically see [ROI metric] within [timeframe]. Would it help to see a quick ROI breakdown based on your numbers?"
-
-**"I need to talk to my team"**
-→ "Absolutely — would it help if I put together a one-pager your team can review? I can also join a quick call to answer questions."`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 92,
-        type: 'insight',
-      }]);
-    }
-
-    else if (aiMode === 'coach' && (lowerPrompt.includes('coach') || lowerPrompt.includes('review') || lowerPrompt.includes('doing right') || lowerPrompt.includes('doing wrong'))) {
-      const hotPct = stats.total > 0 ? Math.round((stats.hot / stats.total) * 100) : 0;
-      const goods: string[] = [];
-      const improvements: string[] = [];
-      if (hotPct > 20) goods.push(`Your hot lead percentage (${hotPct}%) is above average — good lead quality`);
-      if (stats.qualified > 0) goods.push(`You have ${stats.qualified} qualified leads in the pipeline — active qualification is happening`);
-      if (stats.avgScore > 55) goods.push(`Average score of ${stats.avgScore} shows a healthy pipeline`);
-      if (goods.length === 0) goods.push('You have leads in your pipeline — that\'s the first step!');
-      if (stats.newCount > 3) improvements.push(`${stats.newCount} leads are untouched — contact within 48hrs for best conversion`);
-      if (stats.avgScore < 50) improvements.push(`Average score of ${stats.avgScore} is below target. Enrich lead data or tighten your ICP`);
-      if (hotPct < 15) improvements.push(`Only ${hotPct}% hot leads — focus on nurturing warm leads with targeted content`);
-      if (improvements.length === 0) improvements.push('Keep up the momentum and track your conversion rates weekly');
-
-      const responseText = `**📋 Pipeline Review**\n\n**What you're doing well:**\n${goods.map(g => `✅ ${g}`).join('\n')}\n\n**Where to improve:**\n${improvements.map(im => `⚠️ ${im}`).join('\n')}\n\n**Overall Grade: ${stats.avgScore > 65 ? 'A' : stats.avgScore > 50 ? 'B' : stats.avgScore > 35 ? 'C' : 'D'}** — ${stats.avgScore > 65 ? 'Excellent work. Stay consistent.' : stats.avgScore > 50 ? 'Good foundation. Small tweaks will make a big difference.' : 'Room for growth. Focus on the basics — contact speed and lead quality.'}`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 91,
-        type: 'insight',
-      }]);
-    }
-
-    else if (aiMode === 'coach' && (lowerPrompt.includes('mistake') || lowerPrompt.includes('avoid'))) {
-      const responseText = `**🚫 Top B2B Pipeline Mistakes to Avoid**
-
-**1. Slow Response Time**
-Leads contacted within 5 minutes are 21x more likely to convert. Every hour you wait, odds drop sharply.
-
-**2. No Follow-up System**
-80% of sales require 5+ touchpoints. Most reps stop after 2. Build a consistent follow-up sequence.
-
-**3. Treating All Leads the Same**
-A hot lead (80+) needs a different approach than a cold one (25). Segment and personalize.
-
-**4. Ignoring Lead Scoring**
-Your AI scores are there for a reason. Trust the data and prioritize accordingly.
-
-**5. Not Qualifying Early**
-Spending time on leads that will never convert wastes your best resource — time. Qualify or disqualify fast.
-
-**6. Skipping Discovery**
-Don't pitch before understanding their pain. Ask questions first, present solutions second.
-
-**7. No Pipeline Hygiene**
-Clean your pipeline monthly. Archive cold leads, update statuses, and keep your data fresh.`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 95,
-        type: 'insight',
-      }]);
-    }
-
-    else if (aiMode === 'strategist' && (lowerPrompt.includes('prioritize') || lowerPrompt.includes('focus'))) {
-      const tiers = [
-        { label: 'Tier 1 — Act Now', leads: leads.filter(l => l.score > 80 && l.status !== 'Qualified'), action: 'Call or send personalized demo invite today' },
-        { label: 'Tier 2 — Nurture This Week', leads: leads.filter(l => l.score > 55 && l.score <= 80), action: 'Send case study or value-add content' },
-        { label: 'Tier 3 — Re-engage Next Week', leads: leads.filter(l => l.score > 30 && l.score <= 55), action: 'Add to email nurture sequence' },
-        { label: 'Tier 4 — Low Priority', leads: leads.filter(l => l.score <= 30), action: 'Batch outreach or archive if stale' },
-      ];
-
-      const responseText = `**🎯 Lead Prioritization Matrix**\n\n${tiers.map(t =>
-        `**${t.label}** (${t.leads.length} leads)\n${t.leads.slice(0, 3).map(l => `  • ${l.name} (${l.company}) — ${l.score}`).join('\n') || '  No leads in this tier'}\n  → **Action:** ${t.action}`
-      ).join('\n\n')}\n\n**Rule of thumb:** Spend 60% of your time on Tier 1, 25% on Tier 2, 10% on Tier 3, and batch Tier 4.`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 93,
-        type: 'insight',
-      }]);
-    }
-
-    else if (aiMode === 'strategist' && (lowerPrompt.includes('game plan') || lowerPrompt.includes('day-by-day') || lowerPrompt.includes('action plan'))) {
-      const hot = leads.filter(l => l.score > 80).slice(0, 3);
-      const warm = leads.filter(l => l.score > 55 && l.score <= 80).slice(0, 3);
-      const newLeads = leads.filter(l => l.status === 'New').slice(0, 2);
-
-      const responseText = `**📅 Weekly Action Plan**
-
-**Monday — Pipeline Review**
-- Review this week's priorities using AI Command Center
-- Update stale lead statuses
-- Block 2 hours for outreach
-
-**Tuesday — High-Priority Outreach**
-${hot.map(l => `- Call/email ${l.name} (${l.company}, score ${l.score})`).join('\n') || '- No hot leads — focus on warm leads'}
-- Follow up on any pending demos
-
-**Wednesday — Content & Nurture**
-${warm.map(l => `- Send case study to ${l.name} (${l.company})`).join('\n') || '- Prepare content for next batch'}
-- Schedule LinkedIn engagement for top prospects
-
-**Thursday — New Lead Response**
-${newLeads.map(l => `- First touch: ${l.name} (${l.company}, score ${l.score})`).join('\n') || '- All new leads contacted — follow up instead'}
-- Research 3 new target accounts
-
-**Friday — Review & Prep**
-- Update pipeline statuses
-- Run "Weekly Summary" in AI Command Center
-- Prep next week's priority list`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 89,
-        type: 'insight',
-      }]);
-    }
-
-    else {
-      // Generic AI response — mode-aware
-      const insights = generateProgrammaticInsights(leads);
-      const topLead = leads[0];
-      const modeLabel = AI_MODES.find(m => m.key === aiMode)?.label || 'AI';
-      const modeChips = MODE_CHIPS[aiMode];
-
-      const responseText = `I analyzed your request as your **${modeLabel}**. Here's what I found:
-
-${insights.length > 0 ? insights.slice(0, 2).map((ins, i) => `**${i + 1}. ${ins.title}**\n${ins.description}`).join('\n\n') : 'No specific insights match your query.'}
-
-${topLead ? `\n**Quick Stat:** Your top lead is **${topLead.name}** (${topLead.company}) with a score of ${topLead.score}.` : ''}
-
-Try these ${modeLabel} commands:
-${modeChips.slice(0, 4).map(c => `• "${c.label}"`).join('\n')}`;
-
-      setMessages(prev => [...prev, {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: frameModeResponse(responseText),
-        timestamp: new Date(),
-        confidence: 75,
-        type: 'text',
-      }]);
-    }
+    // ─── Fallback to template responses ───
+    const templateText = generateTemplateResponse();
+    setMessages(prev => [...prev, {
+      id: `ai-${Date.now()}`,
+      role: 'ai',
+      content: frameModeResponse(templateText || 'I couldn\'t generate a response. Please try again or use one of the quick commands above.'),
+      timestamp: new Date(),
+      confidence: templateText ? 85 : 60,
+      type: templateText ? 'insight' : 'text',
+    }]);
 
     setThinking(false);
     setResponseCount(prev => prev + 1);
-  }, [leads, stats, aiMode, frameModeResponse]);
+  }, [leads, stats, aiMode, frameModeResponse, getConversationHistory, user.businessProfile]);
 
   // ─── Handlers ───
   const handleSend = () => {
@@ -1319,7 +1111,7 @@ ${modeChips.slice(0, 4).map(c => `• "${c.label}"`).join('\n')}`;
                       <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white">
                         <SparklesIcon className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-[10px] text-slate-400">AuraAI is thinking...</span>
+                      <span className="text-[10px] text-slate-400">{THINKING_LABELS[aiMode]}</span>
                     </div>
                     <div className="bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
                       <div className="flex items-center space-x-2">
@@ -1328,7 +1120,7 @@ ${modeChips.slice(0, 4).map(c => `• "${c.label}"`).join('\n')}`;
                           <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                           <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                         </div>
-                        <span className="text-xs text-slate-400">Analyzing your pipeline...</span>
+                        <span className="text-xs text-slate-400">{THINKING_LABELS[aiMode]}</span>
                       </div>
                     </div>
                   </div>

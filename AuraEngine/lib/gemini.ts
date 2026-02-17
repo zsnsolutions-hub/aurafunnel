@@ -707,6 +707,130 @@ Guidelines:
   }
 };
 
+// === AI Command Center — General-Purpose Gemini Response ===
+
+const MODE_SYSTEM_INSTRUCTIONS: Record<string, string> = {
+  analyst: 'You are a senior data analyst for a B2B sales pipeline. Cite specific lead names, scores, and percentages. Use markdown tables when comparing data. Be precise and data-driven.',
+  strategist: 'You are a sales strategist for a B2B pipeline. Create actionable plans and reference leads by name. Always end with a clear next step the user can take immediately.',
+  coach: 'You are a sales coach reviewing a B2B pipeline. Give honest, constructive feedback. Identify strengths and weaknesses from the actual data. Be encouraging but direct.',
+  creative: 'You are a content specialist for B2B sales outreach. Write personalized content referencing specific lead details (name, company, insights). Never produce generic templates — every piece must be tailored to the data provided.',
+};
+
+export const generateCommandCenterResponse = async (
+  userPrompt: string,
+  mode: 'analyst' | 'strategist' | 'coach' | 'creative',
+  leads: Lead[],
+  conversationHistory: { role: 'user' | 'ai'; content: string }[],
+  businessProfile?: BusinessProfile
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  // Build lead context from top 15 leads
+  const topLeads = leads.slice(0, 15);
+  const leadContext = topLeads.map(l => {
+    const parts = [`- ${l.name} (${l.company}) — Score: ${l.score}, Status: ${l.status}`];
+    if (l.insights) parts.push(`  Insights: ${l.insights}`);
+    if (l.knowledgeBase) {
+      const urls = Object.entries(l.knowledgeBase)
+        .filter(([k, v]) => v && k !== 'extraNotes')
+        .map(([k, v]) => `${k}: ${v}`);
+      if (urls.length > 0) parts.push(`  Links: ${urls.join(', ')}`);
+      if (l.knowledgeBase.extraNotes) parts.push(`  Notes: ${l.knowledgeBase.extraNotes}`);
+    }
+    return parts.join('\n');
+  }).join('\n');
+
+  // Pipeline stats
+  const statusBreakdown: Record<string, number> = {};
+  leads.forEach(l => { statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1; });
+  const avgScore = leads.length > 0
+    ? Math.round(leads.reduce((a, b) => a + b.score, 0) / leads.length)
+    : 0;
+  const hotCount = leads.filter(l => l.score > 80).length;
+
+  const pipelineStats = `PIPELINE STATS:
+- Total Leads: ${leads.length}
+- Average Score: ${avgScore}/100
+- Hot Leads (80+): ${hotCount}
+- Status Breakdown: ${Object.entries(statusBreakdown).map(([k, v]) => `${k}: ${v}`).join(', ')}`;
+
+  const contextBlock = `${pipelineStats}
+
+TOP LEADS:
+${leadContext || 'No leads in pipeline.'}
+${buildBusinessContext(businessProfile)}`;
+
+  // Build multi-turn contents from conversation history (last 10)
+  const historySlice = conversationHistory.slice(-10);
+  const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
+
+  // First message includes full context
+  if (historySlice.length > 0) {
+    for (const msg of historySlice.slice(0, -1)) {
+      contents.push({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.content }],
+      });
+    }
+  }
+
+  // Current user prompt with context
+  contents.push({
+    role: 'user',
+    parts: [{ text: `${contextBlock}\n\nUSER REQUEST:\n${userPrompt}` }],
+  });
+
+  const systemInstruction = MODE_SYSTEM_INSTRUCTIONS[mode] || MODE_SYSTEM_INSTRUCTIONS.analyst;
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents,
+        config: {
+          systemInstruction,
+          temperature: mode === 'creative' ? 0.85 : 0.7,
+          topP: 0.9,
+          topK: 40,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error('Empty response from Command Center.');
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: `command_center_${mode}`,
+        prompt_version: 1,
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Command Center Gemini attempt ${attempt} failed:`, errMsg);
+      if (attempt === MAX_RETRIES) {
+        // Return empty text to signal caller to use fallback
+        return {
+          text: '',
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: `command_center_${mode}`,
+          prompt_version: 1,
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: `command_center_${mode}`, prompt_version: 1 };
+};
+
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
   const steps: EmailStep[] = [];
   const emailBlocks = rawText.split('===EMAIL_START===').filter(b => b.trim());
