@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useLocation, useOutletContext } from 'react-router-dom';
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Lead, ContentCategory, ToneType, EmailStep, User, EmailSequenceConfig } from '../../types';
 import { generateContentByCategory, generateEmailSequence, parseEmailSequenceResponse, AIResponse } from '../../lib/gemini';
 import {
@@ -8,11 +8,11 @@ import {
   ArrowRightIcon, ArrowLeftIcon, CalendarIcon, SendIcon, SplitIcon, ChartIcon,
   TrendUpIcon, TrendDownIcon, TargetIcon, FlameIcon, RefreshIcon,
   KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon,
-  AlertTriangleIcon
+  AlertTriangleIcon, ChevronDownIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance } from '../../lib/emailTracking';
-import type { EmailPerformanceEntry } from '../../lib/emailTracking';
+import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance, fetchCampaignHistory, fetchCampaignRecipients, fetchConnectedEmailProvider } from '../../lib/emailTracking';
+import type { EmailPerformanceEntry, CampaignSummary, CampaignRecipient, ConnectedEmailProvider } from '../../lib/emailTracking';
 import { generateEmailSequencePdf } from '../../lib/pdfExport';
 
 // ═══════════════════════════════════════════════
@@ -319,6 +319,7 @@ function extractDelayDays(title: string, fallbackIndex: number): number {
 // ═══════════════════════════════════════════════
 const ContentGen: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const navigate = useNavigate();
   const query = new URLSearchParams(useLocation().search);
   const initialLeadId = query.get('leadId');
 
@@ -361,6 +362,16 @@ const ContentGen: React.FC = () => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [contentHistory, setContentHistory] = useState<{ id: string; timestamp: Date; blocks: ContentBlock[]; label: string }[]>([]);
   const [showWritingAssistant, setShowWritingAssistant] = useState(true);
+  const [excludedLeadIds, setExcludedLeadIds] = useState<Set<string>>(new Set());
+  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
+  const [showCampaignHistory, setShowCampaignHistory] = useState(false);
+  const [campaignHistory, setCampaignHistory] = useState<CampaignSummary[]>([]);
+  const [campaignHistoryLoading, setCampaignHistoryLoading] = useState(false);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [campaignRecipients, setCampaignRecipients] = useState<CampaignRecipient[]>([]);
+  const [campaignRecipientsLoading, setCampaignRecipientsLoading] = useState(false);
+  const [connectedProvider, setConnectedProvider] = useState<ConnectedEmailProvider | null>(null);
+  const [providerLoading, setProviderLoading] = useState(false);
 
   const generationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -419,6 +430,51 @@ const ContentGen: React.FC = () => {
     return () => { cancelled = true; };
   }, [showPerformance]);
 
+  // ── Load campaign history when panel opens ──
+  useEffect(() => {
+    if (!showCampaignHistory) return;
+    let cancelled = false;
+    const loadCampaigns = async () => {
+      setCampaignHistoryLoading(true);
+      const data = await fetchCampaignHistory();
+      if (cancelled) return;
+      setCampaignHistory(data);
+      setCampaignHistoryLoading(false);
+    };
+    loadCampaigns();
+    return () => { cancelled = true; };
+  }, [showCampaignHistory]);
+
+  // ── Load campaign recipients when a campaign is selected ──
+  useEffect(() => {
+    if (!selectedCampaignId) return;
+    let cancelled = false;
+    const loadRecipients = async () => {
+      setCampaignRecipientsLoading(true);
+      const data = await fetchCampaignRecipients(selectedCampaignId);
+      if (cancelled) return;
+      setCampaignRecipients(data);
+      setCampaignRecipientsLoading(false);
+    };
+    loadRecipients();
+    return () => { cancelled = true; };
+  }, [selectedCampaignId]);
+
+  // ── Load connected email provider on mount + when reaching step 5 ──
+  useEffect(() => {
+    if (wizardStep !== 5 && connectedProvider !== undefined) return;
+    let cancelled = false;
+    const loadProvider = async () => {
+      setProviderLoading(true);
+      const result = await fetchConnectedEmailProvider();
+      if (cancelled) return;
+      setConnectedProvider(result);
+      setProviderLoading(false);
+    };
+    loadProvider();
+    return () => { cancelled = true; };
+  }, [wizardStep]);
+
   // ── Derived ──
   const segments = useMemo(() => [
     { id: 'hot', name: 'Hot Leads', count: leads.filter(l => l.score > 80).length },
@@ -442,6 +498,10 @@ const ContentGen: React.FC = () => {
     });
     return leads.filter(l => ids.has(l.id));
   }, [leads, selectedSegments]);
+
+  const selectedLeads = useMemo(() =>
+    targetLeads.filter(l => !excludedLeadIds.has(l.id)),
+  [targetLeads, excludedLeadIds]);
 
   const activeBlock = blocks[activeBlockIdx] || null;
   const aiSuggestions = useMemo(() => deriveAISuggestions(activeBlock?.body || ''), [activeBlock?.body]);
@@ -589,6 +649,8 @@ const ContentGen: React.FC = () => {
   // ── Handlers ──
   const toggleSegment = (id: string) => {
     setSelectedSegments(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+    setExcludedLeadIds(new Set());
+    setExpandedLeadId(null);
   };
 
   const togglePersonalization = (id: string) => {
@@ -631,7 +693,7 @@ const ContentGen: React.FC = () => {
 
   // ── Generation with staged progress ──
   const runGeneration = async () => {
-    if (targetLeads.length === 0 && leads.length === 0) {
+    if (selectedLeads.length === 0 && leads.length === 0) {
       setError('No leads available. Add leads first.');
       return;
     }
@@ -662,7 +724,7 @@ const ContentGen: React.FC = () => {
     };
     generationRef.current = setTimeout(advanceStage, GENERATION_STAGES[0].duration);
 
-    const representative = targetLeads[0] || leads[0];
+    const representative = selectedLeads[0] || leads[0];
     const enabledTags = Object.entries(personalization).filter(([, v]) => v).map(([k]) => k);
     const goalLabel = GOAL_OPTIONS.find(g => g.id === goal)?.label || goal;
     const contextParts = [
@@ -670,7 +732,7 @@ const ContentGen: React.FC = () => {
       `Focus: ${focus}`,
       `Length: ${length}`,
       `Personalization: ${enabledTags.join(', ')}`,
-      `Target audience: ${selectedSegments.join(', ')} (${targetLeads.length} leads)`,
+      `Target audience: ${selectedSegments.join(', ')} (${selectedLeads.length} leads)`,
     ];
 
     try {
@@ -679,13 +741,13 @@ const ContentGen: React.FC = () => {
 
       if (contentType === ContentCategory.EMAIL_SEQUENCE) {
         const config: EmailSequenceConfig = {
-          audienceLeadIds: targetLeads.map(l => l.id),
+          audienceLeadIds: selectedLeads.map(l => l.id),
           goal: CONTENT_GOAL_TO_SEQ_GOAL[goal] || FOCUS_TO_GOAL[focus],
           sequenceLength: LENGTH_TO_COUNT[length],
           cadence: 'every_2_days',
           tone,
         };
-        const response = await generateEmailSequence(targetLeads.length > 0 ? targetLeads : leads.slice(0, 5), config, user.businessProfile);
+        const response = await generateEmailSequence(selectedLeads.length > 0 ? selectedLeads : leads.slice(0, 5), config, user.businessProfile);
         const parsed = parseEmailSequenceResponse(response.text, config);
 
         if (parsed.length > 0) {
@@ -734,7 +796,7 @@ const ContentGen: React.FC = () => {
       await supabase.from('audit_logs').insert({
         user_id: user.id,
         action: 'AI_CONTENT_GENERATED',
-        details: `Generated ${contentType} for ${targetLeads.length} leads. Goal: ${goalLabel}, Tone: ${tone}, Focus: ${focus}.`,
+        details: `Generated ${contentType} for ${selectedLeads.length} leads. Goal: ${goalLabel}, Tone: ${tone}, Focus: ${focus}.`,
       });
       if (refreshProfile) await refreshProfile();
 
@@ -788,8 +850,8 @@ const ContentGen: React.FC = () => {
   const handleDeliver = async () => {
     setDeliveryConfirmed(true);
 
-    if (contentType === ContentCategory.EMAIL_SEQUENCE && targetLeads.length > 0 && blocks.length > 0) {
-      const eligibleLeads = targetLeads
+    if (contentType === ContentCategory.EMAIL_SEQUENCE && selectedLeads.length > 0 && blocks.length > 0) {
+      const eligibleLeads = selectedLeads
         .filter(l => l.email)
         .map(l => ({ id: l.id, email: l.email, name: l.name }));
 
@@ -809,6 +871,25 @@ const ContentGen: React.FC = () => {
           );
           console.log(`Email delivery block 1: ${result.sent} sent, ${result.failed} failed`, result.errors);
 
+          // Record block 0 in scheduled_emails for campaign history tracking
+          const now = new Date().toISOString();
+          const trackingRows = eligibleLeads.map(lead => ({
+            owner_id: user.id,
+            lead_id: lead.id,
+            to_email: lead.email,
+            subject: firstBlock.subject
+              .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
+              .replace(/\{\{name\}\}/gi, lead.name),
+            html_body: htmlBody,
+            scheduled_at: now,
+            block_index: 0,
+            sequence_id: sequenceId,
+            status: 'sent',
+            sent_at: now,
+            from_email: connectedProvider?.from_email ?? null,
+          }));
+          await supabase.from('scheduled_emails').insert(trackingRows);
+
           // Schedule remaining blocks
           for (let i = 1; i < blocks.length; i++) {
             setDeliveryProgress({ current: i + 1, total: blocks.length });
@@ -825,6 +906,7 @@ const ContentGen: React.FC = () => {
               scheduledAt,
               blockIndex: i,
               sequenceId,
+              fromEmail: connectedProvider?.from_email,
             });
           }
           setDeliveryProgress(null);
@@ -846,6 +928,7 @@ const ContentGen: React.FC = () => {
               scheduledAt,
               blockIndex: i,
               sequenceId,
+              fromEmail: connectedProvider?.from_email,
             });
           }
           setDeliveryProgress(null);
@@ -858,7 +941,7 @@ const ContentGen: React.FC = () => {
     await supabase.from('audit_logs').insert({
       user_id: user.id,
       action: schedule.mode === 'now' ? 'CONTENT_SENT' : schedule.mode === 'scheduled' ? 'CONTENT_SCHEDULED' : 'CONTENT_DRAFT_SAVED',
-      details: `${contentType}: ${blocks.length} blocks. Mode: ${schedule.mode}. Recipients: ${targetLeads.length} leads.${schedule.mode === 'scheduled' ? ` Scheduled: ${schedule.date} ${schedule.time}` : ''}`,
+      details: `${contentType}: ${blocks.length} blocks. Mode: ${schedule.mode}. Recipients: ${selectedLeads.length} leads.${schedule.mode === 'scheduled' ? ` Scheduled: ${schedule.date} ${schedule.time}` : ''}`,
     });
     handleSave();
     setTimeout(() => setDeliveryConfirmed(false), 3000);
@@ -1031,7 +1114,7 @@ const ContentGen: React.FC = () => {
               <span className="text-slate-300">&rsaquo;</span>
               <span className="text-indigo-600 font-bold">{WIZARD_STEPS[wizardStep - 1].label}</span>
             </div>
-            <p className="text-[10px] text-slate-400">{targetLeads.length} leads targeted &middot; {(creditsTotal - creditsUsed).toLocaleString()} credits left</p>
+            <p className="text-[10px] text-slate-400">{selectedLeads.length} leads targeted &middot; {(creditsTotal - creditsUsed).toLocaleString()} credits left</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -1054,13 +1137,22 @@ const ContentGen: React.FC = () => {
             <span>Prompts</span>
           </button>
           <button
-            onClick={() => setShowPerformance(!showPerformance)}
+            onClick={() => { setShowPerformance(!showPerformance); if (!showPerformance) setShowCampaignHistory(false); }}
             className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center space-x-1.5 ${
               showPerformance ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200'
             }`}
           >
             <ChartIcon className="w-3.5 h-3.5" />
             <span>Performance</span>
+          </button>
+          <button
+            onClick={() => { setShowCampaignHistory(!showCampaignHistory); if (!showCampaignHistory) { setShowPerformance(false); setSelectedCampaignId(null); } }}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center space-x-1.5 ${
+              showCampaignHistory ? 'bg-violet-50 border-violet-200 text-violet-600' : 'bg-white border-slate-200 text-slate-500 hover:border-violet-200'
+            }`}
+          >
+            <SendIcon className="w-3.5 h-3.5" />
+            <span>Campaigns</span>
           </button>
           {blocks.length > 0 && (
             <div className="relative">
@@ -1397,7 +1489,124 @@ const ContentGen: React.FC = () => {
                         ))}
                       </div>
                       {targetLeads.length > 0 && (
-                        <p className="text-[10px] text-slate-400 mt-2">{targetLeads.length} leads in selected segments</p>
+                        <div className="mt-3 bg-slate-50 rounded-xl border border-slate-100 p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Recipients</p>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                                {selectedLeads.filter(l => l.email).length} / {selectedLeads.length} selected
+                              </span>
+                              <button
+                                onClick={() => {
+                                  if (excludedLeadIds.size === 0) {
+                                    setExcludedLeadIds(new Set(targetLeads.map(l => l.id)));
+                                  } else {
+                                    setExcludedLeadIds(new Set());
+                                  }
+                                }}
+                                className="text-[9px] font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
+                              >
+                                {excludedLeadIds.size === 0 ? 'Deselect all' : 'Select all'}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto space-y-0 divide-y divide-slate-100">
+                            {targetLeads.map(lead => {
+                              const isChecked = !excludedLeadIds.has(lead.id);
+                              const isExpanded = expandedLeadId === lead.id;
+                              return (
+                                <div key={lead.id} className="py-1.5 first:pt-0 last:pb-0">
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        setExcludedLeadIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(lead.id)) next.delete(lead.id);
+                                          else next.add(lead.id);
+                                          return next;
+                                        });
+                                      }}
+                                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0 cursor-pointer"
+                                    />
+                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[9px] font-black shrink-0 ${
+                                      lead.email && isChecked ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-400'
+                                    }`}>
+                                      {lead.name?.[0]?.toUpperCase() || '?'}
+                                    </div>
+                                    <button
+                                      onClick={() => setExpandedLeadId(isExpanded ? null : lead.id)}
+                                      className="min-w-0 flex-1 text-left"
+                                    >
+                                      <p className={`text-[11px] font-bold truncate ${isChecked ? 'text-slate-700' : 'text-slate-400 line-through'}`}>{lead.name}</p>
+                                      <p className="text-[9px] text-slate-400 truncate">
+                                        {lead.email || <span className="text-amber-500 italic">No email</span>}
+                                        {lead.company && <span className="text-slate-300"> &middot; {lead.company}</span>}
+                                      </p>
+                                    </button>
+                                    <button
+                                      onClick={() => setExpandedLeadId(isExpanded ? null : lead.id)}
+                                      className="shrink-0 p-0.5"
+                                    >
+                                      <ChevronDownIcon className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </button>
+                                  </div>
+                                  {isExpanded && (
+                                    <div className="ml-12 mt-1.5 mb-1 p-2.5 bg-white rounded-lg border border-slate-100 space-y-1.5">
+                                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                                        <div>
+                                          <p className="text-[8px] font-bold text-slate-400 uppercase">Score</p>
+                                          <p className="text-[11px] font-bold text-slate-700">{lead.score}/100</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-[8px] font-bold text-slate-400 uppercase">Status</p>
+                                          <p className="text-[11px] font-bold text-slate-700">{lead.status}</p>
+                                        </div>
+                                        {lead.source && (
+                                          <div>
+                                            <p className="text-[8px] font-bold text-slate-400 uppercase">Source</p>
+                                            <p className="text-[11px] font-bold text-slate-700">{lead.source}</p>
+                                          </div>
+                                        )}
+                                        {lead.lastActivity && (
+                                          <div>
+                                            <p className="text-[8px] font-bold text-slate-400 uppercase">Last Activity</p>
+                                            <p className="text-[11px] font-bold text-slate-700">{lead.lastActivity}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {lead.insights && (
+                                        <div>
+                                          <p className="text-[8px] font-bold text-slate-400 uppercase">Insights</p>
+                                          <p className="text-[10px] text-slate-600">{lead.insights}</p>
+                                        </div>
+                                      )}
+                                      {lead.knowledgeBase && (
+                                        <div>
+                                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Knowledge Base</p>
+                                          <div className="space-y-0.5">
+                                            {lead.knowledgeBase.website && <p className="text-[10px] text-indigo-600 truncate">{lead.knowledgeBase.website}</p>}
+                                            {lead.knowledgeBase.linkedin && <p className="text-[10px] text-indigo-600 truncate">{lead.knowledgeBase.linkedin}</p>}
+                                            {lead.knowledgeBase.extraNotes && <p className="text-[10px] text-slate-500">{lead.knowledgeBase.extraNotes}</p>}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {targetLeads.some(l => !l.email && !excludedLeadIds.has(l.id)) && (
+                            <div className="flex items-center space-x-1.5 mt-2 pt-2 border-t border-slate-100">
+                              <AlertTriangleIcon className="w-3 h-3 text-amber-500 shrink-0" />
+                              <p className="text-[9px] text-amber-600 font-medium">
+                                {selectedLeads.filter(l => !l.email).length} lead{selectedLeads.filter(l => !l.email).length > 1 ? 's' : ''} without email will be skipped
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
 
@@ -1426,10 +1635,29 @@ const ContentGen: React.FC = () => {
                       )}
                     </div>
 
+                    {/* No leads warning */}
+                    {leads.length > 0 && selectedLeads.length === 0 && (
+                      <div className="flex items-center space-x-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                        <AlertTriangleIcon className="w-4 h-4 text-amber-500 shrink-0" />
+                        <p className="text-xs font-bold text-amber-700">No leads selected. Select at least one segment or lead to continue.</p>
+                      </div>
+                    )}
+                    {leads.length === 0 && !loadingLeads && (
+                      <div className="flex items-center space-x-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                        <AlertTriangleIcon className="w-4 h-4 text-amber-500 shrink-0" />
+                        <p className="text-xs font-bold text-amber-700">No leads available. Add leads first.</p>
+                      </div>
+                    )}
+
                     {/* Next Button */}
                     <button
                       onClick={() => setWizardStep(2)}
-                      className="w-full py-3 rounded-xl font-bold text-xs bg-slate-900 text-white hover:bg-indigo-600 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-indigo-100/50 active:scale-95"
+                      disabled={selectedLeads.length === 0}
+                      className={`w-full py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center space-x-2 active:scale-95 ${
+                        selectedLeads.length === 0
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg shadow-indigo-100/50'
+                      }`}
                     >
                       <span>Next: Set Parameters</span>
                       <ArrowRightIcon className="w-4 h-4" />
@@ -1441,9 +1669,18 @@ const ContentGen: React.FC = () => {
                 {wizardStep === 2 && (
                   <>
                     {/* Header */}
-                    <div className="flex items-center space-x-2 pb-2 border-b border-slate-100 mb-1">
-                      <SparklesIcon className="w-4 h-4 text-indigo-600" />
-                      <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">AI Content Settings</p>
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-1">
+                      <div className="flex items-center space-x-2">
+                        <SparklesIcon className="w-4 h-4 text-indigo-600" />
+                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">AI Content Settings</p>
+                      </div>
+                      <button
+                        onClick={() => setWizardStep(1)}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 transition-all"
+                      >
+                        <ArrowLeftIcon className="w-3 h-3" />
+                        <span>Back</span>
+                      </button>
                     </div>
 
                     {/* GOAL */}
@@ -1564,72 +1801,11 @@ const ContentGen: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Summary Card */}
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Generation Summary</p>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Type</span>
-                          <span className="font-bold text-slate-700">{typeInfo?.label}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Audience</span>
-                          <span className="font-bold text-slate-700">{targetLeads.length} leads</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Goal</span>
-                          <span className="font-bold text-slate-700">{GOAL_OPTIONS.find(g => g.id === goal)?.label || goal}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Tone</span>
-                          <span className="font-bold text-slate-700">{TONE_OPTIONS.find(t => t.id === tone)?.label || tone}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Length</span>
-                          <span className="font-bold text-slate-700">{length} ({LENGTH_DETAILS[length].emails})</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Focus</span>
-                          <span className="font-bold text-slate-700">{focus}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Personalization</span>
-                          <span className="font-bold text-indigo-600">{Object.values(personalization).filter(Boolean).length}/{PERSONALIZATION_OPTIONS.length} active</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-200 mt-1.5">
-                          <span className="text-slate-500">Credits Cost</span>
-                          <span className="font-bold text-indigo-600">1 credit</span>
-                        </div>
-                      </div>
-                    </div>
-
                     {error && (
                       <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 font-bold text-center">
                         {error}
                       </div>
                     )}
-
-                    <div className="flex space-x-3">
-                      <button
-                        onClick={() => setWizardStep(1)}
-                        className="px-4 py-3 rounded-xl text-xs font-bold border border-slate-200 text-slate-500 hover:text-slate-700 transition-all"
-                      >
-                        <ArrowLeftIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={runGeneration}
-                        disabled={isGenerating || creditsUsed >= creditsTotal}
-                        className={`flex-grow py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center space-x-2 ${
-                          isGenerating || creditsUsed >= creditsTotal
-                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg shadow-indigo-100/50 active:scale-95'
-                        }`}
-                      >
-                        <SparklesIcon className="w-4 h-4" />
-                        <span>Generate with AI</span>
-                        <ArrowRightIcon className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
                   </>
                 )}
               </div>
@@ -2113,7 +2289,7 @@ const ContentGen: React.FC = () => {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-slate-400">Target audience</span>
-                          <span className="text-xs font-bold text-white">{targetLeads.length} leads</span>
+                          <span className="text-xs font-bold text-white">{selectedLeads.length} leads</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-slate-400">Personalization tokens</span>
@@ -2126,7 +2302,7 @@ const ContentGen: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Generate CTA (duplicate for visibility) */}
+                    {/* Generate CTA */}
                     <button
                       onClick={runGeneration}
                       disabled={isGenerating || creditsUsed >= creditsTotal}
@@ -2263,6 +2439,32 @@ const ContentGen: React.FC = () => {
               </div>
             </div>
 
+            {/* Email Integration Warning */}
+            {schedule.mode !== 'draft' && providerLoading && (
+              <div className="flex items-center space-x-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                <div className="w-4 h-4 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin"></div>
+                <span className="text-xs text-slate-500">Checking email integration...</span>
+              </div>
+            )}
+            {schedule.mode !== 'draft' && !providerLoading && connectedProvider === null && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                <div className="flex items-start space-x-3">
+                  <AlertTriangleIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-800">No email integration connected</p>
+                    <p className="text-xs text-amber-600 mt-1">Connect an email provider (SendGrid, Gmail, SMTP, or Mailchimp) to send emails.</p>
+                    <button
+                      onClick={() => navigate('/portal/integrations')}
+                      className="mt-2 inline-flex items-center space-x-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-lg transition-colors"
+                    >
+                      <BoltIcon className="w-3.5 h-3.5" />
+                      <span>Go to Integration Hub</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Delivery Progress */}
             {deliveryProgress && (
               <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
@@ -2291,11 +2493,11 @@ const ContentGen: React.FC = () => {
               </button>
               <button
                 onClick={handleDeliver}
-                disabled={deliveryConfirmed || deliveryProgress !== null}
+                disabled={deliveryConfirmed || deliveryProgress !== null || (schedule.mode !== 'draft' && connectedProvider === null)}
                 className={`flex items-center space-x-2 px-8 py-3 rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 ${
                   deliveryConfirmed
                     ? 'bg-emerald-500 text-white shadow-emerald-200'
-                    : deliveryProgress
+                    : (deliveryProgress || (schedule.mode !== 'draft' && connectedProvider === null))
                     ? 'bg-slate-400 text-white cursor-not-allowed'
                     : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-200'
                 }`}
@@ -2324,7 +2526,7 @@ const ContentGen: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between py-2 border-b border-slate-50">
                   <span className="text-xs text-slate-500">Recipients</span>
-                  <span className="text-xs font-bold text-slate-700">{targetLeads.length} leads</span>
+                  <span className="text-xs font-bold text-slate-700">{selectedLeads.length} leads</span>
                 </div>
                 <div className="flex items-center justify-between py-2 border-b border-slate-50">
                   <span className="text-xs text-slate-500">A/B Test</span>
@@ -2336,20 +2538,26 @@ const ContentGen: React.FC = () => {
                   <span className="text-xs text-slate-500">Method</span>
                   <span className="text-xs font-bold text-indigo-600 capitalize">{schedule.mode === 'now' ? 'Immediate' : schedule.mode}</span>
                 </div>
+                {connectedProvider && (
+                  <div className="flex items-center justify-between py-2 border-t border-slate-50">
+                    <span className="text-xs text-slate-500">Sending from</span>
+                    <span className="text-xs font-bold text-slate-700 truncate ml-2">{connectedProvider.from_email} <span className="text-slate-400 font-medium">via {connectedProvider.provider}</span></span>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Recipients List */}
-            {targetLeads.length > 0 && (
+            {selectedLeads.length > 0 && (
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recipients</p>
                   <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                    {targetLeads.filter(l => l.email).length} / {targetLeads.length} with email
+                    {selectedLeads.filter(l => l.email).length} / {selectedLeads.length} with email
                   </span>
                 </div>
                 <div className="max-h-64 overflow-y-auto space-y-0 divide-y divide-slate-50 -mx-2">
-                  {targetLeads.map(lead => (
+                  {selectedLeads.map(lead => (
                     <div key={lead.id} className="flex items-center space-x-3 px-2 py-2.5 hover:bg-slate-50/50 rounded-lg transition-colors">
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
                         lead.email ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
@@ -2367,11 +2575,11 @@ const ContentGen: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                {targetLeads.some(l => !l.email) && (
+                {selectedLeads.some(l => !l.email) && (
                   <div className="flex items-center space-x-2 mt-3 p-2.5 bg-amber-50 rounded-xl">
                     <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                     <p className="text-[10px] text-amber-700 font-medium">
-                      {targetLeads.filter(l => !l.email).length} lead{targetLeads.filter(l => !l.email).length > 1 ? 's' : ''} without email will be skipped
+                      {selectedLeads.filter(l => !l.email).length} lead{selectedLeads.filter(l => !l.email).length > 1 ? 's' : ''} without email will be skipped
                     </p>
                   </div>
                 )}
@@ -2386,7 +2594,7 @@ const ContentGen: React.FC = () => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-indigo-200">Expected Opens</span>
-                      <span className="text-sm font-black">{Math.round(targetLeads.length * predictions.openRate / 100)}</span>
+                      <span className="text-sm font-black">{Math.round(selectedLeads.length * predictions.openRate / 100)}</span>
                     </div>
                     <div className="w-full bg-indigo-800/50 h-1.5 rounded-full overflow-hidden">
                       <div className="bg-white/80 h-full rounded-full" style={{ width: `${predictions.openRate}%` }} />
@@ -2395,7 +2603,7 @@ const ContentGen: React.FC = () => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-indigo-200">Expected Clicks</span>
-                      <span className="text-sm font-black">{Math.round(targetLeads.length * predictions.clickRate / 100)}</span>
+                      <span className="text-sm font-black">{Math.round(selectedLeads.length * predictions.clickRate / 100)}</span>
                     </div>
                     <div className="w-full bg-indigo-800/50 h-1.5 rounded-full overflow-hidden">
                       <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${predictions.clickRate * 5}%` }} />
@@ -2404,7 +2612,7 @@ const ContentGen: React.FC = () => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-indigo-200">Expected Responses</span>
-                      <span className="text-sm font-black">{Math.round(targetLeads.length * predictions.responseRate / 100)}</span>
+                      <span className="text-sm font-black">{Math.round(selectedLeads.length * predictions.responseRate / 100)}</span>
                     </div>
                     <div className="w-full bg-indigo-800/50 h-1.5 rounded-full overflow-hidden">
                       <div className="bg-amber-400 h-full rounded-full" style={{ width: `${predictions.responseRate * 8}%` }} />
@@ -2581,6 +2789,207 @@ const ContentGen: React.FC = () => {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ═══ CAMPAIGN HISTORY PANEL ═══ */}
+      {showCampaignHistory && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              {selectedCampaignId ? (
+                <>
+                  <button
+                    onClick={() => { setSelectedCampaignId(null); setCampaignRecipients([]); }}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <ArrowLeftIcon className="w-4 h-4" />
+                  </button>
+                  <SendIcon className="w-5 h-5 text-violet-600" />
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900 font-heading">
+                      {campaignHistory.find(c => c.sequence_id === selectedCampaignId)?.subject ?? 'Campaign Details'}
+                    </h2>
+                    {campaignHistory.find(c => c.sequence_id === selectedCampaignId)?.from_email && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Sent from: {campaignHistory.find(c => c.sequence_id === selectedCampaignId)!.from_email}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <SendIcon className="w-5 h-5 text-violet-600" />
+                  <h2 className="text-lg font-black text-slate-900 font-heading">Campaign History</h2>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => { setShowCampaignHistory(false); setSelectedCampaignId(null); }}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <XIcon className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Loading state */}
+          {(selectedCampaignId ? campaignRecipientsLoading : campaignHistoryLoading) && (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-3 border-violet-100 border-t-violet-600 rounded-full animate-spin"></div>
+              <span className="ml-3 text-sm text-slate-500">
+                {selectedCampaignId ? 'Loading recipients...' : 'Loading campaigns...'}
+              </span>
+            </div>
+          )}
+
+          {/* Campaign list view */}
+          {!selectedCampaignId && !campaignHistoryLoading && campaignHistory.length === 0 && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-12 text-center">
+              <SendIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-400">No campaigns sent yet</p>
+              <p className="text-xs text-slate-300 mt-1">Send your first email sequence to see campaign history here.</p>
+            </div>
+          )}
+
+          {!selectedCampaignId && !campaignHistoryLoading && campaignHistory.length > 0 && (
+            <div className="space-y-3">
+              {campaignHistory.map(campaign => {
+                const total = campaign.sent_count + campaign.pending_count + campaign.failed_count;
+                return (
+                  <button
+                    key={campaign.sequence_id}
+                    onClick={() => setSelectedCampaignId(campaign.sequence_id)}
+                    className="w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-violet-200 hover:shadow-md transition-all text-left"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{campaign.subject}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {new Date(campaign.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                        {campaign.from_email && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">Sent from: {campaign.from_email}</p>
+                        )}
+                      </div>
+                      <ArrowRightIcon className="w-4 h-4 text-slate-300 ml-3 flex-shrink-0 mt-1" />
+                    </div>
+                    <div className="flex items-center space-x-4 mt-3">
+                      <span className="text-[10px] font-bold text-slate-500">
+                        {campaign.recipient_count} recipient{campaign.recipient_count !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        {campaign.block_count} block{campaign.block_count !== 1 ? 's' : ''}
+                      </span>
+                      <div className="flex items-center space-x-2 ml-auto">
+                        {campaign.sent_count > 0 && (
+                          <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-50 text-emerald-600">
+                            {campaign.sent_count} sent
+                          </span>
+                        )}
+                        {campaign.pending_count > 0 && (
+                          <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-50 text-amber-600">
+                            {campaign.pending_count} pending
+                          </span>
+                        )}
+                        {campaign.failed_count > 0 && (
+                          <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 text-rose-600">
+                            {campaign.failed_count} failed
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Campaign detail / recipients view */}
+          {selectedCampaignId && !campaignRecipientsLoading && (() => {
+            const campaign = campaignHistory.find(c => c.sequence_id === selectedCampaignId);
+            const totalSent = campaignRecipients.reduce((a, r) => a + r.blocks.filter(b => b.status === 'sent').length, 0);
+            const totalPending = campaignRecipients.reduce((a, r) => a + r.blocks.filter(b => b.status === 'pending').length, 0);
+            const totalFailed = campaignRecipients.reduce((a, r) => a + r.blocks.filter(b => b.status === 'failed').length, 0);
+            return (
+              <>
+                {/* Summary stats */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Recipients', value: campaignRecipients.length.toString(), color: 'violet' },
+                    { label: 'Sent', value: totalSent.toString(), color: 'emerald' },
+                    { label: 'Pending', value: totalPending.toString(), color: 'amber' },
+                    { label: 'Failed', value: totalFailed.toString(), color: 'rose' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                      <p className="text-xl font-black text-slate-900">{s.value}</p>
+                      <p className={`text-[10px] font-bold text-${s.color}-500 uppercase`}>{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Recipients table */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recipients</p>
+                  </div>
+                  {campaignRecipients.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <p className="text-sm text-slate-400">No recipients found for this campaign.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-slate-100">
+                            <th className="px-6 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">Lead</th>
+                            <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">Company</th>
+                            <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">Email</th>
+                            <th className="px-4 py-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-wider">Delivery Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {campaignRecipients.map((recipient, i) => (
+                            <tr key={recipient.lead_id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
+                              <td className="px-6 py-3">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center text-violet-600 text-xs font-black flex-shrink-0">
+                                    {recipient.lead_name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-slate-800">{recipient.lead_name}</p>
+                                    <p className="text-[10px] text-slate-400">Score: {recipient.lead_score}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-slate-600">{recipient.lead_company || '—'}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{recipient.lead_email}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center justify-center space-x-1.5">
+                                  {recipient.blocks.map(block => (
+                                    <span
+                                      key={block.block_index}
+                                      title={`Block ${block.block_index + 1}: ${block.status}${block.sent_at ? ` (${new Date(block.sent_at).toLocaleDateString()})` : ''}`}
+                                      className={`w-3 h-3 rounded-full ${
+                                        block.status === 'sent' ? 'bg-emerald-400' :
+                                        block.status === 'pending' ? 'bg-amber-400' :
+                                        block.status === 'failed' ? 'bg-rose-400' :
+                                        'bg-slate-300'
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 

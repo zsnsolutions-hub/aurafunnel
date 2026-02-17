@@ -9,6 +9,34 @@ import type {
 
 const TRACKING_BASE_URL = import.meta.env.VITE_TRACKING_DOMAIN ?? '';
 
+// ── Check if user has a connected email provider ──
+export interface ConnectedEmailProvider {
+  provider: string;
+  from_email: string;
+  from_name?: string;
+}
+
+export async function fetchConnectedEmailProvider(): Promise<ConnectedEmailProvider | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('email_provider_configs')
+    .select('provider, from_email, from_name')
+    .eq('owner_id', user.id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data || !data.from_email) return null;
+
+  return {
+    provider: data.provider,
+    from_email: data.from_email,
+    from_name: data.from_name ?? undefined,
+  };
+}
+
 // ── Create email message record ──
 export async function createEmailMessage(params: {
   leadId: string;
@@ -313,6 +341,7 @@ export interface ScheduleEmailBlockParams {
   scheduledAt: Date;
   blockIndex: number;
   sequenceId: string;
+  fromEmail?: string;
 }
 
 export async function scheduleEmailBlock(
@@ -341,6 +370,7 @@ export async function scheduleEmailBlock(
       block_index: params.blockIndex,
       sequence_id: params.sequenceId,
       status: 'pending',
+      from_email: params.fromEmail ?? null,
     };
   });
 
@@ -473,6 +503,122 @@ export async function fetchOwnerEmailPerformance(): Promise<EmailPerformanceEntr
       clicks: stats.clicks,
     };
   });
+}
+
+// ── Fetch campaign history (grouped by sequence_id) ──
+export interface CampaignSummary {
+  sequence_id: string;
+  subject: string;
+  created_at: string;
+  recipient_count: number;
+  block_count: number;
+  sent_count: number;
+  pending_count: number;
+  failed_count: number;
+  from_email: string | null;
+}
+
+export async function fetchCampaignHistory(): Promise<CampaignSummary[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from('scheduled_emails')
+    .select('sequence_id, subject, status, block_index, lead_id, created_at, from_email')
+    .eq('owner_id', user.id)
+    .not('sequence_id', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (error || !data || data.length === 0) return [];
+
+  // Group by sequence_id
+  const groups = new Map<string, typeof data>();
+  for (const row of data) {
+    const key = row.sequence_id!;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(row);
+  }
+
+  const campaigns: CampaignSummary[] = [];
+  for (const [seqId, rows] of groups) {
+    const leads = new Set(rows.map(r => r.lead_id));
+    const blockIndices = new Set(rows.map(r => r.block_index));
+    campaigns.push({
+      sequence_id: seqId,
+      subject: rows[0].subject ?? '(no subject)',
+      created_at: rows[0].created_at,
+      recipient_count: leads.size,
+      block_count: blockIndices.size,
+      sent_count: rows.filter(r => r.status === 'sent').length,
+      pending_count: rows.filter(r => r.status === 'pending').length,
+      failed_count: rows.filter(r => r.status === 'failed').length,
+      from_email: rows[0].from_email ?? null,
+    });
+  }
+
+  return campaigns;
+}
+
+// ── Fetch recipients for a specific campaign ──
+export interface CampaignRecipient {
+  lead_id: string;
+  lead_name: string;
+  lead_company: string;
+  lead_email: string;
+  lead_score: number;
+  lead_status: string;
+  blocks: { block_index: number; status: string; sent_at: string | null }[];
+}
+
+export async function fetchCampaignRecipients(sequenceId: string): Promise<CampaignRecipient[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: rows, error } = await supabase
+    .from('scheduled_emails')
+    .select('lead_id, to_email, status, block_index, sent_at')
+    .eq('owner_id', user.id)
+    .eq('sequence_id', sequenceId)
+    .order('block_index', { ascending: true });
+
+  if (error || !rows || rows.length === 0) return [];
+
+  // Fetch lead details
+  const leadIds = [...new Set(rows.map(r => r.lead_id).filter(Boolean))];
+  const { data: leadsData } = await supabase
+    .from('leads')
+    .select('id, name, company, score, status')
+    .in('id', leadIds);
+
+  const leadMap = new Map((leadsData ?? []).map(l => [l.id, l]));
+
+  // Group by lead
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = row.lead_id ?? row.to_email;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(row);
+  }
+
+  const recipients: CampaignRecipient[] = [];
+  for (const [key, leadRows] of grouped) {
+    const lead = leadMap.get(key);
+    recipients.push({
+      lead_id: key,
+      lead_name: lead?.name ?? 'Unknown',
+      lead_company: lead?.company ?? '',
+      lead_email: leadRows[0].to_email,
+      lead_score: lead?.score ?? 0,
+      lead_status: lead?.status ?? 'Unknown',
+      blocks: leadRows.map(r => ({
+        block_index: r.block_index,
+        status: r.status,
+        sent_at: r.sent_at,
+      })),
+    });
+  }
+
+  return recipients;
 }
 
 // ── Helper: extract visible text from anchor tag ──
