@@ -410,3 +410,60 @@ export interface ApolloSearchParams {
   page?: number;
   per_page?: number;
 }
+
+// Module: Email Tracking
+export type EmailProvider = 'sendgrid' | 'mailchimp' | 'gmail' | 'smtp' | 'manual';
+export type EmailMessageStatus = 'sent' | 'delivered' | 'bounced' | 'failed';
+export type EmailEventType = 'open' | 'click' | 'delivered' | 'bounced' | 'unsubscribe' | 'spam_report';
+
+export interface EmailMessage {
+  id: string;
+  lead_id: string;
+  owner_id: string;
+  provider: EmailProvider;
+  provider_message_id?: string;
+  subject?: string;
+  to_email: string;
+  from_email?: string;
+  status: EmailMessageStatus;
+  track_opens: boolean;
+  track_clicks: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailLink {
+  id: string;
+  message_id: string;
+  destination_url: string;
+  link_label?: string;
+  link_index: number;
+  click_count: number;
+  created_at: string;
+}
+
+export interface EmailEvent {
+  id: string;
+  message_id: string;
+  link_id?: string;
+  event_type: EmailEventType;
+  ip_address?: string;
+  user_agent?: string;
+  is_bot: boolean;
+  is_apple_privacy: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface EmailEngagement {
+  totalSent: number;
+  totalOpens: number;
+  totalClicks: number;
+  uniqueOpens: number;
+  uniqueClicks: number;
+  totalBounced: number;
+  lastOpenedAt?: string;
+  lastClickedAt?: string;
+  topClickedLink?: { label: string; url: string; clicks: number };
+  recentEvents: EmailEvent[];
+}

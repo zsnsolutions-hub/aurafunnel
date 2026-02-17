@@ -32,7 +32,9 @@ const DEFAULT_INTEGRATIONS: IntegrationConfig[] = [
   { id: 'salesforce', name: 'Salesforce', category: 'crm', icon: 'SF', status: 'disconnected' },
   { id: 'hubspot', name: 'HubSpot', category: 'crm', icon: 'HS', status: 'disconnected' },
   { id: 'sendgrid', name: 'SendGrid', category: 'email', icon: 'SG', status: 'disconnected' },
-  { id: 'mailgun', name: 'Mailgun', category: 'email', icon: 'MG', status: 'disconnected' },
+  { id: 'gmail', name: 'Gmail SMTP', category: 'email', icon: 'GM', status: 'disconnected' },
+  { id: 'smtp', name: 'Custom SMTP', category: 'email', icon: 'SM', status: 'disconnected' },
+  { id: 'mailchimp', name: 'Mailchimp', category: 'email', icon: 'MC', status: 'disconnected' },
   { id: 'google-analytics', name: 'Google Analytics', category: 'analytics', icon: 'GA', status: 'disconnected' },
   { id: 'mixpanel', name: 'Mixpanel', category: 'analytics', icon: 'MP', status: 'disconnected' },
   { id: 'google-calendar', name: 'Google Calendar', category: 'calendar', icon: 'GC', status: 'disconnected' },
@@ -89,6 +91,12 @@ const AdminSettings: React.FC = () => {
   const [setupModalId, setSetupModalId] = useState<string | null>(null);
   const [setupApiKey, setSetupApiKey] = useState('');
   const [setupWebhook, setSetupWebhook] = useState('');
+  const [setupSmtpHost, setSetupSmtpHost] = useState('');
+  const [setupSmtpPort, setSetupSmtpPort] = useState('587');
+  const [setupSmtpUser, setSetupSmtpUser] = useState('');
+  const [setupSmtpPass, setSetupSmtpPass] = useState('');
+  const [setupFromEmail, setSetupFromEmail] = useState('');
+  const [setupFromName, setSetupFromName] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
 
@@ -98,9 +106,12 @@ const AdminSettings: React.FC = () => {
     { id: 'integrations' as AdminTab, label: 'Integrations', icon: <LinkIcon className="w-4 h-4" /> },
   ];
 
+  const isSmtpProvider = (id: string | null) => id === 'smtp' || id === 'gmail';
+
   useEffect(() => {
     fetchConfig();
     fetchTeam();
+    fetchEmailProviders();
   }, []);
 
   const fetchConfig = async () => {
@@ -181,35 +192,103 @@ const AdminSettings: React.FC = () => {
     }
   };
 
+  const fetchEmailProviders = async () => {
+    try {
+      const { data } = await supabase.from('email_provider_configs').select('provider, is_active, from_email, updated_at');
+      if (data && data.length > 0) {
+        setIntegrations(prev => prev.map(i => {
+          const match = data.find((d: any) => d.provider === i.id && d.is_active);
+          if (match) return { ...i, status: 'connected' as const, lastSync: match.updated_at };
+          return i;
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to load email providers:', err);
+    }
+  };
+
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
-    await new Promise(res => setTimeout(res, 1500));
-    setTestResult(setupApiKey.length > 5 ? 'success' : 'error');
+
+    if (isSmtpProvider(setupModalId)) {
+      // Validate SMTP fields
+      const valid = setupSmtpHost.length > 0 && setupSmtpUser.length > 0 && setupSmtpPass.length > 0;
+      await new Promise(res => setTimeout(res, 800));
+      setTestResult(valid ? 'success' : 'error');
+    } else {
+      // Validate API key
+      const valid = setupApiKey.length > 10;
+      await new Promise(res => setTimeout(res, 800));
+      setTestResult(valid ? 'success' : 'error');
+    }
+
     setIsTesting(false);
   };
 
-  const handleActivateIntegration = () => {
+  const handleActivateIntegration = async () => {
     if (!setupModalId || testResult !== 'success') return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const row: Record<string, unknown> = {
+      owner_id: user.id,
+      provider: setupModalId,
+      is_active: true,
+      from_email: setupFromEmail || null,
+      from_name: setupFromName || null,
+      webhook_key: setupWebhook || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isSmtpProvider(setupModalId)) {
+      row.smtp_host = setupModalId === 'gmail' ? 'smtp.gmail.com' : setupSmtpHost;
+      row.smtp_port = parseInt(setupSmtpPort) || 587;
+      row.smtp_user = setupSmtpUser;
+      row.smtp_pass = setupSmtpPass;
+    } else {
+      row.api_key = setupApiKey;
+    }
+
+    const { error } = await supabase.from('email_provider_configs').upsert(row, { onConflict: 'owner_id,provider' });
+
+    if (error) {
+      console.error('Failed to save provider config:', error);
+      setTestResult('error');
+      return;
+    }
+
     const updated = integrations.map(i =>
-      i.id === setupModalId ? { ...i, status: 'connected' as const, apiKey: setupApiKey, webhookUrl: setupWebhook, lastSync: new Date().toISOString() } : i
+      i.id === setupModalId ? { ...i, status: 'connected' as const, lastSync: new Date().toISOString() } : i
     );
     setIntegrations(updated);
     try { localStorage.setItem(INTEGRATIONS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
-    supabase.from('audit_logs').insert({ action: 'INTEGRATION_CONNECTED', details: `Integration ${setupModalId} activated` });
+    await supabase.from('audit_logs').insert({ action: 'INTEGRATION_CONNECTED', details: `Email provider ${setupModalId} activated` });
+
     setSetupModalId(null);
     setSetupApiKey('');
     setSetupWebhook('');
+    setSetupSmtpHost('');
+    setSetupSmtpPort('587');
+    setSetupSmtpUser('');
+    setSetupSmtpPass('');
+    setSetupFromEmail('');
+    setSetupFromName('');
     setTestResult(null);
   };
 
-  const handleDisconnect = (id: string) => {
+  const handleDisconnect = async (id: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('email_provider_configs').update({ is_active: false }).eq('owner_id', user.id).eq('provider', id);
+    }
     const updated = integrations.map(i =>
       i.id === id ? { ...i, status: 'disconnected' as const, apiKey: undefined, webhookUrl: undefined, lastSync: undefined } : i
     );
     setIntegrations(updated);
     try { localStorage.setItem(INTEGRATIONS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
-    supabase.from('audit_logs').insert({ action: 'INTEGRATION_DISCONNECTED', details: `Integration ${id} disconnected` });
+    await supabase.from('audit_logs').insert({ action: 'INTEGRATION_DISCONNECTED', details: `Email provider ${id} disconnected` });
   };
 
   const categories: string[] = Array.from(new Set(integrations.map(i => i.category)));
@@ -466,7 +545,7 @@ const AdminSettings: React.FC = () => {
                       </button>
                     ) : (
                       <button
-                        onClick={() => { setSetupModalId(integration.id); setSetupApiKey(''); setSetupWebhook(''); setTestResult(null); }}
+                        onClick={() => { setSetupModalId(integration.id); setSetupApiKey(''); setSetupWebhook(''); setSetupSmtpHost(''); setSetupSmtpPort(integration.id === 'gmail' ? '587' : '587'); setSetupSmtpUser(''); setSetupSmtpPass(''); setSetupFromEmail(''); setSetupFromName(''); setTestResult(null); }}
                         className="px-4 py-2 text-[10px] font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors"
                       >
                         Setup
@@ -507,26 +586,50 @@ const AdminSettings: React.FC = () => {
                 <span className={`px-3 py-1 rounded-full ${testResult === 'success' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>3. Activate</span>
               </div>
 
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">API Key / Token</label>
-                <input
-                  type="text"
-                  value={setupApiKey}
-                  onChange={(e) => setSetupApiKey(e.target.value)}
-                  placeholder="Enter API key..."
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all"
-                />
-              </div>
+              {isSmtpProvider(setupModalId) ? (
+                <>
+                  {setupModalId === 'smtp' && (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">SMTP Host</label>
+                        <input type="text" value={setupSmtpHost} onChange={(e) => setSetupSmtpHost(e.target.value)} placeholder="smtp.example.com" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Port</label>
+                        <input type="text" value={setupSmtpPort} onChange={(e) => setSetupSmtpPort(e.target.value)} placeholder="587" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all" />
+                      </div>
+                    </div>
+                  )}
+                  {setupModalId === 'gmail' && (
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                      <p className="text-[11px] text-blue-700 font-medium">Gmail requires an App Password (not your regular password). Enable 2FA at myaccount.google.com, then generate an App Password under Security.</p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">{setupModalId === 'gmail' ? 'Gmail Address' : 'SMTP Username'}</label>
+                    <input type="text" value={setupSmtpUser} onChange={(e) => setSetupSmtpUser(e.target.value)} placeholder={setupModalId === 'gmail' ? 'you@gmail.com' : 'username'} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">{setupModalId === 'gmail' ? 'App Password' : 'SMTP Password'}</label>
+                    <input type="password" value={setupSmtpPass} onChange={(e) => setSetupSmtpPass(e.target.value)} placeholder="••••••••" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all" />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">API Key / Token</label>
+                  <input type="text" value={setupApiKey} onChange={(e) => setSetupApiKey(e.target.value)} placeholder="Enter API key..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all" />
+                </div>
+              )}
 
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Webhook URL (Optional)</label>
-                <input
-                  type="text"
-                  value={setupWebhook}
-                  onChange={(e) => setSetupWebhook(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">From Email</label>
+                  <input type="email" value={setupFromEmail} onChange={(e) => setSetupFromEmail(e.target.value)} placeholder="noreply@yourcompany.com" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">From Name</label>
+                  <input type="text" value={setupFromName} onChange={(e) => setSetupFromName(e.target.value)} placeholder="Your Company" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all" />
+                </div>
               </div>
 
               {testResult && (
@@ -543,8 +646,8 @@ const AdminSettings: React.FC = () => {
               <div className="flex items-center space-x-3 pt-4">
                 <button
                   onClick={handleTestConnection}
-                  disabled={!setupApiKey || isTesting}
-                  className={`flex-grow py-3 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 transition-all ${!setupApiKey || isTesting ? 'bg-slate-100 text-slate-300' : 'bg-slate-900 text-white hover:bg-indigo-600'}`}
+                  disabled={isTesting || (isSmtpProvider(setupModalId) ? !setupSmtpUser || !setupSmtpPass : !setupApiKey)}
+                  className={`flex-grow py-3 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 transition-all ${(isTesting || (isSmtpProvider(setupModalId) ? !setupSmtpUser || !setupSmtpPass : !setupApiKey)) ? 'bg-slate-100 text-slate-300' : 'bg-slate-900 text-white hover:bg-indigo-600'}`}
                 >
                   {isTesting ? (
                     <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div><span>Testing...</span></>

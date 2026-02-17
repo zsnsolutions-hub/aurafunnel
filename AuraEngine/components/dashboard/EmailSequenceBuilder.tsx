@@ -48,6 +48,8 @@ const EmailSequenceBuilder: React.FC<EmailSequenceBuilderProps> = ({
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
   const [rawResponse, setRawResponse] = useState<AIResponse | null>(null);
   const [error, setError] = useState('');
+  const [trackOpens, setTrackOpens] = useState(true);
+  const [trackClicks, setTrackClicks] = useState(true);
 
   const toggleLead = (id: string) => {
     setSelectedLeadIds(prev =>
@@ -308,6 +310,33 @@ const EmailSequenceBuilder: React.FC<EmailSequenceBuilderProps> = ({
                   {t}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Tracking */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tracking</p>
+            <div className="flex flex-wrap gap-6">
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setTrackOpens(!trackOpens)}
+                  className={`relative w-10 h-6 rounded-full transition-colors ${trackOpens ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${trackOpens ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+                <span className="text-xs font-bold text-slate-600">Track Opens</span>
+              </label>
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setTrackClicks(!trackClicks)}
+                  className={`relative w-10 h-6 rounded-full transition-colors ${trackClicks ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${trackClicks ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+                <span className="text-xs font-bold text-slate-600">Track Clicks</span>
+              </label>
             </div>
           </div>
 

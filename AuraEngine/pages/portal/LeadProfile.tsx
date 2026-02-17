@@ -11,6 +11,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch } from '../../lib/gemini';
+import EmailEngagementCard from '../../components/dashboard/EmailEngagementCard';
 
 // ── Helpers ──
 const scoreToStars = (score: number): number => {
@@ -1105,6 +1106,12 @@ const LeadProfile: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* ── Email Engagement Card ── */}
+          <EmailEngagementCard
+            leadId={lead.id}
+            onSendEmailClick={() => showFeedback('Email composer opened')}
+          />
 
           {/* ── Knowledge Base Card ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mt-4">

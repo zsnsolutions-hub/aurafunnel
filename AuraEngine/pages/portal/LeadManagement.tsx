@@ -1679,7 +1679,7 @@ const LeadManagement: React.FC = () => {
           isOpen={isActionsOpen}
           onClose={() => { setIsActionsOpen(false); setSelectedLead(null); }}
           onStatusUpdate={handleStatusUpdate}
-          onSendEmail={() => {}}
+          onSendEmail={() => navigate('/portal/content')}
           manualLists={[]}
           onAddToManualList={() => {}}
         />

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lead, ManualList } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { TargetIcon, SparklesIcon, BoltIcon } from '../../components/Icons';
@@ -9,6 +10,7 @@ import LeadSegmentation from '../../components/dashboard/LeadSegmentation';
 const LISTS_STORAGE_KEY = 'aurafunnel_admin_manual_lists';
 
 const LeadsManagement: React.FC = () => {
+  const navigate = useNavigate();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -271,7 +273,7 @@ const LeadsManagement: React.FC = () => {
           isOpen={isActionsOpen}
           onClose={() => { setIsActionsOpen(false); setSelectedLead(null); }}
           onStatusUpdate={handleStatusUpdate}
-          onSendEmail={() => {}}
+          onSendEmail={() => navigate('/portal/content')}
           manualLists={manualLists}
           onAddToManualList={handleAddToManualList}
         />

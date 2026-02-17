@@ -10,6 +10,7 @@ import {
   KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { sendTrackedEmail, sendTrackedEmailBatch } from '../../lib/emailTracking';
 
 // ═══════════════════════════════════════════════
 // TYPES
@@ -748,6 +749,26 @@ const ContentGen: React.FC = () => {
 
   const handleDeliver = async () => {
     setDeliveryConfirmed(true);
+
+    // Actually send emails when content type is email and mode is "now"
+    if (contentType === ContentCategory.EMAIL_SEQUENCE && schedule.mode === 'now' && targetLeads.length > 0 && blocks.length > 0) {
+      const firstBlock = blocks[0];
+      const htmlBody = `<div>${firstBlock.body.replace(/\n/g, '<br />')}</div>`;
+      const eligibleLeads = targetLeads
+        .filter(l => l.email)
+        .map(l => ({ id: l.id, email: l.email, name: l.name }));
+
+      if (eligibleLeads.length > 0) {
+        const result = await sendTrackedEmailBatch(
+          eligibleLeads,
+          firstBlock.subject,
+          htmlBody,
+          { trackOpens: true, trackClicks: true }
+        );
+        console.log(`Email delivery: ${result.sent} sent, ${result.failed} failed`, result.errors);
+      }
+    }
+
     // Log delivery to audit
     await supabase.from('audit_logs').insert({
       user_id: user.id,

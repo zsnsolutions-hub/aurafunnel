@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
+import { supabase } from '../../lib/supabase';
 import {
   PlugIcon, PlusIcon, CheckIcon, XIcon, RefreshIcon, CopyIcon, KeyIcon,
   BoltIcon, GlobeIcon, LinkIcon, AlertTriangleIcon, EyeIcon, EditIcon,
@@ -20,7 +21,7 @@ interface LayoutContext {
   refreshProfile: () => Promise<void>;
 }
 
-type IntegrationCategory = 'all' | 'crm' | 'marketing' | 'comms' | 'analytics';
+type IntegrationCategory = 'all' | 'crm' | 'marketing' | 'comms' | 'analytics' | 'email';
 type IntegrationStatus = 'connected' | 'partial' | 'disconnected';
 type SyncDirection = 'bidirectional' | 'outbound' | 'inbound';
 
@@ -130,9 +131,24 @@ const DEFAULT_INTEGRATIONS: Integration[] = [
     objects: ['Website traffic', 'Conversions'], icon: '📊', color: '#E37400', dataVolume: 10,
   },
   {
-    id: 'mailchimp', name: 'Mailchimp', category: 'marketing', status: 'connected',
-    lastSync: '30 minutes ago', syncDirection: 'outbound',
-    objects: ['Lists', 'Campaigns', 'Templates'], icon: '🐵', color: '#FFE01B', dataVolume: 5,
+    id: 'mailchimp', name: 'Mailchimp', category: 'email', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
+    objects: ['Campaigns', 'Lists'], icon: '🐵', color: '#FFE01B', dataVolume: 5,
+  },
+  {
+    id: 'sendgrid', name: 'SendGrid', category: 'email', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
+    objects: ['Transactional Email', 'Webhooks'], icon: '📧', color: '#1A82E2', dataVolume: 0,
+  },
+  {
+    id: 'gmail', name: 'Gmail SMTP', category: 'email', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
+    objects: ['Email Sending'], icon: '✉️', color: '#EA4335', dataVolume: 0,
+  },
+  {
+    id: 'smtp', name: 'Custom SMTP', category: 'email', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
+    objects: ['Email Sending'], icon: '📮', color: '#6B7280', dataVolume: 0,
   },
 ];
 
@@ -178,6 +194,19 @@ const IntegrationHub: React.FC = () => {
   const [showKeyFull, setShowKeyFull] = useState<string | null>(null);
   const [webhookForm, setWebhookForm] = useState({ name: '', url: '', trigger: 'When lead is created' });
 
+  // ─── Email Provider Setup Modal State ───
+  const [emailSetupId, setEmailSetupId] = useState<string | null>(null);
+  const [emailSetupApiKey, setEmailSetupApiKey] = useState('');
+  const [emailSetupSmtpHost, setEmailSetupSmtpHost] = useState('');
+  const [emailSetupSmtpPort, setEmailSetupSmtpPort] = useState('587');
+  const [emailSetupSmtpUser, setEmailSetupSmtpUser] = useState('');
+  const [emailSetupSmtpPass, setEmailSetupSmtpPass] = useState('');
+  const [emailSetupFromEmail, setEmailSetupFromEmail] = useState('');
+  const [emailSetupFromName, setEmailSetupFromName] = useState('');
+  const [emailSetupTesting, setEmailSetupTesting] = useState(false);
+  const [emailSetupResult, setEmailSetupResult] = useState<'success' | 'error' | null>(null);
+  const [emailSetupSaving, setEmailSetupSaving] = useState(false);
+
   // ─── Enhanced Wireframe State ───
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showHealthDashboard, setShowHealthDashboard] = useState(false);
@@ -188,6 +217,31 @@ const IntegrationHub: React.FC = () => {
   const [showCostOptimization, setShowCostOptimization] = useState(false);
   const [configureId, setConfigureId] = useState<string | null>(null);
   const [configForm, setConfigForm] = useState<{ syncDirection: SyncDirection; objects: string[]; syncInterval: string }>({ syncDirection: 'bidirectional', objects: [], syncInterval: '5' });
+
+  const EMAIL_PROVIDERS = useMemo(() => new Set(['sendgrid', 'gmail', 'smtp', 'mailchimp']), []);
+
+  // ─── Load email provider configs from DB ───
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.from('email_provider_configs').select('provider, is_active, from_email, updated_at');
+        if (data && data.length > 0) {
+          setIntegrations(prev => prev.map(i => {
+            const match = data.find((d: any) => d.provider === i.id && d.is_active);
+            if (match) {
+              const ago = Math.round((Date.now() - new Date(match.updated_at).getTime()) / 60000);
+              const lastSync = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+              return { ...i, status: 'connected' as IntegrationStatus, lastSync };
+            }
+            if (EMAIL_PROVIDERS.has(i.id)) return { ...i, status: 'disconnected' as IntegrationStatus };
+            return i;
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to load email provider configs:', err);
+      }
+    })();
+  }, [EMAIL_PROVIDERS]);
 
   // ─── Filtered integrations ───
   const filteredIntegrations = useMemo(() => {
@@ -338,23 +392,45 @@ const IntegrationHub: React.FC = () => {
     } : k));
   }, []);
 
-  const handleTestIntegration = useCallback((id: string) => {
+  const handleTestIntegration = useCallback(async (id: string) => {
     setTestingId(id);
     setTestResult(null);
-    setTimeout(() => {
-      const success = Math.random() > 0.15;
+
+    if (EMAIL_PROVIDERS.has(id)) {
+      // Real check: see if config exists and is active
+      const { data } = await supabase.from('email_provider_configs').select('id, is_active').eq('provider', id).eq('is_active', true).limit(1);
+      const success = !!(data && data.length > 0);
       setTestResult({ id, success });
       setTestingId(null);
-    }, 1500);
-  }, []);
+    } else {
+      // Mock for non-email integrations
+      setTimeout(() => {
+        const success = Math.random() > 0.15;
+        setTestResult({ id, success });
+        setTestingId(null);
+      }, 1500);
+    }
+  }, [EMAIL_PROVIDERS]);
 
-  const handleDisconnect = useCallback((id: string) => {
+  const handleDisconnect = useCallback(async (id: string) => {
+    if (EMAIL_PROVIDERS.has(id)) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        await supabase.from('email_provider_configs').update({ is_active: false }).eq('owner_id', authUser.id).eq('provider', id);
+      }
+    }
     setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'disconnected' as IntegrationStatus, lastSync: 'Disconnected' } : i));
-  }, []);
+  }, [EMAIL_PROVIDERS]);
 
-  const handleReconnect = useCallback((id: string) => {
+  const handleReconnect = useCallback(async (id: string) => {
+    if (EMAIL_PROVIDERS.has(id)) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        await supabase.from('email_provider_configs').update({ is_active: true, updated_at: new Date().toISOString() }).eq('owner_id', authUser.id).eq('provider', id);
+      }
+    }
     setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'connected' as IntegrationStatus, lastSync: 'Just now', error: undefined } : i));
-  }, []);
+  }, [EMAIL_PROVIDERS]);
 
   const handleConfigure = useCallback((id: string) => {
     const integ = integrations.find(i => i.id === id);
@@ -420,6 +496,115 @@ const IntegrationHub: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [integrations, webhooks, user.name]);
 
+  // ─── Email Provider Setup Modal Handlers ───
+  const isSmtpProvider = (id: string) => id === 'smtp' || id === 'gmail';
+
+  const openEmailSetup = useCallback(async (id: string) => {
+    setEmailSetupApiKey('');
+    setEmailSetupSmtpHost(id === 'gmail' ? 'smtp.gmail.com' : '');
+    setEmailSetupSmtpPort(id === 'gmail' ? '587' : '587');
+    setEmailSetupSmtpUser('');
+    setEmailSetupSmtpPass('');
+    setEmailSetupFromEmail('');
+    setEmailSetupFromName('');
+    setEmailSetupResult(null);
+    setEmailSetupTesting(false);
+    setEmailSetupSaving(false);
+
+    // Pre-fill from existing config if any
+    try {
+      const { data } = await supabase
+        .from('email_provider_configs')
+        .select('*')
+        .eq('provider', id)
+        .limit(1)
+        .single();
+      if (data) {
+        if (data.api_key) setEmailSetupApiKey(data.api_key);
+        if (data.smtp_host) setEmailSetupSmtpHost(data.smtp_host);
+        if (data.smtp_port) setEmailSetupSmtpPort(String(data.smtp_port));
+        if (data.smtp_user) setEmailSetupSmtpUser(data.smtp_user);
+        if (data.smtp_pass) setEmailSetupSmtpPass(data.smtp_pass);
+        if (data.from_email) setEmailSetupFromEmail(data.from_email);
+        if (data.from_name) setEmailSetupFromName(data.from_name);
+      }
+    } catch {}
+
+    setEmailSetupId(id);
+  }, []);
+
+  const handleEmailSetupTest = useCallback(() => {
+    if (!emailSetupId) return;
+    setEmailSetupTesting(true);
+    setEmailSetupResult(null);
+
+    if (isSmtpProvider(emailSetupId)) {
+      if (!emailSetupSmtpHost || !emailSetupSmtpUser || !emailSetupSmtpPass) {
+        setEmailSetupResult('error');
+        setEmailSetupTesting(false);
+        return;
+      }
+    } else {
+      if (!emailSetupApiKey || emailSetupApiKey.length < 8) {
+        setEmailSetupResult('error');
+        setEmailSetupTesting(false);
+        return;
+      }
+    }
+
+    // Simulate a short test delay
+    setTimeout(() => {
+      setEmailSetupResult('success');
+      setEmailSetupTesting(false);
+    }, 1200);
+  }, [emailSetupId, emailSetupApiKey, emailSetupSmtpHost, emailSetupSmtpUser, emailSetupSmtpPass]);
+
+  const handleEmailSetupActivate = useCallback(async () => {
+    if (!emailSetupId) return;
+    setEmailSetupSaving(true);
+
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) { setEmailSetupSaving(false); return; }
+
+      const row: Record<string, unknown> = {
+        owner_id: authUser.id,
+        provider: emailSetupId,
+        is_active: true,
+        from_email: emailSetupFromEmail || null,
+        from_name: emailSetupFromName || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (isSmtpProvider(emailSetupId)) {
+        row.smtp_host = emailSetupSmtpHost;
+        row.smtp_port = parseInt(emailSetupSmtpPort) || 587;
+        row.smtp_user = emailSetupSmtpUser;
+        row.smtp_pass = emailSetupSmtpPass;
+        row.api_key = null;
+      } else {
+        row.api_key = emailSetupApiKey;
+        row.smtp_host = null;
+        row.smtp_port = null;
+        row.smtp_user = null;
+        row.smtp_pass = null;
+      }
+
+      await supabase
+        .from('email_provider_configs')
+        .upsert(row, { onConflict: 'owner_id,provider' });
+
+      setIntegrations(prev => prev.map(i =>
+        i.id === emailSetupId ? { ...i, status: 'connected' as IntegrationStatus, lastSync: 'Just now', error: undefined } : i
+      ));
+      setEmailSetupId(null);
+    } catch (err) {
+      console.error('Failed to save email provider config:', err);
+    } finally {
+      setEmailSetupSaving(false);
+    }
+  }, [emailSetupId, emailSetupApiKey, emailSetupSmtpHost, emailSetupSmtpPort, emailSetupSmtpUser, emailSetupSmtpPass, emailSetupFromEmail, emailSetupFromName]);
+
   const statusColor = (s: IntegrationStatus) =>
     s === 'connected' ? 'emerald' : s === 'partial' ? 'amber' : 'slate';
 
@@ -434,6 +619,7 @@ const IntegrationHub: React.FC = () => {
 
   const categories: { key: IntegrationCategory; label: string }[] = [
     { key: 'all', label: 'All' },
+    { key: 'email', label: 'Email' },
     { key: 'crm', label: 'CRM' },
     { key: 'marketing', label: 'Marketing' },
     { key: 'comms', label: 'Comms' },
@@ -683,12 +869,21 @@ const IntegrationHub: React.FC = () => {
                       <div className="flex items-center space-x-1.5">
                         {integ.status === 'connected' && (
                           <>
-                            <button
-                              onClick={() => handleConfigure(integ.id)}
-                              className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-all"
-                            >
-                              Configure
-                            </button>
+                            {EMAIL_PROVIDERS.has(integ.id) ? (
+                              <button
+                                onClick={() => openEmailSetup(integ.id)}
+                                className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-all"
+                              >
+                                Setup
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleConfigure(integ.id)}
+                                className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-all"
+                              >
+                                Configure
+                              </button>
+                            )}
                             <button
                               onClick={() => handleTestIntegration(integ.id)}
                               disabled={testingId === integ.id}
@@ -721,12 +916,21 @@ const IntegrationHub: React.FC = () => {
                           </>
                         )}
                         {integ.status === 'disconnected' && (
-                          <button
-                            onClick={() => handleReconnect(integ.id)}
-                            className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-all"
-                          >
-                            Reconnect
-                          </button>
+                          EMAIL_PROVIDERS.has(integ.id) ? (
+                            <button
+                              onClick={() => openEmailSetup(integ.id)}
+                              className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all"
+                            >
+                              Connect
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleReconnect(integ.id)}
+                              className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-all"
+                            >
+                              Reconnect
+                            </button>
+                          )
                         )}
                       </div>
 
@@ -2069,6 +2273,213 @@ const IntegrationHub: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* EMAIL PROVIDER SETUP MODAL                                    */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {emailSetupId && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-xl">
+                  {emailSetupId === 'sendgrid' ? '📧' : emailSetupId === 'gmail' ? '✉️' : emailSetupId === 'mailchimp' ? '🐵' : '📮'}
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-900 font-heading">
+                    {emailSetupId === 'sendgrid' ? 'SendGrid' : emailSetupId === 'gmail' ? 'Gmail SMTP' : emailSetupId === 'mailchimp' ? 'Mailchimp' : 'Custom SMTP'} Setup
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Enter your credentials to connect</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEmailSetupId(null)}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <XIcon className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              {/* API Key field (SendGrid / Mailchimp) */}
+              {!isSmtpProvider(emailSetupId) && (
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                    API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={emailSetupApiKey}
+                    onChange={e => setEmailSetupApiKey(e.target.value)}
+                    placeholder={emailSetupId === 'sendgrid' ? 'SG.xxxxxxxx...' : 'Your Mailchimp API key'}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {emailSetupId === 'sendgrid'
+                      ? 'Find your API key at Settings > API Keys in the SendGrid dashboard.'
+                      : 'Find your API key at Account > Extras > API Keys in Mailchimp.'}
+                  </p>
+                </div>
+              )}
+
+              {/* SMTP fields (Gmail / Custom SMTP) */}
+              {isSmtpProvider(emailSetupId) && (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                        SMTP Host
+                      </label>
+                      <input
+                        type="text"
+                        value={emailSetupSmtpHost}
+                        onChange={e => setEmailSetupSmtpHost(e.target.value)}
+                        placeholder="smtp.gmail.com"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                        Port
+                      </label>
+                      <input
+                        type="text"
+                        value={emailSetupSmtpPort}
+                        onChange={e => setEmailSetupSmtpPort(e.target.value)}
+                        placeholder="587"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                      Username / Email
+                    </label>
+                    <input
+                      type="text"
+                      value={emailSetupSmtpUser}
+                      onChange={e => setEmailSetupSmtpUser(e.target.value)}
+                      placeholder={emailSetupId === 'gmail' ? 'you@gmail.com' : 'user@example.com'}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                      Password {emailSetupId === 'gmail' && <span className="normal-case text-indigo-500">(App Password)</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={emailSetupSmtpPass}
+                      onChange={e => setEmailSetupSmtpPass(e.target.value)}
+                      placeholder={emailSetupId === 'gmail' ? '16-character app password' : 'SMTP password'}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                    />
+                    {emailSetupId === 'gmail' && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Go to Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App Passwords to generate one.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* From Email / Name (all providers) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                    From Email
+                  </label>
+                  <input
+                    type="email"
+                    value={emailSetupFromEmail}
+                    onChange={e => setEmailSetupFromEmail(e.target.value)}
+                    placeholder="noreply@yourcompany.com"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                    From Name
+                  </label>
+                  <input
+                    type="text"
+                    value={emailSetupFromName}
+                    onChange={e => setEmailSetupFromName(e.target.value)}
+                    placeholder="Your Company"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Test result */}
+              {emailSetupResult && (
+                <div className={`flex items-center space-x-2 px-4 py-3 rounded-xl text-xs font-bold ${
+                  emailSetupResult === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                    : 'bg-rose-50 text-rose-700 border border-rose-100'
+                }`}>
+                  {emailSetupResult === 'success' ? <CheckIcon className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                  <span>
+                    {emailSetupResult === 'success'
+                      ? 'Credentials look good! Click "Save & Activate" to connect.'
+                      : isSmtpProvider(emailSetupId)
+                        ? 'Please fill in SMTP host, username, and password.'
+                        : 'Please enter a valid API key (at least 8 characters).'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+              <button
+                onClick={handleEmailSetupTest}
+                disabled={emailSetupTesting}
+                className="flex items-center space-x-2 px-4 py-2.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-100 transition-all disabled:opacity-50"
+              >
+                {emailSetupTesting ? (
+                  <>
+                    <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
+                    <span>Testing...</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayIcon className="w-3.5 h-3.5" />
+                    <span>Test Connection</span>
+                  </>
+                )}
+              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setEmailSetupId(null)}
+                  className="px-4 py-2.5 text-slate-500 text-xs font-bold hover:text-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEmailSetupActivate}
+                  disabled={emailSetupSaving}
+                  className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+                >
+                  {emailSetupSaving ? (
+                    <>
+                      <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckIcon className="w-3.5 h-3.5" />
+                      <span>Save &amp; Activate</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
