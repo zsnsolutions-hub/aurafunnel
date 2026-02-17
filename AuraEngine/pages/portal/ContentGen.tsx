@@ -7,7 +7,8 @@ import {
   CopyIcon, CheckIcon, ClockIcon, EyeIcon, XIcon, PlusIcon, DownloadIcon,
   ArrowRightIcon, ArrowLeftIcon, CalendarIcon, SendIcon, SplitIcon, ChartIcon,
   TrendUpIcon, TrendDownIcon, TargetIcon, FlameIcon, RefreshIcon,
-  KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon
+  KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon,
+  AlertTriangleIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { sendTrackedEmail, sendTrackedEmailBatch } from '../../lib/emailTracking';
@@ -2226,6 +2227,45 @@ const ContentGen: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Recipients List */}
+            {targetLeads.length > 0 && (
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recipients</p>
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                    {targetLeads.filter(l => l.email).length} / {targetLeads.length} with email
+                  </span>
+                </div>
+                <div className="max-h-64 overflow-y-auto space-y-0 divide-y divide-slate-50 -mx-2">
+                  {targetLeads.map(lead => (
+                    <div key={lead.id} className="flex items-center space-x-3 px-2 py-2.5 hover:bg-slate-50/50 rounded-lg transition-colors">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+                        lead.email ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {lead.name?.[0]?.toUpperCase() || '?'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-700 truncate">{lead.name}</p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {lead.email || <span className="text-amber-500 italic">No email</span>}
+                          {lead.company && <span className="text-slate-300"> &middot; {lead.company}</span>}
+                        </p>
+                      </div>
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${lead.email ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                    </div>
+                  ))}
+                </div>
+                {targetLeads.some(l => !l.email) && (
+                  <div className="flex items-center space-x-2 mt-3 p-2.5 bg-amber-50 rounded-xl">
+                    <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <p className="text-[10px] text-amber-700 font-medium">
+                      {targetLeads.filter(l => !l.email).length} lead{targetLeads.filter(l => !l.email).length > 1 ? 's' : ''} without email will be skipped
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Predicted Impact */}
             {predictions && (
