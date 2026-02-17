@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom';
 import { User, Lead, ToneType } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { fetchOwnerEmailPerformance } from '../../lib/emailTracking';
+import { generateProposalPdf, generateEmailSequencePdf } from '../../lib/pdfExport';
 import {
   SparklesIcon, MailIcon, CheckIcon, XIcon, PlusIcon, CopyIcon,
   EditIcon, EyeIcon, ChartIcon, RefreshIcon, FilterIcon,
@@ -205,10 +207,10 @@ Worth a quick look? → [Book 15 min]
 
 P.S. {{personalized_ps}}`,
   performance: {
-    openRate: isControl ? 42 : name === 'Variant B' ? 38 : 47,
-    clickRate: isControl ? 8 : name === 'Variant B' ? 6 : 11,
-    replyRate: isControl ? 5 : name === 'Variant B' ? 4 : 7,
-    conversion: isControl ? 3.2 : name === 'Variant B' ? 2.8 : 4.1,
+    openRate: 0,
+    clickRate: 0,
+    replyRate: 0,
+    conversion: 0,
   },
   isControl,
 });
@@ -335,13 +337,10 @@ const ContentStudio: React.FC = () => {
   const [showNotes, setShowNotes] = useState(false);
   const [showSendHistory, setShowSendHistory] = useState(false);
   const [showBenchmarks, setShowBenchmarks] = useState(false);
-  const [sendHistory] = useState<SendHistoryEntry[]>([
-    { id: 'sh-1', label: 'Q1 Cold Outreach v3', sentAt: new Date(Date.now() - 86400000 * 2), recipients: 342, openRate: 47.2, status: 'sent' },
-    { id: 'sh-2', label: 'Product Update Drip', sentAt: new Date(Date.now() - 86400000 * 5), recipients: 128, openRate: 52.1, status: 'sent' },
-    { id: 'sh-3', label: 'Re-engagement Series', sentAt: new Date(Date.now() - 86400000 * 8), recipients: 89, openRate: 31.4, status: 'sent' },
-    { id: 'sh-4', label: 'Webinar Invite Seq', sentAt: new Date(Date.now() - 86400000 * 12), recipients: 256, openRate: 44.8, status: 'sent' },
-    { id: 'sh-5', label: 'Trial Nurture Drip', sentAt: new Date(Date.now() + 86400000), recipients: 185, openRate: 0, status: 'scheduled' },
-  ]);
+  const [sendHistory, setSendHistory] = useState<SendHistoryEntry[]>([]);
+  const [sendHistoryLoading, setSendHistoryLoading] = useState(false);
+  const [linkedinCopied, setLinkedinCopied] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
@@ -362,6 +361,41 @@ const ContentStudio: React.FC = () => {
   }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Load real send history when panel opens ──
+  useEffect(() => {
+    if (!showSendHistory) return;
+    let cancelled = false;
+    const loadHistory = async () => {
+      setSendHistoryLoading(true);
+      const raw = await fetchOwnerEmailPerformance();
+      if (cancelled) return;
+
+      // Group by subject into SendHistoryEntry
+      const grouped = new Map<string, typeof raw>();
+      for (const entry of raw) {
+        const key = entry.subject;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(entry);
+      }
+
+      const history: SendHistoryEntry[] = Array.from(grouped.entries()).map(([subject, entries], i) => ({
+        id: `sh-${i}`,
+        label: subject,
+        sentAt: new Date(entries[0].sentAt),
+        recipients: entries.length,
+        openRate: entries.length > 0
+          ? +(entries.reduce((a, e) => a + (e.opens > 0 ? 1 : 0), 0) / entries.length * 100).toFixed(1)
+          : 0,
+        status: 'sent' as const,
+      }));
+
+      setSendHistory(history);
+      setSendHistoryLoading(false);
+    };
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [showSendHistory]);
 
   // ─── Keyboard Shortcuts ───
   useEffect(() => {
@@ -655,7 +689,58 @@ const ContentStudio: React.FC = () => {
     setRules(prev => prev.filter(r => r.id !== id));
   };
 
-  const handleExport = () => {
+  const handleCopyLinkedin = () => {
+    const personalized = linkedinPost
+      .replace(/\{\{company\}\}/g, leads[0]?.company || 'your company')
+      .replace(/\{\{industry\}\}/g, 'technology')
+      .replace(/\{\{first_name\}\}/g, leads[0]?.name?.split(' ')[0] || '')
+      .replace(/\{\{client_name\}\}/g, leads[0]?.company || 'leading companies');
+    navigator.clipboard.writeText(personalized);
+    setLinkedinCopied(true);
+    setTimeout(() => setLinkedinCopied(false), 2500);
+  };
+
+  const handleOpenLinkedin = () => {
+    window.open('https://www.linkedin.com/feed/?shareActive=true', '_blank');
+  };
+
+  const handleExport = (format: 'txt' | 'pdf' = 'txt') => {
+    setShowExportMenu(false);
+    if (format === 'pdf') {
+      if (contentMode === 'proposal') {
+        const sections = [
+          { label: 'Executive Summary', body: proposalSections.executiveSummary },
+          { label: 'Problem Statement', body: proposalSections.problemStatement },
+          { label: 'Proposed Solution', body: proposalSections.solution },
+          { label: 'ROI Analysis', body: proposalSections.roi },
+          { label: 'Pricing', body: proposalSections.pricing },
+          { label: 'Next Steps', body: proposalSections.nextSteps },
+        ];
+        const personalization: Record<string, string> = {
+          '{{company}}': leads[0]?.company || 'Acme Corp',
+          '{{industry}}': 'technology',
+          '{{pain_point}}': 'scaling lead generation',
+          '{{company_size}}': '150',
+        };
+        generateProposalPdf({
+          companyName: user.name || 'Your Company',
+          recipientCompany: leads[0]?.company || '{{company}}',
+          date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+          sections,
+          personalization,
+        });
+      } else if (contentMode === 'email') {
+        const blocks = steps.map(step => {
+          const v = step.variants.find(vr => vr.id === step.activeVariantId) || step.variants[0];
+          return { title: `Email ${step.stepNumber} (${step.delay})`, subject: v.subject, body: v.body };
+        });
+        generateEmailSequencePdf(blocks);
+      } else if (contentMode === 'linkedin') {
+        generateEmailSequencePdf([{ title: 'LinkedIn Post', subject: linkedinTone, body: linkedinPost }]);
+      }
+      return;
+    }
+    // TXT export (original logic)
     let content = '';
     if (contentMode === 'email') {
       content = steps.map(step => {
@@ -790,9 +875,17 @@ const ContentStudio: React.FC = () => {
             <LayersIcon className="w-3.5 h-3.5" />
             <span>Batch</span>
           </button>
-          <button onClick={handleExport} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-            <DownloadIcon className="w-3.5 h-3.5" />
-          </button>
+          <div className="relative">
+            <button onClick={() => setShowExportMenu(prev => !prev)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+              <DownloadIcon className="w-3.5 h-3.5" />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-40 py-1">
+                <button onClick={() => handleExport('txt')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as TXT</button>
+                <button onClick={() => handleExport('pdf')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as PDF</button>
+              </div>
+            )}
+          </div>
           <button onClick={handleSave} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
             {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
             <span>{saved ? 'Saved!' : 'Save'}</span>
@@ -911,37 +1004,50 @@ const ContentStudio: React.FC = () => {
               <XIcon className="w-4 h-4" />
             </button>
           </div>
-          <div className="relative">
-            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-100" />
-            <div className="space-y-4">
-              {sendHistory.map(entry => {
-                const daysAgo = Math.round((Date.now() - entry.sentAt.getTime()) / 86400000);
-                const timeLabel = daysAgo < 0 ? `in ${Math.abs(daysAgo)} days` : daysAgo === 0 ? 'today' : `${daysAgo}d ago`;
-                return (
-                  <div key={entry.id} className="flex items-start space-x-4 relative pl-8">
-                    <div className={`absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
-                      entry.status === 'sent' ? 'bg-emerald-400' : entry.status === 'scheduled' ? 'bg-amber-400' : 'bg-rose-400'
-                    }`} />
-                    <div className="flex-1 flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100/70 transition-colors">
-                      <div>
-                        <p className="text-xs font-bold text-slate-700">{entry.label}</p>
-                        <p className="text-[10px] text-slate-400">{timeLabel} &middot; {entry.recipients} recipients</p>
-                      </div>
-                      <div className="text-right">
-                        {entry.status === 'sent' ? (
-                          <p className={`text-xs font-black ${entry.openRate > 40 ? 'text-emerald-600' : 'text-slate-600'}`}>
-                            {entry.openRate}% opens
-                          </p>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-lg text-[9px] font-bold">Scheduled</span>
-                        )}
+          {sendHistoryLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-6 h-6 border-2 border-violet-100 border-t-violet-600 rounded-full animate-spin"></div>
+              <span className="ml-2 text-xs text-slate-500">Loading history...</span>
+            </div>
+          ) : sendHistory.length === 0 ? (
+            <div className="text-center py-8">
+              <ClockIcon className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+              <p className="text-xs font-bold text-slate-400">No send history yet</p>
+              <p className="text-[10px] text-slate-300 mt-0.5">Send emails to see real performance data here.</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-100" />
+              <div className="space-y-4">
+                {sendHistory.map(entry => {
+                  const daysAgo = Math.round((Date.now() - entry.sentAt.getTime()) / 86400000);
+                  const timeLabel = daysAgo < 0 ? `in ${Math.abs(daysAgo)} days` : daysAgo === 0 ? 'today' : `${daysAgo}d ago`;
+                  return (
+                    <div key={entry.id} className="flex items-start space-x-4 relative pl-8">
+                      <div className={`absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
+                        entry.status === 'sent' ? 'bg-emerald-400' : entry.status === 'scheduled' ? 'bg-amber-400' : 'bg-rose-400'
+                      }`} />
+                      <div className="flex-1 flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100/70 transition-colors">
+                        <div>
+                          <p className="text-xs font-bold text-slate-700">{entry.label}</p>
+                          <p className="text-[10px] text-slate-400">{timeLabel} &middot; {entry.recipients} recipients</p>
+                        </div>
+                        <div className="text-right">
+                          {entry.status === 'sent' ? (
+                            <p className={`text-xs font-black ${entry.openRate > 40 ? 'text-emerald-600' : 'text-slate-600'}`}>
+                              {entry.openRate}% opens
+                            </p>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-lg text-[9px] font-bold">Scheduled</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -1470,6 +1576,31 @@ const ContentStudio: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* LinkedIn Action Buttons */}
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={handleCopyLinkedin}
+                      className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${
+                        linkedinCopied
+                          ? 'bg-emerald-600 text-white shadow-emerald-200'
+                          : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200'
+                      }`}
+                    >
+                      {linkedinCopied ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                      <span>{linkedinCopied ? 'Copied!' : 'Copy to Clipboard'}</span>
+                    </button>
+                    <button
+                      onClick={handleOpenLinkedin}
+                      className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
+                    >
+                      <LinkedInIcon className="w-4 h-4" />
+                      <span>Open LinkedIn</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2">Copy your post first, then paste it in the LinkedIn composer</p>
+                </div>
               </div>
             )}
 
@@ -1583,6 +1714,29 @@ const ContentStudio: React.FC = () => {
                     ))}
                   </div>
                 </div>
+
+                {/* LinkedIn Action Buttons (Preview) */}
+                <div className="mt-4 flex items-center space-x-3">
+                  <button
+                    onClick={handleCopyLinkedin}
+                    className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${
+                      linkedinCopied
+                        ? 'bg-emerald-600 text-white shadow-emerald-200'
+                        : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200'
+                    }`}
+                  >
+                    {linkedinCopied ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                    <span>{linkedinCopied ? 'Copied!' : 'Copy to Clipboard'}</span>
+                  </button>
+                  <button
+                    onClick={handleOpenLinkedin}
+                    className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
+                  >
+                    <LinkedInIcon className="w-4 h-4" />
+                    <span>Open LinkedIn</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">Copy your post first, then paste it in the LinkedIn composer</p>
               </div>
             )}
 

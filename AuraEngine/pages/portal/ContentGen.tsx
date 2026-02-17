@@ -11,7 +11,9 @@ import {
   AlertTriangleIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { sendTrackedEmail, sendTrackedEmailBatch } from '../../lib/emailTracking';
+import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance } from '../../lib/emailTracking';
+import type { EmailPerformanceEntry } from '../../lib/emailTracking';
+import { generateEmailSequencePdf } from '../../lib/pdfExport';
 
 // ═══════════════════════════════════════════════
 // TYPES
@@ -305,26 +307,11 @@ function replaceTagsForPreview(text: string): string {
   return out;
 }
 
-// Mock performance data
-function generateMockPerformance(): ContentPerformance[] {
-  const types = ['Email Sequence', 'Landing Page', 'Social Post', 'Blog Article'];
-  const statuses: ContentPerformance['status'][] = ['sent', 'sent', 'sent', 'scheduled', 'draft'];
-  return Array.from({ length: 8 }, (_, i) => {
-    const dayOffset = i * 2 + 1;
-    const d = new Date();
-    d.setDate(d.getDate() - dayOffset);
-    return {
-      id: `perf-${i}`,
-      title: [`Q1 Cold Outreach`, `Product Launch Campaign`, `Weekly Newsletter`, `LinkedIn Authority`, `Re-engagement Drip`, `Webinar Invite`, `Case Study Push`, `Trial Nudge`][i],
-      type: types[i % types.length],
-      sentAt: d.toISOString(),
-      recipients: Math.floor(Math.random() * 500) + 50,
-      openRate: +(Math.random() * 35 + 20).toFixed(1),
-      clickRate: +(Math.random() * 12 + 3).toFixed(1),
-      responseRate: +(Math.random() * 8 + 1).toFixed(1),
-      status: statuses[i % statuses.length],
-    };
-  });
+// Helper: extract day offset from block title like "Day 3", "Email 2 — Day 5", etc.
+function extractDelayDays(title: string, fallbackIndex: number): number {
+  const match = title.match(/Day\s+(\d+)/i);
+  if (match) return parseInt(match[1], 10);
+  return fallbackIndex * 2;
 }
 
 // ═══════════════════════════════════════════════
@@ -365,7 +352,9 @@ const ContentGen: React.FC = () => {
   });
   const [deliveryConfirmed, setDeliveryConfirmed] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
-  const [performanceData] = useState<ContentPerformance[]>(generateMockPerformance);
+  const [performanceData, setPerformanceData] = useState<ContentPerformance[]>([]);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [deliveryProgress, setDeliveryProgress] = useState<{ current: number; total: number } | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showPromptLibrary, setShowPromptLibrary] = useState(false);
   const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
@@ -388,6 +377,47 @@ const ContentGen: React.FC = () => {
     };
     if (user) fetchLeads();
   }, [user]);
+
+  // ── Load real performance data when panel opens ──
+  useEffect(() => {
+    if (!showPerformance) return;
+    let cancelled = false;
+    const loadPerformance = async () => {
+      setPerformanceLoading(true);
+      const raw = await fetchOwnerEmailPerformance();
+      if (cancelled) return;
+
+      // Group by subject into ContentPerformance entries
+      const grouped = new Map<string, { entries: typeof raw; subject: string }>();
+      for (const entry of raw) {
+        const key = entry.subject;
+        if (!grouped.has(key)) grouped.set(key, { entries: [], subject: key });
+        grouped.get(key)!.entries.push(entry);
+      }
+
+      const perfData: ContentPerformance[] = Array.from(grouped.values()).map((g, i) => {
+        const totalOpens = g.entries.reduce((a, e) => a + e.opens, 0);
+        const totalClicks = g.entries.reduce((a, e) => a + e.clicks, 0);
+        const count = g.entries.length;
+        return {
+          id: `perf-${i}`,
+          title: g.subject,
+          type: 'Email Sequence',
+          sentAt: g.entries[0].sentAt,
+          recipients: count,
+          openRate: count > 0 ? +(totalOpens / count * 100).toFixed(1) : 0,
+          clickRate: count > 0 ? +(totalClicks / count * 100).toFixed(1) : 0,
+          responseRate: 0,
+          status: 'sent' as const,
+        };
+      });
+
+      setPerformanceData(perfData);
+      setPerformanceLoading(false);
+    };
+    loadPerformance();
+    return () => { cancelled = true; };
+  }, [showPerformance]);
 
   // ── Derived ──
   const segments = useMemo(() => [
@@ -737,7 +767,14 @@ const ContentGen: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const downloadAll = () => {
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
+  const downloadAll = (format: 'txt' | 'pdf' = 'txt') => {
+    setShowDownloadMenu(false);
+    if (format === 'pdf') {
+      generateEmailSequencePdf(blocks.map(b => ({ title: b.title, subject: b.subject, body: b.body })));
+      return;
+    }
     const full = blocks.map(b => `--- ${b.title} ---\nSubject: ${b.subject}\n\n${b.body}`).join('\n\n');
     const blob = new Blob([full], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -751,22 +788,69 @@ const ContentGen: React.FC = () => {
   const handleDeliver = async () => {
     setDeliveryConfirmed(true);
 
-    // Actually send emails when content type is email and mode is "now"
-    if (contentType === ContentCategory.EMAIL_SEQUENCE && schedule.mode === 'now' && targetLeads.length > 0 && blocks.length > 0) {
-      const firstBlock = blocks[0];
-      const htmlBody = `<div>${firstBlock.body.replace(/\n/g, '<br />')}</div>`;
+    if (contentType === ContentCategory.EMAIL_SEQUENCE && targetLeads.length > 0 && blocks.length > 0) {
       const eligibleLeads = targetLeads
         .filter(l => l.email)
         .map(l => ({ id: l.id, email: l.email, name: l.name }));
 
       if (eligibleLeads.length > 0) {
-        const result = await sendTrackedEmailBatch(
-          eligibleLeads,
-          firstBlock.subject,
-          htmlBody,
-          { trackOpens: true, trackClicks: true }
-        );
-        console.log(`Email delivery: ${result.sent} sent, ${result.failed} failed`, result.errors);
+        const sequenceId = `seq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+        if (schedule.mode === 'now') {
+          // Send first block immediately
+          setDeliveryProgress({ current: 1, total: blocks.length });
+          const firstBlock = blocks[0];
+          const htmlBody = `<div>${firstBlock.body.replace(/\n/g, '<br />')}</div>`;
+          const result = await sendTrackedEmailBatch(
+            eligibleLeads,
+            firstBlock.subject,
+            htmlBody,
+            { trackOpens: true, trackClicks: true }
+          );
+          console.log(`Email delivery block 1: ${result.sent} sent, ${result.failed} failed`, result.errors);
+
+          // Schedule remaining blocks
+          for (let i = 1; i < blocks.length; i++) {
+            setDeliveryProgress({ current: i + 1, total: blocks.length });
+            const block = blocks[i];
+            const delayDays = extractDelayDays(block.title, i);
+            const scheduledAt = new Date();
+            scheduledAt.setDate(scheduledAt.getDate() + delayDays);
+
+            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>`;
+            await scheduleEmailBlock({
+              leads: eligibleLeads,
+              subject: block.subject,
+              htmlBody,
+              scheduledAt,
+              blockIndex: i,
+              sequenceId,
+            });
+          }
+          setDeliveryProgress(null);
+
+        } else if (schedule.mode === 'scheduled') {
+          // Schedule ALL blocks relative to the base date
+          const baseDate = new Date(`${schedule.date}T${schedule.time}`);
+          for (let i = 0; i < blocks.length; i++) {
+            setDeliveryProgress({ current: i + 1, total: blocks.length });
+            const block = blocks[i];
+            const delayDays = extractDelayDays(block.title, i);
+            const scheduledAt = new Date(baseDate.getTime() + delayDays * 86400000);
+
+            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>`;
+            await scheduleEmailBlock({
+              leads: eligibleLeads,
+              subject: block.subject,
+              htmlBody,
+              scheduledAt,
+              blockIndex: i,
+              sequenceId,
+            });
+          }
+          setDeliveryProgress(null);
+        }
+        // draft mode: no sending or scheduling
       }
     }
 
@@ -979,9 +1063,17 @@ const ContentGen: React.FC = () => {
             <span>Performance</span>
           </button>
           {blocks.length > 0 && (
-            <button onClick={downloadAll} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" title="Download">
-              <DownloadIcon className="w-4 h-4" />
-            </button>
+            <div className="relative">
+              <button onClick={() => setShowDownloadMenu(prev => !prev)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" title="Download">
+                <DownloadIcon className="w-4 h-4" />
+              </button>
+              {showDownloadMenu && (
+                <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-40 py-1">
+                  <button onClick={() => downloadAll('txt')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as TXT</button>
+                  <button onClick={() => downloadAll('pdf')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as PDF</button>
+                </div>
+              )}
+            </div>
           )}
           <button
             onClick={() => setShowShortcuts(true)}
@@ -2171,6 +2263,23 @@ const ContentGen: React.FC = () => {
               </div>
             </div>
 
+            {/* Delivery Progress */}
+            {deliveryProgress && (
+              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <div className="flex items-center space-x-2 mb-1.5">
+                  <div className="w-4 h-4 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                  <span className="text-xs font-bold text-indigo-700">
+                    {schedule.mode === 'now' && deliveryProgress.current === 1
+                      ? `Sending block 1 of ${deliveryProgress.total}...`
+                      : `Scheduling block ${deliveryProgress.current} of ${deliveryProgress.total}...`}
+                  </span>
+                </div>
+                <div className="w-full bg-indigo-100 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-indigo-600 h-full rounded-full transition-all" style={{ width: `${(deliveryProgress.current / deliveryProgress.total) * 100}%` }} />
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex items-center justify-between">
               <button
@@ -2182,10 +2291,12 @@ const ContentGen: React.FC = () => {
               </button>
               <button
                 onClick={handleDeliver}
-                disabled={deliveryConfirmed}
+                disabled={deliveryConfirmed || deliveryProgress !== null}
                 className={`flex items-center space-x-2 px-8 py-3 rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 ${
                   deliveryConfirmed
                     ? 'bg-emerald-500 text-white shadow-emerald-200'
+                    : deliveryProgress
+                    ? 'bg-slate-400 text-white cursor-not-allowed'
                     : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-200'
                 }`}
               >
@@ -2323,8 +2434,23 @@ const ContentGen: React.FC = () => {
             </button>
           </div>
 
+          {/* Loading / Empty State */}
+          {performanceLoading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-3 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+              <span className="ml-3 text-sm text-slate-500">Loading performance data...</span>
+            </div>
+          )}
+          {!performanceLoading && performanceData.length === 0 && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-12 text-center">
+              <ChartIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-400">No campaigns sent yet</p>
+              <p className="text-xs text-slate-300 mt-1">Send your first email sequence to see real performance data here.</p>
+            </div>
+          )}
+
           {/* Aggregate Metrics */}
-          {perfMetrics && (
+          {!performanceLoading && perfMetrics && (
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               {[
                 { label: 'Total Sent', value: perfMetrics.totalSent.toLocaleString(), icon: <SendIcon className="w-4 h-4" />, color: 'indigo' },

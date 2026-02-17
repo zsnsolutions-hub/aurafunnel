@@ -277,32 +277,61 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
 
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    // Allow service role key for internal calls (e.g. from process-scheduled-emails)
+    let userId: string;
+    if (token === SUPABASE_SERVICE_ROLE_KEY) {
+      const body = await req.json();
+      if (!body.owner_id) {
+        return new Response(
+          JSON.stringify({ error: "owner_id required for service role calls" }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      userId = body.owner_id;
+      // Re-assign body fields below from the already-parsed body
+      var {
+        lead_id,
+        to_email,
+        from_email,
+        subject,
+        html_body,
+        provider = "sendgrid",
+        track_opens = true,
+        track_clicks = true,
+      } = body;
+    } else {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabaseAdmin.auth.getUser(token);
+
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: "Invalid token" }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      userId = user.id;
+
+      var body = await req.json();
+      var {
+        lead_id,
+        to_email,
+        from_email,
+        subject,
+        html_body,
+        provider = "sendgrid",
+        track_opens = true,
+        track_clicks = true,
+      } = body;
     }
-
-    const body = await req.json();
-    const {
-      lead_id,
-      to_email,
-      from_email,
-      subject,
-      html_body,
-      provider = "sendgrid",
-      track_opens = true,
-      track_clicks = true,
-    } = body;
 
     if (!to_email || !subject || !html_body) {
       return new Response(
@@ -317,7 +346,7 @@ serve(async (req) => {
     }
 
     // Load per-user provider credentials (falls back to env vars)
-    const creds = await loadProviderCreds(supabaseAdmin, user.id, provider);
+    const creds = await loadProviderCreds(supabaseAdmin, userId, provider);
     const senderEmail =
       from_email || creds.from_email || creds.smtp_user || "noreply@example.com";
 
@@ -326,7 +355,7 @@ serve(async (req) => {
       .from("email_messages")
       .insert({
         lead_id: lead_id || null,
-        owner_id: user.id,
+        owner_id: userId,
         provider,
         subject,
         to_email,

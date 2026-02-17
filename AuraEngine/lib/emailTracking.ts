@@ -305,6 +305,176 @@ export async function sendTrackedEmailBatch(
   return results;
 }
 
+// ── Schedule an email block for future delivery ──
+export interface ScheduleEmailBlockParams {
+  leads: { id: string; email: string; name: string }[];
+  subject: string;
+  htmlBody: string;
+  scheduledAt: Date;
+  blockIndex: number;
+  sequenceId: string;
+}
+
+export async function scheduleEmailBlock(
+  params: ScheduleEmailBlockParams
+): Promise<{ scheduled: number; failed: number; errors: string[] }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { scheduled: 0, failed: 0, errors: ['Not authenticated'] };
+
+  const results = { scheduled: 0, failed: 0, errors: [] as string[] };
+
+  const rows = params.leads.map((lead) => {
+    const personalizedHtml = params.htmlBody
+      .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
+      .replace(/\{\{name\}\}/gi, lead.name);
+    const personalizedSubject = params.subject
+      .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
+      .replace(/\{\{name\}\}/gi, lead.name);
+
+    return {
+      owner_id: user.id,
+      lead_id: lead.id,
+      to_email: lead.email,
+      subject: personalizedSubject,
+      html_body: personalizedHtml,
+      scheduled_at: params.scheduledAt.toISOString(),
+      block_index: params.blockIndex,
+      sequence_id: params.sequenceId,
+      status: 'pending',
+    };
+  });
+
+  const { data, error } = await supabase
+    .from('scheduled_emails')
+    .insert(rows)
+    .select();
+
+  if (error) {
+    results.failed = params.leads.length;
+    results.errors.push(`Schedule error: ${error.message}`);
+  } else {
+    results.scheduled = data?.length ?? 0;
+  }
+
+  return results;
+}
+
+// ── Fetch user's scheduled emails ──
+export interface ScheduledEmail {
+  id: string;
+  lead_id: string | null;
+  to_email: string;
+  subject: string;
+  scheduled_at: string;
+  status: string;
+  block_index: number;
+  sequence_id: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+export async function fetchScheduledEmails(): Promise<ScheduledEmail[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from('scheduled_emails')
+    .select('*')
+    .eq('owner_id', user.id)
+    .order('scheduled_at', { ascending: true });
+
+  if (error) {
+    console.error('Failed to fetch scheduled emails:', error);
+    return [];
+  }
+
+  return (data ?? []) as ScheduledEmail[];
+}
+
+// ── Cancel a single scheduled email ──
+export async function cancelScheduledEmail(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('scheduled_emails')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', 'pending');
+
+  if (error) {
+    console.error('Failed to cancel scheduled email:', error);
+    return false;
+  }
+  return true;
+}
+
+// ── Cancel all pending emails in a sequence ──
+export async function cancelScheduledSequence(sequenceId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('scheduled_emails')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('sequence_id', sequenceId)
+    .eq('status', 'pending')
+    .select();
+
+  if (error) {
+    console.error('Failed to cancel sequence:', error);
+    return 0;
+  }
+  return data?.length ?? 0;
+}
+
+// ── Fetch email performance data for the current user ──
+export interface EmailPerformanceEntry {
+  subject: string;
+  status: string;
+  sentAt: string;
+  opens: number;
+  clicks: number;
+  messageId: string;
+}
+
+export async function fetchOwnerEmailPerformance(): Promise<EmailPerformanceEntry[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: messages, error: msgErr } = await supabase
+    .from('email_messages')
+    .select('id, subject, status, created_at')
+    .eq('owner_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (msgErr || !messages || messages.length === 0) return [];
+
+  const messageIds = messages.map((m) => m.id);
+
+  const { data: events } = await supabase
+    .from('email_events')
+    .select('message_id, event_type')
+    .in('message_id', messageIds)
+    .eq('is_bot', false);
+
+  const eventMap = new Map<string, { opens: number; clicks: number }>();
+  for (const ev of events ?? []) {
+    const existing = eventMap.get(ev.message_id) ?? { opens: 0, clicks: 0 };
+    if (ev.event_type === 'open') existing.opens++;
+    if (ev.event_type === 'click') existing.clicks++;
+    eventMap.set(ev.message_id, existing);
+  }
+
+  return messages.map((m) => {
+    const stats = eventMap.get(m.id) ?? { opens: 0, clicks: 0 };
+    return {
+      messageId: m.id,
+      subject: m.subject ?? '(no subject)',
+      status: m.status,
+      sentAt: m.created_at,
+      opens: stats.opens,
+      clicks: stats.clicks,
+    };
+  });
+}
+
 // ── Helper: extract visible text from anchor tag ──
 function extractLinkLabel(html: string, anchorOpen: string): string {
   const startIdx = html.indexOf(anchorOpen);
