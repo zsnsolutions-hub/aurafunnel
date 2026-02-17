@@ -871,6 +871,23 @@ const ContentGen: React.FC = () => {
           );
           console.log(`Email delivery block 1: ${result.sent} sent, ${result.failed} failed`, result.errors);
 
+          // Mode B: Auto-mark New leads as Contacted if preference is enabled
+          try {
+            const storedPrefs = localStorage.getItem('aurafunnel_dashboard_prefs');
+            const prefs = storedPrefs ? JSON.parse(storedPrefs) : {};
+            if (prefs.autoContactedOnSend) {
+              const newLeadIds = eligibleLeads.filter(l => l.status === 'New').map(l => l.id);
+              if (newLeadIds.length > 0) {
+                await supabase.from('leads')
+                  .update({ status: 'Contacted', lastActivity: 'Auto-contacted via email send' })
+                  .in('id', newLeadIds)
+                  .eq('status', 'New');
+              }
+            }
+          } catch (e) {
+            console.error('Auto-contacted hook error:', e);
+          }
+
           // Record block 0 in scheduled_emails for campaign history tracking
           const now = new Date().toISOString();
           const trackingRows = eligibleLeads.map(lead => ({

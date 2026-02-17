@@ -6,11 +6,14 @@ import {
   ArrowLeftIcon, CheckIcon, EditIcon, LinkIcon, GlobeIcon, XIcon,
   BrainIcon, AlertTriangleIcon, TrendDownIcon,
   LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon,
-  StickyNoteIcon, PencilIcon, PlusIcon
+  StickyNoteIcon, PencilIcon, PlusIcon,
+  SendIcon, EyeIcon, CursorClickIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch } from '../../lib/gemini';
+import { fetchLeadEmailEngagement } from '../../lib/emailTracking';
+import type { EmailEngagement } from '../../types';
 import EmailEngagementCard from '../../components/dashboard/EmailEngagementCard';
 
 // ── Helpers ──
@@ -180,6 +183,9 @@ const LeadProfile: React.FC = () => {
   // Menu
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ── Email Engagement ──
+  const [emailEngagement, setEmailEngagement] = useState<EmailEngagement | null>(null);
+
   // ── Panel State ──
   const [showLeadHealth, setShowLeadHealth] = useState(false);
   const [showConversionIntel, setShowConversionIntel] = useState(false);
@@ -217,6 +223,7 @@ const LeadProfile: React.FC = () => {
       console.error('LeadProfile fetch error:', error.message);
     } else if (data) {
       setLead(data);
+      fetchLeadEmailEngagement(data.id).then(setEmailEngagement);
     }
     setLoading(false);
   };
@@ -599,6 +606,29 @@ const LeadProfile: React.FC = () => {
   const prediction = derivePredictiveAnalysis(lead);
   const patterns = deriveBehavioralPatterns(lead);
   const actions = deriveRecommendedActions(lead);
+
+  // ── Email engagement computed values ──
+  const hasEmailSent = (emailEngagement?.totalSent ?? 0) > 0;
+  const thirtyDaysAgo = Date.now() - 30 * 86400000;
+  const recentEvents = (emailEngagement?.recentEvents ?? []).filter(
+    e => new Date(e.created_at).getTime() >= thirtyDaysAgo
+  );
+  const hasRecentOpen = recentEvents.some(e => e.event_type === 'open');
+  const hasRecentClick = recentEvents.some(e => e.event_type === 'click');
+  const recentOpenCount = recentEvents.filter(e => e.event_type === 'open').length;
+
+  // Mode A: UI-only "Contacted" display
+  const displayStatus = (lead.status === 'New' && hasEmailSent) ? 'Contacted' : lead.status;
+  const isAutoContacted = lead.status === 'New' && hasEmailSent;
+
+  // Warm lead callout
+  const warmLeadCallout = hasRecentClick
+    ? { message: 'Clicked your CTA — high intent. Follow up now.', level: 'click' as const }
+    : hasRecentOpen
+    ? { message: 'Opened your email — follow up today.', level: 'open' as const }
+    : null;
+
+  const isPotentialLead = hasRecentClick || recentOpenCount >= 2;
   const timeline = deriveEngagementTimeline(lead);
 
   const TABS: { key: TabKey; label: string }[] = [
@@ -715,8 +745,8 @@ const LeadProfile: React.FC = () => {
         </div>
         <div className="flex items-center">
           {PIPELINE_STAGES.map((stage, i) => {
-            const currentIdx = PIPELINE_STAGES.indexOf(lead.status);
-            const isLost = lead.status === 'Lost';
+            const currentIdx = PIPELINE_STAGES.indexOf(displayStatus);
+            const isLost = displayStatus === 'Lost';
             const isCompleted = !isLost && currentIdx >= 0 && i < currentIdx;
             const isCurrent = !isLost && i === currentIdx;
             const isFuture = isLost || i > currentIdx;
@@ -791,6 +821,36 @@ const LeadProfile: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Contact Method Badges ── */}
+      {(hasEmailSent || hasRecentOpen || hasRecentClick || isPotentialLead) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {hasEmailSent && (
+            <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[11px] font-bold">
+              <SendIcon className="w-3.5 h-3.5" />
+              <span>Email</span>
+            </span>
+          )}
+          {hasRecentOpen && (
+            <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-xl text-[11px] font-bold">
+              <EyeIcon className="w-3.5 h-3.5" />
+              <span>Opened</span>
+            </span>
+          )}
+          {hasRecentClick && (
+            <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl text-[11px] font-bold">
+              <CursorClickIcon className="w-3.5 h-3.5" />
+              <span>Clicked CTA</span>
+            </span>
+          )}
+          {isPotentialLead && (
+            <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-violet-50 text-violet-600 rounded-xl text-[11px] font-bold">
+              <FlameIcon className="w-3.5 h-3.5" />
+              <span>Potential Lead</span>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── Main Layout: Content (left) + Quick Actions (right) ── */}
       <div className="flex flex-col lg:flex-row gap-6">
 
@@ -830,12 +890,12 @@ const LeadProfile: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Status</span>
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                        lead.status === 'New' ? 'bg-slate-50 text-slate-600' :
-                        lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
-                        lead.status === 'Qualified' ? 'bg-amber-50 text-amber-600' :
-                        lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-600' :
+                        displayStatus === 'New' ? 'bg-slate-50 text-slate-600' :
+                        displayStatus === 'Contacted' ? 'bg-blue-50 text-blue-600' :
+                        displayStatus === 'Qualified' ? 'bg-amber-50 text-amber-600' :
+                        displayStatus === 'Converted' ? 'bg-emerald-50 text-emerald-600' :
                         'bg-red-50 text-red-600'
-                      }`}>{lead.status}</span>
+                      }`}>{displayStatus}{isAutoContacted && ' (auto)'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Owner</span>
@@ -1203,6 +1263,33 @@ const LeadProfile: React.FC = () => {
             leadId={lead.id}
             onSendEmailClick={() => showFeedback('Email composer opened')}
           />
+
+          {/* ── Warm Lead Callout ── */}
+          {warmLeadCallout && (
+            <div className={`rounded-2xl border shadow-sm p-4 ${
+              warmLeadCallout.level === 'click'
+                ? 'bg-amber-50 border-amber-200'
+                : 'bg-blue-50 border-blue-200'
+            }`}>
+              <div className="flex items-start space-x-3">
+                {warmLeadCallout.level === 'click'
+                  ? <CursorClickIcon className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  : <EyeIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                }
+                <div>
+                  <p className={`text-sm font-bold ${
+                    warmLeadCallout.level === 'click' ? 'text-amber-800' : 'text-blue-800'
+                  }`}>{warmLeadCallout.message}</p>
+                  {isPotentialLead && (
+                    <span className="inline-flex items-center space-x-1 mt-2 px-2.5 py-1 bg-violet-100 text-violet-700 rounded-lg text-[10px] font-bold">
+                      <FlameIcon className="w-3 h-3" />
+                      <span>Potential Lead</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Knowledge Base Card ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mt-4">

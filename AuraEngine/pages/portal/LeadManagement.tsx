@@ -3,6 +3,8 @@ import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
+import { fetchBatchEmailSummary } from '../../lib/emailTracking';
+import type { BatchEmailSummary } from '../../lib/emailTracking';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
 
@@ -134,6 +136,7 @@ const LeadManagement: React.FC = () => {
   const [activityFilter, setActivityFilter] = useState<typeof ACTIVITY_OPTIONS[number]>('All Time');
   const [companySizeFilter, setCompanySizeFilter] = useState<Set<string>>(new Set());
   const [tagFilter, setTagFilter] = useState<Set<LeadTag>>(new Set());
+  const [emailEngagementFilter, setEmailEngagementFilter] = useState<Set<'sent' | 'opened' | 'clicked'>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
   // ── Selection State ──
@@ -170,6 +173,9 @@ const LeadManagement: React.FC = () => {
   const [bulkAIPersonalize, setBulkAIPersonalize] = useState(true);
   const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Email Summary Map ──
+  const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
 
   // ── Inline Status Edit ──
   const [inlineStatusId, setInlineStatusId] = useState<string | null>(null);
@@ -217,6 +223,13 @@ const LeadManagement: React.FC = () => {
     setLoading(false);
   };
 
+  // ── Batch email summary fetch ──
+  useEffect(() => {
+    if (allLeads.length === 0) return;
+    const leadIds = allLeads.map(l => l.id);
+    fetchBatchEmailSummary(leadIds).then(setEmailSummaryMap);
+  }, [allLeads]);
+
   // ── Filtering ──
   const filteredLeads = useMemo(() => {
     let result = [...allLeads];
@@ -246,6 +259,16 @@ const LeadManagement: React.FC = () => {
       });
     }
     if (tagFilter.size > 0) result = result.filter(l => tagFilter.has(getLeadTag(l)));
+    if (emailEngagementFilter.size > 0) {
+      result = result.filter(l => {
+        const summary = emailSummaryMap.get(l.id);
+        if (!summary) return false;
+        if (emailEngagementFilter.has('sent') && !summary.hasSent) return false;
+        if (emailEngagementFilter.has('opened') && !summary.hasOpened) return false;
+        if (emailEngagementFilter.has('clicked') && !summary.hasClicked) return false;
+        return true;
+      });
+    }
 
     // Sort
     result.sort((a, b) => {
@@ -260,7 +283,7 @@ const LeadManagement: React.FC = () => {
     });
 
     return result;
-  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, sortBy, sortDir]);
+  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, emailSummaryMap, sortBy, sortDir]);
 
   // ── KPI Stats ──
   const kpiStats = useMemo(() => {
@@ -387,7 +410,7 @@ const LeadManagement: React.FC = () => {
     return filteredLeads.slice(start, start + PER_PAGE);
   }, [filteredLeads, currentPage]);
 
-  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, searchQuery]);
 
   // ── Selection Helpers ──
   const allOnPageSelected = paginatedLeads.length > 0 && paginatedLeads.every(l => selectedIds.has(l.id));
@@ -429,6 +452,7 @@ const LeadManagement: React.FC = () => {
     setActivityFilter('All Time');
     setCompanySizeFilter(new Set());
     setTagFilter(new Set());
+    setEmailEngagementFilter(new Set());
     setSearchQuery('');
   };
 
@@ -766,7 +790,7 @@ const LeadManagement: React.FC = () => {
 
   const activeFilterCount = [
     statusFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
-    companySizeFilter.size > 0, tagFilter.size > 0,
+    companySizeFilter.size > 0, tagFilter.size > 0, emailEngagementFilter.size > 0,
   ].filter(Boolean).length;
 
   const rangeStart = (currentPage - 1) * PER_PAGE + 1;
@@ -1177,6 +1201,32 @@ const LeadManagement: React.FC = () => {
                     {tag}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Email Engagement */}
+            <div className="mb-5">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Email Engagement</label>
+              <div className="flex flex-wrap gap-2">
+                {(['sent', 'opened', 'clicked'] as const).map(key => {
+                  const label = key === 'sent' ? 'Sent' : key === 'opened' ? 'Opened' : 'Clicked';
+                  const colors = key === 'sent' ? 'bg-blue-50 text-blue-600 border-blue-200' : key === 'opened' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200';
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        const next = new Set(emailEngagementFilter);
+                        next.has(key) ? next.delete(key) : next.add(key);
+                        setEmailEngagementFilter(next);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
+                        emailEngagementFilter.has(key) ? colors + ' border-current' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1625,7 +1675,18 @@ const LeadManagement: React.FC = () => {
                           <span className="text-xs text-slate-500 font-medium">{formatRelativeTime(lead.created_at || lead.lastActivity)}</span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            {(() => {
+                              const summary = emailSummaryMap.get(lead.id);
+                              if (!summary) return null;
+                              return (
+                                <>
+                                  {summary.hasSent && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600">Email</span>}
+                                  {summary.hasOpened && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-600">Opened</span>}
+                                  {summary.hasClicked && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600">Clicked</span>}
+                                </>
+                              );
+                            })()}
                             <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border ${TAG_COLORS[tag]}`}>
                               {tag}
                             </span>

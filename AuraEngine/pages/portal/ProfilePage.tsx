@@ -45,9 +45,9 @@ const ProfilePage: React.FC = () => {
       const stored = localStorage.getItem(PREFS_STORAGE_KEY);
       return stored ? JSON.parse(stored) : {
         defaultView: 'grid', itemsPerPage: 25, showQuickStats: true,
-        showAiInsights: true, showActivityFeed: true, theme: 'light'
+        showAiInsights: true, showActivityFeed: true, theme: 'light', autoContactedOnSend: false
       };
-    } catch { return { defaultView: 'grid', itemsPerPage: 25, showQuickStats: true, showAiInsights: true, showActivityFeed: true, theme: 'light' }; }
+    } catch { return { defaultView: 'grid', itemsPerPage: 25, showQuickStats: true, showAiInsights: true, showActivityFeed: true, theme: 'light', autoContactedOnSend: false }; }
   });
 
   // API Keys
@@ -721,6 +721,7 @@ const ProfilePage: React.FC = () => {
               { key: 'showQuickStats' as const, label: 'Quick Stats Row', desc: 'Show 6-card stats at top of dashboard' },
               { key: 'showAiInsights' as const, label: 'AI Insights Panel', desc: 'Display AI-generated recommendations' },
               { key: 'showActivityFeed' as const, label: 'Activity Feed', desc: 'Show live activity feed on dashboard' },
+              { key: 'autoContactedOnSend' as const, label: 'Auto-mark Contacted on Email Send', desc: 'Automatically move New leads to Contacted when you send them an email' },
             ]).map(item => (
               <div key={item.key} className="flex items-center justify-between py-4 border-b border-slate-50 last:border-0">
                 <div>

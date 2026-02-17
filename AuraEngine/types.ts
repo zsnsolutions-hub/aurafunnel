@@ -228,6 +228,7 @@ export interface DashboardPreferences {
   showAiInsights: boolean;
   showActivityFeed: boolean;
   theme: 'light' | 'dark' | 'system';
+  autoContactedOnSend: boolean;
 }
 
 export interface ApiKey {

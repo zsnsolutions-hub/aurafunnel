@@ -225,6 +225,67 @@ export async function fetchLeadEmailEngagement(
   };
 }
 
+// ── Batch email summary for lead list views ──
+export interface BatchEmailSummary {
+  hasSent: boolean;
+  hasOpened: boolean;   // non-bot open in last 30 days
+  hasClicked: boolean;  // non-bot click in last 30 days
+  openCount: number;    // for "Potential Lead" threshold (>=2)
+}
+
+export async function fetchBatchEmailSummary(
+  leadIds: string[]
+): Promise<Map<string, BatchEmailSummary>> {
+  const map = new Map<string, BatchEmailSummary>();
+  if (leadIds.length === 0) return map;
+
+  // Query 1: messages for these leads → mark hasSent, build messageId→leadId map
+  const { data: messages, error: msgErr } = await supabase
+    .from('email_messages')
+    .select('id, lead_id')
+    .in('lead_id', leadIds);
+
+  if (msgErr || !messages || messages.length === 0) return map;
+
+  const msgToLead = new Map<string, string>();
+  for (const m of messages) {
+    msgToLead.set(m.id, m.lead_id);
+    if (!map.has(m.lead_id)) {
+      map.set(m.lead_id, { hasSent: true, hasOpened: false, hasClicked: false, openCount: 0 });
+    }
+  }
+
+  const messageIds = [...msgToLead.keys()];
+
+  // Query 2: non-bot events in last 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  const { data: events, error: evtErr } = await supabase
+    .from('email_events')
+    .select('message_id, event_type')
+    .in('message_id', messageIds)
+    .eq('is_bot', false)
+    .gte('created_at', thirtyDaysAgo)
+    .in('event_type', ['open', 'click']);
+
+  if (evtErr || !events) return map;
+
+  for (const ev of events) {
+    const leadId = msgToLead.get(ev.message_id);
+    if (!leadId) continue;
+    const summary = map.get(leadId);
+    if (!summary) continue;
+    if (ev.event_type === 'open') {
+      summary.hasOpened = true;
+      summary.openCount++;
+    }
+    if (ev.event_type === 'click') {
+      summary.hasClicked = true;
+    }
+  }
+
+  return map;
+}
+
 // ── Send a tracked email via edge function ──
 export interface SendEmailParams {
   leadId?: string;
