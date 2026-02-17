@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Target, Users, Brain, MessageSquare, Sparkles, PenSquare, Zap,
   PieChart, GitBranch, SlidersHorizontal, Plug, CreditCard,
-  HelpCircle, BookOpen, Settings, LogOut, Search, Bell
+  HelpCircle, BookOpen, Settings, LogOut, Search, Bell, Compass
 } from 'lucide-react';
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
@@ -31,6 +31,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const navItems = [
     { label: 'Main Dashboard', path: '/portal', icon: <Target size={20} /> },
     { label: 'Lead Management', path: '/portal/leads', icon: <Users size={20} /> },
+    { label: 'People Search', path: '/portal/leads/apollo', icon: <Compass size={20} /> },
     { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <Brain size={20} /> },
     { label: 'AI Command Center', path: '/portal/ai', icon: <MessageSquare size={20} /> },
     { label: 'Neural Studio', path: '/portal/content', icon: <Sparkles size={20} /> },

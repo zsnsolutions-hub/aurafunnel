@@ -147,9 +147,9 @@ const LeadManagement: React.FC = () => {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isCSVOpen, setIsCSVOpen] = useState(false);
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
-  const [newLead, setNewLead] = useState({ name: '', email: '', company: '', insights: '' });
+  const [newLead, setNewLead] = useState({ name: '', email: '', company: '', phone: '', insights: '' });
   const [newLeadKb, setNewLeadKb] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
-  const [showNewLeadSocials, setShowNewLeadSocials] = useState(false);
+  const [visibleKbFields, setVisibleKbFields] = useState<Set<string>>(new Set());
   const [addLeadError, setAddLeadError] = useState('');
   const [isAddingLead, setIsAddingLead] = useState(false);
 
@@ -489,6 +489,7 @@ const LeadManagement: React.FC = () => {
       if (newLeadKb.facebook.trim()) kbCleaned.facebook = normalizeUrl(newLeadKb.facebook);
       if (newLeadKb.twitter.trim()) kbCleaned.twitter = normalizeUrl(newLeadKb.twitter);
       if (newLeadKb.youtube.trim()) kbCleaned.youtube = normalizeUrl(newLeadKb.youtube);
+      if (newLead.phone.trim()) kbCleaned.phone = newLead.phone.trim();
       const knowledgeBase = Object.keys(kbCleaned).length > 0 ? kbCleaned : null;
 
       const payload: Record<string, any> = {
@@ -523,9 +524,9 @@ const LeadManagement: React.FC = () => {
       if (data) {
         setAllLeads(prev => [data, ...prev]);
         setIsAddLeadOpen(false);
-        setNewLead({ name: '', email: '', company: '', insights: '' });
+        setNewLead({ name: '', email: '', company: '', phone: '', insights: '' });
         setNewLeadKb({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
-        setShowNewLeadSocials(false);
+        setVisibleKbFields(new Set());
         setQuickInsightLead(data);
       } else {
         setAddLeadError('Insert returned no data. The lead may not have been created.');
@@ -692,6 +693,13 @@ const LeadManagement: React.FC = () => {
           </span>
         </div>
         <div className="flex items-center space-x-3">
+          <button
+            onClick={() => navigate('/portal/leads/apollo')}
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
+          >
+            <GlobeIcon className="w-4 h-4" />
+            <span>Apollo</span>
+          </button>
           <button
             onClick={() => setIsCSVOpen(true)}
             className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
@@ -1821,43 +1829,78 @@ const LeadManagement: React.FC = () => {
                 <input required type="text" value={newLead.company} onChange={e => setNewLead({...newLead, company: e.target.value})} placeholder="e.g. Stripe" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
               </div>
               <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Phone Number</label>
+                <input type="tel" value={newLead.phone} onChange={e => setNewLead({...newLead, phone: e.target.value})} placeholder="+1 (555) 123-4567" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Key Insights</label>
-                <textarea rows={4} value={newLead.insights} onChange={e => setNewLead({...newLead, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none focus:border-indigo-300 transition-colors"></textarea>
+                <textarea rows={3} value={newLead.insights} onChange={e => setNewLead({...newLead, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none focus:border-indigo-300 transition-colors"></textarea>
               </div>
-              {/* Website & Social Links */}
+              {/* Website & Social Links — icon toggles */}
               <div>
-                <div className="space-y-2">
-                  <label className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    <GlobeIcon className="w-3.5 h-3.5" /><span>Website</span>
-                  </label>
-                  <input type="text" value={newLeadKb.website} onChange={e => setNewLeadKb({...newLeadKb, website: e.target.value})} placeholder="https://company.com" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Websites & Social Profiles</label>
+                <div className="flex items-center gap-2 mb-3">
+                  {([
+                    { key: 'website', icon: <GlobeIcon className="w-4 h-4" />, tip: 'Website' },
+                    { key: 'linkedin', icon: <LinkedInIcon className="w-4 h-4" />, tip: 'LinkedIn' },
+                    { key: 'twitter', icon: <TwitterIcon className="w-4 h-4" />, tip: 'X / Twitter' },
+                    { key: 'instagram', icon: <InstagramIcon className="w-4 h-4" />, tip: 'Instagram' },
+                    { key: 'facebook', icon: <FacebookIcon className="w-4 h-4" />, tip: 'Facebook' },
+                  ] as const).map(s => {
+                    const isActive = visibleKbFields.has(s.key) || newLeadKb[s.key].trim() !== '';
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        title={s.tip}
+                        onClick={() => setVisibleKbFields(prev => {
+                          const next = new Set(prev);
+                          if (next.has(s.key)) { next.delete(s.key); } else { next.add(s.key); }
+                          return next;
+                        })}
+                        className={`p-2.5 rounded-xl border transition-all ${
+                          isActive
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {s.icon}
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
-              <div>
-                <button type="button" onClick={() => setShowNewLeadSocials(!showNewLeadSocials)} className="flex items-center space-x-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors">
-                  <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${showNewLeadSocials ? 'rotate-180' : ''}`} />
-                  <span>Social media profiles (optional)</span>
-                </button>
-                {showNewLeadSocials && (
-                  <div className="space-y-3 mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="relative">
+                <div className="space-y-2.5">
+                  {(visibleKbFields.has('website') || newLeadKb.website.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><GlobeIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKb.website} onChange={e => setNewLeadKb({...newLeadKb, website: e.target.value})} placeholder="https://company.com" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(visibleKbFields.has('linkedin') || newLeadKb.linkedin.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
                       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><LinkedInIcon className="w-4 h-4" /></div>
-                      <input type="text" value={newLeadKb.linkedin} onChange={e => setNewLeadKb({...newLeadKb, linkedin: e.target.value})} placeholder="linkedin.com/in/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                      <input type="text" value={newLeadKb.linkedin} onChange={e => setNewLeadKb({...newLeadKb, linkedin: e.target.value})} placeholder="linkedin.com/in/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="relative">
+                  )}
+                  {(visibleKbFields.has('twitter') || newLeadKb.twitter.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
                       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><TwitterIcon className="w-4 h-4" /></div>
-                      <input type="text" value={newLeadKb.twitter} onChange={e => setNewLeadKb({...newLeadKb, twitter: e.target.value})} placeholder="x.com/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                      <input type="text" value={newLeadKb.twitter} onChange={e => setNewLeadKb({...newLeadKb, twitter: e.target.value})} placeholder="x.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="relative">
+                  )}
+                  {(visibleKbFields.has('instagram') || newLeadKb.instagram.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
                       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><InstagramIcon className="w-4 h-4" /></div>
-                      <input type="text" value={newLeadKb.instagram} onChange={e => setNewLeadKb({...newLeadKb, instagram: e.target.value})} placeholder="instagram.com/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                      <input type="text" value={newLeadKb.instagram} onChange={e => setNewLeadKb({...newLeadKb, instagram: e.target.value})} placeholder="instagram.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="relative">
+                  )}
+                  {(visibleKbFields.has('facebook') || newLeadKb.facebook.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
                       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><FacebookIcon className="w-4 h-4" /></div>
-                      <input type="text" value={newLeadKb.facebook} onChange={e => setNewLeadKb({...newLeadKb, facebook: e.target.value})} placeholder="facebook.com/..." className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                      <input type="text" value={newLeadKb.facebook} onChange={e => setNewLeadKb({...newLeadKb, facebook: e.target.value})} placeholder="facebook.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <div className="bg-indigo-50 rounded-2xl p-4 flex items-start space-x-3">
                 <SparklesIcon className="w-5 h-5 text-indigo-500 mt-0.5 shrink-0" />

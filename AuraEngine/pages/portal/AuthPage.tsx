@@ -279,7 +279,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
           .select('*, subscription:subscriptions(*)')
           .eq('id', userId)
           .maybeSingle();
-        
+
         if (profileError && (profileError.code === '42P01' || profileError.message.includes('column'))) {
           setIsDbMissing(true);
           return null;

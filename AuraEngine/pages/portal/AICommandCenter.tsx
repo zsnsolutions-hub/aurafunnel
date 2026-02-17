@@ -109,16 +109,47 @@ const ConfidenceMeter: React.FC<{ confidence: number; size?: 'sm' | 'md' }> = ({
   );
 };
 
-const SUGGESTION_CHIPS: SuggestionChip[] = [
-  { label: 'Pipeline Health', prompt: 'Analyze my current pipeline health', icon: <ActivityIcon className="w-3.5 h-3.5" />, color: 'indigo', category: 'analyze' },
-  { label: 'Hot Lead Actions', prompt: 'What should I do with my hot leads today?', icon: <FlameIcon className="w-3.5 h-3.5" />, color: 'rose', category: 'strategy' },
-  { label: 'Score Breakdown', prompt: 'Show me a breakdown of lead scores', icon: <ChartIcon className="w-3.5 h-3.5" />, color: 'violet', category: 'analyze' },
-  { label: 'Stale Leads', prompt: 'Which leads need re-engagement?', icon: <ClockIcon className="w-3.5 h-3.5" />, color: 'amber', category: 'analyze' },
-  { label: 'Best Outreach Time', prompt: 'When is the best time to reach out to leads?', icon: <MailIcon className="w-3.5 h-3.5" />, color: 'emerald', category: 'strategy' },
-  { label: 'Weekly Summary', prompt: 'Give me a summary of this week\'s activity', icon: <PieChartIcon className="w-3.5 h-3.5" />, color: 'blue', category: 'report' },
-  { label: 'Deep Analysis', prompt: 'Run a deep AI analysis of my entire pipeline', icon: <BrainIcon className="w-3.5 h-3.5" />, color: 'purple', category: 'analyze' },
-  { label: 'Company Clusters', prompt: 'Show me companies with multiple contacts', icon: <UsersIcon className="w-3.5 h-3.5" />, color: 'teal', category: 'analyze' },
-];
+const MODE_CHIPS: Record<AIMode, SuggestionChip[]> = {
+  analyst: [
+    { label: 'Pipeline Health', prompt: 'Analyze my current pipeline health', icon: <ActivityIcon className="w-3.5 h-3.5" />, color: 'indigo', category: 'analyze' },
+    { label: 'Score Breakdown', prompt: 'Show me a breakdown of lead scores', icon: <ChartIcon className="w-3.5 h-3.5" />, color: 'violet', category: 'analyze' },
+    { label: 'Company Clusters', prompt: 'Show me companies with multiple contacts', icon: <UsersIcon className="w-3.5 h-3.5" />, color: 'teal', category: 'analyze' },
+    { label: 'Deep Analysis', prompt: 'Run a deep AI analysis of my entire pipeline', icon: <BrainIcon className="w-3.5 h-3.5" />, color: 'purple', category: 'analyze' },
+    { label: 'Weekly Summary', prompt: 'Give me a summary of this week\'s activity', icon: <PieChartIcon className="w-3.5 h-3.5" />, color: 'blue', category: 'report' },
+    { label: 'Stale Leads', prompt: 'Which leads need re-engagement?', icon: <ClockIcon className="w-3.5 h-3.5" />, color: 'amber', category: 'analyze' },
+  ],
+  strategist: [
+    { label: 'Hot Lead Actions', prompt: 'What should I do with my hot leads today?', icon: <FlameIcon className="w-3.5 h-3.5" />, color: 'rose', category: 'strategy' },
+    { label: 'Best Outreach Time', prompt: 'When is the best time to reach out to leads?', icon: <MailIcon className="w-3.5 h-3.5" />, color: 'emerald', category: 'strategy' },
+    { label: 'Prioritize Pipeline', prompt: 'Help me prioritize which leads to focus on this week', icon: <TargetIcon className="w-3.5 h-3.5" />, color: 'violet', category: 'strategy' },
+    { label: 'Conversion Playbook', prompt: 'Create an action plan to convert my warm leads into qualified', icon: <BoltIcon className="w-3.5 h-3.5" />, color: 'amber', category: 'strategy' },
+    { label: 'Win-back Plan', prompt: 'Suggest a win-back strategy for my cold or lost leads', icon: <RefreshIcon className="w-3.5 h-3.5" />, color: 'slate', category: 'strategy' },
+    { label: 'Weekly Game Plan', prompt: 'Give me a day-by-day action plan for the week', icon: <ClockIcon className="w-3.5 h-3.5" />, color: 'indigo', category: 'strategy' },
+  ],
+  coach: [
+    { label: 'Pipeline Review', prompt: 'Coach me on what I am doing right and wrong with my pipeline', icon: <EyeIcon className="w-3.5 h-3.5" />, color: 'emerald', category: 'analyze' },
+    { label: 'Follow-up Tips', prompt: 'What are the best practices for following up with leads?', icon: <MailIcon className="w-3.5 h-3.5" />, color: 'indigo', category: 'strategy' },
+    { label: 'Scoring Guide', prompt: 'Explain how lead scoring works and how I should interpret scores', icon: <ChartIcon className="w-3.5 h-3.5" />, color: 'violet', category: 'report' },
+    { label: 'Qualification Help', prompt: 'How do I decide when a lead is ready to be qualified?', icon: <CheckIcon className="w-3.5 h-3.5" />, color: 'emerald', category: 'strategy' },
+    { label: 'Common Mistakes', prompt: 'What are common B2B sales pipeline mistakes I should avoid?', icon: <XIcon className="w-3.5 h-3.5" />, color: 'rose', category: 'analyze' },
+    { label: 'Improve Conversion', prompt: 'Give me tips to improve my lead conversion rate', icon: <TrendUpIcon className="w-3.5 h-3.5" />, color: 'amber', category: 'strategy' },
+  ],
+  creative: [
+    { label: 'Email Templates', prompt: 'Write cold outreach email templates for my top leads', icon: <MailIcon className="w-3.5 h-3.5" />, color: 'indigo', category: 'generate' },
+    { label: 'LinkedIn Messages', prompt: 'Draft LinkedIn connection messages for my hot leads', icon: <GlobeIcon className="w-3.5 h-3.5" />, color: 'blue', category: 'generate' },
+    { label: 'Follow-up Sequences', prompt: 'Create a 3-step follow-up email sequence for warm leads', icon: <BoltIcon className="w-3.5 h-3.5" />, color: 'violet', category: 'generate' },
+    { label: 'Value Propositions', prompt: 'Generate unique value propositions for each of my top companies', icon: <SparklesIcon className="w-3.5 h-3.5" />, color: 'amber', category: 'generate' },
+    { label: 'Meeting Agendas', prompt: 'Create meeting agenda templates for qualified leads', icon: <BookOpenIcon className="w-3.5 h-3.5" />, color: 'emerald', category: 'generate' },
+    { label: 'Objection Responses', prompt: 'Write responses to common sales objections based on my pipeline', icon: <TagIcon className="w-3.5 h-3.5" />, color: 'rose', category: 'generate' },
+  ],
+};
+
+const MODE_WELCOME: Record<AIMode, string> = {
+  analyst: `I'm your **Data Analyst**. I specialize in pipeline metrics, score distributions, trends, and data-driven insights. I'll crunch the numbers on your {count} leads. Ask me about pipeline health, score breakdowns, or company clusters.`,
+  strategist: `I'm your **Sales Strategist**. I'll help you prioritize leads, plan your week, and build action plans to maximize conversions. You have {count} leads — let's figure out where to focus. Ask about priorities, outreach timing, or conversion playbooks.`,
+  coach: `I'm your **Sales Coach**. I'll give you honest feedback on your pipeline, share best practices, and help you sharpen your sales process. With {count} leads in your pipeline, let's make sure you're working smart. Ask me for tips, reviews, or guidance.`,
+  creative: `I'm your **Creative Writer**. I'll draft outreach emails, LinkedIn messages, follow-up sequences, and meeting agendas tailored to your leads. You have {count} leads — let me help you craft the perfect message. Ask for templates, sequences, or value propositions.`,
+};
 
 const AICommandCenter: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
@@ -166,19 +197,38 @@ const AICommandCenter: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Welcome message
+  // Welcome message on first load
   useEffect(() => {
     if (!loading && messages.length === 0) {
+      const welcome = MODE_WELCOME[aiMode].replace('{count}', leads.length.toString());
       setMessages([{
         id: 'welcome',
         role: 'ai',
-        content: `Welcome to the AI Command Center, ${user.name?.split(' ')[0] || 'there'}! I'm your AI sales strategist. I can analyze your pipeline, identify opportunities, suggest next actions, and generate insights from your ${leads.length} leads. Try a suggestion below or ask me anything.`,
+        content: `Hey ${user.name?.split(' ')[0] || 'there'}! ${welcome}`,
         timestamp: new Date(),
         confidence: 99,
         type: 'text',
       }]);
     }
-  }, [loading, leads.length, user.name, messages.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  // Mode change → add a new context message
+  const prevMode = useRef(aiMode);
+  useEffect(() => {
+    if (prevMode.current !== aiMode && !loading) {
+      prevMode.current = aiMode;
+      const welcome = MODE_WELCOME[aiMode].replace('{count}', leads.length.toString());
+      setMessages(prev => [...prev, {
+        id: `mode-${Date.now()}`,
+        role: 'ai',
+        content: `**Switched to ${AI_MODES.find(m => m.key === aiMode)?.label} mode.** ${welcome}`,
+        timestamp: new Date(),
+        confidence: 99,
+        type: 'text',
+      }]);
+    }
+  }, [aiMode, loading, leads.length]);
 
   // Auto-scroll
   useEffect(() => {
@@ -297,6 +347,27 @@ const AICommandCenter: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showShortcuts]);
 
+  // ─── Mode-aware response framing ───
+  const frameModeResponse = useCallback((baseContent: string): string => {
+    switch (aiMode) {
+      case 'strategist': {
+        const actionLine = '\n\n**Next Step:** Want me to break this into a day-by-day action plan?';
+        return baseContent + (baseContent.includes('Next Step') ? '' : actionLine);
+      }
+      case 'coach': {
+        const coachPrefix = '**Coach\'s Take:** ';
+        const tip = '\n\n💡 **Pro Tip:** Focus on progress, not perfection. Small consistent actions beat big sporadic ones.';
+        return (baseContent.startsWith('**Coach') ? '' : coachPrefix) + baseContent + tip;
+      }
+      case 'creative': {
+        const cta = '\n\n✏️ Want me to refine this, try a different tone, or personalize it for a specific lead?';
+        return baseContent + cta;
+      }
+      default: // analyst
+        return baseContent;
+    }
+  }, [aiMode]);
+
   // ─── AI Response Generation ───
   const generateResponse = useCallback(async (prompt: string) => {
     setThinking(true);
@@ -340,7 +411,7 @@ ${stats.newCount > 0 ? `**Action Required:** ${stats.newCount} leads haven't bee
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 94,
         type: 'insight',
@@ -361,7 +432,7 @@ ${stats.newCount > 0 ? `**Action Required:** ${stats.newCount} leads haven't bee
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 91,
         type: 'insight',
@@ -392,7 +463,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 96,
         type: 'insight',
@@ -417,7 +488,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 88,
         type: 'insight',
@@ -446,7 +517,7 @@ Based on engagement patterns and industry benchmarks:
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 82,
         type: 'text',
@@ -482,7 +553,7 @@ Would you like me to prepare outreach content for your top priorities?`;
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 90,
         type: 'insight',
@@ -510,7 +581,7 @@ Would you like me to prepare outreach content for your top priorities?`;
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 87,
         type: 'insight',
@@ -532,7 +603,7 @@ Would you like me to prepare outreach content for your top priorities?`;
         setMessages(prev => [...prev, {
           id: `ai-deep-${Date.now()}`,
           role: 'ai',
-          content: `**🧠 Deep AI Analysis (Gemini)**\n\n${result}`,
+          content: frameModeResponse(`**🧠 Deep AI Analysis (Gemini)**\n\n${result}`),
           timestamp: new Date(),
           confidence: 93,
           type: 'insight',
@@ -545,7 +616,7 @@ Would you like me to prepare outreach content for your top priorities?`;
         setMessages(prev => [...prev, {
           id: `ai-fallback-${Date.now()}`,
           role: 'ai',
-          content: fallbackText,
+          content: frameModeResponse(fallbackText),
           timestamp: new Date(),
           confidence: 85,
           type: 'insight',
@@ -553,27 +624,240 @@ Would you like me to prepare outreach content for your top priorities?`;
       }
     }
 
+    // ── Creative mode: email/linkedin/sequence/objection/meeting prompts ──
+    else if (aiMode === 'creative' && (lowerPrompt.includes('email') || lowerPrompt.includes('outreach') || lowerPrompt.includes('template'))) {
+      const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
+      const templates = topLeads.map((l, i) =>
+        `**${i + 1}. Email for ${l.name} (${l.company}) — Score ${l.score}**\n\nSubject: Quick question about ${l.company}'s growth\n\nHi ${l.name.split(' ')[0]},\n\nI noticed ${l.company} is ${l.score > 80 ? 'scaling rapidly' : 'making great strides'} in your space. I work with similar companies to help them ${l.score > 70 ? 'accelerate pipeline and close deals faster' : 'build a more predictable revenue engine'}.\n\nWould you be open to a quick 15-min chat this week?\n\nBest,\n[Your Name]`
+      );
+
+      const responseText = topLeads.length > 0
+        ? `**✉️ Cold Outreach Templates**\n\nHere are personalized emails for your top leads:\n\n${templates.join('\n\n---\n\n')}`
+        : `**✉️ Email Templates**\n\nNo high-scoring leads found to personalize. Here's a generic template:\n\n**Subject:** Quick question about [Company]\n\nHi [First Name],\n\nI help companies like yours [value prop]. Would you be open to a quick 15-min chat?\n\nBest,\n[Your Name]`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 88,
+        type: 'insight',
+      }]);
+    }
+
+    else if (aiMode === 'creative' && (lowerPrompt.includes('linkedin') || lowerPrompt.includes('connection'))) {
+      const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
+      const msgs = topLeads.map((l, i) =>
+        `**${i + 1}. LinkedIn for ${l.name} (${l.company})**\n\nHi ${l.name.split(' ')[0]}, I came across your work at ${l.company} — really impressive what you're building. I work with ${l.score > 80 ? 'high-growth' : 'ambitious'} teams in the ${l.company} space and thought it'd be great to connect. No pitch, just genuine interest in swapping notes. Cheers!`
+      );
+
+      const responseText = `**💼 LinkedIn Connection Messages**\n\n${msgs.length > 0 ? msgs.join('\n\n---\n\n') : 'Add some leads first so I can personalize messages for you.'}`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 86,
+        type: 'insight',
+      }]);
+    }
+
+    else if (aiMode === 'creative' && (lowerPrompt.includes('sequence') || lowerPrompt.includes('follow'))) {
+      const responseText = `**📧 3-Step Follow-up Sequence**
+
+**Email 1 — Day 0 (Initial Touch)**
+Subject: Quick thought about [Company]
+Body: Short, value-first message. Reference something specific about their company. End with a soft CTA (reply, not a meeting link).
+
+**Email 2 — Day 3 (Value Add)**
+Subject: Re: Quick thought about [Company]
+Body: Share a relevant case study, stat, or resource. Position it as "saw this and thought of you." No hard ask.
+
+**Email 3 — Day 7 (Breakup)**
+Subject: Should I close the loop?
+Body: Acknowledge they're busy. Offer to reconnect later or be removed. Creates urgency without being pushy.
+
+**Timing:** Send Email 1 on Tuesday 10am, Email 2 on Friday 1pm, Email 3 on following Tuesday 10am.`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 90,
+        type: 'insight',
+      }]);
+    }
+
+    else if (aiMode === 'creative' && (lowerPrompt.includes('objection') || lowerPrompt.includes('response'))) {
+      const responseText = `**🛡️ Objection Handling Playbook**
+
+**"We're not interested right now"**
+→ "Totally understand. Out of curiosity, is that because timing is off, or because [product type] isn't a priority? Happy to reconnect when it makes sense."
+
+**"We already use [competitor]"**
+→ "Great choice! Many of our best clients switched from [competitor] because of [differentiator]. Would it be helpful to see a quick side-by-side?"
+
+**"Send me more info"**
+→ "Of course! To make sure I send the most relevant stuff — what's your biggest challenge with [topic] right now?" (Re-engages instead of dead-end)
+
+**"It's too expensive"**
+→ "I hear you. Our clients typically see [ROI metric] within [timeframe]. Would it help to see a quick ROI breakdown based on your numbers?"
+
+**"I need to talk to my team"**
+→ "Absolutely — would it help if I put together a one-pager your team can review? I can also join a quick call to answer questions."`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 92,
+        type: 'insight',
+      }]);
+    }
+
+    else if (aiMode === 'coach' && (lowerPrompt.includes('coach') || lowerPrompt.includes('review') || lowerPrompt.includes('doing right') || lowerPrompt.includes('doing wrong'))) {
+      const hotPct = stats.total > 0 ? Math.round((stats.hot / stats.total) * 100) : 0;
+      const goods: string[] = [];
+      const improvements: string[] = [];
+      if (hotPct > 20) goods.push(`Your hot lead percentage (${hotPct}%) is above average — good lead quality`);
+      if (stats.qualified > 0) goods.push(`You have ${stats.qualified} qualified leads in the pipeline — active qualification is happening`);
+      if (stats.avgScore > 55) goods.push(`Average score of ${stats.avgScore} shows a healthy pipeline`);
+      if (goods.length === 0) goods.push('You have leads in your pipeline — that\'s the first step!');
+      if (stats.newCount > 3) improvements.push(`${stats.newCount} leads are untouched — contact within 48hrs for best conversion`);
+      if (stats.avgScore < 50) improvements.push(`Average score of ${stats.avgScore} is below target. Enrich lead data or tighten your ICP`);
+      if (hotPct < 15) improvements.push(`Only ${hotPct}% hot leads — focus on nurturing warm leads with targeted content`);
+      if (improvements.length === 0) improvements.push('Keep up the momentum and track your conversion rates weekly');
+
+      const responseText = `**📋 Pipeline Review**\n\n**What you're doing well:**\n${goods.map(g => `✅ ${g}`).join('\n')}\n\n**Where to improve:**\n${improvements.map(im => `⚠️ ${im}`).join('\n')}\n\n**Overall Grade: ${stats.avgScore > 65 ? 'A' : stats.avgScore > 50 ? 'B' : stats.avgScore > 35 ? 'C' : 'D'}** — ${stats.avgScore > 65 ? 'Excellent work. Stay consistent.' : stats.avgScore > 50 ? 'Good foundation. Small tweaks will make a big difference.' : 'Room for growth. Focus on the basics — contact speed and lead quality.'}`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 91,
+        type: 'insight',
+      }]);
+    }
+
+    else if (aiMode === 'coach' && (lowerPrompt.includes('mistake') || lowerPrompt.includes('avoid'))) {
+      const responseText = `**🚫 Top B2B Pipeline Mistakes to Avoid**
+
+**1. Slow Response Time**
+Leads contacted within 5 minutes are 21x more likely to convert. Every hour you wait, odds drop sharply.
+
+**2. No Follow-up System**
+80% of sales require 5+ touchpoints. Most reps stop after 2. Build a consistent follow-up sequence.
+
+**3. Treating All Leads the Same**
+A hot lead (80+) needs a different approach than a cold one (25). Segment and personalize.
+
+**4. Ignoring Lead Scoring**
+Your AI scores are there for a reason. Trust the data and prioritize accordingly.
+
+**5. Not Qualifying Early**
+Spending time on leads that will never convert wastes your best resource — time. Qualify or disqualify fast.
+
+**6. Skipping Discovery**
+Don't pitch before understanding their pain. Ask questions first, present solutions second.
+
+**7. No Pipeline Hygiene**
+Clean your pipeline monthly. Archive cold leads, update statuses, and keep your data fresh.`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 95,
+        type: 'insight',
+      }]);
+    }
+
+    else if (aiMode === 'strategist' && (lowerPrompt.includes('prioritize') || lowerPrompt.includes('focus'))) {
+      const tiers = [
+        { label: 'Tier 1 — Act Now', leads: leads.filter(l => l.score > 80 && l.status !== 'Qualified'), action: 'Call or send personalized demo invite today' },
+        { label: 'Tier 2 — Nurture This Week', leads: leads.filter(l => l.score > 55 && l.score <= 80), action: 'Send case study or value-add content' },
+        { label: 'Tier 3 — Re-engage Next Week', leads: leads.filter(l => l.score > 30 && l.score <= 55), action: 'Add to email nurture sequence' },
+        { label: 'Tier 4 — Low Priority', leads: leads.filter(l => l.score <= 30), action: 'Batch outreach or archive if stale' },
+      ];
+
+      const responseText = `**🎯 Lead Prioritization Matrix**\n\n${tiers.map(t =>
+        `**${t.label}** (${t.leads.length} leads)\n${t.leads.slice(0, 3).map(l => `  • ${l.name} (${l.company}) — ${l.score}`).join('\n') || '  No leads in this tier'}\n  → **Action:** ${t.action}`
+      ).join('\n\n')}\n\n**Rule of thumb:** Spend 60% of your time on Tier 1, 25% on Tier 2, 10% on Tier 3, and batch Tier 4.`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 93,
+        type: 'insight',
+      }]);
+    }
+
+    else if (aiMode === 'strategist' && (lowerPrompt.includes('game plan') || lowerPrompt.includes('day-by-day') || lowerPrompt.includes('action plan'))) {
+      const hot = leads.filter(l => l.score > 80).slice(0, 3);
+      const warm = leads.filter(l => l.score > 55 && l.score <= 80).slice(0, 3);
+      const newLeads = leads.filter(l => l.status === 'New').slice(0, 2);
+
+      const responseText = `**📅 Weekly Action Plan**
+
+**Monday — Pipeline Review**
+- Review this week's priorities using AI Command Center
+- Update stale lead statuses
+- Block 2 hours for outreach
+
+**Tuesday — High-Priority Outreach**
+${hot.map(l => `- Call/email ${l.name} (${l.company}, score ${l.score})`).join('\n') || '- No hot leads — focus on warm leads'}
+- Follow up on any pending demos
+
+**Wednesday — Content & Nurture**
+${warm.map(l => `- Send case study to ${l.name} (${l.company})`).join('\n') || '- Prepare content for next batch'}
+- Schedule LinkedIn engagement for top prospects
+
+**Thursday — New Lead Response**
+${newLeads.map(l => `- First touch: ${l.name} (${l.company}, score ${l.score})`).join('\n') || '- All new leads contacted — follow up instead'}
+- Research 3 new target accounts
+
+**Friday — Review & Prep**
+- Update pipeline statuses
+- Run "Weekly Summary" in AI Command Center
+- Prep next week's priority list`;
+
+      setMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: frameModeResponse(responseText),
+        timestamp: new Date(),
+        confidence: 89,
+        type: 'insight',
+      }]);
+    }
+
     else {
-      // Generic AI response using programmatic insights
+      // Generic AI response — mode-aware
       const insights = generateProgrammaticInsights(leads);
       const topLead = leads[0];
+      const modeLabel = AI_MODES.find(m => m.key === aiMode)?.label || 'AI';
+      const modeChips = MODE_CHIPS[aiMode];
 
-      const responseText = `I analyzed your request against your pipeline data. Here's what I found:
+      const responseText = `I analyzed your request as your **${modeLabel}**. Here's what I found:
 
 ${insights.length > 0 ? insights.slice(0, 2).map((ins, i) => `**${i + 1}. ${ins.title}**\n${ins.description}`).join('\n\n') : 'No specific insights match your query.'}
 
 ${topLead ? `\n**Quick Stat:** Your top lead is **${topLead.name}** (${topLead.company}) with a score of ${topLead.score}.` : ''}
 
-Try asking about:
-• "Pipeline health" for a full overview
-• "Hot lead actions" for priority recommendations
-• "Score breakdown" for distribution analysis
-• "Deep analysis" for Gemini-powered insights`;
+Try these ${modeLabel} commands:
+${modeChips.slice(0, 4).map(c => `• "${c.label}"`).join('\n')}`;
 
       setMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         role: 'ai',
-        content: responseText,
+        content: frameModeResponse(responseText),
         timestamp: new Date(),
         confidence: 75,
         type: 'text',
@@ -582,7 +866,7 @@ Try asking about:
 
     setThinking(false);
     setResponseCount(prev => prev + 1);
-  }, [leads, stats]);
+  }, [leads, stats, aiMode, frameModeResponse]);
 
   // ─── Handlers ───
   const handleSend = () => {
@@ -613,9 +897,10 @@ Try asking about:
     }]);
   };
 
+  const modeChips = MODE_CHIPS[aiMode];
   const filteredChips = chipFilter
-    ? SUGGESTION_CHIPS.filter(c => c.category === chipFilter)
-    : SUGGESTION_CHIPS;
+    ? modeChips.filter(c => c.category === chipFilter)
+    : modeChips;
 
   // ─── Loading ───
   if (loading) {

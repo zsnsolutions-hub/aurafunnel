@@ -5,7 +5,7 @@ import {
   KeyboardIcon, XIcon, TrendDownIcon, ActivityIcon, ShieldIcon, CheckIcon,
   AlertTriangleIcon, ClockIcon, UsersIcon, LayersIcon, BrainIcon, PieChartIcon,
   StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
-  ChevronDownIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon
+  PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon
 } from '../../components/Icons';
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch } from '../../lib/gemini';
 import { supabase } from '../../lib/supabase';
@@ -94,8 +94,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [funnelStages, setFunnelStages] = useState<FunnelStage[]>([]);
 
   // Form states for adding lead
-  const [newLead, setNewLead] = useState({ name: '', email: '', company: '', insights: '' });
-  const [showKBFields, setShowKBFields] = useState(false);
+  const [newLead, setNewLead] = useState({ name: '', email: '', company: '', phone: '', insights: '' });
+  const [visibleKbFields, setVisibleKbFields] = useState<Set<string>>(new Set());
   const [newLeadKB, setNewLeadKB] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
   const [addLeadError, setAddLeadError] = useState('');
   const [isAddingLead, setIsAddingLead] = useState(false);
@@ -486,8 +486,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     return `https://${trimmed}`;
   };
 
-  const buildKnowledgeBase = (kb: typeof newLeadKB) => {
+  const buildKnowledgeBase = (kb: typeof newLeadKB, phone?: string) => {
     const result: Record<string, string> = {};
+    if (phone?.trim()) result.phone = phone.trim();
     if (kb.website.trim()) result.website = normalizeUrl(kb.website);
     if (kb.linkedin.trim()) result.linkedin = normalizeUrl(kb.linkedin);
     if (kb.instagram.trim()) result.instagram = normalizeUrl(kb.instagram);
@@ -506,9 +507,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     setFilteredLeads(updated);
     setActiveSegmentId(null);
     setIsAddLeadOpen(false);
-    setNewLead({ name: '', email: '', company: '', insights: '' });
+    setNewLead({ name: '', email: '', company: '', phone: '', insights: '' });
     setNewLeadKB({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
-    setShowKBFields(false);
+    setVisibleKbFields(new Set());
     fetchQuickStats();
 
     // Fire background AI research if social URLs are present
@@ -565,7 +566,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       }
 
       const mockScore = Math.floor(Math.random() * 40) + 60;
-      const kb = buildKnowledgeBase(newLeadKB);
+      const kb = buildKnowledgeBase(newLeadKB, newLead.phone);
 
       const payload: Record<string, any> = {
         name: newLead.name.trim(),
@@ -1289,58 +1290,92 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Work Email</label>
-                <input required type="email" value={newLead.email} onChange={e => setNewLead({...newLead, email: e.target.value})} placeholder="robert@stripe.com" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" />
+                <input required type="email" value={newLead.email} onChange={e => setNewLead({...newLead, email: e.target.value})} placeholder="robert@stripe.com" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Company Name</label>
-                <input required type="text" value={newLead.company} onChange={e => setNewLead({...newLead, company: e.target.value})} placeholder="e.g. Stripe" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" />
+                <input required type="text" value={newLead.company} onChange={e => setNewLead({...newLead, company: e.target.value})} placeholder="e.g. Stripe" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Phone Number</label>
+                <input type="tel" value={newLead.phone} onChange={e => setNewLead({...newLead, phone: e.target.value})} placeholder="+1 (555) 123-4567" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Key Insights</label>
-                <textarea rows={4} value={newLead.insights} onChange={e => setNewLead({...newLead, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none"></textarea>
+                <textarea rows={3} value={newLead.insights} onChange={e => setNewLead({...newLead, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none focus:border-indigo-300 transition-colors"></textarea>
               </div>
-              {/* KB Accordion */}
-              <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setShowKBFields(!showKBFields)}
-                  className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex items-center space-x-2">
-                    <GlobeIcon className="w-4 h-4 text-slate-400" />
-                    <span className="text-xs font-bold text-slate-600">Add website & social profiles (optional)</span>
-                  </div>
-                  <ChevronDownIcon className={`w-4 h-4 text-slate-400 transition-transform ${showKBFields ? 'rotate-180' : ''}`} />
-                </button>
-                {showKBFields && (
-                  <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3 animate-in fade-in duration-200">
-                    <div className="flex items-center space-x-2">
-                      <GlobeIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      <input type="url" value={newLeadKB.website} onChange={e => setNewLeadKB({...newLeadKB, website: e.target.value})} placeholder="Website URL" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+              {/* Website & Social Links — icon toggles */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Websites & Social Profiles</label>
+                <div className="flex items-center gap-2 mb-3">
+                  {([
+                    { key: 'website', icon: <GlobeIcon className="w-4 h-4" />, tip: 'Website' },
+                    { key: 'linkedin', icon: <LinkedInIcon className="w-4 h-4" />, tip: 'LinkedIn' },
+                    { key: 'twitter', icon: <TwitterIcon className="w-4 h-4" />, tip: 'X / Twitter' },
+                    { key: 'instagram', icon: <InstagramIcon className="w-4 h-4" />, tip: 'Instagram' },
+                    { key: 'facebook', icon: <FacebookIcon className="w-4 h-4" />, tip: 'Facebook' },
+                    { key: 'youtube', icon: <YoutubeIcon className="w-4 h-4" />, tip: 'YouTube' },
+                  ] as const).map(s => {
+                    const isActive = visibleKbFields.has(s.key) || newLeadKB[s.key].trim() !== '';
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        title={s.tip}
+                        onClick={() => setVisibleKbFields(prev => {
+                          const next = new Set(prev);
+                          if (next.has(s.key)) { next.delete(s.key); } else { next.add(s.key); }
+                          return next;
+                        })}
+                        className={`p-2.5 rounded-xl border transition-all ${
+                          isActive
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {s.icon}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="space-y-2.5">
+                  {(visibleKbFields.has('website') || newLeadKB.website.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><GlobeIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKB.website} onChange={e => setNewLeadKB({...newLeadKB, website: e.target.value})} placeholder="https://company.com" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <LinkedInIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      <input type="url" value={newLeadKB.linkedin} onChange={e => setNewLeadKB({...newLeadKB, linkedin: e.target.value})} placeholder="LinkedIn profile" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                  )}
+                  {(visibleKbFields.has('linkedin') || newLeadKB.linkedin.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><LinkedInIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKB.linkedin} onChange={e => setNewLeadKB({...newLeadKB, linkedin: e.target.value})} placeholder="linkedin.com/in/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <InstagramIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      <input type="url" value={newLeadKB.instagram} onChange={e => setNewLeadKB({...newLeadKB, instagram: e.target.value})} placeholder="Instagram profile" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                  )}
+                  {(visibleKbFields.has('twitter') || newLeadKB.twitter.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><TwitterIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKB.twitter} onChange={e => setNewLeadKB({...newLeadKB, twitter: e.target.value})} placeholder="x.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <FacebookIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      <input type="url" value={newLeadKB.facebook} onChange={e => setNewLeadKB({...newLeadKB, facebook: e.target.value})} placeholder="Facebook page" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                  )}
+                  {(visibleKbFields.has('instagram') || newLeadKB.instagram.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><InstagramIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKB.instagram} onChange={e => setNewLeadKB({...newLeadKB, instagram: e.target.value})} placeholder="instagram.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <TwitterIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      <input type="url" value={newLeadKB.twitter} onChange={e => setNewLeadKB({...newLeadKB, twitter: e.target.value})} placeholder="X / Twitter profile" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                  )}
+                  {(visibleKbFields.has('facebook') || newLeadKB.facebook.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><FacebookIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKB.facebook} onChange={e => setNewLeadKB({...newLeadKB, facebook: e.target.value})} placeholder="facebook.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <YoutubeIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      <input type="url" value={newLeadKB.youtube} onChange={e => setNewLeadKB({...newLeadKB, youtube: e.target.value})} placeholder="YouTube channel" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300" />
+                  )}
+                  {(visibleKbFields.has('youtube') || newLeadKB.youtube.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><YoutubeIcon className="w-4 h-4" /></div>
+                      <input type="text" value={newLeadKB.youtube} onChange={e => setNewLeadKB({...newLeadKB, youtube: e.target.value})} placeholder="youtube.com/@channel" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
                     </div>
-                    <textarea rows={2} value={newLeadKB.extraNotes} onChange={e => setNewLeadKB({...newLeadKB, extraNotes: e.target.value})} placeholder="Extra notes..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none resize-none focus:border-indigo-300" />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               {addLeadError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl">

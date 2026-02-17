@@ -160,15 +160,15 @@ const LeadIntelligence: React.FC = () => {
       if (error) throw error;
       const fetchedLeads = (data || []) as Lead[];
       setLeads(fetchedLeads);
-      if (fetchedLeads.length > 0 && !selectedLeadId) {
-        setSelectedLeadId(fetchedLeads[0].id);
+      if (fetchedLeads.length > 0) {
+        setSelectedLeadId(prev => prev ?? fetchedLeads[0].id);
       }
     } catch (err: unknown) {
       console.error('Intelligence fetch error:', err instanceof Error ? err.message : err);
     } finally {
       setLoading(false);
     }
-  }, [user?.id, selectedLeadId]);
+  }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

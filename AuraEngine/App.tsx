@@ -41,6 +41,7 @@ const ContentStudio = lazy(() => import('./pages/portal/ContentStudio'));
 const MobileDashboard = lazy(() => import('./pages/portal/MobileDashboard'));
 const ModelTraining = lazy(() => import('./pages/portal/ModelTraining'));
 const IntegrationHub = lazy(() => import('./pages/portal/IntegrationHub'));
+const ApolloSearchPage = lazy(() => import('./pages/portal/ApolloSearchPage'));
 
 // Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -104,11 +105,7 @@ const App: React.FC = () => {
     let cancelled = false;
     const checkUser = async () => {
       try {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Session check timeout')), 5000)
-        );
-        const sessionPromise = supabase.auth.getSession();
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+        const { data: { session } } = await supabase.auth.getSession();
         if (session && !cancelled) {
           const profile = await fetchProfile(session.user.id);
           if (profile && !cancelled) setUser(profile);
@@ -175,6 +172,7 @@ const App: React.FC = () => {
           >
             <Route index element={<ErrorBoundary><ClientDashboard user={user!} /></ErrorBoundary>} />
             <Route path="leads" element={<ErrorBoundary><LeadManagement /></ErrorBoundary>} />
+            <Route path="leads/apollo" element={<ErrorBoundary><ApolloSearchPage /></ErrorBoundary>} />
             <Route path="leads/:leadId" element={<ErrorBoundary><LeadProfile /></ErrorBoundary>} />
             <Route path="content" element={<ErrorBoundary><ContentGen /></ErrorBoundary>} />
             <Route path="strategy" element={<ErrorBoundary><StrategyHub /></ErrorBoundary>} />
