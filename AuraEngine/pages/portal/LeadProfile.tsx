@@ -194,6 +194,14 @@ const LeadProfile: React.FC = () => {
   const [kbSaving, setKbSaving] = useState(false);
   const [kbError, setKbError] = useState('');
 
+  // ── Edit Lead ──
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', email: '', company: '', phone: '', insights: '' });
+  const [editKb, setEditKb] = useState({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
+  const [editKbVisible, setEditKbVisible] = useState<Set<string>>(new Set());
+  const [editError, setEditError] = useState('');
+  const [isEditSaving, setIsEditSaving] = useState(false);
+
   useEffect(() => {
     if (leadId) fetchLead();
   }, [leadId]);
@@ -229,6 +237,82 @@ const LeadProfile: React.FC = () => {
   const openKbDrawer = () => {
     setKbForm({ ...(lead?.knowledgeBase || {}) });
     setKbDrawerOpen(true);
+  };
+
+  const openEditDrawer = () => {
+    if (!lead) return;
+    const kb = lead.knowledgeBase || {};
+    setEditForm({
+      name: lead.name || '',
+      email: lead.email || '',
+      company: lead.company || '',
+      phone: (kb as Record<string, string>).phone || '',
+      insights: lead.insights || '',
+    });
+    setEditKb({
+      website: kb.website || '',
+      linkedin: kb.linkedin || '',
+      instagram: kb.instagram || '',
+      facebook: kb.facebook || '',
+      twitter: kb.twitter || '',
+      youtube: kb.youtube || '',
+    });
+    const visible = new Set<string>();
+    if (kb.website) visible.add('website');
+    if (kb.linkedin) visible.add('linkedin');
+    if (kb.twitter) visible.add('twitter');
+    if (kb.instagram) visible.add('instagram');
+    if (kb.facebook) visible.add('facebook');
+    setEditKbVisible(visible);
+    setEditError('');
+    setIsEditOpen(true);
+  };
+
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lead) return;
+    setEditError('');
+    setIsEditSaving(true);
+    try {
+      const kbCleaned: Record<string, string> = {};
+      if (editKb.website.trim()) kbCleaned.website = normalizeUrl(editKb.website);
+      if (editKb.linkedin.trim()) kbCleaned.linkedin = normalizeUrl(editKb.linkedin);
+      if (editKb.instagram.trim()) kbCleaned.instagram = normalizeUrl(editKb.instagram);
+      if (editKb.facebook.trim()) kbCleaned.facebook = normalizeUrl(editKb.facebook);
+      if (editKb.twitter.trim()) kbCleaned.twitter = normalizeUrl(editKb.twitter);
+      if (editKb.youtube.trim()) kbCleaned.youtube = normalizeUrl(editKb.youtube);
+      if (editForm.phone.trim()) kbCleaned.phone = editForm.phone.trim();
+      const knowledgeBase = Object.keys(kbCleaned).length > 0 ? kbCleaned : null;
+
+      const payload: Record<string, any> = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
+        company: editForm.company.trim(),
+        insights: editForm.insights.trim() || '',
+      };
+      if (knowledgeBase !== undefined) payload.knowledgeBase = knowledgeBase;
+
+      let { error } = await supabase.from('leads').update(payload).eq('id', lead.id);
+
+      if (error && (error.message?.includes('knowledgeBase') || error.code === 'PGRST204')) {
+        delete payload.knowledgeBase;
+        const retry = await supabase.from('leads').update(payload).eq('id', lead.id);
+        error = retry.error;
+      }
+
+      if (error) {
+        setEditError(`${error.message}${error.hint ? ` (Hint: ${error.hint})` : ''}`);
+        return;
+      }
+
+      setLead({ ...lead, ...payload, knowledgeBase: knowledgeBase || lead.knowledgeBase });
+      setIsEditOpen(false);
+      showFeedback('Lead updated successfully');
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+    } finally {
+      setIsEditSaving(false);
+    }
   };
 
   const AI_RESEARCH_HEADER = '--- AI Research Brief ---';
@@ -575,6 +659,13 @@ const LeadProfile: React.FC = () => {
           >
             <BrainIcon className="w-3.5 h-3.5" />
             <span className="hidden lg:inline">Engagement</span>
+          </button>
+          <button
+            onClick={openEditDrawer}
+            className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+          >
+            <PencilIcon className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline">Edit Lead</span>
           </button>
           <div className="relative">
           <button onClick={() => setMenuOpen(!menuOpen)} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-500">
@@ -1695,6 +1786,122 @@ const LeadProfile: React.FC = () => {
                 {kbSaving ? 'Saving...' : 'Save Knowledge Base'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lead Drawer */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-end">
+          <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsEditOpen(false)}></div>
+          <div className="relative w-full max-w-md h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 p-10 flex flex-col overflow-y-auto">
+            <div className="flex items-center justify-between mb-10">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 font-heading">Edit Lead</h2>
+                <p className="text-sm text-slate-500 mt-1">Update lead details and enrichment data.</p>
+              </div>
+              <button onClick={() => setIsEditOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <form className="space-y-6 flex-grow" onSubmit={handleEditSave}>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Full Name</label>
+                <input required type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="e.g. Robert Fox" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Work Email</label>
+                <input required type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} placeholder="robert@stripe.com" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Company Name</label>
+                <input required type="text" value={editForm.company} onChange={e => setEditForm({...editForm, company: e.target.value})} placeholder="e.g. Stripe" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Phone Number</label>
+                <input type="tel" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} placeholder="+1 (555) 123-4567" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Key Insights</label>
+                <textarea rows={3} value={editForm.insights} onChange={e => setEditForm({...editForm, insights: e.target.value})} placeholder="What do we know?" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none resize-none focus:border-indigo-300 transition-colors"></textarea>
+              </div>
+              {/* Website & Social Links */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Websites & Social Profiles</label>
+                <div className="flex items-center gap-2 mb-3">
+                  {([
+                    { key: 'website', icon: <GlobeIcon className="w-4 h-4" />, tip: 'Website' },
+                    { key: 'linkedin', icon: <LinkedInIcon className="w-4 h-4" />, tip: 'LinkedIn' },
+                    { key: 'twitter', icon: <TwitterIcon className="w-4 h-4" />, tip: 'X / Twitter' },
+                    { key: 'instagram', icon: <InstagramIcon className="w-4 h-4" />, tip: 'Instagram' },
+                    { key: 'facebook', icon: <FacebookIcon className="w-4 h-4" />, tip: 'Facebook' },
+                  ] as const).map(s => {
+                    const isActive = editKbVisible.has(s.key) || editKb[s.key].trim() !== '';
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        title={s.tip}
+                        onClick={() => setEditKbVisible(prev => {
+                          const next = new Set(prev);
+                          if (next.has(s.key)) { next.delete(s.key); } else { next.add(s.key); }
+                          return next;
+                        })}
+                        className={`p-2.5 rounded-xl border transition-all ${
+                          isActive
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {s.icon}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="space-y-2.5">
+                  {(editKbVisible.has('website') || editKb.website.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><GlobeIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editKb.website} onChange={e => setEditKb({...editKb, website: e.target.value})} placeholder="https://company.com" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editKbVisible.has('linkedin') || editKb.linkedin.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><LinkedInIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editKb.linkedin} onChange={e => setEditKb({...editKb, linkedin: e.target.value})} placeholder="linkedin.com/in/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editKbVisible.has('twitter') || editKb.twitter.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><TwitterIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editKb.twitter} onChange={e => setEditKb({...editKb, twitter: e.target.value})} placeholder="x.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editKbVisible.has('instagram') || editKb.instagram.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><InstagramIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editKb.instagram} onChange={e => setEditKb({...editKb, instagram: e.target.value})} placeholder="instagram.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                  {(editKbVisible.has('facebook') || editKb.facebook.trim() !== '') && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><FacebookIcon className="w-4 h-4" /></div>
+                      <input type="text" value={editKb.facebook} onChange={e => setEditKb({...editKb, facebook: e.target.value})} placeholder="facebook.com/username" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors" />
+                    </div>
+                  )}
+                </div>
+              </div>
+              {editError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <p className="text-xs font-bold text-red-600">{editError}</p>
+                </div>
+              )}
+              <div className="pt-6">
+                <button type="submit" disabled={isEditSaving} className={`w-full py-4 rounded-2xl font-bold shadow-xl transition-colors ${isEditSaving ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+                  {isEditSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
