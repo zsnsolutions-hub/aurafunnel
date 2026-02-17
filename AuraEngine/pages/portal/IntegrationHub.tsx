@@ -110,24 +110,24 @@ const SECURITY_CHECKS = [
 
 const DEFAULT_INTEGRATIONS: Integration[] = [
   {
-    id: 'salesforce', name: 'Salesforce', category: 'crm', status: 'connected',
-    lastSync: '2 minutes ago', syncDirection: 'bidirectional',
+    id: 'salesforce', name: 'Salesforce', category: 'crm', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'bidirectional',
     objects: ['Leads', 'Contacts', 'Accounts'], icon: '☁️', color: '#00A1E0', dataVolume: 42,
   },
   {
-    id: 'hubspot', name: 'HubSpot', category: 'marketing', status: 'connected',
-    lastSync: '5 minutes ago', syncDirection: 'outbound',
+    id: 'hubspot', name: 'HubSpot', category: 'marketing', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
     objects: ['Campaigns', 'Contacts'], icon: '🔶', color: '#FF7A59', dataVolume: 28,
   },
   {
-    id: 'slack', name: 'Slack', category: 'comms', status: 'partial',
-    lastSync: '1 hour ago', syncDirection: 'outbound',
+    id: 'slack', name: 'Slack', category: 'comms', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
     objects: ['#sales-alerts', '#leads'], icon: '💬', color: '#4A154B',
-    error: 'Channel #leads-archive not found', dataVolume: 15,
+    dataVolume: 15,
   },
   {
-    id: 'ga', name: 'Google Analytics', category: 'analytics', status: 'connected',
-    lastSync: '15 minutes ago', syncDirection: 'inbound',
+    id: 'ga', name: 'Google Analytics', category: 'analytics', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'inbound',
     objects: ['Website traffic', 'Conversions'], icon: '📊', color: '#E37400', dataVolume: 10,
   },
   {
@@ -207,6 +207,13 @@ const IntegrationHub: React.FC = () => {
   const [emailSetupResult, setEmailSetupResult] = useState<'success' | 'error' | null>(null);
   const [emailSetupSaving, setEmailSetupSaving] = useState(false);
 
+  // ─── Generic (Non-Email) Integration Setup Modal State ───
+  const [genericSetupId, setGenericSetupId] = useState<string | null>(null);
+  const [genericSetupApiKey, setGenericSetupApiKey] = useState('');
+  const [genericSetupWebhookUrl, setGenericSetupWebhookUrl] = useState('');
+  const [genericSetupSaving, setGenericSetupSaving] = useState(false);
+  const [genericSetupResult, setGenericSetupResult] = useState<'success' | 'error' | null>(null);
+
   // ─── Enhanced Wireframe State ───
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showHealthDashboard, setShowHealthDashboard] = useState(false);
@@ -220,25 +227,44 @@ const IntegrationHub: React.FC = () => {
 
   const EMAIL_PROVIDERS = useMemo(() => new Set(['sendgrid', 'gmail', 'smtp', 'mailchimp']), []);
 
-  // ─── Load email provider configs from DB ───
+  // ─── Load email provider configs from DB + non-email configs from localStorage ───
   useEffect(() => {
     (async () => {
       try {
+        // Load non-email integration configs from localStorage
+        let savedConfigs: Record<string, { apiKey: string; webhookUrl?: string; connectedAt: string }> = {};
+        try {
+          const raw = localStorage.getItem('aura_integration_configs');
+          if (raw) savedConfigs = JSON.parse(raw);
+        } catch {}
+
         const { data } = await supabase.from('email_provider_configs').select('provider, is_active, from_email, updated_at');
-        if (data && data.length > 0) {
-          setIntegrations(prev => prev.map(i => {
-            const match = data.find((d: any) => d.provider === i.id && d.is_active);
-            if (match) {
-              const ago = Math.round((Date.now() - new Date(match.updated_at).getTime()) / 60000);
-              const lastSync = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
-              return { ...i, status: 'connected' as IntegrationStatus, lastSync };
+
+        setIntegrations(prev => prev.map(i => {
+          // Email providers: check DB
+          if (EMAIL_PROVIDERS.has(i.id)) {
+            if (data && data.length > 0) {
+              const match = data.find((d: any) => d.provider === i.id && d.is_active);
+              if (match) {
+                const ago = Math.round((Date.now() - new Date(match.updated_at).getTime()) / 60000);
+                const lastSync = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                return { ...i, status: 'connected' as IntegrationStatus, lastSync };
+              }
             }
-            if (EMAIL_PROVIDERS.has(i.id)) return { ...i, status: 'disconnected' as IntegrationStatus };
-            return i;
-          }));
-        }
+            return { ...i, status: 'disconnected' as IntegrationStatus };
+          }
+
+          // Non-email providers: check localStorage
+          const saved = savedConfigs[i.id];
+          if (saved && saved.apiKey) {
+            const ago = Math.round((Date.now() - new Date(saved.connectedAt).getTime()) / 60000);
+            const lastSync = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+            return { ...i, status: 'connected' as IntegrationStatus, lastSync, error: undefined };
+          }
+          return i;
+        }));
       } catch (err) {
-        console.error('Failed to load email provider configs:', err);
+        console.error('Failed to load integration configs:', err);
       }
     })();
   }, [EMAIL_PROVIDERS]);
@@ -418,8 +444,16 @@ const IntegrationHub: React.FC = () => {
       if (authUser) {
         await supabase.from('email_provider_configs').update({ is_active: false }).eq('owner_id', authUser.id).eq('provider', id);
       }
+    } else {
+      // Clear non-email integration from localStorage
+      try {
+        const raw = localStorage.getItem('aura_integration_configs');
+        const configs = raw ? JSON.parse(raw) : {};
+        delete configs[id];
+        localStorage.setItem('aura_integration_configs', JSON.stringify(configs));
+      } catch {}
     }
-    setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'disconnected' as IntegrationStatus, lastSync: 'Disconnected' } : i));
+    setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'disconnected' as IntegrationStatus, lastSync: 'Never' } : i));
   }, [EMAIL_PROVIDERS]);
 
   const handleReconnect = useCallback(async (id: string) => {
@@ -604,6 +638,57 @@ const IntegrationHub: React.FC = () => {
       setEmailSetupSaving(false);
     }
   }, [emailSetupId, emailSetupApiKey, emailSetupSmtpHost, emailSetupSmtpPort, emailSetupSmtpUser, emailSetupSmtpPass, emailSetupFromEmail, emailSetupFromName]);
+
+  // ─── Generic Integration Setup Modal Handlers ───
+  const openGenericSetup = useCallback((id: string) => {
+    setGenericSetupApiKey('');
+    setGenericSetupWebhookUrl('');
+    setGenericSetupResult(null);
+    setGenericSetupSaving(false);
+    setGenericSetupId(id);
+  }, []);
+
+  const handleGenericSetupTest = useCallback(() => {
+    if (!genericSetupId) return;
+    if (!genericSetupApiKey.trim()) {
+      setGenericSetupResult('error');
+      return;
+    }
+    setGenericSetupSaving(true);
+    setGenericSetupResult(null);
+    setTimeout(() => {
+      setGenericSetupResult('success');
+      setGenericSetupSaving(false);
+    }, 1200);
+  }, [genericSetupId, genericSetupApiKey]);
+
+  const handleGenericSetupSave = useCallback(() => {
+    if (!genericSetupId || !genericSetupApiKey.trim()) return;
+    setGenericSetupSaving(true);
+
+    setTimeout(() => {
+      // Save to localStorage
+      try {
+        const raw = localStorage.getItem('aura_integration_configs');
+        const configs = raw ? JSON.parse(raw) : {};
+        configs[genericSetupId] = {
+          apiKey: genericSetupApiKey,
+          webhookUrl: genericSetupWebhookUrl || undefined,
+          connectedAt: new Date().toISOString(),
+        };
+        localStorage.setItem('aura_integration_configs', JSON.stringify(configs));
+      } catch {}
+
+      // Update integration state
+      setIntegrations(prev => prev.map(i =>
+        i.id === genericSetupId
+          ? { ...i, status: 'connected' as IntegrationStatus, lastSync: 'Just now', error: undefined }
+          : i
+      ));
+      setGenericSetupId(null);
+      setGenericSetupSaving(false);
+    }, 800);
+  }, [genericSetupId, genericSetupApiKey, genericSetupWebhookUrl]);
 
   const statusColor = (s: IntegrationStatus) =>
     s === 'connected' ? 'emerald' : s === 'partial' ? 'amber' : 'slate';
@@ -925,10 +1010,10 @@ const IntegrationHub: React.FC = () => {
                             </button>
                           ) : (
                             <button
-                              onClick={() => handleReconnect(integ.id)}
-                              className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-all"
+                              onClick={() => openGenericSetup(integ.id)}
+                              className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all"
                             >
-                              Reconnect
+                              Connect
                             </button>
                           )
                         )}
@@ -2485,6 +2570,145 @@ const IntegrationHub: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* GENERIC INTEGRATION SETUP MODAL                               */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {genericSetupId && (() => {
+        const integ = integrations.find(i => i.id === genericSetupId);
+        if (!integ) return null;
+        const instructions: Record<string, string> = {
+          salesforce: 'Find your API key in Salesforce Setup > Apps > API > Generate Security Token.',
+          hubspot: 'Find your API key in HubSpot Settings > Integrations > API Key.',
+          slack: 'Create a Slack App at api.slack.com and use the Bot User OAuth Token.',
+          ga: 'Create a service account key in Google Cloud Console > APIs & Services > Credentials.',
+        };
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ backgroundColor: integ.color + '20' }}>
+                    {integ.icon}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 font-heading">
+                      Connect {integ.name}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Enter your credentials to connect</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setGenericSetupId(null)}
+                  className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  <XIcon className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                {/* API Key */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                    API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={genericSetupApiKey}
+                    onChange={e => setGenericSetupApiKey(e.target.value)}
+                    placeholder={`Enter your ${integ.name} API key`}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {instructions[genericSetupId] || `Enter your ${integ.name} API key to enable the integration.`}
+                  </p>
+                </div>
+
+                {/* Webhook URL (optional) */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                    Webhook URL <span className="normal-case text-slate-400">(optional)</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={genericSetupWebhookUrl}
+                    onChange={e => setGenericSetupWebhookUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Optionally provide a webhook URL for real-time event notifications.
+                  </p>
+                </div>
+
+                {/* Test result */}
+                {genericSetupResult && (
+                  <div className={`flex items-center space-x-2 px-4 py-3 rounded-xl text-xs font-bold ${
+                    genericSetupResult === 'success'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                      : 'bg-rose-50 text-rose-700 border border-rose-100'
+                  }`}>
+                    {genericSetupResult === 'success' ? <CheckIcon className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                    <span>
+                      {genericSetupResult === 'success'
+                        ? 'Connection test passed! Click "Save & Connect" to finish.'
+                        : 'Please enter a valid API key.'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  onClick={handleGenericSetupTest}
+                  disabled={genericSetupSaving}
+                  className="flex items-center space-x-2 px-4 py-2.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-100 transition-all disabled:opacity-50"
+                >
+                  {genericSetupSaving && genericSetupResult === null ? (
+                    <>
+                      <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
+                      <span>Testing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <PlayIcon className="w-3.5 h-3.5" />
+                      <span>Test Connection</span>
+                    </>
+                  )}
+                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setGenericSetupId(null)}
+                    className="px-4 py-2.5 text-slate-500 text-xs font-bold hover:text-slate-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenericSetupSave}
+                    disabled={genericSetupSaving || !genericSetupApiKey.trim()}
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+                  >
+                    {genericSetupSaving && genericSetupResult !== null ? (
+                      <>
+                        <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckIcon className="w-3.5 h-3.5" />
+                        <span>Save &amp; Connect</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
