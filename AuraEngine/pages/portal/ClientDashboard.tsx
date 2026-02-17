@@ -1279,11 +1279,15 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         <div className="fixed inset-0 z-[100] flex items-center justify-end">
           <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsAddLeadOpen(false)}></div>
           <div className="relative w-full max-w-md h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 p-10 flex flex-col">
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-slate-900 font-heading">New Lead Profile</h2>
-              <p className="text-sm text-slate-500 mt-1">Add details for manual AI enrichment.</p>
+            <div className="mb-10 flex items-start justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 font-heading">New Lead Profile</h2>
+                <p className="text-sm text-slate-500 mt-1">Add details for manual AI enrichment.</p>
+              </div>
+              <button onClick={() => setIsAddLeadOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"><XIcon className="w-4 h-4" /></button>
             </div>
-            <form className="space-y-6 flex-grow overflow-y-auto" onSubmit={handleAddLead}>
+            <form className="flex flex-col flex-grow min-h-0" onSubmit={handleAddLead}>
+              <div className="space-y-6 flex-grow overflow-y-auto min-h-0 pr-1">
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Full Name</label>
                 <input required type="text" value={newLead.name} onChange={e => setNewLead({...newLead, name: e.target.value})} placeholder="e.g. Robert Fox" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" />
@@ -1377,12 +1381,13 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                   )}
                 </div>
               </div>
+              </div>
               {addLeadError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                <div className="p-3 mt-4 bg-red-50 border border-red-200 rounded-xl">
                   <p className="text-xs font-bold text-red-600">{addLeadError}</p>
                 </div>
               )}
-              <div className="pt-6 flex flex-col space-y-3">
+              <div className="pt-6 flex-shrink-0">
                 <button type="submit" disabled={isAddingLead} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
                   {isAddingLead ? 'Creating...' : 'Create Lead Profile'}
                 </button>

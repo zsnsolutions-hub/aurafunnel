@@ -204,7 +204,8 @@ const IntegrationHub: React.FC = () => {
   const [emailSetupFromEmail, setEmailSetupFromEmail] = useState('');
   const [emailSetupFromName, setEmailSetupFromName] = useState('');
   const [emailSetupTesting, setEmailSetupTesting] = useState(false);
-  const [emailSetupResult, setEmailSetupResult] = useState<'success' | 'error' | null>(null);
+  const [emailSetupResult, setEmailSetupResult] = useState<'success' | 'error' | 'sent' | null>(null);
+  const [emailSetupTestError, setEmailSetupTestError] = useState('');
   const [emailSetupSaving, setEmailSetupSaving] = useState(false);
 
   // ─── Generic (Non-Email) Integration Setup Modal State ───
@@ -567,31 +568,114 @@ const IntegrationHub: React.FC = () => {
     setEmailSetupId(id);
   }, []);
 
-  const handleEmailSetupTest = useCallback(() => {
+  const handleEmailSetupTest = useCallback(async () => {
     if (!emailSetupId) return;
     setEmailSetupTesting(true);
     setEmailSetupResult(null);
+    setEmailSetupTestError('');
 
+    // Quick field validation
     if (isSmtpProvider(emailSetupId)) {
       if (!emailSetupSmtpHost || !emailSetupSmtpUser || !emailSetupSmtpPass) {
         setEmailSetupResult('error');
+        setEmailSetupTestError('Please fill in SMTP host, username, and password.');
         setEmailSetupTesting(false);
         return;
       }
     } else {
       if (!emailSetupApiKey || emailSetupApiKey.length < 8) {
         setEmailSetupResult('error');
+        setEmailSetupTestError('Please enter a valid API key (at least 8 characters).');
         setEmailSetupTesting(false);
         return;
       }
     }
 
-    // Simulate a short test delay
-    setTimeout(() => {
-      setEmailSetupResult('success');
+    if (!emailSetupFromEmail) {
+      setEmailSetupResult('error');
+      setEmailSetupTestError('Please fill in the "From Email" field — the test email will be sent there.');
       setEmailSetupTesting(false);
-    }, 1200);
-  }, [emailSetupId, emailSetupApiKey, emailSetupSmtpHost, emailSetupSmtpUser, emailSetupSmtpPass]);
+      return;
+    }
+
+    try {
+      // 1. Save credentials first so the edge function can load them
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        setEmailSetupResult('error');
+        setEmailSetupTestError('Not authenticated. Please log in again.');
+        setEmailSetupTesting(false);
+        return;
+      }
+
+      const row: Record<string, unknown> = {
+        owner_id: authUser.id,
+        provider: emailSetupId,
+        is_active: true,
+        from_email: emailSetupFromEmail || null,
+        from_name: emailSetupFromName || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (isSmtpProvider(emailSetupId)) {
+        row.smtp_host = emailSetupSmtpHost;
+        row.smtp_port = parseInt(emailSetupSmtpPort) || 587;
+        row.smtp_user = emailSetupSmtpUser;
+        row.smtp_pass = emailSetupSmtpPass;
+        row.api_key = null;
+      } else {
+        row.api_key = emailSetupApiKey;
+        row.smtp_host = null;
+        row.smtp_port = null;
+        row.smtp_user = null;
+        row.smtp_pass = null;
+      }
+
+      await supabase
+        .from('email_provider_configs')
+        .upsert(row, { onConflict: 'owner_id,provider' });
+
+      // 2. Send a real test email via the send-email edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setEmailSetupResult('error');
+        setEmailSetupTestError('Session expired. Please log in again.');
+        setEmailSetupTesting(false);
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          to_email: emailSetupFromEmail,
+          subject: `AuraFunnel Test — ${emailSetupId.toUpperCase()} connection verified`,
+          html_body: `<div style="font-family:sans-serif;padding:20px;"><h2>Connection Test Successful</h2><p>This email confirms your <strong>${emailSetupId.toUpperCase()}</strong> integration is working correctly.</p><p style="color:#888;font-size:12px;">Sent by AuraFunnel at ${new Date().toLocaleString()}</p></div>`,
+          provider: emailSetupId,
+          track_opens: false,
+          track_clicks: false,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setEmailSetupResult('sent');
+      } else {
+        setEmailSetupResult('error');
+        setEmailSetupTestError(data.error || 'Unknown error from email provider.');
+      }
+    } catch (err) {
+      setEmailSetupResult('error');
+      setEmailSetupTestError(`Network error: ${(err as Error).message}`);
+    } finally {
+      setEmailSetupTesting(false);
+    }
+  }, [emailSetupId, emailSetupApiKey, emailSetupSmtpHost, emailSetupSmtpPort, emailSetupSmtpUser, emailSetupSmtpPass, emailSetupFromEmail, emailSetupFromName]);
 
   const handleEmailSetupActivate = useCallback(async () => {
     if (!emailSetupId) return;
@@ -2502,18 +2586,18 @@ const IntegrationHub: React.FC = () => {
 
               {/* Test result */}
               {emailSetupResult && (
-                <div className={`flex items-center space-x-2 px-4 py-3 rounded-xl text-xs font-bold ${
-                  emailSetupResult === 'success'
+                <div className={`flex items-start space-x-2 px-4 py-3 rounded-xl text-xs font-bold ${
+                  emailSetupResult === 'sent'
                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                    : 'bg-rose-50 text-rose-700 border border-rose-100'
+                    : emailSetupResult === 'error'
+                      ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                      : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                 }`}>
-                  {emailSetupResult === 'success' ? <CheckIcon className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                  {emailSetupResult === 'error' ? <XIcon className="w-4 h-4 mt-0.5 shrink-0" /> : <CheckIcon className="w-4 h-4 mt-0.5 shrink-0" />}
                   <span>
-                    {emailSetupResult === 'success'
-                      ? 'Credentials look good! Click "Save & Activate" to connect.'
-                      : isSmtpProvider(emailSetupId)
-                        ? 'Please fill in SMTP host, username, and password.'
-                        : 'Please enter a valid API key (at least 8 characters).'}
+                    {emailSetupResult === 'sent'
+                      ? `Test email sent to ${emailSetupFromEmail}! Check your inbox.`
+                      : emailSetupTestError || 'An error occurred.'}
                   </span>
                 </div>
               )}

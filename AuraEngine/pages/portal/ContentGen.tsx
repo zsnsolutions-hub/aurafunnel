@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
-import { Lead, ContentCategory, ToneType, EmailStep, User, EmailSequenceConfig } from '../../types';
+import { Lead, ContentCategory, ToneType, EmailStep, User, EmailSequenceConfig, EmailProvider } from '../../types';
 import { generateContentByCategory, generateEmailSequence, parseEmailSequenceResponse, AIResponse } from '../../lib/gemini';
 import {
   SparklesIcon, MailIcon, GlobeIcon, HashIcon, BookIcon, BriefcaseIcon, BoltIcon,
@@ -853,7 +853,7 @@ const ContentGen: React.FC = () => {
     if (contentType === ContentCategory.EMAIL_SEQUENCE && selectedLeads.length > 0 && blocks.length > 0) {
       const eligibleLeads = selectedLeads
         .filter(l => l.email)
-        .map(l => ({ id: l.id, email: l.email, name: l.name }));
+        .map(l => ({ id: l.id, email: l.email, name: l.name, company: l.company, insights: l.insights, score: l.score, status: l.status, lastActivity: l.lastActivity }));
 
       if (eligibleLeads.length > 0) {
         const sequenceId = `seq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -867,7 +867,7 @@ const ContentGen: React.FC = () => {
             eligibleLeads,
             firstBlock.subject,
             htmlBody,
-            { trackOpens: true, trackClicks: true }
+            { trackOpens: true, trackClicks: true, provider: connectedProvider?.provider as EmailProvider, fromName: connectedProvider?.from_name }
           );
           console.log(`Email delivery block 1: ${result.sent} sent, ${result.failed} failed`, result.errors);
 
@@ -879,7 +879,12 @@ const ContentGen: React.FC = () => {
             to_email: lead.email,
             subject: firstBlock.subject
               .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
-              .replace(/\{\{name\}\}/gi, lead.name),
+              .replace(/\{\{name\}\}/gi, lead.name)
+              .replace(/\{\{company\}\}/gi, lead.company || '')
+              .replace(/\{\{ai_insight\}\}/gi, lead.insights || '')
+              .replace(/\{\{insights\}\}/gi, lead.insights || '')
+              .replace(/\{\{your_name\}\}/gi, connectedProvider?.from_name || '')
+              .replace(/\{\{[a-z_]+\}\}/gi, ''),
             html_body: htmlBody,
             scheduled_at: now,
             block_index: 0,
@@ -887,6 +892,7 @@ const ContentGen: React.FC = () => {
             status: 'sent',
             sent_at: now,
             from_email: connectedProvider?.from_email ?? null,
+            provider: connectedProvider?.provider ?? null,
           }));
           await supabase.from('scheduled_emails').insert(trackingRows);
 
@@ -907,6 +913,8 @@ const ContentGen: React.FC = () => {
               blockIndex: i,
               sequenceId,
               fromEmail: connectedProvider?.from_email,
+              fromName: connectedProvider?.from_name,
+              provider: connectedProvider?.provider,
             });
           }
           setDeliveryProgress(null);
@@ -929,6 +937,8 @@ const ContentGen: React.FC = () => {
               blockIndex: i,
               sequenceId,
               fromEmail: connectedProvider?.from_email,
+              fromName: connectedProvider?.from_name,
+              provider: connectedProvider?.provider,
             });
           }
           setDeliveryProgress(null);
@@ -2205,7 +2215,7 @@ const ContentGen: React.FC = () => {
             ) : (
               /* Steps 1-2 Right Panel: Quick Preview / AI Config Preview */
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                {blocks.length > 0 ? (
+                {blocks.length > 0 && wizardStep === 1 ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Draft Preview</p>

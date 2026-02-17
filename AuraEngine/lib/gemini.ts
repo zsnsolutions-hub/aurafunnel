@@ -209,9 +209,18 @@ export const generateEmailSequence = async (
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const leadContext = leads.slice(0, 5).map(l =>
-    `- ${l.name} at ${l.company} (Score: ${l.score}, Status: ${l.status}, Insights: ${l.insights})`
-  ).join('\n');
+  const leadContext = leads.slice(0, 5).map(l => {
+    let ctx = `- ${l.name} at ${l.company} (Score: ${l.score}, Status: ${l.status}, Insights: ${l.insights})`;
+    if (l.knowledgeBase) {
+      const kb = l.knowledgeBase;
+      const parts: string[] = [];
+      if (kb.website) parts.push(`Website: ${kb.website}`);
+      if (kb.linkedin) parts.push(`LinkedIn: ${kb.linkedin}`);
+      if (kb.extraNotes) parts.push(`Notes: ${kb.extraNotes}`);
+      if (parts.length > 0) ctx += `\n  Knowledge: ${parts.join(', ')}`;
+    }
+    return ctx;
+  }).join('\n');
 
   const cadenceDays = CADENCE_DAYS[config.cadence] || 2;
   const goalLabel = GOAL_LABELS[config.goal] || config.goal;
@@ -230,12 +239,13 @@ SEQUENCE CONFIG:
 
 REQUIREMENTS:
 1. Each email must have a clear subject line and body.
-2. Use personalization placeholders: {{first_name}}, {{company}}, {{industry}}, {{recent_activity}}, {{ai_insight}}
+2. Use ONLY these personalization placeholders: {{first_name}}, {{company}}, {{ai_insight}}, {{your_name}}. Do NOT use {{industry}}, {{pain_point}}, {{benefit}}, {{solution}}, {{insight_1}}, {{goal}}, or any other placeholders — write the actual specific values inline based on the lead data provided above.
 3. Each email should build on the previous, escalating urgency naturally.
 4. Email 1: Introduction & value proposition
 5. Final email: Break-up email with last chance CTA
 6. Keep each email under 200 words.
 7. Match the ${config.tone} tone consistently.
+8. Use the lead's Knowledge Base data (website, LinkedIn, notes) to tailor messaging to their specific company and context.
 ${buildBusinessContext(businessProfile)}
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS (repeat for each email):
 ===EMAIL_START===
@@ -305,7 +315,7 @@ export const generateContentByCategory = async (
   const categoryPrompts: Record<ContentCategory, { system: string; prompt: string }> = {
     [ContentCategory.EMAIL_SEQUENCE]: {
       system: 'You are an expert email copywriter.',
-      prompt: `Write a compelling cold email for ${lead.name} at ${lead.company}. Score: ${lead.score}. Insights: ${lead.insights}. Tone: ${tone}. Include {{first_name}} and {{company}} tags. Under 200 words.`
+      prompt: `Write a compelling cold email for ${lead.name} at ${lead.company}. Score: ${lead.score}. Insights: ${lead.insights}. Tone: ${tone}. Use ONLY these placeholders: {{first_name}}, {{company}}, {{your_name}}. Write all other details (industry, pain points, benefits, solutions) as actual specific content based on the lead data. Under 200 words.`
     },
     [ContentCategory.LANDING_PAGE]: {
       system: 'You are a conversion-focused landing page copywriter.',
@@ -314,7 +324,7 @@ export const generateContentByCategory = async (
 - 3 benefit bullets
 - Social proof section placeholder
 - CTA section
-Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
+Use ONLY {{company}} and {{first_name}} as placeholders. Write industry, pain points, and benefits as actual content. Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
     },
     [ContentCategory.SOCIAL_MEDIA]: {
       system: 'You are a B2B social media strategist.',
@@ -323,7 +333,7 @@ Each post should:
 - Hook in first line
 - Provide value
 - End with engagement question or CTA
-Tone: ${tone}. Industry insights: ${lead.insights}. Use {{first_name}} and {{company}} where appropriate. ${additionalContext || ''}`
+Use ONLY {{first_name}} and {{company}} as placeholders. Write industry details and insights as actual content. Tone: ${tone}. Industry insights: ${lead.insights}. ${additionalContext || ''}`
     },
     [ContentCategory.BLOG_ARTICLE]: {
       system: 'You are a B2B content marketing expert.',
@@ -332,7 +342,7 @@ Tone: ${tone}. Industry insights: ${lead.insights}. Use {{first_name}} and {{com
 - 5-section outline with key points
 - Full intro paragraph (150 words)
 - Meta description
-Tone: ${tone}. Industry context: ${lead.insights}. ${additionalContext || ''}`
+Do NOT use any {{...}} placeholders. Write all content with specific details. Tone: ${tone}. Industry context: ${lead.insights}. ${additionalContext || ''}`
     },
     [ContentCategory.REPORT]: {
       system: 'You are a B2B research analyst and report writer.',
@@ -341,18 +351,18 @@ Tone: ${tone}. Industry context: ${lead.insights}. ${additionalContext || ''}`
 - 4-5 key sections with bullet points
 - Data points to include (suggest specific metrics)
 - Conclusion with CTA
-Tone: ${tone}. Context: ${lead.insights}. ${additionalContext || ''}`
+Do NOT use any {{...}} placeholders. Write all content with specific details. Tone: ${tone}. Context: ${lead.insights}. ${additionalContext || ''}`
     },
     [ContentCategory.PROPOSAL]: {
       system: 'You are a senior sales proposal writer.',
       prompt: `Draft a business proposal for ${lead.name} at ${lead.company}:
-- Opening (reference {{company}} and their challenges)
+- Opening (reference their company and challenges)
 - Problem Statement
 - Proposed Solution (3 key deliverables)
 - Timeline
 - Pricing placeholder
 - Next Steps / CTA
-Tone: ${tone}. Lead score: ${lead.score}. Insights: ${lead.insights}. Use {{first_name}}, {{company}} tags. ${additionalContext || ''}`
+Use ONLY {{first_name}}, {{company}}, {{your_name}} as placeholders. Write all other details as actual specific content. Tone: ${tone}. Lead score: ${lead.score}. Insights: ${lead.insights}. ${additionalContext || ''}`
     },
     [ContentCategory.AD_COPY]: {
       system: 'You are a performance marketing copywriter specializing in high-converting B2B ad copy.',

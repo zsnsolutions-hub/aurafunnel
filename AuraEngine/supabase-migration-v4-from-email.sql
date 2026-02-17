@@ -4,3 +4,6 @@
 -- ============================================================
 
 ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS from_email TEXT;
+
+-- Track which email provider (smtp, sendgrid, gmail) was used for each scheduled email
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS provider TEXT;

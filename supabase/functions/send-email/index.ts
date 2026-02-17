@@ -166,7 +166,7 @@ async function sendViaSendGrid(
   return { success: true, providerMessageId: messageId };
 }
 
-// ── Send via SMTP ──
+// ── Send via SMTP (with STARTTLS support) ──
 async function sendViaSmtp(
   to: string,
   from: string,
@@ -184,28 +184,66 @@ async function sendViaSmtp(
 
   try {
     const port = creds.smtp_port ?? 587;
-    const conn = await Deno.connect({ hostname: host, port });
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
 
-    async function readLine(): Promise<string> {
-      const buf = new Uint8Array(1024);
-      const n = await conn.read(buf);
-      return n ? decoder.decode(buf.subarray(0, n)).trim() : "";
+    // Port 465 = implicit TLS (SMTPS) — connect with TLS directly
+    // Port 587/25 = plain connect, then upgrade via STARTTLS
+    let activeConn: Deno.Conn;
+    if (port === 465) {
+      activeConn = await Deno.connectTls({ hostname: host, port });
+    } else {
+      activeConn = await Deno.connect({ hostname: host, port });
+    }
+
+    // Read a full SMTP response (handles multi-line responses like EHLO)
+    // Multi-line: "250-..." continuation, final line: "250 ..."
+    async function readResponse(): Promise<string> {
+      let full = "";
+      const buf = new Uint8Array(4096);
+      while (true) {
+        const n = await activeConn.read(buf);
+        if (!n) break;
+        full += decoder.decode(buf.subarray(0, n));
+        // Check if we have a complete response:
+        // Final line starts with "NNN " (code + space) or is a single-line response
+        const lines = full.trimEnd().split("\n");
+        const lastLine = lines[lines.length - 1].trimStart();
+        if (/^\d{3}\s/.test(lastLine) || /^\d{3}$/.test(lastLine)) break;
+      }
+      return full.trim();
     }
 
     async function send(cmd: string): Promise<string> {
-      await conn.write(encoder.encode(cmd + "\r\n"));
-      return await readLine();
+      await activeConn.write(encoder.encode(cmd + "\r\n"));
+      return await readResponse();
     }
 
-    await readLine(); // greeting
-    await send("EHLO localhost");
+    // Read server greeting
+    await readResponse();
+
+    // Initial EHLO
+    const ehloResp = await send("EHLO localhost");
+
+    // For non-465 ports: upgrade to TLS if server supports STARTTLS
+    if (port !== 465 && (ehloResp.includes("STARTTLS") || port === 587)) {
+      const starttlsResp = await send("STARTTLS");
+      if (starttlsResp.startsWith("220")) {
+        const tlsConn = await (Deno as any).startTls(activeConn, { hostname: host });
+        activeConn = tlsConn;
+        // Re-issue EHLO after TLS upgrade (required by RFC 3207)
+        await send("EHLO localhost");
+      }
+    }
 
     if (creds.smtp_user && creds.smtp_pass) {
       await send("AUTH LOGIN");
       await send(btoa(creds.smtp_user));
-      await send(btoa(creds.smtp_pass));
+      const authResp = await send(btoa(creds.smtp_pass));
+      if (authResp.startsWith("535") || authResp.startsWith("534")) {
+        activeConn.close();
+        return { success: false, error: `SMTP authentication failed: ${authResp}` };
+      }
     }
 
     const fromDisplay = creds.from_name
@@ -235,7 +273,7 @@ async function sendViaSmtp(
 
     const resp = await send(message);
     await send("QUIT");
-    conn.close();
+    activeConn.close();
 
     const idMatch = resp.match(/<([^>]+)>/);
     return {
@@ -278,9 +316,22 @@ serve(async (req) => {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const token = authHeader.replace("Bearer ", "");
 
+    // Check if this is a service role token by decoding the JWT payload
+    function isServiceRoleToken(jwt: string): boolean {
+      try {
+        if (jwt === SUPABASE_SERVICE_ROLE_KEY) return true;
+        const parts = jwt.split(".");
+        if (parts.length !== 3) return false;
+        const payload = JSON.parse(atob(parts[1]));
+        return payload.role === "service_role";
+      } catch {
+        return false;
+      }
+    }
+
     // Allow service role key for internal calls (e.g. from process-scheduled-emails)
     let userId: string;
-    if (token === SUPABASE_SERVICE_ROLE_KEY) {
+    if (isServiceRoleToken(token)) {
       const body = await req.json();
       if (!body.owner_id) {
         return new Response(

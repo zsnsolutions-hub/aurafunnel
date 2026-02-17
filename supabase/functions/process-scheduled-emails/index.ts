@@ -67,6 +67,8 @@ serve(async (req) => {
             to_email: email.to_email,
             subject: email.subject,
             html_body: email.html_body,
+            provider: email.provider || undefined,
+            from_email: email.from_email || undefined,
             track_opens: true,
             track_clicks: true,
           }),

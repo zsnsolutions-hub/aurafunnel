@@ -56,7 +56,8 @@ serve(async (req) => {
   const path = url.pathname;
 
   // ── Open pixel: GET /t/p/:messageId.png ──
-  const pixelMatch = path.match(/^\/t\/p\/([0-9a-f-]{36})\.png$/i);
+  // Path may include the edge function base prefix (e.g. /functions/v1/email-track/t/p/...)
+  const pixelMatch = path.match(/\/t\/p\/([0-9a-f-]{36})\.png$/i);
   if (pixelMatch && req.method === "GET") {
     const messageId = pixelMatch[1];
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -90,7 +91,7 @@ serve(async (req) => {
   }
 
   // ── Click redirect: GET /t/c/:linkId ──
-  const clickMatch = path.match(/^\/t\/c\/([0-9a-f-]{36})$/i);
+  const clickMatch = path.match(/\/t\/c\/([0-9a-f-]{36})$/i);
   if (clickMatch && req.method === "GET") {
     const linkId = clickMatch[1];
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";

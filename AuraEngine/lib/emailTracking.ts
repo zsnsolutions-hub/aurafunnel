@@ -288,13 +288,55 @@ export async function sendTrackedEmail(
   }
 }
 
+// ── Lead shape used for personalization ──
+interface EmailLead {
+  id: string;
+  email: string;
+  name: string;
+  company?: string;
+  insights?: string;
+  score?: number;
+  status?: string;
+  lastActivity?: string;
+}
+
+// ── Personalize all template variables in text using lead + sender data ──
+function personalizeText(text: string, lead: EmailLead, senderName?: string): string {
+  const firstName = lead.name.split(' ')[0] || '';
+  const lastName = lead.name.split(' ').slice(1).join(' ') || '';
+  const insights = lead.insights || '';
+
+  let result = text
+    // Lead identity
+    .replace(/\{\{first_name\}\}/gi, firstName)
+    .replace(/\{\{last_name\}\}/gi, lastName)
+    .replace(/\{\{name\}\}/gi, lead.name)
+    .replace(/\{\{lead_name\}\}/gi, lead.name)
+    .replace(/\{\{company\}\}/gi, lead.company || '')
+    // AI-generated insights (multiple alias tags all map to the insights field)
+    .replace(/\{\{ai_insight\}\}/gi, insights)
+    .replace(/\{\{insights\}\}/gi, insights)
+    .replace(/\{\{insight_1\}\}/gi, insights)
+    .replace(/\{\{recent_activity\}\}/gi, lead.lastActivity || insights)
+    // Sender
+    .replace(/\{\{your_name\}\}/gi, senderName || '')
+    // Lead metadata
+    .replace(/\{\{score\}\}/gi, lead.score != null ? String(lead.score) : '');
+
+  // Strip any remaining unreplaced {{...}} tags so raw placeholders never reach customers
+  result = result.replace(/\{\{[a-z_]+\}\}/gi, '');
+
+  return result;
+}
+
 // ── Send emails to multiple leads (batch) ──
 export async function sendTrackedEmailBatch(
-  leads: { id: string; email: string; name: string }[],
+  leads: EmailLead[],
   subject: string,
   htmlBody: string,
   options?: {
     fromEmail?: string;
+    fromName?: string;
     provider?: EmailProvider;
     trackOpens?: boolean;
     trackClicks?: boolean;
@@ -304,12 +346,8 @@ export async function sendTrackedEmailBatch(
 
   for (const lead of leads) {
     // Personalize per lead
-    const personalizedHtml = htmlBody
-      .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
-      .replace(/\{\{name\}\}/gi, lead.name);
-    const personalizedSubject = subject
-      .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
-      .replace(/\{\{name\}\}/gi, lead.name);
+    const personalizedHtml = personalizeText(htmlBody, lead, options?.fromName);
+    const personalizedSubject = personalizeText(subject, lead, options?.fromName);
 
     const result = await sendTrackedEmail({
       leadId: lead.id,
@@ -335,13 +373,15 @@ export async function sendTrackedEmailBatch(
 
 // ── Schedule an email block for future delivery ──
 export interface ScheduleEmailBlockParams {
-  leads: { id: string; email: string; name: string }[];
+  leads: EmailLead[];
   subject: string;
   htmlBody: string;
   scheduledAt: Date;
   blockIndex: number;
   sequenceId: string;
   fromEmail?: string;
+  fromName?: string;
+  provider?: string;
 }
 
 export async function scheduleEmailBlock(
@@ -353,12 +393,8 @@ export async function scheduleEmailBlock(
   const results = { scheduled: 0, failed: 0, errors: [] as string[] };
 
   const rows = params.leads.map((lead) => {
-    const personalizedHtml = params.htmlBody
-      .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
-      .replace(/\{\{name\}\}/gi, lead.name);
-    const personalizedSubject = params.subject
-      .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
-      .replace(/\{\{name\}\}/gi, lead.name);
+    const personalizedHtml = personalizeText(params.htmlBody, lead, params.fromName);
+    const personalizedSubject = personalizeText(params.subject, lead, params.fromName);
 
     return {
       owner_id: user.id,
@@ -371,6 +407,7 @@ export async function scheduleEmailBlock(
       sequence_id: params.sequenceId,
       status: 'pending',
       from_email: params.fromEmail ?? null,
+      provider: params.provider ?? null,
     };
   });
 
