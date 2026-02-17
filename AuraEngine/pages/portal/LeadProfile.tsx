@@ -1135,7 +1135,7 @@ const LeadProfile: React.FC = () => {
 
         {/* ── RIGHT: Quick Actions Panel ── */}
         <div className="w-full lg:w-72 flex-shrink-0">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sticky top-8">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sticky top-8 z-10">
             <h3 className="font-bold text-slate-800 font-heading text-sm mb-4">Quick Actions</h3>
             <div className="space-y-2">
               <button
