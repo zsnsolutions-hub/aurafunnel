@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile, BusinessAnalysisResult } from '../../types';
 import {
   ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon,
@@ -18,7 +18,14 @@ type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferenc
 
 const ProfilePage: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['profile','business_profile','notifications','preferences','api_keys','security'].includes(tab)) {
+      return tab as SettingsTab;
+    }
+    return 'profile';
+  });
 
   // Profile
   const [name, setName] = useState(user?.name || '');
@@ -447,6 +454,14 @@ const ProfilePage: React.FC = () => {
 
     return { quotas, overallUsage, nearLimit };
   }, [apiKeys]);
+
+  // ─── Clean tab query param from URL ───
+  useEffect(() => {
+    if (searchParams.has('tab')) {
+      searchParams.delete('tab');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   // ─── Keyboard Shortcuts ───
   useEffect(() => {

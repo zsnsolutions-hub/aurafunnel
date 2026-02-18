@@ -373,10 +373,30 @@ const ContentGen: React.FC = () => {
   const [connectedProvider, setConnectedProvider] = useState<ConnectedEmailProvider | null>(null);
   const [providerLoading, setProviderLoading] = useState(false);
 
+  // ── Business Brief State ──
+  const [customContext, setCustomContext] = useState('');
+  const [keyDifferentiator, setKeyDifferentiator] = useState('');
+  const [competitorContext, setCompetitorContext] = useState('');
+
   const generationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const creditsTotal = user.credits_total ?? 500;
   const creditsUsed = user.credits_used ?? 0;
+
+  // ── Business Profile Detection ──
+  const bp = user.businessProfile;
+  const hasBusinessProfile = !!(bp?.companyName || bp?.productsServices || bp?.industry);
+  const profileCompleteness = [
+    bp?.companyName, bp?.industry, bp?.productsServices,
+    bp?.targetAudience, bp?.valueProp, bp?.pricingModel, bp?.salesApproach
+  ].filter(Boolean).length;
+  const profileTotal = 7;
+
+  // ── Auto-populate brief from business profile ──
+  useEffect(() => {
+    if (bp?.productsServices && !customContext) setCustomContext(bp.productsServices);
+    if (bp?.valueProp && !keyDifferentiator) setKeyDifferentiator(bp.valueProp);
+  }, []);
 
   // ── Effects ──
   useEffect(() => {
@@ -734,6 +754,9 @@ const ContentGen: React.FC = () => {
       `Personalization: ${enabledTags.join(', ')}`,
       `Target audience: ${selectedSegments.join(', ')} (${selectedLeads.length} leads)`,
     ];
+    if (customContext) contextParts.push(`Products/Services: ${customContext}`);
+    if (keyDifferentiator) contextParts.push(`Key Differentiator: ${keyDifferentiator}`);
+    if (competitorContext) contextParts.push(`Competitors: ${competitorContext}`);
 
     try {
       const { error: rpcError } = await supabase.rpc('consume_credits', { amount: 1 });
@@ -1462,6 +1485,27 @@ const ContentGen: React.FC = () => {
                 {/* STEP 1: CONTENT TYPE */}
                 {wizardStep === 1 && (
                   <>
+                    {/* Business Profile Banner */}
+                    {!hasBusinessProfile && (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                        <div className="flex items-start space-x-3">
+                          <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+                            <AlertTriangleIcon className="w-4 h-4 text-amber-600" />
+                          </div>
+                          <div className="flex-grow min-w-0">
+                            <p className="text-xs font-bold text-amber-800 mb-0.5">Set up your Business Profile for smarter AI content</p>
+                            <p className="text-[10px] text-amber-600 leading-relaxed mb-2">AI generates better content when it knows your business. Add your company, services, and value proposition.</p>
+                            <button
+                              onClick={() => navigate('/portal/settings?tab=business_profile')}
+                              className="text-[11px] font-bold text-amber-700 hover:text-amber-900 transition-colors"
+                            >
+                              Set Up Business Profile &rarr;
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-2">
                         <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">1</span>
@@ -1825,6 +1869,48 @@ const ContentGen: React.FC = () => {
                             </button>
                           );
                         })}
+                      </div>
+                    </div>
+
+                    {/* BUSINESS BRIEF */}
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center space-x-2">
+                        <span className="w-5 h-5 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center text-[10px] font-black">6</span>
+                        <span>Business Brief — Help AI understand your offering</span>
+                      </p>
+                      {hasBusinessProfile && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-bold border border-emerald-100 mb-2">Auto-filled from Business Profile</span>
+                      )}
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 block mb-1">Key Differentiator</label>
+                          <textarea
+                            value={keyDifferentiator}
+                            onChange={e => setKeyDifferentiator(e.target.value)}
+                            placeholder="What makes your product/service unique?"
+                            rows={2}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none resize-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 block mb-1">Additional Context</label>
+                          <textarea
+                            value={customContext}
+                            onChange={e => setCustomContext(e.target.value)}
+                            placeholder="Specific products, features, or pain points to highlight..."
+                            rows={2}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none resize-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 block mb-1">Competitor Context</label>
+                          <input
+                            value={competitorContext}
+                            onChange={e => setCompetitorContext(e.target.value)}
+                            placeholder="Who are you competing against? (optional)"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -2231,6 +2317,51 @@ const ContentGen: React.FC = () => {
               </div>
             ) : (
               /* Steps 1-2 Right Panel: Quick Preview / AI Config Preview */
+              <div className="space-y-4">
+                {/* Business Context Card */}
+                {hasBusinessProfile && (wizardStep === 1 || wizardStep === 2) && (
+                  <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center space-x-2">
+                        <BriefcaseIcon className="w-3.5 h-3.5 text-emerald-600" />
+                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Business Context</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[9px] font-bold text-emerald-500">{profileCompleteness}/{profileTotal}</span>
+                        <button
+                          onClick={() => navigate('/portal/settings?tab=business_profile')}
+                          className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 transition-colors"
+                        >
+                          Edit Profile
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {bp?.companyName && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold">{bp.companyName}</span>
+                      )}
+                      {bp?.industry && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold">{bp.industry}</span>
+                      )}
+                      {bp?.productsServices && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold truncate max-w-[200px]">{bp.productsServices}</span>
+                      )}
+                      {bp?.targetAudience && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold truncate max-w-[200px]">{bp.targetAudience}</span>
+                      )}
+                      {bp?.valueProp && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold truncate max-w-[200px]">{bp.valueProp}</span>
+                      )}
+                      {bp?.pricingModel && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold">{bp.pricingModel}</span>
+                      )}
+                      {bp?.salesApproach && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold">{bp.salesApproach}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
                 {blocks.length > 0 && wizardStep === 1 ? (
                   <div className="space-y-4">
@@ -2288,6 +2419,16 @@ const ContentGen: React.FC = () => {
                         <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider mb-1.5">Approach</p>
                         <p className="text-xs font-bold text-amber-800">{focus}</p>
                       </div>
+
+                      {hasBusinessProfile && (
+                        <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100">
+                          <p className="text-[10px] font-black text-emerald-600 uppercase tracking-wider mb-1">Business Context</p>
+                          <p className="text-xs font-bold text-emerald-800">{bp?.companyName || 'Your Business'}</p>
+                          <p className="text-[10px] text-emerald-500 mt-0.5">
+                            {[bp?.industry, bp?.targetAudience].filter(Boolean).join(' · ') || 'Profile loaded'}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Active Personalization Tags */}
@@ -2325,6 +2466,12 @@ const ContentGen: React.FC = () => {
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-slate-400">AI credit cost</span>
                           <span className="text-xs font-bold text-indigo-400">1 credit</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">Business context</span>
+                          <span className={`text-xs font-bold ${hasBusinessProfile ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {hasBusinessProfile ? `${profileCompleteness}/${profileTotal} fields` : 'Not configured'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -2369,6 +2516,7 @@ const ContentGen: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
               </div>
             )}
           </div>
