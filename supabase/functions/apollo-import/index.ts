@@ -163,12 +163,20 @@ serve(async (req) => {
         buildLocation(contact) ? `Location: ${buildLocation(contact)}` : null,
       ].filter(Boolean);
 
-      // Build knowledgeBase
-      const knowledgeBase: Record<string, string> = {};
+      // Build knowledgeBase with structured fields
+      const knowledgeBase: Record<string, unknown> = {};
       if (linkedinUrl) knowledgeBase.linkedin = contact.linkedin_url;
       const phones = contact.phone_numbers as { number: string }[] | undefined;
-      if (phones && phones.length > 0) knowledgeBase.extraNotes = `Phone: ${phones[0].number}`;
+      const extraNotesParts: string[] = [];
+      if (phones && phones.length > 0) extraNotesParts.push(`Phone: ${phones[0].number}`);
+      if (contact.headline) extraNotesParts.push(`Headline: ${contact.headline}`);
+      if (extraNotesParts.length > 0) knowledgeBase.extraNotes = extraNotesParts.join('\n');
       if (org?.website_url) knowledgeBase.website = org.website_url as string;
+      if (contact.title) knowledgeBase.title = contact.title;
+      if (org?.industry) knowledgeBase.industry = org.industry as string;
+      if (org?.estimated_num_employees) knowledgeBase.employeeCount = String(org.estimated_num_employees);
+      const loc = buildLocation(contact);
+      if (loc) knowledgeBase.location = loc;
 
       leadsToInsert.push({
         client_id: user.id,

@@ -5,7 +5,9 @@ import type {
   EmailEvent,
   EmailEngagement,
   EmailProvider,
+  KnowledgeBase,
 } from '../types';
+import { personalizeForSend } from './personalization';
 
 const TRACKING_BASE_URL = import.meta.env.VITE_TRACKING_DOMAIN ?? '';
 
@@ -359,35 +361,12 @@ interface EmailLead {
   score?: number;
   status?: string;
   lastActivity?: string;
+  knowledgeBase?: KnowledgeBase;
 }
 
 // ── Personalize all template variables in text using lead + sender data ──
 function personalizeText(text: string, lead: EmailLead, senderName?: string): string {
-  const firstName = lead.name.split(' ')[0] || '';
-  const lastName = lead.name.split(' ').slice(1).join(' ') || '';
-  const insights = lead.insights || '';
-
-  let result = text
-    // Lead identity
-    .replace(/\{\{first_name\}\}/gi, firstName)
-    .replace(/\{\{last_name\}\}/gi, lastName)
-    .replace(/\{\{name\}\}/gi, lead.name)
-    .replace(/\{\{lead_name\}\}/gi, lead.name)
-    .replace(/\{\{company\}\}/gi, lead.company || '')
-    // AI-generated insights (multiple alias tags all map to the insights field)
-    .replace(/\{\{ai_insight\}\}/gi, insights)
-    .replace(/\{\{insights\}\}/gi, insights)
-    .replace(/\{\{insight_1\}\}/gi, insights)
-    .replace(/\{\{recent_activity\}\}/gi, lead.lastActivity || insights)
-    // Sender
-    .replace(/\{\{your_name\}\}/gi, senderName || '')
-    // Lead metadata
-    .replace(/\{\{score\}\}/gi, lead.score != null ? String(lead.score) : '');
-
-  // Strip any remaining unreplaced {{...}} tags so raw placeholders never reach customers
-  result = result.replace(/\{\{[a-z_]+\}\}/gi, '');
-
-  return result;
+  return personalizeForSend(text, lead, senderName);
 }
 
 // ── Send emails to multiple leads (batch) ──

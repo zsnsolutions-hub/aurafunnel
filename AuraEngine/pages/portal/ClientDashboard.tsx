@@ -7,7 +7,7 @@ import {
   StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
   PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon
 } from '../../components/Icons';
-import { generateLeadContent, generateDashboardInsights, generateLeadResearch } from '../../lib/gemini';
+import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
@@ -529,13 +529,32 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
     generateLeadResearch(createdLead, socialUrls, user.businessProfile).then(async (res) => {
       if (!res.text) return;
-      const userNotes = kb.extraNotes || '';
-      const merged = userNotes
-        ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${res.text}`
-        : `${AI_RESEARCH_HEADER}\n${res.text}`;
 
-      const updatedKb = { ...kb, extraNotes: merged };
-      const newInsights = res.text.substring(0, 200);
+      // Parse structured fields from AI response
+      const structured = parseLeadResearchResponse(res.text);
+
+      const userNotes = kb.extraNotes || '';
+      const briefText = structured.aiResearchBrief || res.text;
+      const merged = userNotes
+        ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${briefText}`
+        : `${AI_RESEARCH_HEADER}\n${briefText}`;
+
+      const updatedKb = {
+        ...kb,
+        extraNotes: merged,
+        title: structured.title || kb.title,
+        industry: structured.industry || kb.industry,
+        employeeCount: structured.employeeCount || kb.employeeCount,
+        location: structured.location || kb.location,
+        companyOverview: structured.companyOverview || kb.companyOverview,
+        talkingPoints: structured.talkingPoints || kb.talkingPoints,
+        outreachAngle: structured.outreachAngle || kb.outreachAngle,
+        riskFactors: structured.riskFactors || kb.riskFactors,
+        aiResearchBrief: briefText,
+        aiResearchedAt: structured.aiResearchedAt,
+        mentionedOnWebsite: structured.mentionedOnWebsite || kb.mentionedOnWebsite,
+      };
+      const newInsights = briefText.substring(0, 200);
 
       await supabase.from('leads').update({
         knowledgeBase: updatedKb,

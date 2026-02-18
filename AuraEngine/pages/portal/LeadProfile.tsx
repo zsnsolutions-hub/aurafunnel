@@ -11,7 +11,7 @@ import {
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
-import { generateLeadContent, generateLeadResearch } from '../../lib/gemini';
+import { generateLeadContent, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 import { fetchLeadEmailEngagement } from '../../lib/emailTracking';
 import type { EmailEngagement } from '../../types';
 import EmailEngagementCard from '../../components/dashboard/EmailEngagementCard';
@@ -392,13 +392,33 @@ const LeadProfile: React.FC = () => {
         setKbResearching(false);
         return;
       }
-      const userNotes = stripPreviousAIResearch(cleaned.extraNotes);
-      const merged = userNotes
-        ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${res.text}`
-        : `${AI_RESEARCH_HEADER}\n${res.text}`;
 
-      const updatedKb: KnowledgeBase = { ...cleaned, extraNotes: merged };
-      const newInsights = res.text.substring(0, 200);
+      // Parse structured fields from AI response
+      const structured = parseLeadResearchResponse(res.text);
+
+      const userNotes = stripPreviousAIResearch(cleaned.extraNotes);
+      const briefText = structured.aiResearchBrief || res.text;
+      const merged = userNotes
+        ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${briefText}`
+        : `${AI_RESEARCH_HEADER}\n${briefText}`;
+
+      const updatedKb: KnowledgeBase = {
+        ...cleaned,
+        extraNotes: merged,
+        // Merge structured intelligence fields
+        title: structured.title || cleaned.title,
+        industry: structured.industry || cleaned.industry,
+        employeeCount: structured.employeeCount || cleaned.employeeCount,
+        location: structured.location || cleaned.location,
+        companyOverview: structured.companyOverview || cleaned.companyOverview,
+        talkingPoints: structured.talkingPoints || cleaned.talkingPoints,
+        outreachAngle: structured.outreachAngle || cleaned.outreachAngle,
+        riskFactors: structured.riskFactors || cleaned.riskFactors,
+        aiResearchBrief: briefText,
+        aiResearchedAt: structured.aiResearchedAt,
+        mentionedOnWebsite: structured.mentionedOnWebsite || cleaned.mentionedOnWebsite,
+      };
+      const newInsights = briefText.substring(0, 200);
 
       const { error: researchError } = await supabase.from('leads').update({
         knowledgeBase: updatedKb,
@@ -1320,10 +1340,35 @@ const LeadProfile: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-3">
+                {/* Structured Intelligence Badges */}
+                {(lead.knowledgeBase?.title || lead.knowledgeBase?.industry || lead.knowledgeBase?.location || lead.knowledgeBase?.employeeCount) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {lead.knowledgeBase.title && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold bg-violet-50 text-violet-700">
+                        {lead.knowledgeBase.title}
+                      </span>
+                    )}
+                    {lead.knowledgeBase.industry && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-700">
+                        {lead.knowledgeBase.industry}
+                      </span>
+                    )}
+                    {lead.knowledgeBase.location && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-600">
+                        {lead.knowledgeBase.location}
+                      </span>
+                    )}
+                    {lead.knowledgeBase.employeeCount && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-600">
+                        {lead.knowledgeBase.employeeCount} employees
+                      </span>
+                    )}
+                  </div>
+                )}
                 {/* Social Link Chips */}
                 <div className="flex flex-wrap gap-1.5">
                   {KB_SOCIAL_LINKS.map(({ key, label, icon, color }) => {
-                    const value = lead.knowledgeBase?.[key];
+                    const value = lead.knowledgeBase?.[key] as string | undefined;
                     if (!value) return null;
                     return (
                       <a
@@ -1339,6 +1384,85 @@ const LeadProfile: React.FC = () => {
                     );
                   })}
                 </div>
+                {/* Company Overview */}
+                {lead.knowledgeBase?.companyOverview && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Company Overview</span>
+                    <p className="text-xs text-slate-600 leading-relaxed mt-1">{lead.knowledgeBase.companyOverview}</p>
+                  </div>
+                )}
+                {/* Mentioned on Website — high-value signal */}
+                {lead.knowledgeBase?.mentionedOnWebsite && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                      <div className="flex items-center space-x-1.5 mb-1">
+                        <FlameIcon className="w-3 h-3 text-amber-600" />
+                        <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Mentioned on Website</span>
+                      </div>
+                      <p className="text-xs text-amber-800 leading-relaxed">{lead.knowledgeBase.mentionedOnWebsite}</p>
+                    </div>
+                  </div>
+                )}
+                {/* Outreach Angle */}
+                {lead.knowledgeBase?.outreachAngle && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <div className="flex items-center space-x-1.5 mb-1">
+                        <TargetIcon className="w-3 h-3 text-emerald-600" />
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Outreach Angle</span>
+                      </div>
+                      <p className="text-xs text-emerald-800 leading-relaxed">{lead.knowledgeBase.outreachAngle}</p>
+                    </div>
+                  </div>
+                )}
+                {/* Talking Points */}
+                {lead.knowledgeBase?.talkingPoints && lead.knowledgeBase.talkingPoints.length > 0 && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Talking Points</span>
+                    <ul className="mt-1.5 space-y-1">
+                      {lead.knowledgeBase.talkingPoints.map((point, i) => (
+                        <li key={i} className="flex items-start space-x-1.5 text-xs text-slate-600">
+                          <span className="text-indigo-400 mt-0.5">&#8226;</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* Risk Factors */}
+                {lead.knowledgeBase?.riskFactors && lead.knowledgeBase.riskFactors.length > 0 && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <details>
+                      <summary className="cursor-pointer">
+                        <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Risk Factors ({lead.knowledgeBase.riskFactors.length})</span>
+                      </summary>
+                      <ul className="mt-1.5 space-y-1">
+                        {lead.knowledgeBase.riskFactors.map((risk, i) => (
+                          <li key={i} className="flex items-start space-x-1.5 text-xs text-amber-700">
+                            <AlertTriangleIcon className="w-3 h-3 text-amber-500 mt-0.5 flex-shrink-0" />
+                            <span>{risk}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </div>
+                )}
+                {/* AI Researched timestamp */}
+                {lead.knowledgeBase?.aiResearchedAt && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <p className="text-[10px] text-slate-400">
+                      Last researched: {(() => {
+                        const diff = Date.now() - new Date(lead.knowledgeBase.aiResearchedAt).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 60) return `${mins}m ago`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs}h ago`;
+                        const days = Math.floor(hrs / 24);
+                        return `${days}d ago`;
+                      })()}
+                    </p>
+                  </div>
+                )}
                 {/* Notes Preview */}
                 {lead.knowledgeBase?.extraNotes && (
                   <div className="pt-2 border-t border-slate-100">

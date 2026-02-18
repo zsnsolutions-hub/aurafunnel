@@ -73,6 +73,18 @@ export interface KnowledgeBase {
   twitter?: string;
   youtube?: string;
   extraNotes?: string;
+  // Structured intelligence fields
+  title?: string;
+  industry?: string;
+  employeeCount?: string;
+  location?: string;
+  companyOverview?: string;
+  talkingPoints?: string[];
+  outreachAngle?: string;
+  riskFactors?: string[];
+  aiResearchBrief?: string;
+  aiResearchedAt?: string;
+  mentionedOnWebsite?: string;
 }
 
 export interface Lead {

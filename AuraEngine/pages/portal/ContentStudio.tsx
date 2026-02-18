@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { User, Lead, ToneType } from '../../types';
+import { User, Lead, ToneType, ContentCategory, EmailSequenceConfig, EmailProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { fetchOwnerEmailPerformance } from '../../lib/emailTracking';
+import { fetchOwnerEmailPerformance, sendTrackedEmailBatch, scheduleEmailBlock, fetchConnectedEmailProvider } from '../../lib/emailTracking';
+import type { ConnectedEmailProvider } from '../../lib/emailTracking';
 import { generateProposalPdf, generateEmailSequencePdf } from '../../lib/pdfExport';
+import { generateEmailSequence, generateContentByCategory, parseEmailSequenceResponse, buildEmailFooter, generateContentSuggestions } from '../../lib/gemini';
+import { resolvePersonalizationTags } from '../../lib/personalization';
 import {
   SparklesIcon, MailIcon, CheckIcon, XIcon, PlusIcon, CopyIcon,
   EditIcon, EyeIcon, ChartIcon, RefreshIcon, FilterIcon,
@@ -11,7 +14,7 @@ import {
   DownloadIcon, FlameIcon, SlidersIcon, ArrowRightIcon, StarIcon,
   LinkedInIcon, RecycleIcon, LayersIcon, GridIcon, DocumentIcon,
   KeyboardIcon, HelpCircleIcon, BrainIcon, ActivityIcon, CalendarIcon,
-  TagIcon, MessageIcon
+  TagIcon, MessageIcon, SendIcon, AlertTriangleIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -45,6 +48,7 @@ interface AISuggestion {
   category: 'high' | 'medium' | 'style';
   title: string;
   description: string;
+  originalText?: string;
   replacement?: string;
   impactLabel: string;
   impactPercent: number;
@@ -342,6 +346,22 @@ const ContentStudio: React.FC = () => {
   const [linkedinCopied, setLinkedinCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // ─── AI Generation ───
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  // ─── Email Sending ───
+  const [connectedProvider, setConnectedProvider] = useState<ConnectedEmailProvider | null>(null);
+  const [providerLoading, setProviderLoading] = useState(true);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendMode, setSendMode] = useState<'now' | 'scheduled'>('now');
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [sendingEmails, setSendingEmails] = useState(false);
+  const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
+  const [segmentFilter, setSegmentFilter] = useState<string>('all');
+
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
     if (!user?.id) {
@@ -361,6 +381,27 @@ const ContentStudio: React.FC = () => {
   }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Fetch connected email provider ──
+  useEffect(() => {
+    let cancelled = false;
+    fetchConnectedEmailProvider().then(result => {
+      if (!cancelled) { setConnectedProvider(result); setProviderLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredLeadsForSend = useMemo(() => {
+    return leads.filter(l => {
+      if (!l.email) return false;
+      if (segmentFilter === 'all') return true;
+      if (segmentFilter === 'hot') return l.score > 75;
+      if (segmentFilter === 'warm') return l.score >= 40 && l.score <= 75;
+      if (segmentFilter === 'cold') return l.score < 40;
+      if (segmentFilter === 'new') return l.status === 'New';
+      return true;
+    });
+  }, [leads, segmentFilter]);
 
   // ── Load real send history when panel opens ──
   useEffect(() => {
@@ -630,21 +671,216 @@ const ContentStudio: React.FC = () => {
   };
 
   const applySuggestion = (sugId: string) => {
-    setSuggestions(prev => prev.map(s => s.id === sugId ? { ...s, applied: true } : s));
     const sug = suggestions.find(s => s.id === sugId);
-    if (sug?.replacement && activeVariant) {
-      if (sug.type === 'structure' || sug.type === 'cta') {
-        updateVariantField('body', activeVariant.body + sug.replacement);
+    if (!sug?.replacement) return;
+    setSuggestions(prev => prev.map(s => s.id === sugId ? { ...s, applied: true } : s));
+
+    if (contentMode === 'email' && activeVariant) {
+      if (sug.originalText) {
+        // Find-and-replace in subject or body
+        if (activeVariant.subject.includes(sug.originalText)) {
+          updateVariantField('subject', activeVariant.subject.replace(sug.originalText, sug.replacement));
+        } else {
+          updateVariantField('body', activeVariant.body.replace(sug.originalText, sug.replacement));
+        }
+      } else {
+        // No original text (structure/cta) — append
+        updateVariantField('body', activeVariant.body + '\n' + sug.replacement);
+      }
+    } else if (contentMode === 'linkedin') {
+      if (sug.originalText) {
+        setLinkedinPost(prev => prev.replace(sug.originalText!, sug.replacement!));
+      } else {
+        setLinkedinPost(prev => prev + '\n' + sug.replacement);
+      }
+    } else if (contentMode === 'proposal') {
+      if (sug.originalText) {
+        // Find which section contains the original text, replace there
+        setProposalSections(prev => {
+          const updated = { ...prev };
+          for (const key of Object.keys(updated) as (keyof typeof updated)[]) {
+            if (updated[key].includes(sug.originalText!)) {
+              updated[key] = updated[key].replace(sug.originalText!, sug.replacement!);
+              break;
+            }
+          }
+          return updated;
+        });
+      } else {
+        // Append to executive summary for structure/cta
+        setProposalSections(prev => ({ ...prev, executiveSummary: prev.executiveSummary + '\n' + sug.replacement }));
       }
     }
   };
 
-  const refreshSuggestions = () => {
+  const parseSuggestionsFromAI = (text: string): AISuggestion[] => {
+    const blocks = text.split('===SUGGESTION===').filter(b => b.trim());
+    const parsed: AISuggestion[] = [];
+    for (const block of blocks) {
+      const cleaned = block.replace('===END_SUGGESTION===', '').trim();
+      const typeMatch = cleaned.match(/TYPE:\s*(word|metric|personalization|structure|cta)/i);
+      const catMatch = cleaned.match(/CATEGORY:\s*(high|medium|style)/i);
+      const titleMatch = cleaned.match(/TITLE:\s*(.+)/i);
+      const descMatch = cleaned.match(/DESCRIPTION:\s*(.+)/i);
+      const origMatch = cleaned.match(/ORIGINAL_TEXT:\s*(.+)/i);
+      const replMatch = cleaned.match(/REPLACEMENT:\s*(.+)/i);
+      const impactLabelMatch = cleaned.match(/IMPACT_LABEL:\s*(.+)/i);
+      const impactPctMatch = cleaned.match(/IMPACT_PERCENT:\s*(\d+)/i);
+      if (titleMatch && descMatch) {
+        parsed.push({
+          id: `sug-ai-${Date.now()}-${parsed.length}`,
+          type: (typeMatch?.[1]?.toLowerCase() as AISuggestion['type']) || 'word',
+          category: (catMatch?.[1]?.toLowerCase() as AISuggestion['category']) || 'medium',
+          title: titleMatch[1].trim(),
+          description: descMatch[1].trim(),
+          originalText: origMatch?.[1]?.trim() || undefined,
+          replacement: replMatch?.[1]?.trim() || undefined,
+          impactLabel: impactLabelMatch?.[1]?.trim() || '+5% improvement',
+          impactPercent: parseInt(impactPctMatch?.[1] || '5', 10),
+          applied: false,
+        });
+      }
+    }
+    return parsed;
+  };
+
+  const refreshSuggestions = async () => {
+    let content = '';
+    if (contentMode === 'email' && activeVariant) {
+      content = `Subject: ${activeVariant.subject}\n\n${activeVariant.body}`;
+    } else if (contentMode === 'linkedin') {
+      content = linkedinPost;
+    } else if (contentMode === 'proposal') {
+      content = Object.entries(proposalSections).map(([k, v]) => `${k}: ${v}`).join('\n\n');
+    }
+    if (content.length < 20) return;
+
     setSuggestionsRefreshing(true);
-    setTimeout(() => {
-      setSuggestions(INITIAL_SUGGESTIONS.map(s => ({ ...s, applied: false, impactPercent: +(s.impactPercent + (Math.random() * 4 - 2)).toFixed(0) })));
+    try {
+      const response = await generateContentSuggestions(content, contentMode, user.businessProfile);
+      if (response.text.startsWith('SUGGESTIONS FAILED')) {
+        setAiError('Failed to refresh suggestions. Please try again.');
+        return;
+      }
+      const parsed = parseSuggestionsFromAI(response.text);
+      if (parsed.length > 0) {
+        setSuggestions(parsed);
+      }
+    } catch {
+      setAiError('Failed to refresh suggestions. Please try again.');
+    } finally {
       setSuggestionsRefreshing(false);
-    }, 1000);
+    }
+  };
+
+  const parseProposalSections = (text: string): Partial<typeof proposalSections> => {
+    const result: Partial<typeof proposalSections> = {};
+    const sectionMap: Record<string, keyof typeof proposalSections> = {
+      'executive summary': 'executiveSummary',
+      'problem statement': 'problemStatement',
+      'proposed solution': 'solution',
+      'solution': 'solution',
+      'roi': 'roi',
+      'roi analysis': 'roi',
+      'roi calculation': 'roi',
+      'pricing': 'pricing',
+      'pricing options': 'pricing',
+      'next steps': 'nextSteps',
+      'timeline': 'nextSteps',
+    };
+    const sections = text.split(/(?:^|\n)(?:#{1,3}\s*|[A-Z][A-Z\s/&]+:?\s*\n|(?:\*\*|__)([^*_]+)(?:\*\*|__)\s*\n)/m);
+    const headerPattern = /(?:#{1,3}\s*|(?:\*\*|__)?)([A-Za-z\s/&]+?)(?:\*\*|__)?:?\s*$/;
+    let currentKey: keyof typeof proposalSections | null = null;
+
+    for (const chunk of sections) {
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
+      const headerMatch = trimmed.match(headerPattern);
+      if (headerMatch) {
+        const headerLower = headerMatch[1].trim().toLowerCase();
+        for (const [pattern, key] of Object.entries(sectionMap)) {
+          if (headerLower.includes(pattern)) { currentKey = key; break; }
+        }
+      } else if (currentKey) {
+        result[currentKey] = trimmed;
+      }
+    }
+
+    // Fallback: split into 6 chunks
+    if (Object.keys(result).length < 2) {
+      const lines = text.split('\n\n').filter(l => l.trim().length > 10);
+      const keys: (keyof typeof proposalSections)[] = ['executiveSummary', 'problemStatement', 'solution', 'roi', 'pricing', 'nextSteps'];
+      for (let i = 0; i < Math.min(lines.length, keys.length); i++) {
+        result[keys[i]] = lines[i].trim();
+      }
+    }
+    return result;
+  };
+
+  const handleGenerateWithAI = async () => {
+    if (leads.length === 0 || aiGenerating) return;
+    setAiGenerating(true);
+    setAiError(null);
+
+    try {
+      if (contentMode === 'email') {
+        const config: EmailSequenceConfig = {
+          audienceLeadIds: leads.map(l => l.id),
+          goal: 'book_meeting',
+          sequenceLength: steps.length || 3,
+          cadence: 'every_2_days',
+          tone: ToneType.PROFESSIONAL,
+        };
+        const response = await generateEmailSequence(leads, config, user.businessProfile);
+        if (response.text.startsWith('SEQUENCE GENERATION FAILED') || response.text.startsWith('CRITICAL FAILURE')) {
+          setAiError('Email generation failed. Please try again.');
+          return;
+        }
+        const parsed = parseEmailSequenceResponse(response.text, config);
+        if (parsed.length > 0) {
+          const newSteps: EmailStep[] = parsed.map(p => ({
+            id: p.id,
+            stepNumber: p.stepNumber,
+            delay: p.delay,
+            variants: [{
+              id: `var-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: 'AI Generated',
+              subject: p.subject,
+              body: p.body,
+              performance: { openRate: 0, clickRate: 0, replyRate: 0, conversion: 0 },
+              isControl: true,
+            }],
+            activeVariantId: '',
+          }));
+          setSteps(newSteps.map(s => ({ ...s, activeVariantId: s.variants[0].id })));
+          setActiveStepIdx(0);
+        }
+      } else if (contentMode === 'linkedin') {
+        const context = `Tone: ${linkedinTone}, Goal: ${linkedinGoal}`;
+        const response = await generateContentByCategory(
+          leads[0], ContentCategory.SOCIAL_MEDIA, ToneType.PROFESSIONAL, context, user.businessProfile
+        );
+        if (!response.text.startsWith('GENERATION FAILED') && !response.text.startsWith('CRITICAL FAILURE')) {
+          setLinkedinPost(response.text);
+        } else {
+          setAiError('LinkedIn post generation failed. Please try again.');
+        }
+      } else if (contentMode === 'proposal') {
+        const response = await generateContentByCategory(
+          leads[0], ContentCategory.PROPOSAL, ToneType.PROFESSIONAL, '', user.businessProfile
+        );
+        if (!response.text.startsWith('GENERATION FAILED') && !response.text.startsWith('CRITICAL FAILURE')) {
+          const sections = parseProposalSections(response.text);
+          setProposalSections(prev => ({ ...prev, ...sections }));
+        } else {
+          setAiError('Proposal generation failed. Please try again.');
+        }
+      }
+    } catch (err: unknown) {
+      setAiError(err instanceof Error ? err.message : 'AI generation failed. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
   };
 
   const insertTag = (tag: string) => {
@@ -690,11 +926,11 @@ const ContentStudio: React.FC = () => {
   };
 
   const handleCopyLinkedin = () => {
-    const personalized = linkedinPost
-      .replace(/\{\{company\}\}/g, leads[0]?.company || 'your company')
-      .replace(/\{\{industry\}\}/g, 'technology')
-      .replace(/\{\{first_name\}\}/g, leads[0]?.name?.split(' ')[0] || '')
-      .replace(/\{\{client_name\}\}/g, leads[0]?.company || 'leading companies');
+    const personalized = resolvePersonalizationTags(
+      linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
+      leads[0] || {},
+      user.businessProfile
+    );
     navigator.clipboard.writeText(personalized);
     setLinkedinCopied(true);
     setTimeout(() => setLinkedinCopied(false), 2500);
@@ -716,11 +952,13 @@ const ContentStudio: React.FC = () => {
           { label: 'Pricing', body: proposalSections.pricing },
           { label: 'Next Steps', body: proposalSections.nextSteps },
         ];
+        const selectedLead = leads[0] || {};
         const personalization: Record<string, string> = {
-          '{{company}}': leads[0]?.company || 'Acme Corp',
-          '{{industry}}': 'technology',
+          '{{company}}': selectedLead.company || 'Acme Corp',
+          '{{industry}}': selectedLead.knowledgeBase?.industry || 'your industry',
           '{{pain_point}}': 'scaling lead generation',
-          '{{company_size}}': '150',
+          '{{company_size}}': selectedLead.knowledgeBase?.employeeCount || '',
+          '{{first_name}}': selectedLead.name?.split(' ')[0] || '',
         };
         generateProposalPdf({
           companyName: user.name || 'Your Company',
@@ -781,14 +1019,28 @@ const ContentStudio: React.FC = () => {
     setViewTab('editor');
   };
 
-  const startBatchGeneration = () => {
-    setBatchItems(prev => prev.map(b => ({ ...b, status: 'generating' as const })));
-    let idx = 0;
-    const interval = setInterval(() => {
+  const startBatchGeneration = async () => {
+    if (leads.length === 0) return;
+    for (let idx = 0; idx < batchItems.length; idx++) {
+      const item = batchItems[idx];
+      if (item.status === 'done') continue;
+      setBatchItems(prev => prev.map((b, i) => i === idx ? { ...b, status: 'generating' as const } : b));
+      try {
+        if (item.type === 'email') {
+          await generateEmailSequence(leads, {
+            audienceLeadIds: leads.map(l => l.id), goal: 'book_meeting',
+            sequenceLength: 3, cadence: 'every_2_days', tone: ToneType.PROFESSIONAL,
+          }, user.businessProfile);
+        } else if (item.type === 'linkedin') {
+          await generateContentByCategory(leads[0], ContentCategory.SOCIAL_MEDIA, ToneType.PROFESSIONAL, item.tone, user.businessProfile);
+        } else {
+          await generateContentByCategory(leads[0], ContentCategory.PROPOSAL, ToneType.PROFESSIONAL, '', user.businessProfile);
+        }
+      } catch (err) {
+        console.error(`Batch item ${item.label} failed:`, err);
+      }
       setBatchItems(prev => prev.map((b, i) => i === idx ? { ...b, status: 'done' as const } : b));
-      idx++;
-      if (idx >= batchItems.length) clearInterval(interval);
-    }, 1200);
+    }
   };
 
   const handleRecycle = () => {
@@ -805,6 +1057,115 @@ const ContentStudio: React.FC = () => {
       setContentMode('email');
     }
     setShowRecycleModal(false);
+  };
+
+  const handleSendEmails = async () => {
+    if (selectedLeadIds.size === 0 || sendingEmails) return;
+    setSendingEmails(true);
+    setSendResult(null);
+
+    try {
+      const eligibleLeads = leads
+        .filter(l => selectedLeadIds.has(l.id) && l.email)
+        .map(l => ({ id: l.id, email: l.email, name: l.name, company: l.company, insights: l.insights, score: l.score, status: l.status, lastActivity: l.lastActivity, knowledgeBase: l.knowledgeBase }));
+
+      if (eligibleLeads.length === 0) {
+        setSendResult({ sent: 0, failed: 0 });
+        return;
+      }
+
+      const sequenceId = `seq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const footer = buildEmailFooter(user.businessProfile);
+      let totalSent = 0;
+      let totalFailed = 0;
+
+      if (sendMode === 'now') {
+        // Send first step immediately
+        const firstStep = steps[0];
+        const v = firstStep.variants.find(vr => vr.id === firstStep.activeVariantId) || firstStep.variants[0];
+        const htmlBody = `<div>${v.body.replace(/\n/g, '<br />')}</div>${footer}`;
+        const result = await sendTrackedEmailBatch(
+          eligibleLeads,
+          v.subject,
+          htmlBody,
+          { trackOpens: true, trackClicks: true, provider: connectedProvider?.provider as EmailProvider, fromName: connectedProvider?.from_name }
+        );
+        totalSent += result.sent;
+        totalFailed += result.failed;
+
+        // Auto-mark New leads as Contacted
+        try {
+          const storedPrefs = localStorage.getItem('aurafunnel_dashboard_prefs');
+          const prefs = storedPrefs ? JSON.parse(storedPrefs) : {};
+          if (prefs.autoContactedOnSend) {
+            const newLeadIds = eligibleLeads.filter(l => l.status === 'New').map(l => l.id);
+            if (newLeadIds.length > 0) {
+              await supabase.from('leads')
+                .update({ status: 'Contacted', lastActivity: 'Auto-contacted via email send' })
+                .in('id', newLeadIds)
+                .eq('status', 'New');
+            }
+          }
+        } catch (e) {
+          console.error('Auto-contacted hook error:', e);
+        }
+
+        // Schedule remaining steps
+        for (let i = 1; i < steps.length; i++) {
+          const step = steps[i];
+          const sv = step.variants.find(vr => vr.id === step.activeVariantId) || step.variants[0];
+          const delayMatch = step.delay.match(/\d+/);
+          const delayDays = delayMatch ? parseInt(delayMatch[0], 10) : (i + 1) * 2;
+          const scheduledAt = new Date();
+          scheduledAt.setDate(scheduledAt.getDate() + delayDays);
+
+          const stepHtml = `<div>${sv.body.replace(/\n/g, '<br />')}</div>${footer}`;
+          await scheduleEmailBlock({
+            leads: eligibleLeads,
+            subject: sv.subject,
+            htmlBody: stepHtml,
+            scheduledAt,
+            blockIndex: i,
+            sequenceId,
+            fromEmail: connectedProvider?.from_email,
+            fromName: connectedProvider?.from_name,
+            provider: connectedProvider?.provider,
+          });
+        }
+      } else {
+        // Schedule ALL steps relative to base date
+        const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
+        for (let i = 0; i < steps.length; i++) {
+          const step = steps[i];
+          const sv = step.variants.find(vr => vr.id === step.activeVariantId) || step.variants[0];
+          const delayMatch = step.delay.match(/\d+/);
+          const delayDays = delayMatch ? parseInt(delayMatch[0], 10) : i * 2;
+          const scheduledAt = new Date(baseDate.getTime() + delayDays * 86400000);
+
+          const stepHtml = `<div>${sv.body.replace(/\n/g, '<br />')}</div>${footer}`;
+          await scheduleEmailBlock({
+            leads: eligibleLeads,
+            subject: sv.subject,
+            htmlBody: stepHtml,
+            scheduledAt,
+            blockIndex: i,
+            sequenceId,
+            fromEmail: connectedProvider?.from_email,
+            fromName: connectedProvider?.from_name,
+            provider: connectedProvider?.provider,
+          });
+          totalSent += eligibleLeads.length;
+        }
+      }
+
+      setSendResult({ sent: totalSent, failed: totalFailed });
+      fetchData();
+    } catch (err: unknown) {
+      console.error('Send emails error:', err);
+      setSendResult({ sent: 0, failed: selectedLeadIds.size });
+    } finally {
+      setSendingEmails(false);
+    }
   };
 
   const getSuggestionColor = (cat: string) => {
@@ -840,10 +1201,17 @@ const ContentStudio: React.FC = () => {
                 {contentMode === 'email' ? 'Email Sequence' : contentMode === 'linkedin' ? 'LinkedIn Post' : 'Sales Proposal'}
               </span>
             </h1>
-            <p className="text-slate-400 text-xs mt-0.5">
-              {contentMode === 'email' && <>Multi-variant editor &middot; {steps.length} steps &middot; {activeStep?.variants.length || 0} variants</>}
-              {contentMode === 'linkedin' && <>Social media content &middot; {linkedinPost.split(/\s+/).filter(Boolean).length} words &middot; {(linkedinPost.match(/#\w+/g) || []).length} hashtags</>}
-              {contentMode === 'proposal' && <>Full proposal generator &middot; {Object.keys(proposalSections).length} sections</>}
+            <p className="text-slate-400 text-xs mt-0.5 flex items-center space-x-2">
+              <span>
+                {contentMode === 'email' && <>Multi-variant editor &middot; {steps.length} steps &middot; {activeStep?.variants.length || 0} variants</>}
+                {contentMode === 'linkedin' && <>Social media content &middot; {linkedinPost.split(/\s+/).filter(Boolean).length} words &middot; {(linkedinPost.match(/#\w+/g) || []).length} hashtags</>}
+                {contentMode === 'proposal' && <>Full proposal generator &middot; {Object.keys(proposalSections).length} sections</>}
+              </span>
+              {user.businessProfile?.companyName && (
+                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[9px] font-bold border border-emerald-200">
+                  {user.businessProfile.companyName}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -886,6 +1254,28 @@ const ContentStudio: React.FC = () => {
               </div>
             )}
           </div>
+          <button
+            onClick={handleGenerateWithAI}
+            disabled={aiGenerating || leads.length === 0}
+            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {aiGenerating ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <SparklesIcon className="w-4 h-4" />
+            )}
+            <span>{aiGenerating ? 'Generating...' : 'Generate with AI'}</span>
+          </button>
+          {contentMode === 'email' && (
+            <button
+              onClick={() => { setSendResult(null); setShowSendModal(true); }}
+              disabled={!connectedProvider}
+              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <SendIcon className="w-4 h-4" />
+              <span>Send Emails</span>
+            </button>
+          )}
           <button onClick={handleSave} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
             {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
             <span>{saved ? 'Saved!' : 'Save'}</span>
@@ -942,6 +1332,31 @@ const ContentStudio: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* AI ERROR BANNER                                              */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {aiError && (
+        <div className="flex items-center justify-between p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+          <div className="flex items-center space-x-2">
+            <AlertTriangleIcon className="w-4 h-4 text-rose-500 shrink-0" />
+            <p className="text-xs font-semibold text-rose-700">{aiError}</p>
+          </div>
+          <button onClick={() => setAiError(null)} className="p-1 text-rose-400 hover:text-rose-600 transition-colors">
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* NO-PROVIDER WARNING (email mode only) */}
+      {contentMode === 'email' && !connectedProvider && !providerLoading && (
+        <div className="flex items-center space-x-2 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+          <AlertTriangleIcon className="w-4 h-4 text-amber-500 shrink-0" />
+          <p className="text-xs font-semibold text-amber-700">
+            No email provider connected. Go to Settings &rarr; Integrations to connect SendGrid, Gmail, or SMTP to send emails.
+          </p>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* CONTENT HEALTH SCORE                                         */}
@@ -1455,6 +1870,14 @@ const ContentStudio: React.FC = () => {
                   <div className="flex items-center justify-between mb-3">
                     <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Email Body</label>
                     <div className="flex items-center space-x-2">
+                      <button
+                        onClick={handleGenerateWithAI}
+                        disabled={aiGenerating || leads.length === 0}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-[10px] font-bold hover:bg-violet-100 transition-all disabled:opacity-50"
+                      >
+                        <SparklesIcon className="w-3 h-3" />
+                        <span>AI Generate</span>
+                      </button>
                       <div className="relative">
                         <button
                           onClick={() => setShowTagPicker(!showTagPicker)}
@@ -1506,6 +1929,14 @@ const ContentStudio: React.FC = () => {
                     <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Post Content</label>
                   </div>
                   <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleGenerateWithAI}
+                      disabled={aiGenerating || leads.length === 0}
+                      className="flex items-center space-x-1 px-2.5 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-[10px] font-bold hover:bg-violet-100 transition-all disabled:opacity-50"
+                    >
+                      <SparklesIcon className="w-3 h-3" />
+                      <span>AI Generate</span>
+                    </button>
                     <div className="relative">
                       <button
                         onClick={() => setShowTagPicker(!showTagPicker)}
@@ -1607,6 +2038,16 @@ const ContentStudio: React.FC = () => {
             {/* ═══ PROPOSAL EDITOR ═══ */}
             {viewTab === 'editor' && contentMode === 'proposal' && (
               <div className="space-y-4">
+                <div className="flex items-center justify-end">
+                  <button
+                    onClick={handleGenerateWithAI}
+                    disabled={aiGenerating || leads.length === 0}
+                    className="flex items-center space-x-1 px-2.5 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-[10px] font-bold hover:bg-violet-100 transition-all disabled:opacity-50"
+                  >
+                    <SparklesIcon className="w-3 h-3" />
+                    <span>AI Generate All Sections</span>
+                  </button>
+                </div>
                 {([
                   { key: 'executiveSummary', label: 'Executive Summary', icon: <TargetIcon className="w-3.5 h-3.5" /> },
                   { key: 'problemStatement', label: 'Problem Statement', icon: <FlameIcon className="w-3.5 h-3.5" /> },
@@ -1645,26 +2086,20 @@ const ContentStudio: React.FC = () => {
                     <p className="text-xs text-slate-400">From: <span className="text-slate-600 font-semibold">{user.name} &lt;{user.email}&gt;</span></p>
                     <p className="text-xs text-slate-400 mt-1">To: <span className="text-slate-600 font-semibold">{leads[0]?.name || 'Sarah Johnson'} &lt;{leads[0]?.email || 'sarah@example.com'}&gt;</span></p>
                     <p className="text-xs text-slate-400 mt-1">Subject: <span className="text-slate-900 font-bold">
-                      {activeVariant.subject
-                        .replace('{{company}}', leads[0]?.company || 'Acme Corp')
-                        .replace('{{first_name}}', leads[0]?.name?.split(' ')[0] || 'Sarah')
-                        .replace('{{solve_pain_point}}', 'streamline lead management')}
+                      {resolvePersonalizationTags(
+                        activeVariant.subject.replace(/\{\{your_name\}\}/gi, user.name || 'Your Name'),
+                        leads[0] || {},
+                        user.businessProfile
+                      )}
                     </span></p>
                   </div>
                   <div className="p-5">
                     <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {activeVariant.body
-                        .replace(/\{\{first_name\}\}/g, leads[0]?.name?.split(' ')[0] || 'Sarah')
-                        .replace(/\{\{company\}\}/g, leads[0]?.company || 'Acme Corp')
-                        .replace(/\{\{industry\}\}/g, 'technology')
-                        .replace(/\{\{personalized_opening\}\}/g, 'I noticed your recent expansion')
-                        .replace(/\{\{value_proposition\}\}/g, 'Our AI-powered platform')
-                        .replace(/\{\{target_outcome\}\}/g, 'accelerate pipeline velocity')
-                        .replace(/\{\{pain_point\}\}/g, 'managing a growing lead pipeline')
-                        .replace(/\{\{your_name\}\}/g, user.name || 'Your Name')
-                        .replace(/\{\{recent_activity\}\}/g, 'viewed pricing page')
-                        .replace(/\{\{ai_insight\}\}/g, leads[0]?.insights || 'High engagement detected')
-                        .replace(/\{\{personalized_ps\}\}/g, `I saw ${leads[0]?.company || 'your company'} just raised a new round — exciting times!`)}
+                      {resolvePersonalizationTags(
+                        activeVariant.body.replace(/\{\{your_name\}\}/gi, user.name || 'Your Name'),
+                        leads[0] || {},
+                        user.businessProfile
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1697,10 +2132,11 @@ const ContentStudio: React.FC = () => {
                   {/* Post body */}
                   <div className="px-4 pb-4">
                     <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {linkedinPost
-                        .replace(/\{\{company\}\}/g, leads[0]?.company || 'Acme Corp')
-                        .replace(/\{\{industry\}\}/g, 'technology')
-                        .replace(/\{\{client_name\}\}/g, leads[0]?.company || 'leading companies')}
+                      {resolvePersonalizationTags(
+                        linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
+                        leads[0] || {},
+                        user.businessProfile
+                      )}
                     </div>
                   </div>
                   {/* Engagement bar */}
@@ -2643,6 +3079,208 @@ const ContentStudio: React.FC = () => {
                 Recycle Content
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* SEND EMAIL MODAL                                             */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showSendModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSendModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 flex items-center space-x-2">
+                  <SendIcon className="w-5 h-5 text-emerald-600" />
+                  <span>Send Email Sequence</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">{steps.length} steps &middot; Select recipients and delivery method</p>
+              </div>
+              <button onClick={() => setShowSendModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {sendResult ? (
+              <div className="p-8 text-center">
+                <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${sendResult.failed === 0 ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                  {sendResult.failed === 0 ? <CheckIcon className="w-8 h-8 text-emerald-600" /> : <AlertTriangleIcon className="w-8 h-8 text-amber-600" />}
+                </div>
+                <h3 className="text-lg font-black text-slate-900">{sendResult.failed === 0 ? 'Emails Sent!' : 'Partially Sent'}</h3>
+                <p className="text-sm text-slate-500 mt-1">{sendResult.sent} sent{sendResult.failed > 0 ? `, ${sendResult.failed} failed` : ''}</p>
+                <button onClick={() => setShowSendModal(false)} className="mt-6 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 space-y-5">
+                {/* Segment Filter Tabs */}
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Filter Recipients</p>
+                  <div className="flex items-center space-x-1.5">
+                    {[
+                      { key: 'all', label: 'All Leads' },
+                      { key: 'hot', label: 'Hot (75+)' },
+                      { key: 'warm', label: 'Warm (40-75)' },
+                      { key: 'cold', label: 'Cold (<40)' },
+                      { key: 'new', label: 'New' },
+                    ].map(seg => (
+                      <button
+                        key={seg.key}
+                        onClick={() => setSegmentFilter(seg.key)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                          segmentFilter === seg.key ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        {seg.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Lead List */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">{filteredLeadsForSend.length} Recipients</p>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setSelectedLeadIds(new Set(filteredLeadsForSend.map(l => l.id)))}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        onClick={() => setSelectedLeadIds(new Set())}
+                        className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-xl">
+                    {filteredLeadsForSend.length === 0 ? (
+                      <div className="p-6 text-center">
+                        <p className="text-xs text-slate-400">No leads match this filter</p>
+                      </div>
+                    ) : (
+                      filteredLeadsForSend.map(lead => (
+                        <label key={lead.id} className="flex items-center space-x-3 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-50 last:border-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedLeadIds.has(lead.id)}
+                            onChange={e => {
+                              setSelectedLeadIds(prev => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(lead.id); else next.delete(lead.id);
+                                return next;
+                              });
+                            }}
+                            className="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-700 truncate">{lead.name}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{lead.company} &middot; {lead.email}</p>
+                          </div>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                            lead.score > 75 ? 'bg-emerald-50 text-emerald-700' :
+                            lead.score >= 40 ? 'bg-amber-50 text-amber-700' :
+                            'bg-slate-50 text-slate-500'
+                          }`}>
+                            {lead.score}
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Send Mode Toggle */}
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Delivery Method</p>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setSendMode('now')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        sendMode === 'now' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      Send Now
+                    </button>
+                    <button
+                      onClick={() => setSendMode('scheduled')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        sendMode === 'scheduled' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      Schedule
+                    </button>
+                  </div>
+                  {sendMode === 'scheduled' && (
+                    <div className="flex items-center space-x-2 mt-3">
+                      <input
+                        type="date"
+                        value={scheduleDate}
+                        onChange={e => setScheduleDate(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                      <input
+                        type="time"
+                        value={scheduleTime}
+                        onChange={e => setScheduleTime(e.target.value)}
+                        className="w-28 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Provider Info */}
+                <div className="p-3.5 bg-slate-50 rounded-xl">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Email Provider</p>
+                  {connectedProvider ? (
+                    <p className="text-xs text-slate-700 font-semibold">
+                      {connectedProvider.provider.toUpperCase()} &middot; {connectedProvider.from_email}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-600 font-semibold">No provider connected — go to Settings to set up email</p>
+                  )}
+                </div>
+
+                {/* Summary */}
+                <div className="p-3.5 bg-indigo-50 rounded-xl">
+                  <p className="text-xs font-bold text-indigo-700">
+                    {selectedLeadIds.size} lead{selectedLeadIds.size !== 1 ? 's' : ''} selected &middot; {steps.length} step{steps.length !== 1 ? 's' : ''} &middot; {sendMode === 'now' ? 'Sending immediately' : `Scheduled for ${scheduleDate || 'TBD'}`}
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => setShowSendModal(false)}
+                    className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendEmails}
+                    disabled={sendingEmails || selectedLeadIds.size === 0 || !connectedProvider || (sendMode === 'scheduled' && !scheduleDate)}
+                    className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 flex items-center justify-center space-x-2"
+                  >
+                    {sendingEmails ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <SendIcon className="w-4 h-4" />
+                        <span>{sendMode === 'now' ? 'Send Now' : 'Schedule'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

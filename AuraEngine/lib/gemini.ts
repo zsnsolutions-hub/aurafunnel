@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead, BusinessProfile, BusinessAnalysisResult } from "../types";
+import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead, BusinessProfile, BusinessAnalysisResult, KnowledgeBase } from "../types";
 import { supabase } from "./supabase";
 
 const buildBusinessContext = (profile?: BusinessProfile): string => {
@@ -466,7 +466,7 @@ export const generateLeadResearch = async (
 
   const emailDomain = lead.email?.includes('@') ? lead.email.split('@')[1] : '';
 
-  const prompt = `Analyze the following B2B lead and produce a concise research brief.
+  const prompt = `Research the following B2B lead comprehensively. Search the web, scrape their company website, LinkedIn profile, and any news or press mentions.
 
 LEAD DATA:
 - Name: ${lead.name}
@@ -477,33 +477,63 @@ ${lead.insights ? `- Existing Insights: ${lead.insights}` : ''}
 SOCIAL / WEB PRESENCE:
 ${urlContext || 'None provided'}
 
-Based on the company name, email domain, and social profile URLs (use them as inference signals about the company's size, industry, and positioning), produce exactly these four sections:
+RESEARCH INSTRUCTIONS:
+1. Search the company website for pages mentioning "${lead.name}" by name — look for team pages, about pages, blog posts, case studies.
+2. Search LinkedIn for the lead's profile, activity, and recent posts.
+3. Look for news articles, press releases, podcast appearances, or conference talks.
+4. Identify the company's industry, size, products, and recent milestones.
+5. Find potential common ground or mutual connections with the sender's business.
+6. Identify the lead's recent projects, publications, or notable achievements.
 
-**Company Overview** — What this company likely does, approximate size/stage, and industry positioning (2-3 sentences).
+Respond using EXACTLY this delimited format (every field required):
 
-**Key Talking Points** — 3-4 bullet points a sales rep can reference in outreach to show genuine research and relevance.
+===FIELD===TITLE: [Job title or role, e.g. "VP of Engineering"]===END===
+===FIELD===INDUSTRY: [Industry sector, e.g. "B2B SaaS"]===END===
+===FIELD===EMPLOYEE_COUNT: [Approximate company size, e.g. "50-200"]===END===
+===FIELD===LOCATION: [City, State, Country]===END===
+===FIELD===COMPANY_OVERVIEW: [What this company does, approximate size/stage, and industry positioning — 2-3 sentences]===END===
+===FIELD===TALKING_POINTS: [3-4 conversation starters separated by | pipes, e.g. "Recent Series B funding | Open-source contributions to React | Spoke at DevConf 2025"]===END===
+===FIELD===OUTREACH_ANGLE: [The single best angle to open a conversation, 2-3 sentences]===END===
+===FIELD===RISK_FACTORS: [1-2 potential objections separated by | pipes]===END===
+===FIELD===MENTIONED_ON_WEBSITE: [If the lead is mentioned on their company website, quote what was found. Otherwise write "Not found"]===END===
+===FIELD===RESEARCH_BRIEF: [Full 150-250 word research summary combining all findings]===END===
 
-**Outreach Angle** — The single best angle to open a conversation with this lead, considering their role and company profile (2-3 sentences).
+Be specific and data-driven. Reference actual findings from web search when available.${buildBusinessContext(businessProfile)}`;
 
-**Risk Factors** — 1-2 potential objections or challenges to be aware of when approaching this lead.
-
-Keep the total response under 250 words. Be specific and actionable, not generic.${buildBusinessContext(businessProfile)}`;
+  const systemInstruction = 'You are a senior B2B research analyst with access to web search. Produce comprehensive, actionable intelligence briefs using real web data. Search thoroughly for the lead and their company. Always use the exact delimited format requested.';
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: prompt,
-        config: {
-          systemInstruction: 'You are a senior B2B research analyst. Produce concise, actionable intelligence briefs from limited data signals. Infer what you can from company names, domains, and social presence. Be direct and useful.',
-          temperature: 0.7,
-          topP: 0.9,
-        }
-      });
+      let response;
+      try {
+        // Try with Google Search grounding first
+        response = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            temperature: 0.3,
+            topP: 0.9,
+            tools: [{ googleSearch: {} }],
+          }
+        });
+      } catch (groundingError: unknown) {
+        // Fallback without grounding
+        console.warn('Google Search grounding failed for lead research, falling back:', groundingError instanceof Error ? groundingError.message : 'Unknown error');
+        response = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            temperature: 0.3,
+            topP: 0.9,
+          }
+        });
+      }
 
       clearTimeout(timeoutId);
       const text = response.text;
@@ -514,7 +544,7 @@ Keep the total response under 250 words. Be specific and actionable, not generic
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
         prompt_name: 'lead_research',
-        prompt_version: 1
+        prompt_version: 2
       };
     } catch (error: unknown) {
       attempt++;
@@ -525,14 +555,67 @@ Keep the total response under 250 words. Be specific and actionable, not generic
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: 'lead_research',
-          prompt_version: 1
+          prompt_version: 2
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'lead_research', prompt_version: 1 };
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'lead_research', prompt_version: 2 };
+};
+
+/**
+ * Parse the delimited research response into structured KnowledgeBase fields.
+ */
+export const parseLeadResearchResponse = (text: string): Partial<KnowledgeBase> => {
+  const result: Partial<KnowledgeBase> = {};
+
+  const extractField = (fieldName: string): string | undefined => {
+    const regex = new RegExp(`===FIELD===${fieldName}:\\s*([\\s\\S]*?)===END===`, 'i');
+    const match = text.match(regex);
+    return match?.[1]?.trim() || undefined;
+  };
+
+  const title = extractField('TITLE');
+  if (title) result.title = title;
+
+  const industry = extractField('INDUSTRY');
+  if (industry) result.industry = industry;
+
+  const employeeCount = extractField('EMPLOYEE_COUNT');
+  if (employeeCount) result.employeeCount = employeeCount;
+
+  const location = extractField('LOCATION');
+  if (location) result.location = location;
+
+  const companyOverview = extractField('COMPANY_OVERVIEW');
+  if (companyOverview) result.companyOverview = companyOverview;
+
+  const talkingPointsRaw = extractField('TALKING_POINTS');
+  if (talkingPointsRaw) {
+    result.talkingPoints = talkingPointsRaw.split('|').map(p => p.trim()).filter(Boolean);
+  }
+
+  const outreachAngle = extractField('OUTREACH_ANGLE');
+  if (outreachAngle) result.outreachAngle = outreachAngle;
+
+  const riskFactorsRaw = extractField('RISK_FACTORS');
+  if (riskFactorsRaw) {
+    result.riskFactors = riskFactorsRaw.split('|').map(p => p.trim()).filter(Boolean);
+  }
+
+  const mentioned = extractField('MENTIONED_ON_WEBSITE');
+  if (mentioned && mentioned.toLowerCase() !== 'not found') {
+    result.mentionedOnWebsite = mentioned;
+  }
+
+  const brief = extractField('RESEARCH_BRIEF');
+  if (brief) result.aiResearchBrief = brief;
+
+  result.aiResearchedAt = new Date().toISOString();
+
+  return result;
 };
 
 // === Business Profile AI Analysis ===
@@ -867,6 +950,92 @@ ${buildBusinessContext(businessProfile)}`;
   }
 
   return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: `command_center_${mode}`, prompt_version: 1 };
+};
+
+export const generateContentSuggestions = async (
+  content: string,
+  mode: 'email' | 'linkedin' | 'proposal',
+  businessProfile?: BusinessProfile
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const modeLabel = mode === 'email' ? 'cold email' : mode === 'linkedin' ? 'LinkedIn post' : 'sales proposal';
+
+  const prompt = `Analyze the following ${modeLabel} content and return exactly 5 improvement suggestions.
+
+CONTENT TO ANALYZE:
+${content}
+${buildBusinessContext(businessProfile)}
+
+For each suggestion, use this exact delimited format:
+
+===SUGGESTION===
+TYPE: [one of: word|metric|personalization|structure|cta]
+CATEGORY: [one of: high|medium|style]
+TITLE: [short actionable title, max 10 words]
+DESCRIPTION: [1-2 sentences explaining why this matters]
+ORIGINAL_TEXT: [for word/metric/personalization types: quote the EXACT text from the content above that should be replaced. For structure/cta types: leave empty]
+REPLACEMENT: [the improved replacement text that should replace ORIGINAL_TEXT, or new content to append for structure/cta]
+IMPACT_LABEL: [e.g. "+12% opens" or "+8% engagement"]
+IMPACT_PERCENT: [number only, e.g. 12]
+===END_SUGGESTION===
+
+CRITICAL INSTRUCTIONS:
+- For word, metric, and personalization suggestions: ORIGINAL_TEXT must be an EXACT quote from the content above (verbatim, case-sensitive). REPLACEMENT is what it should be changed to.
+- For structure and cta suggestions: ORIGINAL_TEXT should be empty. REPLACEMENT is the new content to append.
+- Every suggestion MUST have a non-empty REPLACEMENT field.
+
+Return exactly 5 suggestions. Focus on:
+1. Word choice improvements (stronger verbs, action-oriented language)
+2. Metrics/data that could be added for credibility
+3. Personalization opportunities
+4. Structural improvements (formatting, length, flow)
+5. CTA strength and urgency`;
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction: `You are a senior content optimization specialist for B2B sales. Analyze content and provide specific, actionable improvement suggestions. Always use the exact delimited format requested.`,
+          temperature: 0.7,
+          topP: 0.9,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error("Empty suggestions response.");
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: 'content_suggestions',
+        prompt_version: 1
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `SUGGESTIONS FAILED: ${errMsg}`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: 'content_suggestions',
+          prompt_version: 1
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'content_suggestions', prompt_version: 1 };
 };
 
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
