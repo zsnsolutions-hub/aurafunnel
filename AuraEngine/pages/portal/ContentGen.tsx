@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Lead, ContentCategory, ToneType, EmailStep, User, EmailSequenceConfig, EmailProvider } from '../../types';
-import { generateContentByCategory, generateEmailSequence, parseEmailSequenceResponse, AIResponse } from '../../lib/gemini';
+import { generateContentByCategory, generateEmailSequence, parseEmailSequenceResponse, AIResponse, buildEmailFooter } from '../../lib/gemini';
 import {
   SparklesIcon, MailIcon, GlobeIcon, HashIcon, BookIcon, BriefcaseIcon, BoltIcon,
   CopyIcon, CheckIcon, ClockIcon, EyeIcon, XIcon, PlusIcon, DownloadIcon,
@@ -885,7 +885,8 @@ const ContentGen: React.FC = () => {
           // Send first block immediately
           setDeliveryProgress({ current: 1, total: blocks.length });
           const firstBlock = blocks[0];
-          const htmlBody = `<div>${firstBlock.body.replace(/\n/g, '<br />')}</div>`;
+          const footer = buildEmailFooter(user.businessProfile);
+          const htmlBody = `<div>${firstBlock.body.replace(/\n/g, '<br />')}</div>${footer}`;
           const result = await sendTrackedEmailBatch(
             eligibleLeads,
             firstBlock.subject,
@@ -944,7 +945,7 @@ const ContentGen: React.FC = () => {
             const scheduledAt = new Date();
             scheduledAt.setDate(scheduledAt.getDate() + delayDays);
 
-            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>`;
+            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>${footer}`;
             await scheduleEmailBlock({
               leads: eligibleLeads,
               subject: block.subject,
@@ -962,13 +963,14 @@ const ContentGen: React.FC = () => {
         } else if (schedule.mode === 'scheduled') {
           // Schedule ALL blocks relative to the base date
           const baseDate = new Date(`${schedule.date}T${schedule.time}`);
+          const scheduledFooter = buildEmailFooter(user.businessProfile);
           for (let i = 0; i < blocks.length; i++) {
             setDeliveryProgress({ current: i + 1, total: blocks.length });
             const block = blocks[i];
             const delayDays = extractDelayDays(block.title, i);
             const scheduledAt = new Date(baseDate.getTime() + delayDays * 86400000);
 
-            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>`;
+            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>${scheduledFooter}`;
             await scheduleEmailBlock({
               leads: eligibleLeads,
               subject: block.subject,

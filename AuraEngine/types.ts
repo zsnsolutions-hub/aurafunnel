@@ -37,6 +37,16 @@ export interface BusinessProfile {
   valueProp?: string;
   pricingModel?: string;
   salesApproach?: string;
+  businessDescription?: string;
+  phone?: string;
+  businessEmail?: string;
+  address?: string;
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+    instagram?: string;
+    facebook?: string;
+  };
 }
 
 export interface BusinessAnalysisField {

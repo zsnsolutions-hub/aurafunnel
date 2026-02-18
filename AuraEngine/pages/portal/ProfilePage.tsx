@@ -94,6 +94,7 @@ const ProfilePage: React.FC = () => {
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [questionAnswer, setQuestionAnswer] = useState('');
   const [urlError, setUrlError] = useState('');
+  const [businessDescription, setBusinessDescription] = useState(user?.businessProfile?.businessDescription || '');
   const stageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const tabs = [
@@ -137,9 +138,16 @@ const ProfilePage: React.FC = () => {
     setError('');
     setSuccess(false);
     try {
-      const cleaned: Record<string, string> = {};
+      const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(businessProfile)) {
-        if (typeof v === 'string' && v.trim()) cleaned[k] = v.trim();
+        if (k === 'socialLinks' && v && typeof v === 'object') {
+          const filteredSocials = Object.fromEntries(
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+          );
+          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
+        } else if (typeof v === 'string' && v.trim()) {
+          cleaned[k] = v.trim();
+        }
       }
       const { error: updateError } = await supabase
         .from('profiles')
@@ -169,6 +177,12 @@ const ProfilePage: React.FC = () => {
 
   // Wizard: run AI analysis
   const handleAnalyze = async () => {
+    // Description-only flow: skip AI analysis, go straight to manual form
+    if (!websiteUrl.trim() && businessDescription.trim()) {
+      setBusinessProfile(p => ({ ...p, businessDescription: businessDescription.trim() }));
+      setWizardPhase('manual');
+      return;
+    }
     if (!validateUrl(websiteUrl)) {
       setUrlError('Please enter a valid website URL');
       return;
@@ -216,6 +230,7 @@ const ProfilePage: React.FC = () => {
           }
         });
         populated.companyWebsite = fullUrl;
+        if (businessDescription.trim()) populated.businessDescription = businessDescription.trim();
         setBusinessProfile(populated);
 
         // Generate follow-up questions for low-confidence fields
@@ -247,9 +262,26 @@ const ProfilePage: React.FC = () => {
     setError('');
     setSuccess(false);
     try {
-      const cleaned: Record<string, string> = {};
-      for (const [k, v] of Object.entries(businessProfile)) {
-        if (typeof v === 'string' && v.trim()) cleaned[k] = v.trim();
+      // Merge discovered social URLs into profile
+      const mergedProfile = { ...businessProfile };
+      const hasSocials = Object.values(socialUrls).some(v => v?.trim());
+      if (hasSocials) {
+        mergedProfile.socialLinks = {
+          ...(mergedProfile.socialLinks || {}),
+          ...Object.fromEntries(Object.entries(socialUrls).filter(([_, v]) => v?.trim()))
+        };
+      }
+
+      const cleaned: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(mergedProfile)) {
+        if (k === 'socialLinks' && v && typeof v === 'object') {
+          const filteredSocials = Object.fromEntries(
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+          );
+          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
+        } else if (typeof v === 'string' && v.trim()) {
+          cleaned[k] = v.trim();
+        }
       }
       const { error: updateError } = await supabase
         .from('profiles')
@@ -879,6 +911,26 @@ const ProfilePage: React.FC = () => {
                   {urlError && <p className="text-xs font-bold text-red-500 mt-1">{urlError}</p>}
                 </div>
 
+                {/* "Or" Divider */}
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <span className="text-xs font-bold text-slate-400">&mdash; or &mdash;</span>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
+
+                {/* Tell Us About Your Business */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Tell Us About Your Business</label>
+                  <p className="text-xs text-slate-500 leading-relaxed">Don't have a website? No problem &mdash; describe what you do, who you serve, and what makes you different.</p>
+                  <textarea
+                    value={businessDescription}
+                    onChange={e => setBusinessDescription(e.target.value)}
+                    placeholder="e.g. I run a digital marketing agency helping small restaurants and cafes grow online. We offer monthly packages including content creation, posting schedules, and analytics. Our clients are local business owners who want more customers but don't have time to manage social media themselves."
+                    rows={4}
+                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none"
+                  />
+                </div>
+
                 {/* Expandable Social Handles */}
                 <div>
                   <button
@@ -924,9 +976,9 @@ const ProfilePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleAnalyze}
-                    disabled={!websiteUrl.trim()}
+                    disabled={!websiteUrl.trim() && !businessDescription.trim()}
                     className={`flex items-center space-x-2 px-8 py-4 rounded-2xl font-bold text-sm shadow-2xl transition-all active:scale-95 ${
-                      websiteUrl.trim()
+                      websiteUrl.trim() || businessDescription.trim()
                         ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100 hover:scale-[1.02]'
                         : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
                     }`}
@@ -1259,6 +1311,49 @@ const ProfilePage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Contact & Online Presence */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-heading">Contact & Online Presence</h3>
+                    <p className="text-sm text-slate-500 mt-1">This info appears in the footer of emails and content you create.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Phone</label>
+                      <input type="text" value={businessProfile.phone || ''} onChange={e => setBusinessProfile(p => ({ ...p, phone: e.target.value }))}
+                        placeholder="e.g. +1 (555) 123-4567"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Business Email</label>
+                      <input type="text" value={businessProfile.businessEmail || ''} onChange={e => setBusinessProfile(p => ({ ...p, businessEmail: e.target.value }))}
+                        placeholder="e.g. hello@yourcompany.com"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Address</label>
+                      <input type="text" value={businessProfile.address || ''} onChange={e => setBusinessProfile(p => ({ ...p, address: e.target.value }))}
+                        placeholder="e.g. 123 Main St, Suite 200, San Francisco, CA 94105"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {[
+                      { key: 'linkedin' as const, icon: <LinkedInIcon className="w-4 h-4" />, label: 'LinkedIn', placeholder: 'https://linkedin.com/company/...' },
+                      { key: 'twitter' as const, icon: <TwitterIcon className="w-4 h-4" />, label: 'Twitter / X', placeholder: 'https://x.com/...' },
+                      { key: 'instagram' as const, icon: <InstagramIcon className="w-4 h-4" />, label: 'Instagram', placeholder: 'https://instagram.com/...' },
+                      { key: 'facebook' as const, icon: <FacebookIcon className="w-4 h-4" />, label: 'Facebook', placeholder: 'https://facebook.com/...' },
+                    ].map(s => (
+                      <div key={s.key} className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">{s.icon} {s.label}</label>
+                        <input type="text" value={businessProfile.socialLinks?.[s.key] || ''} onChange={e => setBusinessProfile(p => ({ ...p, socialLinks: { ...(p.socialLinks || {}), [s.key]: e.target.value } }))}
+                          placeholder={s.placeholder}
+                          className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Products & Value Prop */}
                 <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
                   <div>
@@ -1266,6 +1361,13 @@ const ProfilePage: React.FC = () => {
                     <p className="text-sm text-slate-500 mt-1">What does your company sell or offer?</p>
                   </div>
                   <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">About Your Business</label>
+                      <textarea value={businessProfile.businessDescription || ''} onChange={e => setBusinessProfile(p => ({ ...p, businessDescription: e.target.value }))}
+                        placeholder="e.g. I run a digital marketing agency helping small restaurants and cafes grow online. We offer monthly packages including content creation, posting schedules, and analytics. Our clients are local business owners who want more customers but don't have time to manage social media themselves."
+                        rows={4}
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+                    </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">What You Sell</label>
                       <textarea value={businessProfile.productsServices || ''} onChange={e => setBusinessProfile(p => ({ ...p, productsServices: e.target.value }))}

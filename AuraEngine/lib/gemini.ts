@@ -13,8 +13,36 @@ const buildBusinessContext = (profile?: BusinessProfile): string => {
   if (profile.targetAudience) parts.push(`Target Audience: ${profile.targetAudience}`);
   if (profile.pricingModel) parts.push(`Pricing Model: ${profile.pricingModel}`);
   if (profile.salesApproach) parts.push(`Sales Approach: ${profile.salesApproach}`);
+  if (profile.businessDescription) parts.push(`Business Description: ${profile.businessDescription}`);
+  if (profile.phone) parts.push(`Phone: ${profile.phone}`);
+  if (profile.businessEmail) parts.push(`Contact Email: ${profile.businessEmail}`);
+  if (profile.address) parts.push(`Address: ${profile.address}`);
+  if (profile.socialLinks) {
+    const socials = Object.entries(profile.socialLinks).filter(([_, v]) => v).map(([k, v]) => `${k}: ${v}`);
+    if (socials.length) parts.push(`Social Media: ${socials.join(', ')}`);
+  }
   if (parts.length === 0) return '';
   return `\n\nYOUR BUSINESS CONTEXT:\n${parts.join('\n')}`;
+};
+
+export const buildEmailFooter = (profile?: BusinessProfile): string => {
+  if (!profile) return '';
+  const lines: string[] = [];
+  if (profile.companyName) lines.push(`<strong>${profile.companyName}</strong>`);
+  if (profile.address) lines.push(profile.address);
+  const contacts: string[] = [];
+  if (profile.phone) contacts.push(profile.phone);
+  if (profile.businessEmail) contacts.push(profile.businessEmail);
+  if (profile.companyWebsite) contacts.push(profile.companyWebsite);
+  if (contacts.length) lines.push(contacts.join(' &middot; '));
+  if (profile.socialLinks) {
+    const socials = Object.entries(profile.socialLinks)
+      .filter(([_, v]) => v)
+      .map(([k, v]) => `<a href="${v}" style="color:#6366f1">${k.charAt(0).toUpperCase() + k.slice(1)}</a>`);
+    if (socials.length) lines.push(socials.join(' &middot; '));
+  }
+  if (lines.length === 0) return '';
+  return `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;line-height:1.6">${lines.join('<br/>')}</div>`;
 };
 
 const MAX_RETRIES = 3;
