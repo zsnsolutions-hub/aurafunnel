@@ -4,13 +4,14 @@ import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { generateBlogContent, BlogContentMode } from '../../lib/gemini';
+import { generateBlogContent, BlogContentMode, generateSocialCaption, SocialPlatform } from '../../lib/gemini';
 import { sendTrackedEmail } from '../../lib/emailTracking';
 import {
   EditIcon, PlusIcon, SparklesIcon, ShieldIcon, CheckIcon, RefreshIcon,
   KeyboardIcon, TrendUpIcon, TrendDownIcon, ClockIcon, EyeIcon, TargetIcon,
   XIcon, BrainIcon, TagIcon, FilterIcon, CalendarIcon, BoltIcon,
-  UsersIcon, ActivityIcon, StarIcon, LayersIcon, SendIcon, MailIcon
+  UsersIcon, ActivityIcon, StarIcon, LayersIcon, SendIcon, MailIcon,
+  LinkedInIcon, TwitterIcon, FacebookIcon, LinkIcon, CopyIcon
 } from '../../components/Icons';
 
 // ─── Types ───
@@ -96,6 +97,15 @@ const BlogDrafts: React.FC = () => {
   const [shareLeads, setShareLeads] = useState<any[]>([]);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [sharingInProgress, setSharingInProgress] = useState(false);
+
+  // ─── Social / Caption state ───
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
+  const [showCaptionModal, setShowCaptionModal] = useState(false);
+  const [captionPost, setCaptionPost] = useState<any>(null);
+  const [captionPlatform, setCaptionPlatform] = useState<SocialPlatform>('linkedin');
+  const [captionText, setCaptionText] = useState('');
+  const [captionGenerating, setCaptionGenerating] = useState(false);
+  const [captionCopied, setCaptionCopied] = useState(false);
 
   // ─── Writing Metrics (computed) ───
   const writingMetrics = useMemo(() => {
@@ -391,6 +401,54 @@ const BlogDrafts: React.FC = () => {
     setShowShareModal(false);
     setSuccess(`Blog post shared with ${sent} lead${sent !== 1 ? 's' : ''}.`);
     setTimeout(() => setSuccess(null), 5000);
+  };
+
+  // ─── Social share helpers ───
+  const getPostUrl = (post: any) => `${window.location.origin}/#/blog/${post.slug}`;
+
+  const copyPostLink = (post: any) => {
+    navigator.clipboard.writeText(getPostUrl(post));
+    setCopiedPostId(post.id);
+    setTimeout(() => setCopiedPostId(null), 2000);
+  };
+
+  const shareToSocial = (post: any, platform: 'linkedin' | 'twitter' | 'facebook') => {
+    const url = getPostUrl(post);
+    const urls: Record<string, string> = {
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
+      twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(url)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
+    };
+    window.open(urls[platform], '_blank', 'width=600,height=600');
+  };
+
+  const openCaptionModal = (post: any) => {
+    setCaptionPost(post);
+    setCaptionText('');
+    setCaptionCopied(false);
+    setCaptionPlatform('linkedin');
+    setShowCaptionModal(true);
+  };
+
+  const handleGenerateCaption = async () => {
+    if (!captionPost) return;
+    setCaptionGenerating(true);
+    setCaptionText('');
+    setCaptionCopied(false);
+    const result = await generateSocialCaption({
+      platform: captionPlatform,
+      postTitle: captionPost.title,
+      postExcerpt: captionPost.excerpt || captionPost.content?.substring(0, 200),
+      postUrl: getPostUrl(captionPost),
+    });
+    setCaptionText(result.text);
+    setCaptionGenerating(false);
+  };
+
+  const copyCaptionText = () => {
+    navigator.clipboard.writeText(captionText);
+    setCaptionCopied(true);
+    setTimeout(() => setCaptionCopied(false), 2000);
   };
 
   return (
@@ -931,15 +989,32 @@ const BlogDrafts: React.FC = () => {
                           Edit
                         </button>
                       )}
-                      {/* Share button for published posts */}
+                      {/* Actions for published posts */}
                       {d.status === 'published' && (
-                        <button
-                          onClick={() => openShareModal(d)}
-                          className="px-2.5 py-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-all flex items-center space-x-1"
-                        >
-                          <SendIcon className="w-3 h-3" />
-                          <span>Share</span>
-                        </button>
+                        <div className="flex items-center space-x-1">
+                          <button onClick={() => shareToSocial(d, 'linkedin')} title="LinkedIn" className="p-1 text-slate-400 hover:text-[#0A66C2] hover:bg-blue-50 rounded transition-all">
+                            <LinkedInIcon className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => shareToSocial(d, 'twitter')} title="X / Twitter" className="p-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded transition-all">
+                            <TwitterIcon className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => shareToSocial(d, 'facebook')} title="Facebook" className="p-1 text-slate-400 hover:text-[#1877F2] hover:bg-blue-50 rounded transition-all">
+                            <FacebookIcon className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => copyPostLink(d)} title="Copy link" className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all">
+                            {copiedPostId === d.id ? <CheckIcon className="w-3 h-3 text-emerald-500" /> : <LinkIcon className="w-3 h-3" />}
+                          </button>
+                          <button onClick={() => openCaptionModal(d)} title="AI Caption" className="p-1 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-all">
+                            <SparklesIcon className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => openShareModal(d)}
+                            className="px-2 py-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-all flex items-center space-x-1"
+                          >
+                            <SendIcon className="w-3 h-3" />
+                            <span>Email</span>
+                          </button>
+                        </div>
                       )}
                       <span className="text-[10px] text-slate-400">{d.content?.trim().split(/\s+/).length || 0} words</span>
                     </div>
@@ -998,6 +1073,99 @@ const BlogDrafts: React.FC = () => {
                 {sharingInProgress ? <RefreshIcon className="w-4 h-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
                 <span>{sharingInProgress ? 'Sending...' : 'Send Emails'}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* AI CAPTION MODAL                                              */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showCaptionModal && captionPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowCaptionModal(false)}>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <SparklesIcon className="w-5 h-5 text-purple-600" />
+                <div>
+                  <h3 className="font-black text-slate-900 font-heading">Generate Social Caption</h3>
+                  <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[300px]">{captionPost.title}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCaptionModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Platform</label>
+                <div className="flex items-center space-x-2">
+                  {([
+                    { id: 'linkedin' as SocialPlatform, label: 'LinkedIn', icon: <LinkedInIcon className="w-4 h-4" /> },
+                    { id: 'twitter' as SocialPlatform, label: 'X / Twitter', icon: <TwitterIcon className="w-4 h-4" /> },
+                    { id: 'facebook' as SocialPlatform, label: 'Facebook', icon: <FacebookIcon className="w-4 h-4" /> },
+                  ]).map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setCaptionPlatform(p.id)}
+                      className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${
+                        captionPlatform === p.id
+                          ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {p.icon}
+                      <span>{p.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={handleGenerateCaption}
+                disabled={captionGenerating}
+                className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-all disabled:opacity-40 flex items-center justify-center space-x-2 shadow-lg shadow-purple-200"
+              >
+                {captionGenerating ? <RefreshIcon className="w-4 h-4 animate-spin" /> : <SparklesIcon className="w-4 h-4" />}
+                <span>{captionGenerating ? 'Generating...' : 'Generate Caption'}</span>
+              </button>
+
+              {captionText && (
+                <div className="space-y-3">
+                  <textarea
+                    value={captionText}
+                    onChange={e => setCaptionText(e.target.value)}
+                    rows={8}
+                    className="w-full p-4 rounded-xl bg-slate-50 border border-slate-100 text-sm leading-relaxed resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={copyCaptionText}
+                      className="flex-1 flex items-center justify-center space-x-2 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all"
+                    >
+                      {captionCopied ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                      <span>{captionCopied ? 'Copied!' : 'Copy Caption'}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const url = getPostUrl(captionPost);
+                        const urls: Record<string, string> = {
+                          linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
+                          twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(captionText)}`,
+                          facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
+                        };
+                        window.open(urls[captionPlatform], '_blank', 'width=600,height=600');
+                      }}
+                      className="flex-1 flex items-center justify-center space-x-2 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all"
+                    >
+                      {captionPlatform === 'linkedin' ? <LinkedInIcon className="w-4 h-4" /> : captionPlatform === 'twitter' ? <TwitterIcon className="w-4 h-4" /> : <FacebookIcon className="w-4 h-4" />}
+                      <span>Open {captionPlatform === 'linkedin' ? 'LinkedIn' : captionPlatform === 'twitter' ? 'X' : 'Facebook'}</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 text-center">Edit the caption above, then copy or share directly.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

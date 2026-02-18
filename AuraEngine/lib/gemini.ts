@@ -1358,6 +1358,94 @@ Output the blog content in clean markdown format. Do not include any meta-commen
   return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: `blog_content_${params.mode}`, prompt_version: 1 };
 };
 
+// === Social Media Caption Generation ===
+
+export type SocialPlatform = 'linkedin' | 'twitter' | 'facebook';
+
+export interface SocialCaptionParams {
+  platform: SocialPlatform;
+  postTitle: string;
+  postExcerpt?: string;
+  postUrl: string;
+  businessProfile?: BusinessProfile;
+}
+
+export const generateSocialCaption = async (params: SocialCaptionParams): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const platformRules: Record<SocialPlatform, string> = {
+    linkedin: `Write a LinkedIn post to share this blog article. Include:
+- A hook in the first line that stops the scroll (no hashtags in the hook)
+- 2-3 sentences expanding on the key insight from the article
+- A clear call to action to read the full post
+- 3-5 relevant hashtags at the end
+- Professional but conversational tone
+- Maximum 300 words
+- Use line breaks for readability`,
+    twitter: `Write a tweet (max 280 characters including the URL) to share this blog article. Include:
+- A punchy, attention-grabbing message
+- The key takeaway in 1-2 sentences
+- 1-2 relevant hashtags
+- Leave room for the URL (assume 23 characters for the link)
+- Keep it concise and engaging`,
+    facebook: `Write a Facebook post to share this blog article. Include:
+- An engaging opening question or statement
+- A brief summary of what readers will learn
+- A call to action to click through
+- Conversational and approachable tone
+- Maximum 200 words`,
+  };
+
+  const prompt = `Generate a social media caption for sharing this blog post:
+
+BLOG POST TITLE: ${params.postTitle}
+${params.postExcerpt ? `EXCERPT: ${params.postExcerpt}` : ''}
+POST URL: ${params.postUrl}
+
+PLATFORM: ${params.platform.toUpperCase()}
+
+${platformRules[params.platform]}
+${buildBusinessContext(params.businessProfile)}
+
+Output ONLY the caption text, ready to copy and paste. Do not include any meta-commentary.`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: prompt,
+      config: {
+        systemInstruction: 'You are an expert social media copywriter for B2B brands. Write engaging, platform-native captions that drive clicks. Output only the caption text.',
+        temperature: 0.85,
+        topP: 0.9,
+      }
+    });
+
+    clearTimeout(timeoutId);
+    const text = response.text;
+    if (!text) throw new Error('Empty caption response.');
+
+    return {
+      text,
+      tokens_used: response.usageMetadata?.totalTokenCount || 0,
+      model_name: MODEL_NAME,
+      prompt_name: `social_caption_${params.platform}`,
+      prompt_version: 1,
+    };
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      text: `Caption generation failed: ${errMsg}`,
+      tokens_used: 0,
+      model_name: MODEL_NAME,
+      prompt_name: `social_caption_${params.platform}`,
+      prompt_version: 1,
+    };
+  }
+};
+
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
   const steps: EmailStep[] = [];
   const emailBlocks = rawText.split('===EMAIL_START===').filter(b => b.trim());
