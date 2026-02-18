@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, Link } from 'react-router-dom';
 import { User } from '../../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -460,7 +460,7 @@ const BlogDrafts: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">Guest Posts</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Draft insights for the community. Posts are reviewed before publishing.</p>
+          <p className="text-sm text-slate-400 mt-0.5">Draft insights for the community. Posts are reviewed before publishing. <Link to="/blog" className="text-indigo-500 hover:text-indigo-700 font-semibold transition-colors">View Blog →</Link></p>
         </div>
         <div className="flex items-center space-x-2">
           <div className="bg-indigo-50 px-3 py-2 rounded-xl border border-indigo-100 flex items-center space-x-2 shadow-sm">
