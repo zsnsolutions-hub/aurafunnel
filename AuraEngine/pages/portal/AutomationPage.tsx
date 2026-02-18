@@ -1217,9 +1217,12 @@ const AutomationPage: React.FC = () => {
 
                       return (
                         <React.Fragment key={node.id}>
-                          <button
+                          <div
+                            role="button"
+                            tabIndex={0}
                             onClick={() => setSelectedNodeId(node.id)}
-                            className={`w-full max-w-md relative group transition-all ${
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedNodeId(node.id); }}
+                            className={`w-full max-w-md relative group transition-all cursor-pointer ${
                               isSelected ? 'ring-2 ring-indigo-500 ring-offset-2 rounded-xl shadow-lg' : 'hover:shadow-md rounded-xl'
                             }`}
                           >
@@ -1267,7 +1270,7 @@ const AutomationPage: React.FC = () => {
                                 </button>
                               </div>
                             )}
-                          </button>
+                          </div>
                           {idx < workflow.nodes.length - 1 && (
                             <div className="flex flex-col items-center py-1">
                               <div className="w-0.5 h-4 bg-slate-200"></div>
