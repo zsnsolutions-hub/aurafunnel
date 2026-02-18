@@ -5,6 +5,18 @@ import {
 } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
+  saveWorkflow as saveWorkflowToDb,
+  loadWorkflows as loadWorkflowsFromDb,
+  executeWorkflow as executeWorkflowEngine,
+  getExecutionLog,
+  getNodeAnalytics,
+  type Workflow as DbWorkflow,
+  type ExecutionResult,
+  type ExecutionLogEntry as DbExecutionLogEntry,
+  type NodePerformanceMetric as DbNodePerformanceMetric,
+} from '../../lib/automationEngine';
+import { generateWorkflowOptimization } from '../../lib/gemini';
+import {
   BoltIcon, PlusIcon, XIcon, CheckIcon, SparklesIcon, ClockIcon,
   PlayIcon, PauseIcon, GitBranchIcon, ZapIcon, TargetIcon, TagIcon,
   MailIcon, RefreshIcon, EditIcon, FlameIcon, TrendUpIcon, CogIcon, TrendDownIcon,
@@ -132,16 +144,7 @@ const OPERATOR_OPTIONS = [
   { value: 'eq', label: 'Equals' },
 ];
 
-const MOCK_EXECUTION_LOG: ExecutionLogEntry[] = [
-  { id: 'ex1', timestamp: new Date(Date.now() - 120000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Sarah Chen', step: 'Send welcome email', status: 'success', duration: 1.2 },
-  { id: 'ex2', timestamp: new Date(Date.now() - 300000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Marcus Johnson', step: 'AI scores lead', status: 'success', duration: 3.4 },
-  { id: 'ex3', timestamp: new Date(Date.now() - 600000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Emily Zhang', step: 'Score > 50?', status: 'skipped', duration: 0.1 },
-  { id: 'ex4', timestamp: new Date(Date.now() - 900000).toISOString(), workflowName: 'Hot Lead Alert', leadName: 'David Park', step: 'Notify sales team', status: 'success', duration: 0.8 },
-  { id: 'ex5', timestamp: new Date(Date.now() - 1500000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Priya Patel', step: 'Send follow-up', status: 'failed', duration: 5.0 },
-  { id: 'ex6', timestamp: new Date(Date.now() - 1800000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Alex Rivera', step: 'Add to nurture campaign', status: 'success', duration: 0.5 },
-  { id: 'ex7', timestamp: new Date(Date.now() - 2400000).toISOString(), workflowName: 'Hot Lead Alert', leadName: 'Jordan Lee', step: 'Check engagement', status: 'running', duration: 0 },
-  { id: 'ex8', timestamp: new Date(Date.now() - 3600000).toISOString(), workflowName: 'Lead Nurturing', leadName: 'Lisa Wang', step: 'Wait 2 days', status: 'success', duration: 0.1 },
-];
+// Execution log entries are now fetched from Supabase via getExecutionLog()
 
 const EXECUTION_STATUS_STYLES: Record<ExecutionLogEntry['status'], { bg: string; text: string; label: string }> = {
   success: { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Success' },
@@ -182,12 +185,7 @@ const AutomationPage: React.FC = () => {
   const [wizardTrigger, setWizardTrigger] = useState<TriggerType | null>(null);
 
   // ─── Workflow State ───
-  const [workflow, setWorkflow] = useState<Workflow>(() => {
-    try {
-      const saved = localStorage.getItem(`aura_workflow_${user?.id}`);
-      return saved ? JSON.parse(saved) : DEFAULT_WORKFLOW;
-    } catch { return DEFAULT_WORKFLOW; }
-  });
+  const [workflow, setWorkflow] = useState<Workflow>(DEFAULT_WORKFLOW);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [testRunning, setTestRunning] = useState(false);
   const [testResults, setTestResults] = useState<TestResult | null>(null);
@@ -206,12 +204,8 @@ const AutomationPage: React.FC = () => {
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
 
   // ─── Saved Workflows ───
-  const [workflows, setWorkflows] = useState<Workflow[]>(() => {
-    try {
-      const saved = localStorage.getItem(`aura_workflows_list_${user?.id}`);
-      return saved ? JSON.parse(saved) : [DEFAULT_WORKFLOW];
-    } catch { return [DEFAULT_WORKFLOW]; }
-  });
+  const [workflows, setWorkflows] = useState<Workflow[]>([DEFAULT_WORKFLOW]);
+  const [dbLoaded, setDbLoaded] = useState(false);
   const [showWorkflowList, setShowWorkflowList] = useState(false);
 
   // ─── Test lead selection ───
@@ -225,6 +219,11 @@ const AutomationPage: React.FC = () => {
   const [showROICalculator, setShowROICalculator] = useState(false);
   const [showTriggerAnalytics, setShowTriggerAnalytics] = useState(false);
   const [showTemplateEffectiveness, setShowTemplateEffectiveness] = useState(false);
+
+  // ─── Real execution data ───
+  const [executionLog, setExecutionLog] = useState<ExecutionLogEntry[]>([]);
+  const [realNodePerformance, setRealNodePerformance] = useState<NodePerformanceMetric[]>([]);
+  const [executionResults, setExecutionResults] = useState<ExecutionResult[] | null>(null);
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -242,13 +241,49 @@ const AutomationPage: React.FC = () => {
     fetchLeads();
   }, [user?.id]);
 
+  // ─── Load workflows from Supabase on mount ───
   useEffect(() => {
-    try { localStorage.setItem(`aura_workflow_${user?.id}`, JSON.stringify(workflow)); } catch {}
-  }, [workflow, user?.id]);
+    const loadFromDb = async () => {
+      if (!user?.id) return;
+      const dbWorkflows = await loadWorkflowsFromDb(user.id);
+      if (dbWorkflows.length > 0) {
+        const mapped: Workflow[] = dbWorkflows.map(w => ({
+          id: w.id,
+          name: w.name,
+          description: w.description,
+          status: w.status,
+          nodes: w.nodes as WorkflowNode[],
+          createdAt: w.createdAt,
+          stats: w.stats,
+        }));
+        setWorkflows(mapped);
+        setWorkflow(mapped[0]);
+      }
+      setDbLoaded(true);
+    };
+    loadFromDb();
+  }, [user?.id]);
+
+  // ─── Fetch execution log from Supabase ───
+  const refreshExecutionLog = useCallback(async () => {
+    if (!user?.id) return;
+    const log = await getExecutionLog(user.id, 50);
+    setExecutionLog(log);
+  }, [user?.id]);
 
   useEffect(() => {
-    try { localStorage.setItem(`aura_workflows_list_${user?.id}`, JSON.stringify(workflows)); } catch {}
-  }, [workflows, user?.id]);
+    if (dbLoaded && user?.id) refreshExecutionLog();
+  }, [dbLoaded, user?.id, refreshExecutionLog]);
+
+  // ─── Fetch node analytics when workflow changes ───
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      if (!workflow?.id || workflow.id.startsWith('wf-default') || workflow.id.startsWith('wf-')) return;
+      const metrics = await getNodeAnalytics(workflow.id);
+      if (metrics.length > 0) setRealNodePerformance(metrics);
+    };
+    if (dbLoaded) fetchAnalytics();
+  }, [workflow?.id, dbLoaded]);
 
   const selectedNode = useMemo(() => {
     return workflow.nodes.find(n => n.id === selectedNodeId) || null;
@@ -264,7 +299,9 @@ const AutomationPage: React.FC = () => {
     const totalProcessed = workflows.reduce((sum, w) => sum + w.stats.leadsProcessed, 0);
     const avgConversion = workflows.length > 0 ? workflows.reduce((sum, w) => sum + w.stats.conversionRate, 0) / workflows.length : 0;
     const totalTimeSaved = workflows.reduce((sum, w) => sum + w.stats.timeSavedHrs, 0);
-    const successRate = MOCK_EXECUTION_LOG.filter(e => e.status === 'success').length / MOCK_EXECUTION_LOG.length * 100;
+    const successRate = executionLog.length > 0
+      ? executionLog.filter(e => e.status === 'success').length / executionLog.length * 100
+      : 100;
 
     return [
       { label: 'Active Workflows', value: activeWorkflows.toString(), icon: <BoltIcon className="w-5 h-5" />, color: 'indigo', trend: '+2 this week', up: true },
@@ -274,19 +311,23 @@ const AutomationPage: React.FC = () => {
       { label: 'AI-Enabled Nodes', value: `${aiNodes}/${totalNodes}`, icon: <BrainIcon className="w-5 h-5" />, color: 'fuchsia', trend: `${actionNodes} actions, ${conditionNodes} conditions`, up: null },
       { label: 'Success Rate', value: `${successRate.toFixed(0)}%`, icon: <ShieldIcon className="w-5 h-5" />, color: 'amber', trend: successRate >= 80 ? 'Healthy' : 'Needs attention', up: successRate >= 80 },
     ];
-  }, [workflow.nodes, workflows]);
+  }, [workflow.nodes, workflows, executionLog]);
 
   // ─── Node Performance Metrics ───
   const nodePerformance = useMemo((): NodePerformanceMetric[] => {
+    // Use real analytics from DB if available, fallback to basic placeholders
+    if (realNodePerformance.length > 0) {
+      return realNodePerformance;
+    }
     return workflow.nodes.map(node => ({
       nodeTitle: node.title,
       nodeType: node.type,
-      executions: Math.floor(Math.random() * 500) + 100,
-      successRate: 75 + Math.floor(Math.random() * 25),
-      avgDuration: parseFloat((Math.random() * 4 + 0.5).toFixed(1)),
-      lastRun: new Date(Date.now() - Math.floor(Math.random() * 86400000)).toISOString(),
+      executions: 0,
+      successRate: 0,
+      avgDuration: 0,
+      lastRun: new Date().toISOString(),
     }));
-  }, [workflow.nodes]);
+  }, [workflow.nodes, realNodePerformance]);
 
   // ─── Workflow Health Score ───
   const workflowHealth = useMemo(() => {
@@ -348,10 +389,15 @@ const AutomationPage: React.FC = () => {
   // ─── Trigger Analytics ───
   const triggerAnalytics = useMemo(() => {
     const triggerNodes = workflow.nodes.filter(n => n.type === 'trigger');
+
+    // Aggregate from real execution log
+    const totalExecs = executionLog.length;
+    const successExecs = executionLog.filter(e => e.status === 'success').length;
+
     const triggerTypes = TRIGGER_OPTIONS.map(opt => {
       const count = triggerNodes.filter(n => n.config.triggerType === opt.type).length;
-      const fired = Math.floor(Math.random() * 200) + 50;
-      const converted = Math.floor(fired * (0.05 + Math.random() * 0.15));
+      const fired = count > 0 ? Math.max(totalExecs, 0) : 0;
+      const converted = count > 0 ? successExecs : 0;
       return {
         type: opt.type,
         label: opt.label,
@@ -359,15 +405,20 @@ const AutomationPage: React.FC = () => {
         fired,
         converted,
         conversionRate: fired > 0 ? Math.round((converted / fired) * 100) : 0,
-        avgResponseTime: parseFloat((Math.random() * 3 + 0.5).toFixed(1)),
+        avgResponseTime: executionLog.length > 0
+          ? parseFloat((executionLog.reduce((s, e) => s + e.duration, 0) / executionLog.length).toFixed(1))
+          : 0,
       };
     });
 
-    const hourlyDistribution = Array.from({ length: 24 }, (_, h) => ({
-      hour: h,
-      label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
-      triggers: Math.round(Math.sin((h - 10) * 0.35) * 30 + 40 + (Math.random() - 0.5) * 10),
-    }));
+    const hourlyDistribution = Array.from({ length: 24 }, (_, h) => {
+      const hourExecs = executionLog.filter(e => new Date(e.timestamp).getHours() === h).length;
+      return {
+        hour: h,
+        label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
+        triggers: hourExecs,
+      };
+    });
     const peakHour = hourlyDistribution.reduce((best, h) => h.triggers > best.triggers ? h : best, hourlyDistribution[0]);
 
     const totalFired = triggerTypes.reduce((s, t) => s + t.fired, 0);
@@ -377,23 +428,24 @@ const AutomationPage: React.FC = () => {
     const weeklyTrend = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
-      return {
-        day: d.toLocaleDateString('en-US', { weekday: 'short' }),
-        count: Math.floor(Math.random() * 40) + 20,
-      };
+      const dayStr = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayDate = d.toISOString().slice(0, 10);
+      const count = executionLog.filter(e => e.timestamp.slice(0, 10) === dayDate).length;
+      return { day: dayStr, count };
     });
 
     return { triggerTypes, hourlyDistribution, peakHour, totalFired, totalConverted, overallConversion, weeklyTrend };
-  }, [workflow.nodes]);
+  }, [workflow.nodes, executionLog]);
 
   // ─── Template Effectiveness ───
   const templateEffectiveness = useMemo(() => {
+    // Count email sends from execution log by template
+    const emailSteps = executionLog.filter(e => e.step.toLowerCase().includes('email'));
+    const totalSentFromLog = emailSteps.length;
+
     const templates = EMAIL_TEMPLATES.map(tmpl => {
       const nodesUsing = workflow.nodes.filter(n => n.config.template === tmpl.id).length;
-      const sent = Math.floor(Math.random() * 300) + 50;
-      const opened = Math.floor(sent * (0.2 + Math.random() * 0.35));
-      const clicked = Math.floor(opened * (0.1 + Math.random() * 0.3));
-      const replied = Math.floor(clicked * (0.15 + Math.random() * 0.25));
+      const sent = nodesUsing > 0 ? Math.max(totalSentFromLog, nodesUsing) : 0;
       const aiEnhanced = workflow.nodes.some(n => n.config.template === tmpl.id && n.config.aiPersonalization);
       return {
         id: tmpl.id,
@@ -401,13 +453,11 @@ const AutomationPage: React.FC = () => {
         desc: tmpl.desc,
         nodesUsing,
         sent,
-        openRate: sent > 0 ? Math.round((opened / sent) * 100) : 0,
-        clickRate: opened > 0 ? Math.round((clicked / opened) * 100) : 0,
-        replyRate: clicked > 0 ? Math.round((replied / clicked) * 100) : 0,
+        openRate: 0,
+        clickRate: 0,
+        replyRate: 0,
         aiEnhanced,
-        conversionScore: Math.round(
-          ((opened / Math.max(sent, 1)) * 40) + ((clicked / Math.max(opened, 1)) * 35) + ((replied / Math.max(clicked, 1)) * 25)
-        ),
+        conversionScore: nodesUsing > 0 ? nodesUsing * 10 : 0,
       };
     }).sort((a, b) => b.conversionScore - a.conversionScore);
 
@@ -418,17 +468,17 @@ const AutomationPage: React.FC = () => {
     const aiLift = avgAiOpenRate - avgNonAiOpenRate;
 
     const timingPerformance = [
-      { timing: 'Immediate', openRate: 38, clickRate: 12, label: 'instant' },
-      { timing: 'AI Optimal', openRate: 52, clickRate: 22, label: 'optimal' },
-      { timing: 'Morning (9 AM)', openRate: 45, clickRate: 16, label: 'morning' },
-      { timing: 'Afternoon (2 PM)', openRate: 41, clickRate: 14, label: 'afternoon' },
+      { timing: 'Immediate', openRate: 0, clickRate: 0, label: 'instant' },
+      { timing: 'AI Optimal', openRate: 0, clickRate: 0, label: 'optimal' },
+      { timing: 'Morning (9 AM)', openRate: 0, clickRate: 0, label: 'morning' },
+      { timing: 'Afternoon (2 PM)', openRate: 0, clickRate: 0, label: 'afternoon' },
     ];
 
     const bestTemplate = templates[0];
     const totalSent = templates.reduce((s, t) => s + t.sent, 0);
 
     return { templates, aiLift, avgAiOpenRate, avgNonAiOpenRate, timingPerformance, bestTemplate, totalSent };
-  }, [workflow.nodes]);
+  }, [workflow.nodes, executionLog]);
 
   // ─── Node Handlers ───
   const updateNodeConfig = useCallback((nodeId: string, key: string, value: string | number | boolean) => {
@@ -498,7 +548,8 @@ const AutomationPage: React.FC = () => {
   }, []);
 
   // ─── Workflow Handlers ───
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    // Save to local state
     setWorkflows(prev => {
       const exists = prev.findIndex(w => w.id === workflow.id);
       if (exists >= 0) {
@@ -508,35 +559,96 @@ const AutomationPage: React.FC = () => {
       }
       return [...prev, workflow];
     });
+    // Persist to Supabase
+    const saved = await saveWorkflowToDb({
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description,
+      status: workflow.status,
+      nodes: workflow.nodes,
+      createdAt: workflow.createdAt,
+      stats: workflow.stats,
+    });
+    if (saved) {
+      // Update local state with the DB-returned ID (important for new workflows)
+      setWorkflow(prev => ({ ...prev, id: saved.id }));
+      setWorkflows(prev => prev.map(w => w.id === workflow.id ? { ...w, id: saved.id } : w));
+    }
   }, [workflow]);
 
-  const handleTest = useCallback(() => {
+  const handleTest = useCallback(async () => {
     setTestRunning(true);
     setTestResults(null);
-    setTimeout(() => {
-      const sampleLead = leads.length > 0 ? leads[0] : { name: 'Sarah Chen', company: 'Acme Corp', score: 72 } as any;
-      const details = workflow.nodes.map((node, i) => {
-        const passed = Math.random() > 0.1;
-        return {
-          step: `${i + 1}. ${node.title}`,
-          status: (passed ? 'pass' : (node.type === 'condition' ? 'skip' : 'fail')) as 'pass' | 'fail' | 'skip',
-          message: passed
-            ? `${NODE_TYPE_META[node.type].label} executed successfully`
-            : node.type === 'condition' ? 'Condition not met, branch skipped' : 'Step failed - check configuration',
-        };
-      });
-      const passedCount = details.filter(d => d.status === 'pass').length;
+    setExecutionResults(null);
+
+    // Determine which leads to test against
+    const selectedLeads = testLeadIds.size > 0
+      ? leads.filter(l => testLeadIds.has(l.id))
+      : leads.slice(0, 1);
+
+    if (selectedLeads.length === 0) {
       setTestResults({
-        passed: passedCount >= details.length * 0.7,
-        stepsRun: passedCount,
-        stepsTotal: details.length,
-        leadName: sampleLead.name,
-        leadScore: sampleLead.score,
-        details,
+        passed: false,
+        stepsRun: 0,
+        stepsTotal: workflow.nodes.length,
+        leadName: 'No leads selected',
+        leadScore: 0,
+        details: [{ step: 'Pre-check', status: 'fail', message: 'No leads available — add leads to your pipeline first' }],
       });
       setTestRunning(false);
-    }, 2500);
-  }, [leads, workflow.nodes]);
+      return;
+    }
+
+    try {
+      const results = await executeWorkflowEngine(
+        {
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          status: workflow.status,
+          nodes: workflow.nodes,
+          createdAt: workflow.createdAt,
+          stats: workflow.stats,
+        },
+        selectedLeads
+      );
+
+      setExecutionResults(results);
+
+      // Build TestResult from the first lead's results for the UI
+      const firstResult = results[0];
+      if (firstResult) {
+        const details = firstResult.steps.map((s, i) => ({
+          step: `${i + 1}. ${s.nodeTitle}`,
+          status: s.status,
+          message: s.message,
+        }));
+        const passedCount = details.filter(d => d.status === 'pass').length;
+        setTestResults({
+          passed: firstResult.status === 'success',
+          stepsRun: passedCount,
+          stepsTotal: details.length,
+          leadName: firstResult.leadName,
+          leadScore: selectedLeads[0]?.score || 0,
+          details,
+        });
+      }
+
+      // Refresh execution log after run
+      refreshExecutionLog();
+    } catch (err) {
+      setTestResults({
+        passed: false,
+        stepsRun: 0,
+        stepsTotal: workflow.nodes.length,
+        leadName: selectedLeads[0]?.name || 'Unknown',
+        leadScore: selectedLeads[0]?.score || 0,
+        details: [{ step: 'Execution', status: 'fail', message: `Error: ${err instanceof Error ? err.message : 'Unknown'}` }],
+      });
+    }
+
+    setTestRunning(false);
+  }, [leads, workflow, testLeadIds, refreshExecutionLog]);
 
   const runValidation = useCallback(() => {
     setValidating(true);
@@ -588,21 +700,26 @@ const AutomationPage: React.FC = () => {
     }, 1500);
   }, [workflow.nodes]);
 
-  const handleAiOptimize = useCallback(() => {
+  const handleAiOptimize = useCallback(async () => {
     setAiOptimizing(true);
     setAiSuggestions([]);
-    setTimeout(() => {
-      const suggestions = [
-        'Add a 24-hour wait after the welcome email for optimal open rates.',
-        'Insert a condition to check if the lead has visited your pricing page before sending case studies.',
-        'Consider adding a "re-engage" branch for leads that don\'t open emails within 3 days.',
-        'Your notification timing aligns with peak engagement hours - great setup.',
-        'Adding a tag-based segmentation step could improve conversion by 15-20%.',
-      ];
-      setAiSuggestions(suggestions.slice(0, 3 + Math.floor(Math.random() * 2)));
-      setAiOptimizing(false);
-    }, 2000);
-  }, []);
+    try {
+      const response = await generateWorkflowOptimization({
+        nodes: workflow.nodes,
+        stats: workflow.stats,
+        leadCount: leads.length,
+      });
+      // Parse bullet points from response
+      const lines = response.text
+        .split('\n')
+        .map(l => l.replace(/^[-*•]\s*/, '').trim())
+        .filter(l => l.length > 10);
+      setAiSuggestions(lines.length > 0 ? lines : ['No suggestions available — try adding more nodes or running the workflow first.']);
+    } catch (err) {
+      setAiSuggestions([`AI optimization failed: ${err instanceof Error ? err.message : 'Unknown error'}. Try again.`]);
+    }
+    setAiOptimizing(false);
+  }, [workflow.nodes, workflow.stats, leads.length]);
 
   const toggleWorkflowStatus = useCallback(() => {
     setWorkflow(prev => ({
@@ -641,9 +758,9 @@ const AutomationPage: React.FC = () => {
     setWizardStep(2);
   }, [wizardName, wizardDescription, wizardTrigger]);
 
-  const handleActivate = useCallback(() => {
+  const handleActivate = useCallback(async () => {
     setWorkflow(prev => ({ ...prev, status: 'active' }));
-    handleSave();
+    await handleSave();
     setWizardActive(false);
   }, [handleSave]);
 
@@ -1750,10 +1867,10 @@ const AutomationPage: React.FC = () => {
               {/* Summary Stats */}
               <div className="grid grid-cols-4 gap-2 mb-4">
                 {[
-                  { label: 'Total', value: MOCK_EXECUTION_LOG.length, color: 'slate' },
-                  { label: 'Success', value: MOCK_EXECUTION_LOG.filter(e => e.status === 'success').length, color: 'emerald' },
-                  { label: 'Failed', value: MOCK_EXECUTION_LOG.filter(e => e.status === 'failed').length, color: 'rose' },
-                  { label: 'Running', value: MOCK_EXECUTION_LOG.filter(e => e.status === 'running').length, color: 'blue' },
+                  { label: 'Total', value: executionLog.length, color: 'slate' },
+                  { label: 'Success', value: executionLog.filter(e => e.status === 'success').length, color: 'emerald' },
+                  { label: 'Failed', value: executionLog.filter(e => e.status === 'failed').length, color: 'rose' },
+                  { label: 'Running', value: executionLog.filter(e => e.status === 'running').length, color: 'blue' },
                 ].map((s, i) => (
                   <div key={i} className={`p-2.5 bg-${s.color}-50 rounded-xl text-center`}>
                     <p className={`text-lg font-black text-${s.color}-700`}>{s.value}</p>
@@ -1763,7 +1880,7 @@ const AutomationPage: React.FC = () => {
               </div>
 
               {/* Log Entries */}
-              {MOCK_EXECUTION_LOG.map(entry => {
+              {executionLog.map(entry => {
                 const style = EXECUTION_STATUS_STYLES[entry.status];
                 const ago = Math.round((Date.now() - new Date(entry.timestamp).getTime()) / 60000);
                 const agoText = ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;

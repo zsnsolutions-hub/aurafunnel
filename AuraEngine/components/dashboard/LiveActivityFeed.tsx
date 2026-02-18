@@ -26,6 +26,7 @@ const formatRelativeTime = (dateStr: string): string => {
 };
 
 const actionColor = (action: string): string => {
+  if (action.includes('AUTOMATION')) return 'bg-amber-400';
   if (action.includes('LOGIN') || action.includes('AUTH')) return 'bg-blue-400';
   if (action.includes('GENERATE') || action.includes('AI')) return 'bg-purple-400';
   if (action.includes('LEAD') || action.includes('IMPORT')) return 'bg-emerald-400';

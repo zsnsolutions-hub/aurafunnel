@@ -1486,3 +1486,87 @@ export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenc
 
   return steps;
 };
+
+// === Workflow Optimization ===
+
+export interface WorkflowOptimizationInput {
+  nodes: { id: string; type: string; title: string; description: string; config: Record<string, any> }[];
+  stats: { leadsProcessed: number; conversionRate: number; timeSavedHrs: number; roi: number };
+  leadCount: number;
+}
+
+export const generateWorkflowOptimization = async (
+  input: WorkflowOptimizationInput,
+  businessProfile?: BusinessProfile
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const nodesSummary = input.nodes.map((n, i) =>
+    `${i + 1}. [${n.type.toUpperCase()}] ${n.title} — ${n.description}`
+  ).join('\n');
+
+  const prompt = `Analyze this automation workflow and suggest specific improvements.
+
+WORKFLOW NODES:
+${nodesSummary}
+
+PERFORMANCE STATS:
+- Leads Processed: ${input.stats.leadsProcessed}
+- Conversion Rate: ${input.stats.conversionRate}%
+- Time Saved: ${input.stats.timeSavedHrs} hours
+- ROI: ${input.stats.roi}%
+- Available Leads: ${input.leadCount}
+
+Provide 3-5 specific, actionable suggestions to improve this workflow. Each suggestion should:
+- Reference specific nodes by name when relevant
+- Include expected impact (e.g. "+15% conversion", "saves 2hrs/week")
+- Be immediately implementable
+
+Return each suggestion on its own line, prefixed with "- ". No headers, no numbering, just the bullet points.${buildBusinessContext(businessProfile)}`;
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction: 'You are a marketing automation expert. Analyze workflows and provide specific, data-driven optimization suggestions. Be concise and actionable.',
+          temperature: 0.7,
+          topP: 0.9,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error('Empty optimization response.');
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: 'workflow_optimization',
+        prompt_version: 1,
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Workflow optimization attempt ${attempt} failed:`, errMsg);
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `OPTIMIZATION FAILED: ${errMsg}`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: 'workflow_optimization',
+          prompt_version: 1,
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'workflow_optimization', prompt_version: 1 };
+};

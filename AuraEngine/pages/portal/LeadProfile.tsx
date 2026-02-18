@@ -13,6 +13,7 @@ import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 import { fetchLeadEmailEngagement, sendTrackedEmail } from '../../lib/emailTracking';
+import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import type { EmailEngagement } from '../../types';
 import EmailEngagementCard from '../../components/dashboard/EmailEngagementCard';
 
@@ -204,6 +205,13 @@ const LeadProfile: React.FC = () => {
   const [showBlogShareModal, setShowBlogShareModal] = useState(false);
   const [publishedPosts, setPublishedPosts] = useState<any[]>([]);
   const [blogShareSending, setBlogShareSending] = useState(false);
+
+  // ── Run Workflow ──
+  const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+  const [availableWorkflows, setAvailableWorkflows] = useState<DbWorkflow[]>([]);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+  const [workflowRunning, setWorkflowRunning] = useState(false);
+  const [workflowResult, setWorkflowResult] = useState<ExecutionResult | null>(null);
 
   // ── Edit Lead ──
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -1288,6 +1296,19 @@ const LeadProfile: React.FC = () => {
                 <EditIcon className="w-4 h-4" />
                 <span>Share Blog Post</span>
               </button>
+              <button
+                onClick={async () => {
+                  const wfs = await loadWorkflows(user.id);
+                  setAvailableWorkflows(wfs.filter(w => w.status === 'active'));
+                  setSelectedWorkflowId(null);
+                  setWorkflowResult(null);
+                  setShowWorkflowModal(true);
+                }}
+                className="w-full flex items-center space-x-3 p-3 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors font-semibold text-sm"
+              >
+                <BoltIcon className="w-4 h-4" />
+                <span>Run Workflow</span>
+              </button>
             </div>
 
             {/* Shortcuts */}
@@ -2189,6 +2210,93 @@ const LeadProfile: React.FC = () => {
                 <span className="text-xs font-bold text-indigo-600">Sending tracked email...</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* ── Run Workflow Modal ── */}
+      {showWorkflowModal && lead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowWorkflowModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <BoltIcon className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-slate-900 font-heading text-sm">Run Workflow</h3>
+              </div>
+              <button onClick={() => setShowWorkflowModal(false)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                <XIcon className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {availableWorkflows.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">No active workflows found. Create one in the Automation Engine.</p>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">Select a workflow to run on <span className="font-bold text-slate-700">{lead.name}</span>:</p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {availableWorkflows.map(wf => (
+                      <button
+                        key={wf.id}
+                        onClick={() => setSelectedWorkflowId(wf.id)}
+                        className={`w-full text-left p-3 rounded-xl border transition-all ${
+                          selectedWorkflowId === wf.id
+                            ? 'border-amber-300 bg-amber-50 text-amber-800'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <p className="text-sm font-bold">{wf.name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{wf.nodes.length} steps</p>
+                      </button>
+                    ))}
+                  </div>
+                  {workflowResult && (
+                    <div className={`p-3 rounded-xl text-sm ${
+                      workflowResult.status === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      <p className="font-bold mb-1">{workflowResult.status === 'success' ? 'Workflow completed successfully' : 'Workflow failed'}</p>
+                      {workflowResult.steps.map((s, i) => (
+                        <p key={i} className="text-xs">
+                          {s.status === 'pass' ? '\u2713' : s.status === 'fail' ? '\u2717' : '\u2015'} {s.nodeTitle}: {s.message}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={async () => {
+                      if (!selectedWorkflowId) return;
+                      const wf = availableWorkflows.find(w => w.id === selectedWorkflowId);
+                      if (!wf) return;
+                      setWorkflowRunning(true);
+                      setWorkflowResult(null);
+                      try {
+                        const results = await executeWorkflowEngine(wf, [lead]);
+                        if (results[0]) setWorkflowResult(results[0]);
+                      } catch (err) {
+                        setWorkflowResult({
+                          leadId: lead.id,
+                          leadName: lead.name,
+                          status: 'failed',
+                          steps: [],
+                          startedAt: new Date().toISOString(),
+                          completedAt: new Date().toISOString(),
+                          errorMessage: err instanceof Error ? err.message : 'Unknown error',
+                        });
+                      }
+                      setWorkflowRunning(false);
+                    }}
+                    disabled={!selectedWorkflowId || workflowRunning}
+                    className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
+                      !selectedWorkflowId || workflowRunning
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : 'bg-amber-600 text-white hover:bg-amber-700 shadow-lg'
+                    }`}
+                  >
+                    {workflowRunning ? 'Running...' : 'Run Workflow'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

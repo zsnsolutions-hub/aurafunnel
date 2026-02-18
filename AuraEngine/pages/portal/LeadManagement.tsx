@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchBatchEmailSummary } from '../../lib/emailTracking';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
+import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
 
@@ -48,7 +49,7 @@ const StarRating = ({ score }: { score: number }) => {
 
 type LeadTag = 'Hot Lead' | 'Cold' | 'Nurturing' | 'Enterprise' | 'Critical' | 'Warm';
 type ActivityType = 'call' | 'email' | 'meeting' | 'note';
-type BulkAction = 'campaign' | 'assign' | 'status' | 'tag' | 'export' | 'email';
+type BulkAction = 'campaign' | 'assign' | 'status' | 'tag' | 'export' | 'email' | 'workflow';
 
 interface ActivityLog {
   type: ActivityType;
@@ -174,6 +175,10 @@ const LeadManagement: React.FC = () => {
   const [bulkAIPersonalize, setBulkAIPersonalize] = useState(true);
   const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Workflow Enrollment ──
+  const [bulkWorkflows, setBulkWorkflows] = useState<DbWorkflow[]>([]);
+  const [bulkSelectedWorkflowId, setBulkSelectedWorkflowId] = useState<string | null>(null);
 
   // ── Email Summary Map ──
   const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
@@ -735,6 +740,26 @@ const LeadManagement: React.FC = () => {
     executeBulkAction('Send bulk email');
     setSelectedIds(new Set());
   };
+
+  const handleBulkWorkflow = useCallback(async () => {
+    if (!bulkSelectedWorkflowId) return;
+    const wf = bulkWorkflows.find(w => w.id === bulkSelectedWorkflowId);
+    if (!wf) return;
+    const ids = Array.from(selectedIds);
+    const selectedLeads = allLeads.filter(l => ids.includes(l.id));
+    const total = selectedLeads.length;
+    setBulkActionOpen(null);
+    setBulkProgress({ action: `Enroll in "${wf.name}"`, total, processed: 0, errors: 0, running: true });
+
+    try {
+      const results = await executeWorkflowEngine(wf, selectedLeads);
+      const errors = results.filter(r => r.status === 'failed').length;
+      setBulkProgress({ action: `Enroll in "${wf.name}"`, total, processed: total, errors, running: false });
+    } catch {
+      setBulkProgress(prev => prev ? { ...prev, processed: total, errors: total, running: false } : null);
+    }
+    setSelectedIds(new Set());
+  }, [bulkSelectedWorkflowId, bulkWorkflows, selectedIds, allLeads]);
 
   // ── Activity Log ──
   const handleLogActivity = () => {
@@ -1487,6 +1512,63 @@ const LeadManagement: React.FC = () => {
                   <MailIcon className="w-3.5 h-3.5" />
                   <span>Send Email</span>
                 </button>
+
+                {/* Enroll in Workflow */}
+                <div className="relative">
+                  <button
+                    onClick={async () => {
+                      if (bulkActionOpen === 'workflow') {
+                        setBulkActionOpen(null);
+                      } else {
+                        const wfs = await loadWorkflows(user.id);
+                        setBulkWorkflows(wfs.filter(w => w.status === 'active'));
+                        setBulkSelectedWorkflowId(null);
+                        setBulkActionOpen('workflow');
+                      }
+                    }}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-amber-200 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-100 transition-all"
+                  >
+                    <BoltIcon className="w-3.5 h-3.5" />
+                    <span>Workflow</span>
+                  </button>
+                  {bulkActionOpen === 'workflow' && (
+                    <div className="absolute top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-4 min-w-[260px]">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Workflow</p>
+                      {bulkWorkflows.length === 0 ? (
+                        <p className="text-xs text-slate-500 py-2">No active workflows. Create one in Automation Engine.</p>
+                      ) : (
+                        <>
+                          <div className="space-y-1.5 mb-3 max-h-36 overflow-y-auto">
+                            {bulkWorkflows.map(wf => (
+                              <button
+                                key={wf.id}
+                                onClick={() => setBulkSelectedWorkflowId(wf.id)}
+                                className={`w-full text-left p-2 rounded-lg text-xs font-semibold border transition-all ${
+                                  bulkSelectedWorkflowId === wf.id
+                                    ? 'border-amber-300 bg-amber-50 text-amber-800'
+                                    : 'border-slate-100 text-slate-600 hover:bg-slate-50'
+                                }`}
+                              >
+                                {wf.name}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-slate-400 mb-3">{selectedIds.size} leads will be enrolled.</p>
+                          <div className="flex space-x-2">
+                            <button onClick={() => setBulkActionOpen(null)} className="flex-1 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">Cancel</button>
+                            <button
+                              onClick={handleBulkWorkflow}
+                              disabled={!bulkSelectedWorkflowId}
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold ${bulkSelectedWorkflowId ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                            >
+                              Run
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
