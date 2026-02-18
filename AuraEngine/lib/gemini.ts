@@ -27,22 +27,62 @@ const buildBusinessContext = (profile?: BusinessProfile): string => {
 
 export const buildEmailFooter = (profile?: BusinessProfile): string => {
   if (!profile) return '';
-  const lines: string[] = [];
-  if (profile.companyName) lines.push(`<strong>${profile.companyName}</strong>`);
-  if (profile.address) lines.push(profile.address);
-  const contacts: string[] = [];
-  if (profile.phone) contacts.push(profile.phone);
-  if (profile.businessEmail) contacts.push(profile.businessEmail);
-  if (profile.companyWebsite) contacts.push(profile.companyWebsite);
-  if (contacts.length) lines.push(contacts.join(' &middot; '));
+
+  const hasContent = profile.companyName || profile.address || profile.phone ||
+    profile.businessEmail || profile.companyWebsite || profile.socialLinks;
+  if (!hasContent) return '';
+
+  let html = '<div style="margin-top:40px;padding-top:24px;border-top:2px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif">';
+
+  // Company name
+  if (profile.companyName) {
+    html += `<p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1e293b">${profile.companyName}</p>`;
+  }
+
+  // Industry tagline
+  if (profile.industry) {
+    html += `<p style="margin:0 0 12px;font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">${profile.industry}</p>`;
+  }
+
+  // Contact row: phone, email, website
+  const contactParts: string[] = [];
+  if (profile.phone) {
+    contactParts.push(`<a href="tel:${profile.phone.replace(/\s/g, '')}" style="color:#6366f1;text-decoration:none">${profile.phone}</a>`);
+  }
+  if (profile.businessEmail) {
+    contactParts.push(`<a href="mailto:${profile.businessEmail}" style="color:#6366f1;text-decoration:none">${profile.businessEmail}</a>`);
+  }
+  if (profile.companyWebsite) {
+    const displayUrl = profile.companyWebsite.replace(/^https?:\/\//, '');
+    contactParts.push(`<a href="${profile.companyWebsite}" style="color:#6366f1;text-decoration:none">${displayUrl}</a>`);
+  }
+  if (contactParts.length) {
+    html += `<p style="margin:0 0 8px;font-size:12px;color:#64748b;line-height:1.8">${contactParts.join(' &nbsp;&middot;&nbsp; ')}</p>`;
+  }
+
+  // Address
+  if (profile.address) {
+    html += `<p style="margin:0 0 12px;font-size:12px;color:#64748b;line-height:1.6">${profile.address}</p>`;
+  }
+
+  // Social links
   if (profile.socialLinks) {
     const socials = Object.entries(profile.socialLinks)
       .filter(([_, v]) => v)
-      .map(([k, v]) => `<a href="${v}" style="color:#6366f1">${k.charAt(0).toUpperCase() + k.slice(1)}</a>`);
-    if (socials.length) lines.push(socials.join(' &middot; '));
+      .map(([k, v]) => `<a href="${v}" style="color:#6366f1;text-decoration:none;font-weight:600">${k.charAt(0).toUpperCase() + k.slice(1)}</a>`);
+    if (socials.length) {
+      html += `<p style="margin:0 0 8px;font-size:12px">${socials.join(' &nbsp;&middot;&nbsp; ')}</p>`;
+    }
   }
-  if (lines.length === 0) return '';
-  return `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;line-height:1.6">${lines.join('<br/>')}</div>`;
+
+  // Unsubscribe / legal line
+  html += '<p style="margin:16px 0 0;font-size:10px;color:#94a3b8;line-height:1.5">';
+  html += 'You received this email because of your business relationship with us. ';
+  html += '<a href="#" style="color:#94a3b8;text-decoration:underline">Unsubscribe</a>';
+  html += '</p>';
+
+  html += '</div>';
+  return html;
 };
 
 const MAX_RETRIES = 3;
