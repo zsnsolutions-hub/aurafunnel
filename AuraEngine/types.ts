@@ -487,6 +487,25 @@ export interface EmailEvent {
   created_at: string;
 }
 
+// Team Collaboration (Strategy Hub)
+export interface Team {
+  id: string;
+  name: string;
+  owner_id: string;
+  created_at: string;
+}
+
+export interface TeamInvite {
+  id: string;
+  team_id: string;
+  email: string;
+  invited_by: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+  expires_at: string;
+  team_name?: string; // joined
+}
+
 export interface EmailEngagement {
   totalSent: number;
   totalOpens: number;
