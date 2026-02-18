@@ -1094,6 +1094,159 @@ Return exactly 5 suggestions. Focus on:
   return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'content_suggestions', prompt_version: 1 };
 };
 
+// === Pipeline Strategy Generation ===
+
+export interface PipelineStrategyInput {
+  totalLeads: number;
+  avgScore: number;
+  statusBreakdown: Record<string, number>;
+  hotLeads: number;
+  recentActivity: string;
+  emailsSent: number;
+  emailsOpened: number;
+  conversionRate: number;
+  businessProfile?: BusinessProfile;
+}
+
+export interface PipelineStrategyResponse {
+  recommendations: string[];
+  sprintGoals: { title: string; target: number; current: number; unit: string; deadline: string }[];
+  risks: string[];
+  priorityActions: string[];
+}
+
+export const generatePipelineStrategy = async (
+  input: PipelineStrategyInput
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const statusStr = Object.entries(input.statusBreakdown)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+
+  const prompt = `Analyze this B2B sales pipeline and generate strategic recommendations.
+
+PIPELINE DATA:
+- Total Leads: ${input.totalLeads}
+- Average Lead Score: ${input.avgScore}/100
+- Status Breakdown: ${statusStr}
+- Hot Leads (score > 80): ${input.hotLeads}
+- Emails Sent: ${input.emailsSent}
+- Emails Opened: ${input.emailsOpened}
+- Conversion Rate: ${input.conversionRate}%
+- Recent Activity: ${input.recentActivity}
+
+Respond using EXACTLY this delimited format (every field required):
+
+===FIELD===RECOMMENDATIONS: [3-5 strategic recommendations separated by | pipes, e.g. "Focus outreach on the 5 hot leads scoring above 80 — they have the highest conversion potential | Re-engage stale New leads with a drip email sequence"]===END===
+===FIELD===SPRINT_GOALS: [4 goals, each on a new line, in format: title|target|current|unit|deadline, e.g.
+Qualify Pipeline Leads|15|4|leads|2026-03-01
+Send Outreach Emails|30|12|emails|2026-03-01
+Complete Strategy Tasks|10|3|tasks|2026-03-01
+Convert Hot Leads|5|1|conversions|2026-03-01]===END===
+===FIELD===RISKS: [2-4 risk factors separated by | pipes, e.g. "Pipeline is top-heavy with unqualified leads | Low email open rate suggests messaging needs improvement"]===END===
+===FIELD===PRIORITY_ACTIONS: [Top 3 immediate actions separated by | pipes, e.g. "Call the top 3 hot leads today | Send follow-up emails to Contacted leads | Review and update stale lead scores"]===END===
+
+Be specific and data-driven. Reference actual numbers from the pipeline data.${buildBusinessContext(input.businessProfile)}`;
+
+  const systemInstruction = 'You are a senior B2B sales strategist. Analyze pipeline data and produce actionable strategy recommendations. Always use the exact delimited format requested.';
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+          topP: 0.9,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error('Empty strategy response.');
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: 'pipeline_strategy',
+        prompt_version: 1,
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Pipeline strategy attempt ${attempt} failed:`, errMsg);
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: '',
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: 'pipeline_strategy',
+          prompt_version: 1,
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'pipeline_strategy', prompt_version: 1 };
+};
+
+export const parsePipelineStrategyResponse = (text: string): PipelineStrategyResponse => {
+  const result: PipelineStrategyResponse = {
+    recommendations: [],
+    sprintGoals: [],
+    risks: [],
+    priorityActions: [],
+  };
+
+  const extractField = (fieldName: string): string | undefined => {
+    const regex = new RegExp(`===FIELD===${fieldName}:\\s*([\\s\\S]*?)===END===`, 'i');
+    const match = text.match(regex);
+    return match?.[1]?.trim() || undefined;
+  };
+
+  const recsRaw = extractField('RECOMMENDATIONS');
+  if (recsRaw) {
+    result.recommendations = recsRaw.split('|').map(r => r.trim()).filter(Boolean);
+  }
+
+  const goalsRaw = extractField('SPRINT_GOALS');
+  if (goalsRaw) {
+    const lines = goalsRaw.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const parts = line.split('|').map(p => p.trim());
+      if (parts.length >= 5) {
+        result.sprintGoals.push({
+          title: parts[0],
+          target: parseInt(parts[1]) || 10,
+          current: parseInt(parts[2]) || 0,
+          unit: parts[3],
+          deadline: parts[4],
+        });
+      }
+    }
+  }
+
+  const risksRaw = extractField('RISKS');
+  if (risksRaw) {
+    result.risks = risksRaw.split('|').map(r => r.trim()).filter(Boolean);
+  }
+
+  const actionsRaw = extractField('PRIORITY_ACTIONS');
+  if (actionsRaw) {
+    result.priorityActions = actionsRaw.split('|').map(a => a.trim()).filter(Boolean);
+  }
+
+  return result;
+};
+
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
   const steps: EmailStep[] = [];
   const emailBlocks = rawText.split('===EMAIL_START===').filter(b => b.trim());
