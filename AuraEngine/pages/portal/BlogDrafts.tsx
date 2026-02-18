@@ -2,11 +2,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { generateBlogContent, BlogContentMode } from '../../lib/gemini';
+import { sendTrackedEmail } from '../../lib/emailTracking';
 import {
   EditIcon, PlusIcon, SparklesIcon, ShieldIcon, CheckIcon, RefreshIcon,
   KeyboardIcon, TrendUpIcon, TrendDownIcon, ClockIcon, EyeIcon, TargetIcon,
   XIcon, BrainIcon, TagIcon, FilterIcon, CalendarIcon, BoltIcon,
-  UsersIcon, ActivityIcon, StarIcon, LayersIcon
+  UsersIcon, ActivityIcon, StarIcon, LayersIcon, SendIcon, MailIcon
 } from '../../components/Icons';
 
 // ─── Types ───
@@ -37,6 +41,14 @@ const CONTENT_TEMPLATES: ContentTemplate[] = [
   { id: 'ct5', title: 'Product Comparison', description: 'Compare tools or approaches', structure: '## Overview\n\nWhat are we comparing and why.\n\n## Option A\n\n**Pros:**\n- Pro 1\n- Pro 2\n\n**Cons:**\n- Con 1\n\n## Option B\n\n**Pros:**\n- Pro 1\n- Pro 2\n\n**Cons:**\n- Con 1\n\n## Side-by-Side Comparison\n\n| Feature | Option A | Option B |\n|---------|----------|----------|\n| Feature 1 | ✓ | ✓ |\n\n## Our Recommendation\n\nFinal verdict.', category: 'Review', icon: <ActivityIcon className="w-4 h-4" /> },
 ];
 
+const AI_TONES = ['Professional', 'Conversational', 'Technical', 'Storytelling', 'Persuasive'];
+const AI_MODES: { id: BlogContentMode; label: string; desc: string }[] = [
+  { id: 'full_draft', label: 'Full Draft', desc: 'Generate a complete post' },
+  { id: 'outline_only', label: 'Outline', desc: 'Structured headings & bullets' },
+  { id: 'improve', label: 'Improve', desc: 'Rewrite existing content' },
+  { id: 'expand', label: 'Expand', desc: 'Add detail to thin sections' },
+];
+
 const BlogDrafts: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
   const [drafts, setDrafts] = useState<any[]>([]);
@@ -46,17 +58,44 @@ const BlogDrafts: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
-  const [newPost, setNewPost] = useState({ title: '', content: '', slug: '', category_id: '', featured_image: null as string | null });
+
+  const [newPost, setNewPost] = useState({
+    title: '', content: '', slug: '', category_id: '', featured_image: null as string | null,
+    excerpt: '',
+    seo_settings: { title: '', description: '', og_image: '' },
+  });
+
+  // ─── Editing state ───
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
   // ─── Enhanced UI state ───
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSeoPanel, setShowSeoPanel] = useState(false);
+  const [showSeoForm, setShowSeoForm] = useState(false);
   const [activeView, setActiveView] = useState<'compose' | 'posts'>('compose');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'pending_review' | 'published'>('all');
   const [showWritingMetrics, setShowWritingMetrics] = useState(true);
+
+  // ─── Markdown preview state ───
+  const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
+
+  // ─── AI Assist state ───
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiTone, setAiTone] = useState('Professional');
+  const [aiMode, setAiMode] = useState<BlogContentMode>('full_draft');
+  const [aiKeywords, setAiKeywords] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiResult, setAiResult] = useState('');
+
+  // ─── Share modal state ───
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharePost, setSharePost] = useState<any>(null);
+  const [shareLeads, setShareLeads] = useState<any[]>([]);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [sharingInProgress, setSharingInProgress] = useState(false);
 
   // ─── Writing Metrics (computed) ───
   const writingMetrics = useMemo(() => {
@@ -132,17 +171,17 @@ const BlogDrafts: React.FC = () => {
         if (showShortcuts) { setShowShortcuts(false); return; }
         if (showTemplates) { setShowTemplates(false); return; }
         if (showSeoPanel) { setShowSeoPanel(false); return; }
+        if (showAiPanel) { setShowAiPanel(false); return; }
+        if (showShareModal) { setShowShareModal(false); return; }
         return;
       }
 
       if (isInput) {
-        // Ctrl+Enter to submit for review from textarea
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && target.tagName === 'TEXTAREA') {
           e.preventDefault();
           handleSubmit('pending_review');
           return;
         }
-        // Ctrl+S to save draft from any input
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
           e.preventDefault();
           handleSubmit('draft');
@@ -157,6 +196,7 @@ const BlogDrafts: React.FC = () => {
         't': () => setShowTemplates(prev => !prev),
         's': () => setShowSeoPanel(prev => !prev),
         'm': () => setShowWritingMetrics(prev => !prev),
+        'a': () => setShowAiPanel(prev => !prev),
         '?': () => setShowShortcuts(prev => !prev),
       };
 
@@ -168,7 +208,7 @@ const BlogDrafts: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showShortcuts, showTemplates, showSeoPanel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showShortcuts, showTemplates, showSeoPanel, showAiPanel, showShareModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = async () => {
     setLoading(true);
@@ -178,7 +218,7 @@ const BlogDrafts: React.FC = () => {
         .select('*, blog_categories(name)')
         .eq('author_id', user.id)
         .order('created_at', { ascending: false });
-      
+
       const { data: c } = await supabase.from('blog_categories').select('*');
 
       if (d) setDrafts(d);
@@ -199,8 +239,8 @@ const BlogDrafts: React.FC = () => {
     setUploadingImage(true);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `client-uploads/${fileName}`;
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `blog-images/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('blog-assets')
@@ -220,6 +260,13 @@ const BlogDrafts: React.FC = () => {
     }
   };
 
+  const resetForm = () => {
+    setNewPost({ title: '', content: '', slug: '', category_id: '', featured_image: null, excerpt: '', seo_settings: { title: '', description: '', og_image: '' } });
+    setEditingPostId(null);
+    setEditorTab('write');
+    setShowSeoForm(false);
+  };
+
   const handleSubmit = async (status: 'draft' | 'pending_review') => {
     if (!newPost.title || !newPost.content) {
       setError("Please provide a title and narrative content.");
@@ -231,19 +278,34 @@ const BlogDrafts: React.FC = () => {
     setSuccess(null);
 
     try {
-      const { error: insertErr } = await supabase
-        .from('blog_posts')
-        .insert([{
-          ...newPost,
-          author_id: user.id,
-          status: status,
-          slug: newPost.title.toLowerCase().replace(/\s+/g, '-')
-        }]);
-      
-      if (insertErr) throw insertErr;
-      
-      setNewPost({ title: '', content: '', slug: '', category_id: '', featured_image: null });
-      setSuccess(status === 'draft' ? "Draft archived." : "Insight transmitted for review.");
+      const payload: any = {
+        title: newPost.title,
+        content: newPost.content,
+        slug: newPost.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+        category_id: newPost.category_id || null,
+        featured_image: newPost.featured_image,
+        excerpt: newPost.excerpt || null,
+        seo_settings: (newPost.seo_settings.title || newPost.seo_settings.description) ? newPost.seo_settings : null,
+        status,
+      };
+
+      if (editingPostId) {
+        const { error: updateErr } = await supabase
+          .from('blog_posts')
+          .update(payload)
+          .eq('id', editingPostId)
+          .eq('author_id', user.id);
+        if (updateErr) throw updateErr;
+        setSuccess(status === 'draft' ? "Draft updated." : "Updated and submitted for review.");
+      } else {
+        const { error: insertErr } = await supabase
+          .from('blog_posts')
+          .insert([{ ...payload, author_id: user.id }]);
+        if (insertErr) throw insertErr;
+        setSuccess(status === 'draft' ? "Draft archived." : "Insight transmitted for review.");
+      }
+
+      resetForm();
       await fetchData();
       setTimeout(() => setSuccess(null), 5000);
     } catch (err: unknown) {
@@ -251,6 +313,84 @@ const BlogDrafts: React.FC = () => {
     } finally {
       setIsCreating(false);
     }
+  };
+
+  // ─── Edit existing draft ───
+  const startEditing = (post: any) => {
+    setEditingPostId(post.id);
+    setNewPost({
+      title: post.title || '',
+      content: post.content || '',
+      slug: post.slug || '',
+      category_id: post.category_id || '',
+      featured_image: post.featured_image || null,
+      excerpt: post.excerpt || '',
+      seo_settings: post.seo_settings || { title: '', description: '', og_image: '' },
+    });
+    setActiveView('compose');
+    setEditorTab('write');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ─── AI Generation ───
+  const handleAiGenerate = async () => {
+    if (!aiTopic.trim()) return;
+    setAiGenerating(true);
+    setAiResult('');
+    try {
+      const result = await generateBlogContent({
+        mode: aiMode,
+        topic: aiTopic,
+        tone: aiTone,
+        category: categories.find(c => c.id === newPost.category_id)?.name,
+        keywords: aiKeywords ? aiKeywords.split(',').map(k => k.trim()).filter(Boolean) : undefined,
+        existingContent: (aiMode === 'improve' || aiMode === 'expand') ? newPost.content : undefined,
+      });
+      setAiResult(result.text);
+    } catch {
+      setAiResult('Generation failed. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  // ─── Share with leads ───
+  const openShareModal = async (post: any) => {
+    setSharePost(post);
+    setSelectedLeadIds([]);
+    setShowShareModal(true);
+    const { data } = await supabase
+      .from('leads')
+      .select('id, name, email, company')
+      .eq('user_id', user.id)
+      .order('name');
+    if (data) setShareLeads(data);
+  };
+
+  const handleShareWithLeads = async () => {
+    if (!sharePost || selectedLeadIds.length === 0) return;
+    setSharingInProgress(true);
+    const postUrl = `${window.location.origin}/#/blog/${sharePost.slug}`;
+    let sent = 0;
+    for (const leadId of selectedLeadIds) {
+      const lead = shareLeads.find(l => l.id === leadId);
+      if (!lead?.email) continue;
+      const result = await sendTrackedEmail({
+        leadId: lead.id,
+        toEmail: lead.email,
+        subject: `Check out: ${sharePost.title}`,
+        htmlBody: `<div style="font-family:Arial,sans-serif;max-width:600px">
+          <h2 style="color:#1e293b">${sharePost.title}</h2>
+          <p style="color:#64748b;line-height:1.6">${sharePost.excerpt || sharePost.content.substring(0, 200)}...</p>
+          <a href="${postUrl}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Read Full Post</a>
+        </div>`,
+      });
+      if (result.success) sent++;
+    }
+    setSharingInProgress(false);
+    setShowShareModal(false);
+    setSuccess(`Blog post shared with ${sent} lead${sent !== 1 ? 's' : ''}.`);
+    setTimeout(() => setSuccess(null), 5000);
   };
 
   return (
@@ -269,6 +409,13 @@ const BlogDrafts: React.FC = () => {
             <SparklesIcon className="w-3.5 h-3.5 text-indigo-600" />
             <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest hidden sm:inline">Contributor Verified</span>
           </div>
+          <button
+            onClick={() => setShowAiPanel(prev => !prev)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showAiPanel ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <BrainIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">AI Assist</span>
+          </button>
           <button
             onClick={() => setShowTemplates(prev => !prev)}
             className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTemplates ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
@@ -317,11 +464,98 @@ const BlogDrafts: React.FC = () => {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* AI ASSIST PANEL                                               */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showAiPanel && (
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border border-purple-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-purple-100 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <BrainIcon className="w-4 h-4 text-purple-600" />
+              <h3 className="font-bold text-purple-800 font-heading text-sm">AI Content Assistant</h3>
+            </div>
+            <button onClick={() => setShowAiPanel(false)} className="p-1 text-purple-400 hover:text-purple-600">
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Topic / Prompt</label>
+                <input
+                  value={aiTopic}
+                  onChange={e => setAiTopic(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-white border border-purple-100 font-bold text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  placeholder="e.g. How AI is transforming B2B sales funnels"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Tone</label>
+                <select value={aiTone} onChange={e => setAiTone(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-white border border-purple-100 font-bold text-sm focus:ring-2 focus:ring-purple-500 outline-none">
+                  {AI_TONES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Mode</label>
+                <select value={aiMode} onChange={e => setAiMode(e.target.value as BlogContentMode)} className="w-full px-4 py-3 rounded-xl bg-white border border-purple-100 font-bold text-sm focus:ring-2 focus:ring-purple-500 outline-none">
+                  {AI_MODES.map(m => <option key={m.id} value={m.id}>{m.label} — {m.desc}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex items-end gap-4">
+              <div className="flex-1 space-y-1.5">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Keywords (comma-separated)</label>
+                <input
+                  value={aiKeywords}
+                  onChange={e => setAiKeywords(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-white border border-purple-100 font-bold text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  placeholder="e.g. AI, sales automation, lead scoring"
+                />
+              </div>
+              <button
+                onClick={handleAiGenerate}
+                disabled={aiGenerating || !aiTopic.trim()}
+                className="px-6 py-3 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-all disabled:opacity-40 flex items-center space-x-2 shadow-lg shadow-purple-200"
+              >
+                {aiGenerating ? <RefreshIcon className="w-4 h-4 animate-spin" /> : <SparklesIcon className="w-4 h-4" />}
+                <span>{aiGenerating ? 'Generating...' : 'Generate'}</span>
+              </button>
+            </div>
+
+            {/* AI Result */}
+            {aiResult && (
+              <div className="mt-4 bg-white rounded-xl border border-purple-100 overflow-hidden">
+                <div className="px-5 py-3 border-b border-purple-50 flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-600">Generated Content</span>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => { setNewPost(prev => ({ ...prev, content: prev.content + '\n\n' + aiResult })); setAiResult(''); setShowAiPanel(false); }}
+                      className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold hover:bg-purple-200 transition-all"
+                    >
+                      Insert
+                    </button>
+                    <button
+                      onClick={() => { setNewPost(prev => ({ ...prev, content: aiResult })); setAiResult(''); setShowAiPanel(false); }}
+                      className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700 transition-all"
+                    >
+                      Replace
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5 max-h-72 overflow-y-auto prose prose-sm prose-slate max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiResult}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* VIEW TABS                                                     */}
       {/* ══════════════════════════════════════════════════════════════ */}
       <div className="flex items-center space-x-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1">
         {([
-          { id: 'compose' as const, label: 'Compose', icon: <EditIcon className="w-4 h-4" /> },
+          { id: 'compose' as const, label: editingPostId ? 'Edit Draft' : 'Compose', icon: <EditIcon className="w-4 h-4" /> },
           { id: 'posts' as const, label: 'My Posts', icon: <LayersIcon className="w-4 h-4" />, badge: drafts.length },
         ]).map(tab => (
           <button
@@ -342,6 +576,15 @@ const BlogDrafts: React.FC = () => {
             )}
           </button>
         ))}
+        {editingPostId && (
+          <button
+            onClick={resetForm}
+            className="ml-auto flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+          >
+            <XIcon className="w-3.5 h-3.5" />
+            <span>Cancel Edit</span>
+          </button>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
@@ -352,7 +595,9 @@ const BlogDrafts: React.FC = () => {
           <div className={`${showWritingMetrics ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="font-bold text-slate-800 font-heading text-sm">Author New Insight</h3>
+                <h3 className="font-bold text-slate-800 font-heading text-sm">
+                  {editingPostId ? 'Edit Post' : 'Author New Insight'}
+                </h3>
                 <button
                   onClick={() => setShowWritingMetrics(prev => !prev)}
                   className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${showWritingMetrics ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
@@ -407,23 +652,110 @@ const BlogDrafts: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Excerpt Field */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Excerpt</label>
+                    <textarea
+                      value={newPost.excerpt}
+                      onChange={e => { if (e.target.value.length <= 200) setNewPost({...newPost, excerpt: e.target.value}); }}
+                      rows={2}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-sm text-slate-700 resize-none"
+                      placeholder="A short summary of your post (shown in previews)..."
+                    />
+                    <p className="text-[10px] font-semibold text-slate-400">{newPost.excerpt.length}/200</p>
+                  </div>
+
+                  {/* Body Content with Write/Preview tabs */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Body Content</label>
+                      <div className="flex items-center space-x-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-3">Body Content</label>
+                        <button
+                          type="button"
+                          onClick={() => setEditorTab('write')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${editorTab === 'write' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-100'}`}
+                        >
+                          Write
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditorTab('preview')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${editorTab === 'preview' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-100'}`}
+                        >
+                          Preview
+                        </button>
+                      </div>
                       <div className="flex items-center space-x-3">
                         <span className="text-[10px] font-bold text-slate-400">{writingMetrics.words} words</span>
                         <span className="text-[10px] font-bold text-slate-400">{writingMetrics.readingTime} min read</span>
                       </div>
                     </div>
-                    <textarea required value={newPost.content} onChange={e => setNewPost({...newPost, content: e.target.value})} rows={12} className="w-full p-5 rounded-xl bg-slate-50 border border-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none leading-relaxed text-sm text-slate-700 resize-none" placeholder="Share your expertise with the network..." />
+
+                    {editorTab === 'write' ? (
+                      <textarea required value={newPost.content} onChange={e => setNewPost({...newPost, content: e.target.value})} rows={12} className="w-full p-5 rounded-xl bg-slate-50 border border-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none leading-relaxed text-sm text-slate-700 resize-none font-mono" placeholder="Write in markdown... Use ## for headings, **bold**, *italic*, - for lists..." />
+                    ) : (
+                      <div className="w-full min-h-[288px] p-5 rounded-xl bg-white border border-slate-100 overflow-y-auto prose prose-sm prose-slate max-w-none">
+                        {newPost.content ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{newPost.content}</ReactMarkdown>
+                        ) : (
+                          <p className="text-slate-400 italic">Nothing to preview yet. Start writing in the Write tab.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SEO Settings (collapsible) */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSeoForm(prev => !prev)}
+                      className="flex items-center space-x-2 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
+                    >
+                      <TargetIcon className="w-3.5 h-3.5" />
+                      <span>{showSeoForm ? 'Hide' : 'Show'} SEO Settings</span>
+                    </button>
+                    {showSeoForm && (
+                      <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SEO Title</label>
+                          <input
+                            value={newPost.seo_settings.title}
+                            onChange={e => setNewPost({ ...newPost, seo_settings: { ...newPost.seo_settings, title: e.target.value } })}
+                            className="w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="Custom title for search engines (defaults to post title)"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meta Description</label>
+                          <textarea
+                            value={newPost.seo_settings.description}
+                            onChange={e => setNewPost({ ...newPost, seo_settings: { ...newPost.seo_settings, description: e.target.value } })}
+                            rows={2}
+                            className="w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                            placeholder="Brief description for search results (max 160 chars)"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">OG Image URL</label>
+                          <input
+                            value={newPost.seo_settings.og_image}
+                            onChange={e => setNewPost({ ...newPost, seo_settings: { ...newPost.seo_settings, og_image: e.target.value } })}
+                            className="w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="Image URL for social sharing (defaults to featured image)"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button type="button" disabled={isCreating || !newPost.title || !newPost.content} onClick={() => handleSubmit('pending_review')} className="flex-grow py-3.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-[0.98] flex items-center justify-center space-x-2 disabled:opacity-40 text-sm">
-                      <span>Submit for Review</span>
+                      <span>{editingPostId ? 'Update & Submit for Review' : 'Submit for Review'}</span>
                       <PlusIcon className="w-4 h-4" />
                     </button>
-                    <button type="button" disabled={isCreating || !newPost.title} onClick={() => handleSubmit('draft')} className="px-6 py-3.5 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-all active:scale-[0.98] text-sm">Save Draft</button>
+                    <button type="button" disabled={isCreating || !newPost.title} onClick={() => handleSubmit('draft')} className="px-6 py-3.5 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-all active:scale-[0.98] text-sm">
+                      {editingPostId ? 'Update Draft' : 'Save Draft'}
+                    </button>
                   </div>
                   <p className="text-[10px] text-slate-400 text-center">
                     <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold">Ctrl+Enter</kbd> submit &middot; <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold">Ctrl+S</kbd> save draft
@@ -586,18 +918,87 @@ const BlogDrafts: React.FC = () => {
                     <p className="text-[10px] font-bold text-slate-400">{new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                   </div>
                   <h4 className="text-sm font-bold text-slate-900 font-heading leading-tight mb-2">{d.title}</h4>
-                  <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed mb-3">{d.content}</p>
+                  <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed mb-3">{d.excerpt || d.content}</p>
                   <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                     <span className="text-[9px] font-black text-indigo-400 uppercase tracking-wider">{d.blog_categories?.name || 'Uncategorized'}</span>
-                    <div className="flex items-center space-x-2 text-[10px] text-slate-400">
-                      <span>{d.content?.trim().split(/\s+/).length || 0} words</span>
-                      <span>&middot;</span>
-                      <span>{Math.max(1, Math.ceil((d.content?.trim().split(/\s+/).length || 0) / 200))} min read</span>
+                    <div className="flex items-center space-x-2">
+                      {/* Edit button for drafts and pending_review */}
+                      {(d.status === 'draft' || d.status === 'pending_review') && (
+                        <button
+                          onClick={() => startEditing(d)}
+                          className="px-2.5 py-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {/* Share button for published posts */}
+                      {d.status === 'published' && (
+                        <button
+                          onClick={() => openShareModal(d)}
+                          className="px-2.5 py-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-all flex items-center space-x-1"
+                        >
+                          <SendIcon className="w-3 h-3" />
+                          <span>Share</span>
+                        </button>
+                      )}
+                      <span className="text-[10px] text-slate-400">{d.content?.trim().split(/\s+/).length || 0} words</span>
                     </div>
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* SHARE WITH LEADS MODAL                                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showShareModal && sharePost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowShareModal(false)}>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-black text-slate-900 font-heading">Share Post with Leads</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Send "{sharePost.title}" via tracked email</p>
+              </div>
+              <button onClick={() => setShowShareModal(false)} className="p-1 text-slate-400 hover:text-slate-600"><XIcon className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 space-y-3">
+              {shareLeads.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">No leads found. Add leads first.</p>
+              ) : shareLeads.map(lead => (
+                <label key={lead.id} className={`flex items-center space-x-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  selectedLeadIds.includes(lead.id) ? 'border-indigo-200 bg-indigo-50' : 'border-slate-100 hover:bg-slate-50'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedLeadIds.includes(lead.id)}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedLeadIds(prev => [...prev, lead.id]);
+                      else setSelectedLeadIds(prev => prev.filter(id => id !== lead.id));
+                    }}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{lead.name}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{lead.email} {lead.company ? `- ${lead.company}` : ''}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-400">{selectedLeadIds.length} selected</span>
+              <button
+                onClick={handleShareWithLeads}
+                disabled={selectedLeadIds.length === 0 || sharingInProgress}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-40 flex items-center space-x-2"
+              >
+                {sharingInProgress ? <RefreshIcon className="w-4 h-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
+                <span>{sharingInProgress ? 'Sending...' : 'Send Emails'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -666,6 +1067,7 @@ const BlogDrafts: React.FC = () => {
                   { keys: 'T', desc: 'Toggle Templates' },
                   { keys: 'S', desc: 'Toggle SEO Panel' },
                   { keys: 'M', desc: 'Toggle Metrics' },
+                  { keys: 'A', desc: 'Toggle AI Assist' },
                   { keys: '?', desc: 'Toggle Shortcuts' },
                   { keys: 'Esc', desc: 'Close Panels' },
                 ]},

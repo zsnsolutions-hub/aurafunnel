@@ -18,6 +18,7 @@ const PricingPage = lazy(() => import('./pages/marketing/PricingPage'));
 const AboutPage = lazy(() => import('./pages/marketing/AboutPage'));
 const ContactPage = lazy(() => import('./pages/marketing/ContactPage'));
 const BlogPage = lazy(() => import('./pages/marketing/BlogPage'));
+const BlogPostPage = lazy(() => import('./pages/marketing/BlogPostPage'));
 
 // Auth
 const AuthPage = lazy(() => import('./pages/portal/AuthPage'));
@@ -203,6 +204,7 @@ const App: React.FC = () => {
             <Route path="/features" element={<ErrorBoundary><FeaturesPage /></ErrorBoundary>} />
             <Route path="/pricing" element={<ErrorBoundary><PricingPage /></ErrorBoundary>} />
             <Route path="/blog" element={<ErrorBoundary><BlogPage /></ErrorBoundary>} />
+            <Route path="/blog/:slug" element={<ErrorBoundary><BlogPostPage /></ErrorBoundary>} />
             <Route path="/about" element={<ErrorBoundary><AboutPage /></ErrorBoundary>} />
             <Route path="/contact" element={<ErrorBoundary><ContactPage /></ErrorBoundary>} />
           </Route>

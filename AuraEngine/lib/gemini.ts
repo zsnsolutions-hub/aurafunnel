@@ -1247,6 +1247,117 @@ export const parsePipelineStrategyResponse = (text: string): PipelineStrategyRes
   return result;
 };
 
+// === Blog Content Generation ===
+
+export type BlogContentMode = 'full_draft' | 'outline_only' | 'improve' | 'expand';
+
+export interface BlogContentParams {
+  mode: BlogContentMode;
+  topic: string;
+  tone?: string;
+  category?: string;
+  keywords?: string[];
+  existingContent?: string;
+  businessProfile?: BusinessProfile;
+}
+
+export const generateBlogContent = async (params: BlogContentParams): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const modeInstructions: Record<BlogContentMode, string> = {
+    full_draft: `Write a complete, publication-ready blog post about "${params.topic}". Include:
+- An engaging title (if not provided)
+- Introduction that hooks the reader
+- 3-5 well-structured sections with ## headings
+- Practical examples or data points
+- A compelling conclusion with a call to action
+- Target 600-1200 words
+- Use markdown formatting throughout`,
+    outline_only: `Create a detailed blog post outline for "${params.topic}". Include:
+- A compelling title suggestion
+- Introduction summary (2-3 sentences)
+- 5-7 section headings (##) with 2-3 bullet points each describing what to cover
+- Conclusion summary
+- 3 suggested keywords for SEO
+- Format in markdown`,
+    improve: `Rewrite and improve the following blog content about "${params.topic}". Make it more:
+- Engaging and readable
+- Well-structured with clear headings
+- Professional yet conversational
+- SEO-friendly
+- Keep the core message but enhance the quality significantly
+
+EXISTING CONTENT TO IMPROVE:
+${params.existingContent || '(No content provided)'}`,
+    expand: `Expand the following blog content about "${params.topic}". The current content is too thin. For each section:
+- Add more detail, examples, and depth
+- Include relevant statistics or data points where appropriate
+- Add transition sentences between sections
+- Ensure each section is at least 150 words
+- Maintain the existing structure but make it more comprehensive
+
+EXISTING CONTENT TO EXPAND:
+${params.existingContent || '(No content provided)'}`,
+  };
+
+  const toneGuide = params.tone ? `\nTONE: Write in a ${params.tone} tone.` : '';
+  const categoryGuide = params.category ? `\nCATEGORY: This is a ${params.category} post.` : '';
+  const keywordGuide = params.keywords?.length ? `\nKEYWORDS TO INCLUDE: ${params.keywords.join(', ')}` : '';
+
+  const prompt = `${modeInstructions[params.mode]}${toneGuide}${categoryGuide}${keywordGuide}${buildBusinessContext(params.businessProfile)}
+
+Output the blog content in clean markdown format. Do not include any meta-commentary or instructions in the output — only the blog content itself.`;
+
+  const systemInstruction = 'You are an expert blog content writer specializing in B2B and technology topics. You write engaging, well-researched content in clean markdown format. Your posts are SEO-friendly and provide genuine value to readers.';
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: params.mode === 'outline_only' ? 0.7 : 0.85,
+          topP: 0.9,
+          topK: 40,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error('Empty blog content response.');
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: `blog_content_${params.mode}`,
+        prompt_version: 1,
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Blog content generation attempt ${attempt} failed:`, errMsg);
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `GENERATION FAILED: ${errMsg}`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: `blog_content_${params.mode}`,
+          prompt_version: 1,
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: `blog_content_${params.mode}`, prompt_version: 1 };
+};
+
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
   const steps: EmailStep[] = [];
   const emailBlocks = rawText.split('===EMAIL_START===').filter(b => b.trim());

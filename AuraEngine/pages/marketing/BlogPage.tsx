@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { SparklesIcon, BoltIcon, ChartIcon, RefreshIcon } from '../../components/Icons';
 
@@ -63,10 +64,10 @@ const BlogPage: React.FC = () => {
                 </div>
                 <div className="relative group">
                   <h3 className="text-2xl font-bold leading-tight text-slate-900 font-heading group-hover:text-indigo-600 transition-colors">
-                    <a href={`/blog/${post.slug}`}>
+                    <Link to={`/blog/${post.slug}`}>
                       <span className="absolute inset-0" />
                       {post.title}
-                    </a>
+                    </Link>
                   </h3>
                   <p className="mt-5 line-clamp-3 text-sm leading-relaxed text-slate-500 italic">
                     "{post.excerpt || post.content.substring(0, 120)}..."

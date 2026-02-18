@@ -12,7 +12,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
-import { fetchLeadEmailEngagement } from '../../lib/emailTracking';
+import { fetchLeadEmailEngagement, sendTrackedEmail } from '../../lib/emailTracking';
 import type { EmailEngagement } from '../../types';
 import EmailEngagementCard from '../../components/dashboard/EmailEngagementCard';
 
@@ -199,6 +199,11 @@ const LeadProfile: React.FC = () => {
   const [kbResearching, setKbResearching] = useState(false);
   const [kbSaving, setKbSaving] = useState(false);
   const [kbError, setKbError] = useState('');
+
+  // ── Blog Share ──
+  const [showBlogShareModal, setShowBlogShareModal] = useState(false);
+  const [publishedPosts, setPublishedPosts] = useState<any[]>([]);
+  const [blogShareSending, setBlogShareSending] = useState(false);
 
   // ── Edit Lead ──
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -1267,6 +1272,22 @@ const LeadProfile: React.FC = () => {
                 <UsersIcon className="w-4 h-4" />
                 <span>Assign to Team</span>
               </button>
+              <button
+                onClick={async () => {
+                  const { data } = await supabase
+                    .from('blog_posts')
+                    .select('id, title, slug, excerpt, content')
+                    .eq('author_id', user.id)
+                    .eq('status', 'published')
+                    .order('published_at', { ascending: false });
+                  setPublishedPosts(data || []);
+                  setShowBlogShareModal(true);
+                }}
+                className="w-full flex items-center space-x-3 p-3 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors font-semibold text-sm"
+              >
+                <EditIcon className="w-4 h-4" />
+                <span>Share Blog Post</span>
+              </button>
             </div>
 
             {/* Shortcuts */}
@@ -2113,6 +2134,61 @@ const LeadProfile: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Share Blog Post Modal ── */}
+      {showBlogShareModal && lead && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowBlogShareModal(false)} />
+          <div className="relative bg-white w-full max-w-md max-h-[70vh] rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-bold text-slate-900 font-heading text-sm">Share Blog Post</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Send a published post to {lead.name}</p>
+              </div>
+              <button onClick={() => setShowBlogShareModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 space-y-2">
+              {publishedPosts.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">No published blog posts yet.</p>
+              ) : publishedPosts.map(post => (
+                <button
+                  key={post.id}
+                  disabled={blogShareSending}
+                  onClick={async () => {
+                    setBlogShareSending(true);
+                    const postUrl = `${window.location.origin}/#/blog/${post.slug}`;
+                    const result = await sendTrackedEmail({
+                      leadId: lead.id,
+                      toEmail: lead.email,
+                      subject: `Check out: ${post.title}`,
+                      htmlBody: `<div style="font-family:Arial,sans-serif;max-width:600px">
+                        <p>Hi ${lead.name.split(' ')[0]},</p>
+                        <h2 style="color:#1e293b">${post.title}</h2>
+                        <p style="color:#64748b;line-height:1.6">${post.excerpt || post.content.substring(0, 200)}...</p>
+                        <a href="${postUrl}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Read Full Post</a>
+                      </div>`,
+                    });
+                    setBlogShareSending(false);
+                    setShowBlogShareModal(false);
+                    showFeedback(result.success ? `"${post.title}" shared with ${lead.name}` : 'Failed to send email');
+                  }}
+                  className="w-full text-left p-4 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all"
+                >
+                  <p className="text-sm font-bold text-slate-800 truncate">{post.title}</p>
+                  <p className="text-xs text-slate-400 mt-1 line-clamp-2">{post.excerpt || post.content.substring(0, 100)}</p>
+                </button>
+              ))}
+            </div>
+            {blogShareSending && (
+              <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/50 text-center">
+                <span className="text-xs font-bold text-indigo-600">Sending tracked email...</span>
+              </div>
+            )}
           </div>
         </div>
       )}

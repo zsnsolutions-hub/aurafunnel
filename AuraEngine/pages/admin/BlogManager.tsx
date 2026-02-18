@@ -487,8 +487,49 @@ const BlogManager: React.FC = () => {
               </div>
 
               <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Excerpt</label>
+                <textarea value={formData.excerpt} onChange={e => setFormData({...formData, excerpt: e.target.value})} rows={2} className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:ring-4 focus:ring-indigo-100 outline-none text-sm resize-none" placeholder="Brief summary for previews (max 200 chars)..." />
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Content Narrative (Markdown)</label>
                 <textarea required value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} rows={12} className="w-full p-8 rounded-[2.5rem] bg-slate-50 border border-slate-100 focus:ring-4 focus:ring-indigo-100 outline-none leading-relaxed text-slate-700 italic" placeholder="Share industry insights..." />
+              </div>
+
+              {/* SEO Settings */}
+              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-5">
+                <div className="flex items-center space-x-3 mb-2">
+                  <TargetIcon className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">SEO Settings</h3>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SEO Title</label>
+                  <input
+                    value={formData.seo_settings?.title || ''}
+                    onChange={e => setFormData({...formData, seo_settings: { ...(formData.seo_settings || { title: '', description: '', og_image: '' }), title: e.target.value }})}
+                    className="w-full px-6 py-4 rounded-2xl bg-white border border-slate-100 font-bold outline-none focus:ring-4 focus:ring-indigo-100"
+                    placeholder="Custom title for search engines"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meta Description</label>
+                  <textarea
+                    value={formData.seo_settings?.description || ''}
+                    onChange={e => setFormData({...formData, seo_settings: { ...(formData.seo_settings || { title: '', description: '', og_image: '' }), description: e.target.value }})}
+                    rows={2}
+                    className="w-full px-6 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100 text-sm resize-none"
+                    placeholder="Brief description for search results (max 160 chars)"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">OG Image URL</label>
+                  <input
+                    value={formData.seo_settings?.og_image || ''}
+                    onChange={e => setFormData({...formData, seo_settings: { ...(formData.seo_settings || { title: '', description: '', og_image: '' }), og_image: e.target.value }})}
+                    className="w-full px-6 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100 font-mono text-sm"
+                    placeholder="Image URL for social sharing"
+                  />
+                </div>
               </div>
 
               <button 

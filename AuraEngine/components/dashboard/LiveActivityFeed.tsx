@@ -31,6 +31,7 @@ const actionColor = (action: string): string => {
   if (action.includes('LEAD') || action.includes('IMPORT')) return 'bg-emerald-400';
   if (action.includes('DELETE') || action.includes('DISABLE')) return 'bg-red-400';
   if (action.includes('PAYMENT') || action.includes('SUBSCRIBE')) return 'bg-orange-400';
+  if (action.includes('BLOG') || action.includes('POST')) return 'bg-indigo-400';
   return 'bg-slate-400';
 };
 
@@ -44,6 +45,7 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchEvents = async () => {
+    // Fetch audit logs
     let query = supabase
       .from('audit_logs')
       .select('id, action, details, created_at, user_id, profiles(name, email)')
@@ -55,29 +57,58 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
     }
 
     const { data, error } = await query;
+    let auditEvents: ActivityFeedItem[] = [];
+
     if (error) {
-      // Fallback: fetch without the profiles join
       const fallback = await supabase
         .from('audit_logs')
         .select('id, action, details, created_at, user_id')
         .order('created_at', { ascending: false })
         .limit(limit);
       if (fallback.data) {
-        setEvents(fallback.data.map((d: any) => ({
+        auditEvents = fallback.data.map((d: any) => ({
           id: d.id, action: d.action, details: d.details,
           created_at: d.created_at, user_email: undefined, user_name: undefined
-        })));
+        }));
       }
     } else if (data) {
-      setEvents(data.map((d: any) => ({
+      auditEvents = data.map((d: any) => ({
         id: d.id,
         action: d.action,
         details: d.details,
         created_at: d.created_at,
         user_email: d.profiles?.email,
         user_name: d.profiles?.name
-      })));
+      }));
     }
+
+    // Fetch recent blog posts for this user
+    let blogQuery = supabase
+      .from('blog_posts')
+      .select('id, title, status, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (userId) {
+      blogQuery = blogQuery.eq('author_id', userId);
+    }
+
+    const { data: blogData } = await blogQuery;
+    const blogEvents: ActivityFeedItem[] = (blogData || []).map((post: any) => ({
+      id: `blog-${post.id}`,
+      action: post.status === 'published' ? 'BLOG_POST_PUBLISHED' : post.status === 'pending_review' ? 'BLOG_DRAFT_SUBMITTED' : 'BLOG_DRAFT_SAVED',
+      details: post.title,
+      created_at: post.updated_at || post.created_at,
+      user_email: undefined,
+      user_name: undefined,
+    }));
+
+    // Merge and sort by date
+    const allEvents = [...auditEvents, ...blogEvents]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, limit);
+
+    setEvents(allEvents);
     setLoading(false);
   };
 
@@ -88,6 +119,13 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [userId, pollInterval]);
+
+  const formatAction = (action: string, details?: string): string => {
+    if (action === 'BLOG_POST_PUBLISHED') return `Published post: ${details || 'Untitled'}`;
+    if (action === 'BLOG_DRAFT_SUBMITTED') return `Draft submitted: ${details || 'Untitled'}`;
+    if (action === 'BLOG_DRAFT_SAVED') return `Draft saved: ${details || 'Untitled'}`;
+    return action.replace(/_/g, ' ');
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -127,16 +165,18 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
                 <div className="flex-grow min-w-0">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-slate-800 font-medium truncate">
-                      {event.action.replace(/_/g, ' ')}
+                      {formatAction(event.action, event.details)}
                     </p>
                     <span className="text-[10px] text-slate-400 font-medium ml-2 flex-shrink-0">
                       {formatRelativeTime(event.created_at)}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5 truncate">
-                    {event.user_name || event.user_email || 'System'}
-                    {event.details && ` — ${event.details}`}
-                  </p>
+                  {!event.action.startsWith('BLOG_') && (
+                    <p className="text-xs text-slate-400 mt-0.5 truncate">
+                      {event.user_name || event.user_email || 'System'}
+                      {event.details && ` — ${event.details}`}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
