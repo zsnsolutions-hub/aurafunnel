@@ -841,7 +841,7 @@ const ContentGen: React.FC = () => {
   };
 
   const handleSave = () => {
-    try { localStorage.setItem('aura_studio_draft', JSON.stringify({ contentType, blocks, tone, focus, length, goal })); } catch {}
+    try { localStorage.setItem(`aura_studio_draft_${user.id}`, JSON.stringify({ contentType, blocks, tone, focus, length, goal })); } catch {}
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -1037,10 +1037,10 @@ const ContentGen: React.FC = () => {
     }
   }, [contentHistory, snapshotContent]);
 
-  // ── Load saved draft on mount ──
+  // ── Load saved draft on mount (user-scoped, stay on Step 1) ──
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('aura_studio_draft');
+      const raw = localStorage.getItem(`aura_studio_draft_${user.id}`);
       if (raw) {
         const draft = JSON.parse(raw);
         if (draft.blocks?.length > 0) {
@@ -1050,7 +1050,6 @@ const ContentGen: React.FC = () => {
           if (draft.focus) setFocus(draft.focus);
           if (draft.length) setLength(draft.length);
           if (draft.goal) setGoal(draft.goal);
-          setWizardStep(4);
         }
       }
     } catch {}
