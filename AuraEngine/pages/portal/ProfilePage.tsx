@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
-import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile, BusinessAnalysisResult } from '../../types';
+import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile, BusinessAnalysisResult, BusinessAnalysisField } from '../../types';
 import {
   ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon,
   TrendUpIcon, TrendDownIcon, KeyboardIcon, ActivityIcon, BrainIcon, LayersIcon, UsersIcon,
   ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon, BriefcaseIcon,
-  GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, BoltIcon, RefreshIcon, ChevronDownIcon
+  GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, BoltIcon, RefreshIcon, ChevronDownIcon,
+  PhoneIcon, MailIcon, MapPinIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
@@ -231,6 +232,36 @@ const ProfilePage: React.FC = () => {
         });
         populated.companyWebsite = fullUrl;
         if (businessDescription.trim()) populated.businessDescription = businessDescription.trim();
+
+        // Apply contact info from analysis
+        if (result.analysis.phone?.value && result.analysis.phone.confidence > 0) {
+          populated.phone = result.analysis.phone.value;
+        }
+        if (result.analysis.businessEmail?.value && result.analysis.businessEmail.confidence > 0) {
+          populated.businessEmail = result.analysis.businessEmail.value;
+        }
+        if (result.analysis.address?.value && result.analysis.address.confidence > 0) {
+          populated.address = result.analysis.address.value;
+        }
+        // Merge discovered social links
+        if (result.analysis.socialLinks) {
+          const discovered = result.analysis.socialLinks;
+          populated.socialLinks = {
+            ...(populated.socialLinks || {}),
+            ...(discovered.linkedin ? { linkedin: discovered.linkedin } : {}),
+            ...(discovered.twitter ? { twitter: discovered.twitter } : {}),
+            ...(discovered.instagram ? { instagram: discovered.instagram } : {}),
+            ...(discovered.facebook ? { facebook: discovered.facebook } : {}),
+          };
+          // Also populate the social URL inputs for the wizard
+          setSocialUrls(prev => ({
+            linkedin: discovered.linkedin || prev.linkedin,
+            twitter: discovered.twitter || prev.twitter,
+            instagram: discovered.instagram || prev.instagram,
+            facebook: discovered.facebook || prev.facebook,
+          }));
+        }
+
         setBusinessProfile(populated);
 
         // Generate follow-up questions for low-confidence fields
@@ -1086,8 +1117,11 @@ const ProfilePage: React.FC = () => {
                   { key: 'valueProp' as const, label: 'Value Proposition', icon: <SparklesIcon className="w-4 h-4" />, type: 'textarea' },
                   { key: 'pricingModel' as const, label: 'Pricing Model', icon: <DocumentIcon className="w-4 h-4" />, type: 'input' },
                   { key: 'salesApproach' as const, label: 'Sales Approach', icon: <BoltIcon className="w-4 h-4" />, type: 'input' },
+                  { key: 'phone' as const, label: 'Phone', icon: <PhoneIcon className="w-4 h-4" />, type: 'input' },
+                  { key: 'businessEmail' as const, label: 'Email', icon: <MailIcon className="w-4 h-4" />, type: 'input' },
+                  { key: 'address' as const, label: 'Address', icon: <MapPinIcon className="w-4 h-4" />, type: 'input' },
                 ]).map(field => {
-                  const confidence = analysisResult[field.key]?.confidence || 0;
+                  const confidence = (analysisResult as Record<string, BusinessAnalysisField | undefined>)[field.key]?.confidence || 0;
                   const confidenceColor = confidence >= 80 ? 'emerald' : confidence >= 50 ? 'amber' : 'rose';
                   const confidenceLabel = confidence >= 80 ? 'High confidence' : confidence >= 50 ? 'Medium' : 'Low — please review';
 

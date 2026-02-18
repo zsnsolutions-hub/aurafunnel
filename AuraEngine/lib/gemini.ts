@@ -702,7 +702,12 @@ export const analyzeBusinessFromWeb = async (
 COMPANY WEBSITE: ${websiteUrl}
 ${socialContext ? `\nSOCIAL MEDIA PROFILES:\n${socialContext}` : ''}
 
-Analyze the company's website and any available online information. Return a JSON object with the following structure. Each field must have a "value" (string) and "confidence" (number 0-100, how certain you are about this information).
+Analyze the company's website and any available online information. Look specifically for:
+- Contact pages, footer sections, and "About Us" pages for phone numbers, email addresses, and physical addresses
+- Social media links in the website header, footer, or contact page
+- Company information, products, target market, and business model
+
+Return a JSON object with the following structure. Each field must have a "value" (string) and "confidence" (number 0-100, how certain you are about this information).
 
 {
   "companyName": { "value": "...", "confidence": 0-100 },
@@ -712,6 +717,15 @@ Analyze the company's website and any available online information. Return a JSO
   "valueProp": { "value": "...", "confidence": 0-100 },
   "pricingModel": { "value": "...", "confidence": 0-100 },
   "salesApproach": { "value": "...", "confidence": 0-100 },
+  "phone": { "value": "+1 555-123-4567", "confidence": 0-100 },
+  "businessEmail": { "value": "contact@example.com", "confidence": 0-100 },
+  "address": { "value": "123 Main St, City, State ZIP", "confidence": 0-100 },
+  "socialLinks": {
+    "linkedin": "https://linkedin.com/company/...",
+    "twitter": "https://twitter.com/...",
+    "instagram": "https://instagram.com/...",
+    "facebook": "https://facebook.com/..."
+  },
   "followUpQuestions": ["question1", "question2"]
 }
 
@@ -719,6 +733,8 @@ Guidelines:
 - For fields you can confidently determine from the website, set confidence 80-100
 - For fields you can reasonably infer, set confidence 50-79
 - For fields you're uncertain about, set confidence below 50 and provide your best guess
+- For phone, businessEmail, and address: only include if actually found on the website. Set confidence to 0 and value to "" if not found
+- For socialLinks: only include platforms that have actual URLs found on the website. Omit platforms not found
 - Generate 2-4 follow-up questions for fields with confidence below 70
 - Return ONLY valid JSON, no markdown or explanation`;
 

@@ -62,6 +62,15 @@ export interface BusinessAnalysisResult {
   valueProp: BusinessAnalysisField;
   pricingModel: BusinessAnalysisField;
   salesApproach: BusinessAnalysisField;
+  phone?: BusinessAnalysisField;
+  businessEmail?: BusinessAnalysisField;
+  address?: BusinessAnalysisField;
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+    instagram?: string;
+    facebook?: string;
+  };
   followUpQuestions: string[];
 }
 
