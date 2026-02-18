@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { UserRole, User } from './types';
 import { supabase } from './lib/supabase';
@@ -65,6 +65,8 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const loggingOutRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -119,6 +121,10 @@ const App: React.FC = () => {
     checkUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || loggingOutRef.current) {
+        setUser(null);
+        return;
+      }
       if (session) {
         const profile = await fetchProfile(session.user.id);
         if (profile) setUser(profile);
@@ -133,9 +139,16 @@ const App: React.FC = () => {
     };
   }, [fetchProfile]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowLogoutModal(false);
+    loggingOutRef.current = true;
     setUser(null);
+    await supabase.auth.signOut({ scope: 'global' });
+    loggingOutRef.current = false;
     navigate('/');
   };
 
@@ -149,6 +162,40 @@ const App: React.FC = () => {
 
   return (
     <ErrorBoundary>
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowLogoutModal(false)} />
+          <div className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center">
+                <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Sign Out?</h3>
+                <p className="text-sm text-slate-500 mt-1">Are you sure you want to sign out of your account?</p>
+              </div>
+              <div className="flex items-center gap-3 w-full pt-2">
+                <button
+                  onClick={() => setShowLogoutModal(false)}
+                  className="flex-1 px-5 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className="flex-1 px-5 py-3 rounded-2xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors shadow-lg shadow-red-100"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route element={<MarketingLayout />}>
