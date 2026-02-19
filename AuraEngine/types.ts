@@ -530,3 +530,67 @@ export interface EmailEngagement {
   topClickedLink?: { label: string; url: string; clicks: number };
   recentEvents: EmailEvent[];
 }
+
+// ── Image Generation Module ──
+
+export type ImageModuleType = 'newsletter' | 'pricing' | 'products' | 'services';
+export type ImageAspectRatio = '1:1' | '4:5' | '16:9';
+export type LogoPlacement = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center-watermark';
+export type LogoSize = 'small' | 'medium' | 'large';
+export type BackgroundStyle = 'solid' | 'gradient' | 'minimal-texture';
+export type FontVibe = 'modern' | 'elegant' | 'bold' | 'minimal';
+
+export interface ImageGenBrandColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  bgStyle: BackgroundStyle;
+}
+
+export interface ImageGenBrandSettings {
+  colors: ImageGenBrandColors;
+  logoAssetId?: string;
+  logoPlacement?: LogoPlacement;
+  logoSize?: LogoSize;
+  logoOpacity?: number;
+  brandName?: string;
+  fontVibe?: FontVibe;
+}
+
+export interface ImageGenBrandAsset {
+  id: string;
+  user_id: string;
+  type: 'logo';
+  file_url: string;
+  file_name?: string;
+  created_at: string;
+}
+
+export interface ImageGenGeneratedImage {
+  id: string;
+  user_id: string;
+  module_type: ImageModuleType;
+  module_id?: string;
+  prompt: string;
+  aspect_ratio: ImageAspectRatio;
+  provider: string;
+  base_image_url: string;
+  final_image_url?: string;
+  brand_settings: ImageGenBrandSettings;
+  created_at: string;
+}
+
+export interface ImageGenRequest {
+  moduleType: ImageModuleType;
+  moduleId?: string;
+  prompt: string;
+  presetId?: string;
+  aspectRatio: ImageAspectRatio;
+  n: number;
+  brand: ImageGenBrandSettings;
+}
+
+export interface ImageGenResponse {
+  generationId: string;
+  images: { id: string; baseImageUrl: string; finalImageUrl?: string }[];
+}

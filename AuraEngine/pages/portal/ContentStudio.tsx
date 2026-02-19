@@ -14,8 +14,9 @@ import {
   DownloadIcon, FlameIcon, SlidersIcon, ArrowRightIcon, StarIcon,
   LinkedInIcon, RecycleIcon, LayersIcon, GridIcon, DocumentIcon,
   KeyboardIcon, HelpCircleIcon, BrainIcon, ActivityIcon, CalendarIcon,
-  TagIcon, MessageIcon, SendIcon, AlertTriangleIcon
+  TagIcon, MessageIcon, SendIcon, AlertTriangleIcon, CameraIcon
 } from '../../components/Icons';
+import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
 
 interface LayoutContext {
   user: User;
@@ -345,6 +346,7 @@ const ContentStudio: React.FC = () => {
   const [sendHistoryLoading, setSendHistoryLoading] = useState(false);
   const [linkedinCopied, setLinkedinCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showImageGen, setShowImageGen] = useState(false);
 
   // ─── AI Generation ───
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -1242,6 +1244,10 @@ const ContentStudio: React.FC = () => {
           <button onClick={() => setShowBatchModal(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
             <LayersIcon className="w-3.5 h-3.5" />
             <span>Batch</span>
+          </button>
+          <button onClick={() => setShowImageGen(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm" title="Generate Image">
+            <CameraIcon className="w-3.5 h-3.5" />
+            <span>Generate Image</span>
           </button>
           <div className="relative">
             <button onClick={() => setShowExportMenu(prev => !prev)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
@@ -3309,6 +3315,7 @@ const ContentStudio: React.FC = () => {
           ))}
         </div>
       )}
+      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} />
     </div>
   );
 };

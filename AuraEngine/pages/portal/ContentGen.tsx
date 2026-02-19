@@ -8,8 +8,9 @@ import {
   ArrowRightIcon, ArrowLeftIcon, CalendarIcon, SendIcon, SplitIcon, ChartIcon,
   TrendUpIcon, TrendDownIcon, TargetIcon, FlameIcon, RefreshIcon,
   KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon,
-  AlertTriangleIcon, ChevronDownIcon
+  AlertTriangleIcon, ChevronDownIcon, CameraIcon
 } from '../../components/Icons';
+import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
 import { supabase } from '../../lib/supabase';
 import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance, fetchCampaignHistory, fetchCampaignRecipients, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { EmailPerformanceEntry, CampaignSummary, CampaignRecipient, ConnectedEmailProvider } from '../../lib/emailTracking';
@@ -357,6 +358,7 @@ const ContentGen: React.FC = () => {
   const [performanceLoading, setPerformanceLoading] = useState(false);
   const [deliveryProgress, setDeliveryProgress] = useState<{ current: number; total: number } | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showImageGen, setShowImageGen] = useState(false);
   const [showPromptLibrary, setShowPromptLibrary] = useState(false);
   const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -1204,6 +1206,14 @@ const ContentGen: React.FC = () => {
           >
             <SendIcon className="w-3.5 h-3.5" />
             <span>Campaigns</span>
+          </button>
+          <button
+            onClick={() => setShowImageGen(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            title="Generate Image"
+          >
+            <CameraIcon className="w-3.5 h-3.5" />
+            <span>Generate Image</span>
           </button>
           {blocks.length > 0 && (
             <div className="relative">
@@ -3256,6 +3266,13 @@ const ContentGen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Image Generator Drawer */}
+      <ImageGeneratorDrawer
+        open={showImageGen}
+        onClose={() => setShowImageGen(false)}
+        moduleType="newsletter"
+      />
     </div>
   );
 };

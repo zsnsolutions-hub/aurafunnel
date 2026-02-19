@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plan } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { CreditCardIcon, SparklesIcon, EditIcon, CheckIcon, BoltIcon } from '../../components/Icons';
+import { CreditCardIcon, SparklesIcon, EditIcon, CheckIcon, BoltIcon, CameraIcon } from '../../components/Icons';
+import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
 
 const PricingManagement: React.FC = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -11,6 +12,7 @@ const PricingManagement: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [showImageGen, setShowImageGen] = useState(false);
 
   // Form states for editing
   const [formPrice, setFormPrice] = useState('');
@@ -100,6 +102,10 @@ const PricingManagement: React.FC = () => {
           <p className="text-slate-500 mt-1">Configure global monetization logic and compute allocation.</p>
         </div>
         <div className="flex flex-col items-end space-y-2">
+          <button onClick={() => setShowImageGen(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm" title="Generate Image">
+            <CameraIcon className="w-3.5 h-3.5" />
+            <span>Generate Image</span>
+          </button>
           {successMsg && (
             <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-100 animate-in slide-in-from-right-4">
               ✓ {successMsg}
@@ -295,6 +301,7 @@ const PricingManagement: React.FC = () => {
           </div>
         </div>
       )}
+      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType="pricing" />
     </div>
   );
 };
