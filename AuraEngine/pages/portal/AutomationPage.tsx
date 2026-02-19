@@ -30,8 +30,10 @@ import {
   MailIcon, RefreshIcon, EditIcon, FlameIcon, TrendUpIcon, CogIcon, TrendDownIcon,
   ArrowRightIcon, ArrowLeftIcon, BellIcon, CalendarIcon, UsersIcon, AlertTriangleIcon,
   EyeIcon, BrainIcon, ShieldIcon, ActivityIcon, KeyboardIcon, FilterIcon, LayersIcon,
-  StarIcon, PieChartIcon, SendIcon
+  StarIcon, PieChartIcon, SendIcon, MessageIcon, PlugIcon, LinkIcon
 } from '../../components/Icons';
+import { useIntegrations, fetchWebhooks as fetchWebhooksFromDb } from '../../lib/integrations';
+import type { WebhookConfig } from '../../types';
 
 interface LayoutContext {
   user: User;
@@ -143,6 +145,9 @@ const ACTION_OPTIONS: { type: ActionType; label: string }[] = [
   { type: 'generate_content', label: 'Generate Content' },
   { type: 'create_alert', label: 'Create Alert' },
   { type: 'move_to_segment', label: 'Move to Segment' },
+  { type: 'notify_slack', label: 'Notify Slack' },
+  { type: 'sync_crm', label: 'Sync to CRM' },
+  { type: 'fire_webhook', label: 'Fire Webhook' },
 ];
 
 const MODEL_OPTIONS = ['gemini-3-flash', 'gemini-3-pro', 'gpt-4o', 'claude-sonnet'];
@@ -185,6 +190,8 @@ const DEFAULT_WORKFLOW: Workflow = {
 const AutomationPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const { integrations: integrationStatuses } = useIntegrations();
+  const [availableWebhooks, setAvailableWebhooks] = useState<WebhookConfig[]>([]);
 
   // ─── Wizard State ───
   const [wizardActive, setWizardActive] = useState(false);
@@ -263,6 +270,11 @@ const AutomationPage: React.FC = () => {
     };
     fetchLeads();
   }, [user?.id]);
+
+  // ─── Load webhooks for fire_webhook action dropdown ───
+  useEffect(() => {
+    fetchWebhooksFromDb().then(setAvailableWebhooks).catch(() => {});
+  }, []);
 
   // ─── Load email summary for all leads (already-emailed detection) ───
   useEffect(() => {
@@ -495,7 +507,7 @@ const AutomationPage: React.FC = () => {
   // ─── Template Effectiveness ───
   const templateEffectiveness = useMemo(() => {
     // Count email sends from execution log by template
-    const emailSteps = executionLog.filter(e => e.step.toLowerCase().includes('email'));
+    const emailSteps = executionLog.filter(e => e.step?.toLowerCase().includes('email'));
     const totalSentFromLog = emailSteps.length;
 
     const templates = EMAIL_TEMPLATES.map(tmpl => {
@@ -1347,6 +1359,23 @@ const AutomationPage: React.FC = () => {
                                 {node.config.aiPersonalization && (
                                   <span className="shrink-0 px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded text-[9px] font-black">AI</span>
                                 )}
+                                {node.type === 'action' && (() => {
+                                  const at = node.config.actionType as string;
+                                  if (at === 'notify_slack') {
+                                    const ok = integrationStatuses.some(i => i.provider === 'slack' && i.status === 'connected');
+                                    return <span className={`shrink-0 w-2.5 h-2.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-rose-400'}`} title={ok ? 'Slack connected' : 'Slack not connected'} />;
+                                  }
+                                  if (at === 'sync_crm') {
+                                    const prov = node.config.crmProvider as string || 'hubspot';
+                                    const ok = integrationStatuses.some(i => i.provider === prov && i.status === 'connected');
+                                    return <span className={`shrink-0 w-2.5 h-2.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-rose-400'}`} title={ok ? `${prov} connected` : `${prov} not connected`} />;
+                                  }
+                                  if (at === 'fire_webhook') {
+                                    const ok = !!(node.config.webhookId && availableWebhooks.some(w => w.id === node.config.webhookId));
+                                    return <span className={`shrink-0 w-2.5 h-2.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-amber-400'}`} title={ok ? 'Webhook configured' : 'No webhook selected'} />;
+                                  }
+                                  return null;
+                                })()}
                                 {isSelected && (
                                   <div className="shrink-0">
                                     <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></div>
@@ -1591,6 +1620,105 @@ const AutomationPage: React.FC = () => {
                               <label className="block text-xs font-bold text-slate-600 mb-1">Assign To</label>
                               <input type="text" value={(selectedNode.config.assignee as string) || ''} onChange={e => updateNodeConfig(selectedNode.id, 'assignee', e.target.value)} placeholder="e.g. sales@company.com" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
                             </div>
+                          )}
+
+                          {(selectedNode.config.actionType as string) === 'notify_slack' && (
+                            <>
+                              {(() => {
+                                const slackConnected = integrationStatuses.some(i => i.provider === 'slack' && i.status === 'connected');
+                                return slackConnected ? (
+                                  <div className="flex items-center space-x-2 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-200 text-xs font-bold text-emerald-700">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                    <span>Slack connected</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center space-x-2 px-3 py-2 bg-rose-50 rounded-xl border border-rose-200 text-xs font-bold text-rose-700">
+                                    <AlertTriangleIcon className="w-3.5 h-3.5" />
+                                    <span>Connect Slack in Integration Hub to use this action</span>
+                                  </div>
+                                );
+                              })()}
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Message Template</label>
+                                <textarea
+                                  value={(selectedNode.config.messageTemplate as string) || ''}
+                                  onChange={e => updateNodeConfig(selectedNode.id, 'messageTemplate', e.target.value)}
+                                  placeholder="*New lead:* {{first_name}} from {{company}} (Score: {{score}})"
+                                  rows={3}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">Leave blank for default format. Supports Slack markdown and {'{{tags}}'}.</p>
+                              </div>
+                            </>
+                          )}
+
+                          {(selectedNode.config.actionType as string) === 'sync_crm' && (
+                            <>
+                              {(() => {
+                                const hubspotConnected = integrationStatuses.some(i => i.provider === 'hubspot' && i.status === 'connected');
+                                const salesforceConnected = integrationStatuses.some(i => i.provider === 'salesforce' && i.status === 'connected');
+                                const anyConnected = hubspotConnected || salesforceConnected;
+                                return anyConnected ? (
+                                  <div className="flex items-center space-x-2 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-200 text-xs font-bold text-emerald-700">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                    <span>{hubspotConnected && salesforceConnected ? 'HubSpot & Salesforce' : hubspotConnected ? 'HubSpot' : 'Salesforce'} connected</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center space-x-2 px-3 py-2 bg-rose-50 rounded-xl border border-rose-200 text-xs font-bold text-rose-700">
+                                    <AlertTriangleIcon className="w-3.5 h-3.5" />
+                                    <span>Connect a CRM in Integration Hub to use this action</span>
+                                  </div>
+                                );
+                              })()}
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">CRM Provider</label>
+                                <select value={selectedNode.config.crmProvider as string || 'hubspot'} onChange={e => updateNodeConfig(selectedNode.id, 'crmProvider', e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                                  <option value="hubspot">HubSpot</option>
+                                  <option value="salesforce">Salesforce</option>
+                                </select>
+                              </div>
+                              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Field Mapping</p>
+                                <div className="space-y-1 text-xs text-slate-600">
+                                  <div className="flex justify-between"><span>Email</span><span className="text-slate-400">lead.email</span></div>
+                                  <div className="flex justify-between"><span>First Name</span><span className="text-slate-400">lead.name (first)</span></div>
+                                  <div className="flex justify-between"><span>Last Name</span><span className="text-slate-400">lead.name (last)</span></div>
+                                  <div className="flex justify-between"><span>Company</span><span className="text-slate-400">lead.company</span></div>
+                                  <div className="flex justify-between"><span>Status</span><span className="text-slate-400">lead.status</span></div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          {(selectedNode.config.actionType as string) === 'fire_webhook' && (
+                            <>
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Webhook</label>
+                                <select value={selectedNode.config.webhookId as string || ''} onChange={e => updateNodeConfig(selectedNode.id, 'webhookId', e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                                  <option value="">Select a webhook...</option>
+                                  {availableWebhooks.map(wh => (
+                                    <option key={wh.id} value={wh.id}>{wh.name} ({wh.trigger_event})</option>
+                                  ))}
+                                </select>
+                                {availableWebhooks.length === 0 && (
+                                  <p className="text-[10px] text-amber-600 mt-1">No webhooks configured. Create one in Integration Hub.</p>
+                                )}
+                              </div>
+                              {selectedNode.config.webhookId && (() => {
+                                const wh = availableWebhooks.find(w => w.id === selectedNode.config.webhookId);
+                                return wh ? (
+                                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                                    <p className="text-xs font-bold text-slate-700">{wh.name}</p>
+                                    <p className="text-[10px] text-slate-400 font-mono truncate">{wh.url}</p>
+                                    <div className="flex items-center space-x-2 text-[10px]">
+                                      <span className={`font-bold ${wh.is_active ? 'text-emerald-600' : 'text-slate-400'}`}>{wh.is_active ? 'Active' : 'Inactive'}</span>
+                                      <span className="text-slate-300">|</span>
+                                      <span className="text-slate-500">{wh.fire_count} fires, {wh.success_rate.toFixed(0)}% success</span>
+                                    </div>
+                                  </div>
+                                ) : null;
+                              })()}
+                            </>
                           )}
                         </>
                       )}

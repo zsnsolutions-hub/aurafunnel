@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom';
 import { User, Lead, ToneType, ContentCategory, EmailSequenceConfig, EmailProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { fetchOwnerEmailPerformance, sendTrackedEmailBatch, scheduleEmailBlock, fetchConnectedEmailProvider } from '../../lib/emailTracking';
+import { fetchOwnerEmailPerformance, sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { ConnectedEmailProvider } from '../../lib/emailTracking';
 import { generateProposalPdf, generateEmailSequencePdf } from '../../lib/pdfExport';
 import { generateEmailSequence, generateContentByCategory, parseEmailSequenceResponse, buildEmailFooter, generateContentSuggestions } from '../../lib/gemini';
@@ -17,6 +17,7 @@ import {
   TagIcon, MessageIcon, SendIcon, AlertTriangleIcon, CameraIcon
 } from '../../components/Icons';
 import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
+import { useIntegrations } from '../../lib/integrations';
 
 interface LayoutContext {
   user: User;
@@ -266,6 +267,7 @@ const ContentStudio: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const { integrations: integrationStatuses } = useIntegrations();
 
   // ─── Content Mode ───
   const [contentMode, setContentMode] = useState<ContentMode>('email');
@@ -331,6 +333,8 @@ const ContentStudio: React.FC = () => {
   // ─── Context Menu ───
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const contextRef = useRef<HTMLDivElement>(null);
+  const emailBodyRef = useRef<HTMLTextAreaElement>(null);
+  const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // ─── Panels ───
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -364,6 +368,12 @@ const ContentStudio: React.FC = () => {
   const [sendingEmails, setSendingEmails] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
   const [segmentFilter, setSegmentFilter] = useState<string>('all');
+
+  // ─── Test Email ───
+  const [showTestEmailModal, setShowTestEmailModal] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [testEmailSending, setTestEmailSending] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; error?: string } | null>(null);
 
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
@@ -514,12 +524,95 @@ const ContentStudio: React.FC = () => {
   const activeStep = steps[activeStepIdx];
   const activeVariant = activeStep?.variants.find(v => v.id === activeStep.activeVariantId) || activeStep?.variants[0];
 
+  const IMAGE_PLACEHOLDER_REGEX = /\[image:(https?:\/\/[^\]]+)\]/g;
+
   const buildHtmlBody = (bodyText: string, footer: string) => {
-    const imagesHtml = emailImages.length > 0
+    // Legacy: prepend images from emailImages array (LinkedIn mode / backward compat)
+    const legacyImagesHtml = emailImages.length > 0
       ? emailImages.map(url => `<div style="margin-bottom:16px;"><img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`).join('')
       : '';
-    return `<div>${imagesHtml}${bodyText.replace(/\n/g, '<br />')}</div>${footer}`;
+    // Replace [image:URL] placeholders with inline <img> tags
+    const htmlBody = bodyText
+      .replace(IMAGE_PLACEHOLDER_REGEX, (_match, url) => `<div style="margin:16px 0;"><img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`)
+      .replace(/\n/g, '<br />');
+    return `<div>${legacyImagesHtml}${htmlBody}</div>${footer}`;
   };
+
+  const parseBodySegments = (text: string): { type: 'text' | 'image'; value: string }[] => {
+    const segments: { type: 'text' | 'image'; value: string }[] = [];
+    const regex = /\[image:(https?:\/\/[^\]]+)\]/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      // Always push a text segment before each image (even if empty)
+      segments.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+      segments.push({ type: 'image', value: match[1] });
+      lastIndex = regex.lastIndex;
+    }
+    // Always push trailing text segment
+    segments.push({ type: 'text', value: text.slice(lastIndex) });
+    return segments;
+  };
+
+  const reconstructBody = (segments: { type: 'text' | 'image'; value: string }[]): string => {
+    return segments.map(seg => seg.type === 'image' ? `[image:${seg.value}]` : seg.value).join('');
+  };
+
+  const moveImageInBody = (imageIndex: number, direction: 'up' | 'down') => {
+    if (!activeVariant) return;
+    const segments = parseBodySegments(activeVariant.body);
+    let count = 0;
+    let segIdx = -1;
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i].type === 'image') {
+        if (count === imageIndex) { segIdx = i; break; }
+        count++;
+      }
+    }
+    if (segIdx === -1) return;
+    if (direction === 'up' && segIdx > 1) {
+      // Swap image with the text segment above it
+      [segments[segIdx - 1], segments[segIdx]] = [segments[segIdx], segments[segIdx - 1]];
+    } else if (direction === 'down' && segIdx < segments.length - 2) {
+      // Swap image with the text segment below it
+      [segments[segIdx], segments[segIdx + 1]] = [segments[segIdx + 1], segments[segIdx]];
+    }
+    updateVariantField('body', reconstructBody(segments));
+  };
+
+  const removeImageFromBody = (imageIndex: number) => {
+    if (!activeVariant) return;
+    const segments = parseBodySegments(activeVariant.body);
+    let count = 0;
+    const newSegments = segments.filter(seg => {
+      if (seg.type === 'image') {
+        if (count === imageIndex) { count++; return false; }
+        count++;
+      }
+      return true;
+    });
+    updateVariantField('body', reconstructBody(newSegments));
+  };
+
+  const updateTextSegment = (segmentIndex: number, newText: string) => {
+    if (!activeVariant) return;
+    const segments = parseBodySegments(activeVariant.body);
+    if (segmentIndex < segments.length && segments[segmentIndex].type === 'text') {
+      segments[segmentIndex] = { ...segments[segmentIndex], value: newText };
+      updateVariantField('body', reconstructBody(segments));
+    }
+  };
+
+  const bodyImageUrls = useMemo(() => {
+    if (!activeVariant) return [];
+    const urls: string[] = [];
+    const regex = /\[image:(https?:\/\/[^\]]+)\]/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(activeVariant.body)) !== null) {
+      urls.push(match[1]);
+    }
+    return urls;
+  }, [activeVariant]);
 
   const aggregatePerformance = useMemo(() => {
     if (!activeVariant) return { openRate: 0, clickRate: 0, replyRate: 0, conversion: 0 };
@@ -895,7 +988,24 @@ const ContentStudio: React.FC = () => {
 
   const insertTag = (tag: string) => {
     if (contentMode === 'email' && activeVariant) {
-      updateVariantField('body', activeVariant.body + ' ' + tag);
+      const el = activeTextareaRef.current;
+      if (el) {
+        const segIdx = parseInt(el.dataset.segIdx || '0', 10);
+        const segments = parseBodySegments(activeVariant.body);
+        if (segIdx < segments.length && segments[segIdx].type === 'text') {
+          const pos = el.selectionStart ?? segments[segIdx].value.length;
+          segments[segIdx] = { ...segments[segIdx], value: segments[segIdx].value.slice(0, pos) + tag + segments[segIdx].value.slice(pos) };
+          updateVariantField('body', reconstructBody(segments));
+          requestAnimationFrame(() => {
+            el.focus();
+            const newPos = pos + tag.length;
+            el.selectionStart = newPos;
+            el.selectionEnd = newPos;
+          });
+        }
+      } else {
+        updateVariantField('body', activeVariant.body + tag);
+      }
     } else if (contentMode === 'linkedin') {
       setLinkedinPost(prev => prev + ' ' + tag);
     }
@@ -1178,6 +1288,45 @@ const ContentStudio: React.FC = () => {
     }
   };
 
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress.trim() || !activeVariant || testEmailSending) return;
+    setTestEmailSending(true);
+    setTestEmailResult(null);
+
+    try {
+      const footer = buildEmailFooter(user.businessProfile);
+      const htmlBody = buildHtmlBody(activeVariant.body, footer);
+
+      // Personalize with first lead data or sample values
+      const sampleLead = leads[0];
+      const personalizedSubject = resolvePersonalizationTags(
+        activeVariant.subject.replace(/\{\{your_name\}\}/gi, user.name || 'Your Name'),
+        sampleLead || {},
+        user.businessProfile
+      );
+      const personalizedHtml = resolvePersonalizationTags(
+        htmlBody.replace(/\{\{your_name\}\}/gi, user.name || 'Your Name'),
+        sampleLead || {},
+        user.businessProfile
+      );
+
+      const result = await sendTrackedEmail({
+        toEmail: testEmailAddress.trim(),
+        subject: `[TEST] ${personalizedSubject}`,
+        htmlBody: personalizedHtml,
+        provider: connectedProvider?.provider as EmailProvider,
+        trackOpens: false,
+        trackClicks: false,
+      });
+
+      setTestEmailResult({ success: result.success, error: result.error });
+    } catch (err: unknown) {
+      setTestEmailResult({ success: false, error: err instanceof Error ? err.message : 'Failed to send test email' });
+    } finally {
+      setTestEmailSending(false);
+    }
+  };
+
   const getSuggestionColor = (cat: string) => {
     if (cat === 'high') return { bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500', text: 'text-emerald-700' };
     if (cat === 'medium') return { bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500', text: 'text-amber-700' };
@@ -1222,6 +1371,11 @@ const ContentStudio: React.FC = () => {
                   {user.businessProfile.companyName}
                 </span>
               )}
+              {integrationStatuses.filter(i => i.status === 'connected').map(i => (
+                <span key={i.provider} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-bold border border-indigo-200 capitalize">
+                  {i.provider}
+                </span>
+              ))}
             </p>
           </div>
         </div>
@@ -1281,14 +1435,24 @@ const ContentStudio: React.FC = () => {
             <span>{aiGenerating ? 'Generating...' : 'Generate with AI'}</span>
           </button>
           {contentMode === 'email' && (
-            <button
-              onClick={() => { setSendResult(null); setShowSendModal(true); }}
-              disabled={!connectedProvider}
-              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <SendIcon className="w-4 h-4" />
-              <span>Send Emails</span>
-            </button>
+            <>
+              <button
+                onClick={() => { setTestEmailResult(null); setShowTestEmailModal(true); }}
+                disabled={!connectedProvider}
+                className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <MailIcon className="w-4 h-4" />
+                <span>Send Test</span>
+              </button>
+              <button
+                onClick={() => { setSendResult(null); setShowSendModal(true); }}
+                disabled={!connectedProvider}
+                className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SendIcon className="w-4 h-4" />
+                <span>Send Emails</span>
+              </button>
+            </>
           )}
           <button onClick={handleSave} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
             {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
@@ -1916,39 +2080,88 @@ const ContentStudio: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <textarea
-                    value={activeVariant.body}
-                    onChange={e => updateVariantField('body', e.target.value)}
-                    onContextMenu={handleContextMenu}
-                    rows={14}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none font-mono"
-                    placeholder="Write your email body here..."
-                  />
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-[10px] text-slate-400">Words: {activeVariant.body.split(/\s+/).filter(Boolean).length}</span>
-                    <span className="text-[10px] text-slate-400">
-                      Tags used: {(activeVariant.body.match(/\{\{[^}]+\}\}/g) || []).length}
-                    </span>
+                  {/* Visual Block Editor */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                    {(() => {
+                      const segments = parseBodySegments(activeVariant.body);
+                      const hasImages = segments.some(s => s.type === 'image');
+                      let imageCount = 0;
+                      return segments.map((seg, segIdx) => {
+                        if (seg.type === 'text') {
+                          return (
+                            <textarea
+                              key={`text-${segIdx}`}
+                              ref={(el) => { if (segIdx === 0) emailBodyRef.current = el; }}
+                              data-seg-idx={segIdx}
+                              value={seg.value}
+                              onChange={e => updateTextSegment(segIdx, e.target.value)}
+                              onFocus={(e) => { activeTextareaRef.current = e.target as HTMLTextAreaElement; }}
+                              onContextMenu={handleContextMenu}
+                              rows={!hasImages ? 14 : Math.max(2, seg.value.split('\n').length + 1)}
+                              className="w-full px-4 py-3 bg-slate-50 text-sm text-slate-700 leading-relaxed focus:ring-2 focus:ring-indigo-500/20 focus:bg-white outline-none resize-none font-mono transition-colors"
+                              placeholder={segIdx === 0 ? 'Write your email body here...' : 'Continue writing...'}
+                            />
+                          );
+                        } else {
+                          const imgIdx = imageCount++;
+                          const isFirst = segIdx <= 1 && segments[0].value === '';
+                          const isLast = segIdx >= segments.length - 2 && segments[segments.length - 1].value === '';
+                          return (
+                            <div key={`img-${segIdx}`} className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-indigo-50/80 to-violet-50/60 border-y border-indigo-100/60">
+                              <img
+                                src={seg.value}
+                                alt={`Image ${imgIdx + 1}`}
+                                className="w-16 h-16 rounded-lg object-cover border-2 border-white shadow-sm flex-shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
+                                  <CameraIcon className="w-3 h-3" />
+                                  Image {imgIdx + 1}
+                                </p>
+                                <p className="text-[10px] text-slate-400 truncate mt-0.5">{seg.value.split('/').pop()}</p>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  onClick={() => moveImageInBody(imgIdx, 'up')}
+                                  disabled={isFirst}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                                  title="Move up"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                                </button>
+                                <button
+                                  onClick={() => moveImageInBody(imgIdx, 'down')}
+                                  disabled={isLast}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                                  title="Move down"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                </button>
+                                <button
+                                  onClick={() => removeImageFromBody(imgIdx)}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-rose-200 text-rose-400 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition-all shadow-sm"
+                                  title="Remove image"
+                                >
+                                  <XIcon className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+                      });
+                    })()}
                   </div>
-                  {emailImages.length > 0 && (
-                    <div className="mt-3">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Attached Images</span>
-                      <div className="mt-1.5 flex flex-wrap gap-2">
-                        {emailImages.map((url, idx) => (
-                          <div key={idx} className="relative group">
-                            <img src={url} alt={`Image ${idx + 1}`} className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
-                            <button
-                              onClick={() => setEmailImages(prev => prev.filter((_, i) => i !== idx))}
-                              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <XIcon className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1">These images will be included at the top of your email.</p>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[10px] text-slate-400">Words: {activeVariant.body.replace(/\[image:https?:\/\/[^\]]+\]/g, '').split(/\s+/).filter(Boolean).length}</span>
+                    <div className="flex items-center space-x-3">
+                      {bodyImageUrls.length > 0 && (
+                        <span className="text-[10px] text-indigo-500 font-semibold">{bodyImageUrls.length} image{bodyImageUrls.length > 1 ? 's' : ''} embedded</span>
+                      )}
+                      <span className="text-[10px] text-slate-400">
+                        Tags used: {(activeVariant.body.match(/\{\{[^}]+\}\}/g) || []).length}
+                      </span>
                     </div>
-                  )}
+                  </div>
                 </div>
               </>
             )}
@@ -2162,11 +2375,21 @@ const ContentStudio: React.FC = () => {
                     </span></p>
                   </div>
                   <div className="p-5">
-                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {resolvePersonalizationTags(
-                        activeVariant.body.replace(/\{\{your_name\}\}/gi, user.name || 'Your Name'),
-                        leads[0] || {},
-                        user.businessProfile
+                    <div className="text-sm text-slate-700 leading-relaxed">
+                      {parseBodySegments(
+                        resolvePersonalizationTags(
+                          activeVariant.body.replace(/\{\{your_name\}\}/gi, user.name || 'Your Name'),
+                          leads[0] || {},
+                          user.businessProfile
+                        )
+                      ).map((seg, i) =>
+                        seg.type === 'image' ? (
+                          <div key={i} style={{ margin: '16px 0' }}>
+                            <img src={seg.value} alt="" className="max-w-full h-auto rounded-lg" />
+                          </div>
+                        ) : (
+                          <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{seg.value}</span>
+                        )
                       )}
                     </div>
                   </div>
@@ -3174,6 +3397,137 @@ const ContentStudio: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* SEND EMAIL MODAL                                             */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* TEST EMAIL MODAL                                              */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showTestEmailModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTestEmailModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-black text-slate-900 flex items-center space-x-2">
+                  <MailIcon className="w-5 h-5 text-amber-500" />
+                  <span>Send Test Email</span>
+                </h2>
+                <p className="text-[10px] text-slate-400 mt-0.5">Preview your email in a real inbox before sending to leads</p>
+              </div>
+              <button onClick={() => setShowTestEmailModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {testEmailResult ? (
+                <div className="text-center py-4">
+                  <div className={`w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center ${testEmailResult.success ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+                    {testEmailResult.success ? <CheckIcon className="w-7 h-7 text-emerald-600" /> : <AlertTriangleIcon className="w-7 h-7 text-rose-600" />}
+                  </div>
+                  <h3 className="text-base font-black text-slate-900">{testEmailResult.success ? 'Test Email Sent!' : 'Send Failed'}</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {testEmailResult.success
+                      ? <>Sent to <span className="font-bold text-slate-700">{testEmailAddress}</span> &mdash; check your inbox</>
+                      : testEmailResult.error || 'Something went wrong'}
+                  </p>
+                  <div className="flex items-center justify-center space-x-2 mt-5">
+                    <button
+                      onClick={() => setTestEmailResult(null)}
+                      className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all"
+                    >
+                      Send Another
+                    </button>
+                    <button
+                      onClick={() => setShowTestEmailModal(false)}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Email Input */}
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1.5">Recipient Email</label>
+                    <input
+                      type="email"
+                      value={testEmailAddress}
+                      onChange={e => setTestEmailAddress(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSendTestEmail(); }}
+                      placeholder="you@example.com"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
+                      autoFocus
+                    />
+                  </div>
+
+                  {/* What will be sent */}
+                  <div className="p-3.5 bg-slate-50 rounded-xl space-y-2">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">What will be sent</p>
+                    {activeVariant && (
+                      <>
+                        <div className="flex items-start space-x-2">
+                          <span className="text-[10px] text-slate-400 mt-0.5 flex-shrink-0 w-12">Subject:</span>
+                          <p className="text-xs font-semibold text-slate-700 truncate">[TEST] {activeVariant.subject || '(empty)'}</p>
+                        </div>
+                        <div className="flex items-start space-x-2">
+                          <span className="text-[10px] text-slate-400 mt-0.5 flex-shrink-0 w-12">Body:</span>
+                          <p className="text-xs text-slate-500 truncate">{activeVariant.body.replace(/\[image:https?:\/\/[^\]]+\]/g, '[image]').slice(0, 80) || '(empty)'}{activeVariant.body.length > 80 ? '...' : ''}</p>
+                        </div>
+                        {bodyImageUrls.length > 0 && (
+                          <div className="flex items-start space-x-2">
+                            <span className="text-[10px] text-slate-400 mt-0.5 flex-shrink-0 w-12">Images:</span>
+                            <p className="text-xs text-slate-500">{bodyImageUrls.length} inline image{bodyImageUrls.length > 1 ? 's' : ''}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {leads.length > 0 && (
+                      <p className="text-[10px] text-slate-400 mt-1">Personalization tags resolved using: <span className="font-bold text-slate-500">{leads[0].name}</span></p>
+                    )}
+                  </div>
+
+                  {/* Provider */}
+                  <div className="p-3 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-0.5">Sending via</p>
+                    {connectedProvider ? (
+                      <p className="text-xs text-slate-700 font-semibold">{connectedProvider.provider.toUpperCase()} &middot; {connectedProvider.from_email}</p>
+                    ) : (
+                      <p className="text-xs text-amber-600 font-semibold">No provider connected</p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => setShowTestEmailModal(false)}
+                      className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSendTestEmail}
+                      disabled={testEmailSending || !testEmailAddress.trim() || !connectedProvider}
+                      className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold text-sm hover:bg-amber-600 transition-all shadow-lg shadow-amber-200 disabled:opacity-50 flex items-center justify-center space-x-2"
+                    >
+                      {testEmailSending ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Sending...</span>
+                        </>
+                      ) : (
+                        <>
+                          <SendIcon className="w-4 h-4" />
+                          <span>Send Test</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSendModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSendModal(false)}>
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -3397,7 +3751,13 @@ const ContentStudio: React.FC = () => {
           ))}
         </div>
       )}
-      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} onInsertImage={(url) => setEmailImages(prev => [...prev, url])} businessProfile={user.businessProfile} insertLabel={contentMode === 'linkedin' ? 'Use in Post' : 'Use in Email'} />
+      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} onInsertImage={(url) => {
+        if (contentMode === 'email' && activeVariant) {
+          updateVariantField('body', activeVariant.body + `[image:${url}]`);
+        } else {
+          setEmailImages(prev => [...prev, url]);
+        }
+      }} businessProfile={user.businessProfile} insertLabel={contentMode === 'linkedin' ? 'Use in Post' : 'Use in Email'} />
     </div>
   );
 };

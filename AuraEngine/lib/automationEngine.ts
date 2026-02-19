@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { sendTrackedEmail, scheduleEmailBlock } from './emailTracking';
 import { personalizeForSend } from './personalization';
 import { generatePersonalizedEmail } from './gemini';
+import { fetchIntegration, updateWebhookStats } from './integrations';
 import type { Lead, EmailTemplate } from '../types';
 
 // ─── Types ───
@@ -491,6 +492,159 @@ async function executeAction(
       return { status: 'pass', message: `Lead assigned to "${assignee}"` };
     }
 
+    case 'notify_slack': {
+      const slack = await fetchIntegration('slack');
+      if (!slack || slack.status !== 'connected') {
+        return { status: 'fail', message: 'Slack is not connected. Connect it in Integration Hub first.' };
+      }
+      const webhookUrl = slack.credentials.webhookUrl;
+      if (!webhookUrl) {
+        return { status: 'fail', message: 'Slack webhook URL not configured' };
+      }
+      try {
+        const messageTemplate = (node.config.messageTemplate as string) || '';
+        const text = messageTemplate
+          ? personalizeForSend(messageTemplate, lead)
+          : `*New lead activity* — ${lead.name} (${lead.company})\nScore: ${lead.score} | Status: ${lead.status}\nEmail: ${lead.email}`;
+
+        const res = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        if (res.ok) {
+          return { status: 'pass', message: `Slack notification sent for "${lead.name}"` };
+        }
+        return { status: 'fail', message: `Slack returned ${res.status}` };
+      } catch (err) {
+        return { status: 'fail', message: `Slack notification failed: ${(err as Error).message}` };
+      }
+    }
+
+    case 'sync_crm': {
+      const crmProvider = (node.config.crmProvider as string) || 'hubspot';
+      const integration = await fetchIntegration(crmProvider === 'salesforce' ? 'salesforce' : 'hubspot');
+      if (!integration || integration.status !== 'connected') {
+        return { status: 'fail', message: `${crmProvider} is not connected. Connect it in Integration Hub first.` };
+      }
+
+      try {
+        if (crmProvider === 'hubspot') {
+          const apiKey = integration.credentials.apiKey;
+          if (!apiKey) return { status: 'fail', message: 'HubSpot API key not configured' };
+
+          const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              properties: {
+                email: lead.email,
+                firstname: lead.name.split(' ')[0] || lead.name,
+                lastname: lead.name.split(' ').slice(1).join(' ') || '',
+                company: lead.company,
+                hs_lead_status: lead.status === 'Qualified' ? 'QUALIFIED' : 'NEW',
+              },
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            return { status: 'pass', message: `Synced "${lead.name}" to HubSpot (ID: ${data.id})` };
+          }
+          const errBody = await res.json().catch(() => ({}));
+          return { status: 'fail', message: `HubSpot sync failed: ${(errBody as any).message || res.status}` };
+        } else {
+          // Salesforce
+          const { instanceUrl, accessToken } = integration.credentials;
+          if (!instanceUrl || !accessToken) return { status: 'fail', message: 'Salesforce credentials incomplete' };
+
+          const baseUrl = instanceUrl.replace(/\/$/, '');
+          const res = await fetch(`${baseUrl}/services/data/v59.0/sobjects/Lead`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              Email: lead.email,
+              FirstName: lead.name.split(' ')[0] || lead.name,
+              LastName: lead.name.split(' ').slice(1).join(' ') || lead.name,
+              Company: lead.company || 'Unknown',
+              Status: lead.status === 'Qualified' ? 'Qualified' : 'Open - Not Contacted',
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            return { status: 'pass', message: `Synced "${lead.name}" to Salesforce (ID: ${data.id})` };
+          }
+          const errBody = await res.json().catch(() => ({}));
+          const errMsg = Array.isArray(errBody) ? errBody.map((e: any) => e.message).join('; ') : (errBody as any).message || String(res.status);
+          return { status: 'fail', message: `Salesforce sync failed: ${errMsg}` };
+        }
+      } catch (err) {
+        return { status: 'fail', message: `CRM sync failed: ${(err as Error).message}` };
+      }
+    }
+
+    case 'fire_webhook': {
+      const webhookId = node.config.webhookId as string;
+      if (!webhookId) {
+        return { status: 'fail', message: 'No webhook selected for this action' };
+      }
+
+      const { data: webhook } = await supabase
+        .from('webhooks')
+        .select('*')
+        .eq('id', webhookId)
+        .single();
+
+      if (!webhook) {
+        return { status: 'fail', message: `Webhook ${webhookId} not found` };
+      }
+
+      try {
+        const payload = JSON.stringify({
+          event: webhook.trigger_event,
+          lead: { id: lead.id, name: lead.name, email: lead.email, company: lead.company, score: lead.score, status: lead.status },
+          timestamp: new Date().toISOString(),
+          workflowId: node.id,
+        });
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+        // HMAC-SHA256 signing if secret exists
+        if (webhook.secret) {
+          const encoder = new TextEncoder();
+          const key = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(webhook.secret),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign']
+          );
+          const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+          const hexSig = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+          headers['X-Webhook-Signature'] = `sha256=${hexSig}`;
+        }
+
+        const res = await fetch(webhook.url, { method: 'POST', headers, body: payload });
+        const success = res.ok;
+        await updateWebhookStats(webhookId, success);
+
+        if (success) {
+          return { status: 'pass', message: `Webhook "${webhook.name}" fired successfully` };
+        }
+        return { status: 'fail', message: `Webhook "${webhook.name}" returned ${res.status}` };
+      } catch (err) {
+        await updateWebhookStats(webhookId, false).catch(() => {});
+        return { status: 'fail', message: `Webhook fire failed: ${(err as Error).message}` };
+      }
+    }
+
     default:
       return { status: 'pass', message: `Action "${node.title}" executed (type: ${actionType})` };
   }
@@ -501,6 +655,9 @@ function inferActionType(node: WorkflowNode): string {
   if (title.includes('email') || title.includes('send')) return 'send_email';
   if (title.includes('status') || title.includes('update')) return 'update_status';
   if (title.includes('tag')) return 'add_tag';
+  if (title.includes('slack')) return 'notify_slack';
+  if (title.includes('crm') || title.includes('hubspot') || title.includes('salesforce')) return 'sync_crm';
+  if (title.includes('webhook')) return 'fire_webhook';
   if (title.includes('alert') || title.includes('notify')) return 'create_alert';
   if (title.includes('assign')) return 'assign_user';
   return 'generic';

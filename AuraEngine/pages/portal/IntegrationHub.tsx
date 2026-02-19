@@ -3,6 +3,16 @@ import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
+  fetchIntegrations as fetchIntegrationsFromDb,
+  upsertIntegration,
+  disconnectIntegration as disconnectIntegrationDb,
+  validateIntegration,
+  fetchWebhooks as fetchWebhooksFromDb,
+  upsertWebhook,
+  deleteWebhook as deleteWebhookDb,
+  updateWebhookStats,
+} from '../../lib/integrations';
+import {
   PlugIcon, PlusIcon, CheckIcon, XIcon, RefreshIcon, CopyIcon, KeyIcon,
   BoltIcon, GlobeIcon, LinkIcon, AlertTriangleIcon, EyeIcon, EditIcon,
   DownloadIcon, BellIcon, ShieldIcon, ActivityIcon, DatabaseIcon,
@@ -212,8 +222,14 @@ const IntegrationHub: React.FC = () => {
   const [genericSetupId, setGenericSetupId] = useState<string | null>(null);
   const [genericSetupApiKey, setGenericSetupApiKey] = useState('');
   const [genericSetupWebhookUrl, setGenericSetupWebhookUrl] = useState('');
+  const [genericSetupInstanceUrl, setGenericSetupInstanceUrl] = useState('');
+  const [genericSetupAccessToken, setGenericSetupAccessToken] = useState('');
+  const [genericSetupMeasurementId, setGenericSetupMeasurementId] = useState('');
+  const [genericSetupApiSecret, setGenericSetupApiSecret] = useState('');
   const [genericSetupSaving, setGenericSetupSaving] = useState(false);
+  const [genericSetupTesting, setGenericSetupTesting] = useState(false);
   const [genericSetupResult, setGenericSetupResult] = useState<'success' | 'error' | null>(null);
+  const [genericSetupError, setGenericSetupError] = useState('');
 
   // ─── Enhanced Wireframe State ───
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -228,18 +244,29 @@ const IntegrationHub: React.FC = () => {
 
   const EMAIL_PROVIDERS = useMemo(() => new Set(['sendgrid', 'gmail', 'smtp', 'mailchimp']), []);
 
-  // ─── Load email provider configs from DB + non-email configs from localStorage ───
+  // ─── Load email provider configs from DB + non-email configs from DB ───
   useEffect(() => {
     (async () => {
       try {
-        // Load non-email integration configs from localStorage
-        let savedConfigs: Record<string, { apiKey: string; webhookUrl?: string; connectedAt: string }> = {};
-        try {
-          const raw = localStorage.getItem('aura_integration_configs');
-          if (raw) savedConfigs = JSON.parse(raw);
-        } catch {}
+        // Load non-email integrations from `integrations` table
+        const dbIntegrations = await fetchIntegrationsFromDb();
 
+        // Load email provider configs from DB
         const { data } = await supabase.from('email_provider_configs').select('provider, is_active, from_email, updated_at');
+
+        // Load webhooks from DB
+        const dbWebhooks = await fetchWebhooksFromDb();
+        if (dbWebhooks.length > 0) {
+          setWebhooks(dbWebhooks.map(wh => ({
+            id: wh.id,
+            name: wh.name,
+            url: wh.url,
+            trigger: wh.trigger_event,
+            lastFired: wh.last_fired || 'Never',
+            active: wh.is_active,
+            successRate: wh.success_rate,
+          })));
+        }
 
         setIntegrations(prev => prev.map(i => {
           // Email providers: check DB
@@ -255,10 +282,10 @@ const IntegrationHub: React.FC = () => {
             return { ...i, status: 'disconnected' as IntegrationStatus };
           }
 
-          // Non-email providers: check localStorage
-          const saved = savedConfigs[i.id];
-          if (saved && saved.apiKey) {
-            const ago = Math.round((Date.now() - new Date(saved.connectedAt).getTime()) / 60000);
+          // Non-email providers: check `integrations` table
+          const dbMatch = dbIntegrations.find(d => d.provider === i.id && d.status === 'connected');
+          if (dbMatch) {
+            const ago = Math.round((Date.now() - new Date(dbMatch.updated_at).getTime()) / 60000);
             const lastSync = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
             return { ...i, status: 'connected' as IntegrationStatus, lastSync, error: undefined };
           }
@@ -424,18 +451,73 @@ const IntegrationHub: React.FC = () => {
     setTestResult(null);
 
     if (EMAIL_PROVIDERS.has(id)) {
-      // Real check: see if config exists and is active
-      const { data } = await supabase.from('email_provider_configs').select('id, is_active').eq('provider', id).eq('is_active', true).limit(1);
-      const success = !!(data && data.length > 0);
-      setTestResult({ id, success });
+      // Actually send a test email via the send-email edge function
+      try {
+        const { data: configRows } = await supabase
+          .from('email_provider_configs')
+          .select('from_email, is_active')
+          .eq('provider', id)
+          .eq('is_active', true)
+          .limit(1);
+
+        if (!configRows || configRows.length === 0) {
+          setTestResult({ id, success: false });
+          setTestingId(null);
+          return;
+        }
+
+        const fromEmail = configRows[0].from_email;
+        if (!fromEmail) {
+          setTestResult({ id, success: false });
+          setTestingId(null);
+          return;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setTestResult({ id, success: false });
+          setTestingId(null);
+          return;
+        }
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const res = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            to_email: fromEmail,
+            subject: `AuraFunnel Test — ${id.toUpperCase()} connection verified`,
+            html_body: `<div style="font-family:sans-serif;padding:20px;"><h2>Connection Test Successful</h2><p>Your <strong>${id.toUpperCase()}</strong> integration is working correctly.</p><p style="color:#888;font-size:12px;">Sent by AuraFunnel at ${new Date().toLocaleString()}</p></div>`,
+            provider: id,
+            track_opens: false,
+            track_clicks: false,
+          }),
+        });
+
+        const result = await res.json();
+        setTestResult({ id, success: !!result.success });
+      } catch {
+        setTestResult({ id, success: false });
+      }
       setTestingId(null);
     } else {
-      // Mock for non-email integrations
-      setTimeout(() => {
-        const success = Math.random() > 0.15;
-        setTestResult({ id, success });
-        setTestingId(null);
-      }, 1500);
+      // Real check: see if integration exists and is connected in DB
+      try {
+        const dbIntegrations = await fetchIntegrationsFromDb();
+        const match = dbIntegrations.find(d => d.provider === id && d.status === 'connected');
+        if (match) {
+          const result = await validateIntegration(id, match.credentials);
+          setTestResult({ id, success: result.success });
+        } else {
+          setTestResult({ id, success: false });
+        }
+      } catch {
+        setTestResult({ id, success: false });
+      }
+      setTestingId(null);
     }
   }, [EMAIL_PROVIDERS]);
 
@@ -446,25 +528,83 @@ const IntegrationHub: React.FC = () => {
         await supabase.from('email_provider_configs').update({ is_active: false }).eq('owner_id', authUser.id).eq('provider', id);
       }
     } else {
-      // Clear non-email integration from localStorage
+      // Disconnect non-email integration in DB
       try {
-        const raw = localStorage.getItem('aura_integration_configs');
-        const configs = raw ? JSON.parse(raw) : {};
-        delete configs[id];
-        localStorage.setItem('aura_integration_configs', JSON.stringify(configs));
-      } catch {}
+        await disconnectIntegrationDb(id);
+      } catch (err) {
+        console.error('Failed to disconnect integration:', err);
+      }
     }
     setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'disconnected' as IntegrationStatus, lastSync: 'Never' } : i));
   }, [EMAIL_PROVIDERS]);
 
   const handleReconnect = useCallback(async (id: string) => {
+    // Open the appropriate setup modal so user can verify credentials before reconnecting
+    // We set the ID directly here instead of calling openEmailSetup/openGenericSetup
+    // to avoid referencing functions defined later in the file.
     if (EMAIL_PROVIDERS.has(id)) {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
-        await supabase.from('email_provider_configs').update({ is_active: true, updated_at: new Date().toISOString() }).eq('owner_id', authUser.id).eq('provider', id);
-      }
+      setEmailSetupResult(null);
+      setEmailSetupTestError('');
+      setEmailSetupSaving(false);
+      setEmailSetupTesting(false);
+
+      // Pre-fill from existing config
+      const isSmtp = id === 'smtp' || id === 'gmail';
+      setEmailSetupApiKey('');
+      setEmailSetupSmtpHost(id === 'gmail' ? 'smtp.gmail.com' : '');
+      setEmailSetupSmtpPort(id === 'gmail' ? '587' : '587');
+      setEmailSetupSmtpUser('');
+      setEmailSetupSmtpPass('');
+      setEmailSetupFromEmail('');
+      setEmailSetupFromName('');
+
+      try {
+        const { data } = await supabase
+          .from('email_provider_configs')
+          .select('*')
+          .eq('provider', id)
+          .limit(1)
+          .single();
+        if (data) {
+          if (data.api_key) setEmailSetupApiKey(data.api_key);
+          if (data.smtp_host) setEmailSetupSmtpHost(data.smtp_host);
+          if (data.smtp_port) setEmailSetupSmtpPort(String(data.smtp_port));
+          if (data.smtp_user) setEmailSetupSmtpUser(data.smtp_user);
+          if (data.smtp_pass) setEmailSetupSmtpPass(data.smtp_pass);
+          if (data.from_email) setEmailSetupFromEmail(data.from_email);
+          if (data.from_name) setEmailSetupFromName(data.from_name);
+        }
+      } catch {}
+
+      setEmailSetupId(id);
+    } else {
+      setGenericSetupApiKey('');
+      setGenericSetupWebhookUrl('');
+      setGenericSetupInstanceUrl('');
+      setGenericSetupAccessToken('');
+      setGenericSetupMeasurementId('');
+      setGenericSetupApiSecret('');
+      setGenericSetupResult(null);
+      setGenericSetupError('');
+      setGenericSetupSaving(false);
+      setGenericSetupTesting(false);
+
+      try {
+        const dbIntegrations = await fetchIntegrationsFromDb();
+        const existing = dbIntegrations.find(d => d.provider === id);
+        if (existing && existing.credentials) {
+          const creds = existing.credentials;
+          if (creds.apiKey) setGenericSetupApiKey(creds.apiKey);
+          if (creds.webhookUrl) setGenericSetupWebhookUrl(creds.webhookUrl);
+          if (creds.instanceUrl) setGenericSetupInstanceUrl(creds.instanceUrl);
+          if (creds.accessToken) setGenericSetupAccessToken(creds.accessToken);
+          if (creds.measurementId) setGenericSetupMeasurementId(creds.measurementId);
+          if (creds.apiSecret) setGenericSetupApiSecret(creds.apiSecret);
+        }
+      } catch {}
+
+      setGenericSetupId(id);
     }
-    setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'connected' as IntegrationStatus, lastSync: 'Just now', error: undefined } : i));
   }, [EMAIL_PROVIDERS]);
 
   const handleConfigure = useCallback((id: string) => {
@@ -481,33 +621,61 @@ const IntegrationHub: React.FC = () => {
     setConfigureId(null);
   }, [configureId, configForm]);
 
-  const handleToggleWebhook = useCallback((id: string) => {
-    setWebhooks(prev => prev.map(w => w.id === id ? { ...w, active: !w.active } : w));
-  }, []);
+  const handleToggleWebhook = useCallback(async (id: string) => {
+    const wh = webhooks.find(w => w.id === id);
+    if (!wh) return;
+    try {
+      await upsertWebhook({ id, name: wh.name, url: wh.url, trigger_event: wh.trigger, is_active: !wh.active });
+      setWebhooks(prev => prev.map(w => w.id === id ? { ...w, active: !w.active } : w));
+    } catch (err) {
+      console.error('Failed to toggle webhook:', err);
+    }
+  }, [webhooks]);
 
-  const handleTestWebhook = useCallback((id: string) => {
+  const handleTestWebhook = useCallback(async (id: string) => {
     setTestingId(`wh-${id}`);
     setTestResult(null);
-    setTimeout(() => {
-      setTestResult({ id: `wh-${id}`, success: true });
-      setTestingId(null);
-    }, 1200);
-  }, []);
+    const wh = webhooks.find(w => w.id === id);
+    if (!wh) { setTestingId(null); return; }
+    try {
+      const res = await fetch(wh.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'test', timestamp: new Date().toISOString(), source: 'AuraFunnel' }),
+      });
+      const success = res.ok;
+      await updateWebhookStats(id, success);
+      setTestResult({ id: `wh-${id}`, success });
+    } catch {
+      await updateWebhookStats(id, false).catch(() => {});
+      setTestResult({ id: `wh-${id}`, success: false });
+    }
+    setTestingId(null);
+  }, [webhooks]);
 
-  const handleAddWebhook = useCallback(() => {
+  const handleAddWebhook = useCallback(async () => {
     if (!webhookForm.name || !webhookForm.url) return;
-    const newWebhook: WebhookData = {
-      id: `wh-${Date.now()}`,
-      name: webhookForm.name,
-      url: webhookForm.url,
-      trigger: webhookForm.trigger,
-      lastFired: 'Never',
-      active: true,
-      successRate: 100,
-    };
-    setWebhooks(prev => [...prev, newWebhook]);
-    setWebhookForm({ name: '', url: '', trigger: 'When lead is created' });
-    setShowAddWebhook(false);
+    try {
+      const saved = await upsertWebhook({
+        name: webhookForm.name,
+        url: webhookForm.url,
+        trigger_event: webhookForm.trigger,
+        is_active: true,
+      });
+      setWebhooks(prev => [...prev, {
+        id: saved.id,
+        name: saved.name,
+        url: saved.url,
+        trigger: saved.trigger_event,
+        lastFired: saved.last_fired || 'Never',
+        active: saved.is_active,
+        successRate: saved.success_rate,
+      }]);
+      setWebhookForm({ name: '', url: '', trigger: 'When lead is created' });
+      setShowAddWebhook(false);
+    } catch (err) {
+      console.error('Failed to add webhook:', err);
+    }
   }, [webhookForm]);
 
   const handleExportConfig = useCallback(() => {
@@ -724,55 +892,117 @@ const IntegrationHub: React.FC = () => {
   }, [emailSetupId, emailSetupApiKey, emailSetupSmtpHost, emailSetupSmtpPort, emailSetupSmtpUser, emailSetupSmtpPass, emailSetupFromEmail, emailSetupFromName]);
 
   // ─── Generic Integration Setup Modal Handlers ───
-  const openGenericSetup = useCallback((id: string) => {
+  const openGenericSetup = useCallback(async (id: string) => {
     setGenericSetupApiKey('');
     setGenericSetupWebhookUrl('');
+    setGenericSetupInstanceUrl('');
+    setGenericSetupAccessToken('');
+    setGenericSetupMeasurementId('');
+    setGenericSetupApiSecret('');
     setGenericSetupResult(null);
+    setGenericSetupError('');
     setGenericSetupSaving(false);
+    setGenericSetupTesting(false);
+
+    // Pre-fill from existing DB config if any
+    try {
+      const dbIntegrations = await fetchIntegrationsFromDb();
+      const existing = dbIntegrations.find(d => d.provider === id);
+      if (existing && existing.credentials) {
+        const creds = existing.credentials;
+        if (creds.apiKey) setGenericSetupApiKey(creds.apiKey);
+        if (creds.webhookUrl) setGenericSetupWebhookUrl(creds.webhookUrl);
+        if (creds.instanceUrl) setGenericSetupInstanceUrl(creds.instanceUrl);
+        if (creds.accessToken) setGenericSetupAccessToken(creds.accessToken);
+        if (creds.measurementId) setGenericSetupMeasurementId(creds.measurementId);
+        if (creds.apiSecret) setGenericSetupApiSecret(creds.apiSecret);
+      }
+    } catch {}
+
     setGenericSetupId(id);
   }, []);
 
-  const handleGenericSetupTest = useCallback(() => {
+  const getGenericCredentials = useCallback((): Record<string, string> => {
+    if (!genericSetupId) return {};
+    switch (genericSetupId) {
+      case 'slack':
+        return { webhookUrl: genericSetupWebhookUrl };
+      case 'hubspot':
+        return { apiKey: genericSetupApiKey };
+      case 'salesforce':
+        return { instanceUrl: genericSetupInstanceUrl, accessToken: genericSetupAccessToken };
+      case 'ga':
+        return { measurementId: genericSetupMeasurementId, apiSecret: genericSetupApiSecret };
+      default:
+        return { apiKey: genericSetupApiKey };
+    }
+  }, [genericSetupId, genericSetupApiKey, genericSetupWebhookUrl, genericSetupInstanceUrl, genericSetupAccessToken, genericSetupMeasurementId, genericSetupApiSecret]);
+
+  const getGenericCategory = useCallback((id: string): string => {
+    const integ = integrations.find(i => i.id === id);
+    if (!integ) return 'crm';
+    switch (integ.category) {
+      case 'crm': return 'crm';
+      case 'marketing': return 'marketing';
+      case 'comms': return 'comms';
+      case 'analytics': return 'analytics';
+      default: return integ.category;
+    }
+  }, [integrations]);
+
+  const handleGenericSetupTest = useCallback(async () => {
     if (!genericSetupId) return;
-    if (!genericSetupApiKey.trim()) {
+    const creds = getGenericCredentials();
+    const hasRequiredFields = Object.values(creds).some(v => v.trim());
+    if (!hasRequiredFields) {
       setGenericSetupResult('error');
+      setGenericSetupError('Please fill in the required fields.');
       return;
     }
-    setGenericSetupSaving(true);
+    setGenericSetupTesting(true);
     setGenericSetupResult(null);
-    setTimeout(() => {
-      setGenericSetupResult('success');
-      setGenericSetupSaving(false);
-    }, 1200);
-  }, [genericSetupId, genericSetupApiKey]);
+    setGenericSetupError('');
 
-  const handleGenericSetupSave = useCallback(() => {
-    if (!genericSetupId || !genericSetupApiKey.trim()) return;
+    try {
+      const result = await validateIntegration(genericSetupId, creds);
+      if (result.success) {
+        setGenericSetupResult('success');
+      } else {
+        setGenericSetupResult('error');
+        setGenericSetupError(result.error || 'Validation failed');
+      }
+    } catch (err) {
+      setGenericSetupResult('error');
+      setGenericSetupError(`Test failed: ${(err as Error).message}`);
+    } finally {
+      setGenericSetupTesting(false);
+    }
+  }, [genericSetupId, getGenericCredentials]);
+
+  const handleGenericSetupSave = useCallback(async () => {
+    if (!genericSetupId) return;
+    const creds = getGenericCredentials();
+    const hasRequiredFields = Object.values(creds).some(v => v.trim());
+    if (!hasRequiredFields) return;
+
     setGenericSetupSaving(true);
+    try {
+      const category = getGenericCategory(genericSetupId);
+      await upsertIntegration(genericSetupId, category, creds);
 
-    setTimeout(() => {
-      // Save to localStorage
-      try {
-        const raw = localStorage.getItem('aura_integration_configs');
-        const configs = raw ? JSON.parse(raw) : {};
-        configs[genericSetupId] = {
-          apiKey: genericSetupApiKey,
-          webhookUrl: genericSetupWebhookUrl || undefined,
-          connectedAt: new Date().toISOString(),
-        };
-        localStorage.setItem('aura_integration_configs', JSON.stringify(configs));
-      } catch {}
-
-      // Update integration state
       setIntegrations(prev => prev.map(i =>
         i.id === genericSetupId
           ? { ...i, status: 'connected' as IntegrationStatus, lastSync: 'Just now', error: undefined }
           : i
       ));
       setGenericSetupId(null);
+    } catch (err) {
+      console.error('Failed to save integration:', err);
+      setGenericSetupError(`Save failed: ${(err as Error).message}`);
+    } finally {
       setGenericSetupSaving(false);
-    }, 800);
-  }, [genericSetupId, genericSetupApiKey, genericSetupWebhookUrl]);
+    }
+  }, [genericSetupId, getGenericCredentials, getGenericCategory]);
 
   const statusColor = (s: IntegrationStatus) =>
     s === 'connected' ? 'emerald' : s === 'partial' ? 'amber' : 'slate';
@@ -2631,7 +2861,8 @@ const IntegrationHub: React.FC = () => {
                 </button>
                 <button
                   onClick={handleEmailSetupActivate}
-                  disabled={emailSetupSaving}
+                  disabled={emailSetupSaving || emailSetupResult !== 'sent'}
+                  title={emailSetupResult !== 'sent' ? 'Send a successful test email first' : ''}
                   className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
                 >
                   {emailSetupSaving ? (
@@ -2659,11 +2890,20 @@ const IntegrationHub: React.FC = () => {
         const integ = integrations.find(i => i.id === genericSetupId);
         if (!integ) return null;
         const instructions: Record<string, string> = {
-          salesforce: 'Find your API key in Salesforce Setup > Apps > API > Generate Security Token.',
-          hubspot: 'Find your API key in HubSpot Settings > Integrations > API Key.',
-          slack: 'Create a Slack App at api.slack.com and use the Bot User OAuth Token.',
-          ga: 'Create a service account key in Google Cloud Console > APIs & Services > Credentials.',
+          salesforce: 'Enter your Salesforce instance URL and access token from Setup > Apps > Connected Apps.',
+          hubspot: 'Create a Private App in HubSpot Settings > Integrations > Private Apps and copy the access token.',
+          slack: 'Create an Incoming Webhook at api.slack.com/apps > Incoming Webhooks and paste the URL.',
+          ga: 'Find your Measurement ID (G-XXXXX) and create an API Secret in GA4 Admin > Data Streams > Measurement Protocol.',
         };
+        const hasRequiredFields = (() => {
+          switch (genericSetupId) {
+            case 'slack': return genericSetupWebhookUrl.trim().length > 0;
+            case 'hubspot': return genericSetupApiKey.trim().length > 0;
+            case 'salesforce': return genericSetupInstanceUrl.trim().length > 0 && genericSetupAccessToken.trim().length > 0;
+            case 'ga': return genericSetupMeasurementId.trim().length > 0 && genericSetupApiSecret.trim().length > 0;
+            default: return genericSetupApiKey.trim().length > 0;
+          }
+        })();
         return (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
@@ -2690,52 +2930,130 @@ const IntegrationHub: React.FC = () => {
 
               {/* Body */}
               <div className="px-6 py-5 space-y-4">
-                {/* API Key */}
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                    API Key
-                  </label>
-                  <input
-                    type="password"
-                    value={genericSetupApiKey}
-                    onChange={e => setGenericSetupApiKey(e.target.value)}
-                    placeholder={`Enter your ${integ.name} API key`}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    {instructions[genericSetupId] || `Enter your ${integ.name} API key to enable the integration.`}
-                  </p>
-                </div>
+                {/* Provider-specific fields */}
+                {genericSetupId === 'slack' && (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                      Webhook URL
+                    </label>
+                    <input
+                      type="url"
+                      value={genericSetupWebhookUrl}
+                      onChange={e => setGenericSetupWebhookUrl(e.target.value)}
+                      placeholder="https://hooks.slack.com/services/T.../B.../xxx"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">{instructions.slack}</p>
+                  </div>
+                )}
 
-                {/* Webhook URL (optional) */}
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                    Webhook URL <span className="normal-case text-slate-400">(optional)</span>
-                  </label>
-                  <input
-                    type="url"
-                    value={genericSetupWebhookUrl}
-                    onChange={e => setGenericSetupWebhookUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Optionally provide a webhook URL for real-time event notifications.
-                  </p>
-                </div>
+                {genericSetupId === 'hubspot' && (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                      Private App Token
+                    </label>
+                    <input
+                      type="password"
+                      value={genericSetupApiKey}
+                      onChange={e => setGenericSetupApiKey(e.target.value)}
+                      placeholder="pat-xx-xxxxxxxx-xxxx-xxxx"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">{instructions.hubspot}</p>
+                  </div>
+                )}
+
+                {genericSetupId === 'salesforce' && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                        Instance URL
+                      </label>
+                      <input
+                        type="url"
+                        value={genericSetupInstanceUrl}
+                        onChange={e => setGenericSetupInstanceUrl(e.target.value)}
+                        placeholder="https://yourorg.my.salesforce.com"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                        Access Token
+                      </label>
+                      <input
+                        type="password"
+                        value={genericSetupAccessToken}
+                        onChange={e => setGenericSetupAccessToken(e.target.value)}
+                        placeholder="00D..."
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400">{instructions.salesforce}</p>
+                  </>
+                )}
+
+                {genericSetupId === 'ga' && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                        Measurement ID
+                      </label>
+                      <input
+                        type="text"
+                        value={genericSetupMeasurementId}
+                        onChange={e => setGenericSetupMeasurementId(e.target.value)}
+                        placeholder="G-XXXXXXXXXX"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                        API Secret
+                      </label>
+                      <input
+                        type="password"
+                        value={genericSetupApiSecret}
+                        onChange={e => setGenericSetupApiSecret(e.target.value)}
+                        placeholder="Enter your API secret"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400">{instructions.ga}</p>
+                  </>
+                )}
+
+                {/* Fallback: generic API key for unknown providers */}
+                {!['slack', 'hubspot', 'salesforce', 'ga'].includes(genericSetupId) && (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                      API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={genericSetupApiKey}
+                      onChange={e => setGenericSetupApiKey(e.target.value)}
+                      placeholder={`Enter your ${integ.name} API key`}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {instructions[genericSetupId] || `Enter your ${integ.name} API key to enable the integration.`}
+                    </p>
+                  </div>
+                )}
 
                 {/* Test result */}
                 {genericSetupResult && (
-                  <div className={`flex items-center space-x-2 px-4 py-3 rounded-xl text-xs font-bold ${
+                  <div className={`flex items-start space-x-2 px-4 py-3 rounded-xl text-xs font-bold ${
                     genericSetupResult === 'success'
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                       : 'bg-rose-50 text-rose-700 border border-rose-100'
                   }`}>
-                    {genericSetupResult === 'success' ? <CheckIcon className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                    {genericSetupResult === 'success' ? <CheckIcon className="w-4 h-4 mt-0.5 shrink-0" /> : <XIcon className="w-4 h-4 mt-0.5 shrink-0" />}
                     <span>
                       {genericSetupResult === 'success'
                         ? 'Connection test passed! Click "Save & Connect" to finish.'
-                        : 'Please enter a valid API key.'}
+                        : genericSetupError || 'Validation failed. Please check your credentials.'}
                     </span>
                   </div>
                 )}
@@ -2745,10 +3063,10 @@ const IntegrationHub: React.FC = () => {
               <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
                 <button
                   onClick={handleGenericSetupTest}
-                  disabled={genericSetupSaving}
+                  disabled={genericSetupTesting || genericSetupSaving}
                   className="flex items-center space-x-2 px-4 py-2.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-100 transition-all disabled:opacity-50"
                 >
-                  {genericSetupSaving && genericSetupResult === null ? (
+                  {genericSetupTesting ? (
                     <>
                       <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
                       <span>Testing...</span>
@@ -2769,10 +3087,10 @@ const IntegrationHub: React.FC = () => {
                   </button>
                   <button
                     onClick={handleGenericSetupSave}
-                    disabled={genericSetupSaving || !genericSetupApiKey.trim()}
+                    disabled={genericSetupSaving || !hasRequiredFields}
                     className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
                   >
-                    {genericSetupSaving && genericSetupResult !== null ? (
+                    {genericSetupSaving ? (
                       <>
                         <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
                         <span>Saving...</span>

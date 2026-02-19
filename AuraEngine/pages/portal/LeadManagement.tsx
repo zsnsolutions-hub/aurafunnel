@@ -6,6 +6,7 @@ import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom
 import { fetchBatchEmailSummary } from '../../lib/emailTracking';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
+import { useIntegrations, fetchIntegration } from '../../lib/integrations';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
 
@@ -127,6 +128,9 @@ const LeadManagement: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { integrations: integrationStatuses } = useIntegrations();
+  const crmConnected = useMemo(() => integrationStatuses.some(i => (i.provider === 'hubspot' || i.provider === 'salesforce') && i.status === 'connected'), [integrationStatuses]);
+  const [syncingCrm, setSyncingCrm] = useState<string | null>(null);
 
   // ── Data State ──
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
@@ -524,6 +528,54 @@ const LeadManagement: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const handleSyncToCrm = useCallback(async (leadId: string) => {
+    setSyncingCrm(leadId);
+    try {
+      const lead = allLeads.find(l => l.id === leadId);
+      if (!lead) return;
+
+      // Determine which CRM is connected
+      const hubspot = integrationStatuses.find(i => i.provider === 'hubspot' && i.status === 'connected');
+      const salesforce = integrationStatuses.find(i => i.provider === 'salesforce' && i.status === 'connected');
+      const provider = hubspot ? 'hubspot' : salesforce ? 'salesforce' : null;
+      if (!provider) return;
+
+      const integration = await fetchIntegration(provider);
+      if (!integration) return;
+
+      if (provider === 'hubspot' && integration.credentials.apiKey) {
+        await fetch('https://api.hubapi.com/crm/v3/objects/contacts', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${integration.credentials.apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            properties: {
+              email: lead.email,
+              firstname: lead.name.split(' ')[0] || lead.name,
+              lastname: lead.name.split(' ').slice(1).join(' ') || '',
+              company: lead.company,
+            },
+          }),
+        });
+      } else if (provider === 'salesforce' && integration.credentials.instanceUrl && integration.credentials.accessToken) {
+        const baseUrl = integration.credentials.instanceUrl.replace(/\/$/, '');
+        await fetch(`${baseUrl}/services/data/v59.0/sobjects/Lead`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${integration.credentials.accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            Email: lead.email,
+            FirstName: lead.name.split(' ')[0] || lead.name,
+            LastName: lead.name.split(' ').slice(1).join(' ') || lead.name,
+            Company: lead.company || 'Unknown',
+          }),
+        });
+      }
+    } catch (err) {
+      console.error('CRM sync failed:', err);
+    } finally {
+      setSyncingCrm(null);
+    }
+  }, [allLeads, integrationStatuses]);
 
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1522,6 +1574,18 @@ const LeadManagement: React.FC = () => {
                   )}
                 </div>
 
+                {/* Sync to CRM */}
+                {crmConnected && (
+                  <button
+                    onClick={() => { selectedIds.forEach(id => handleSyncToCrm(id)); }}
+                    disabled={!!syncingCrm}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all disabled:opacity-50"
+                  >
+                    <GlobeIcon className="w-3.5 h-3.5" />
+                    <span>{syncingCrm ? 'Syncing...' : 'Sync to CRM'}</span>
+                  </button>
+                )}
+
                 {/* Export */}
                 <button
                   onClick={handleExportSelected}
@@ -1882,6 +1946,16 @@ const LeadManagement: React.FC = () => {
                             >
                               <MailIcon className="w-4 h-4" />
                             </button>
+                            {crmConnected && (
+                              <button
+                                onClick={(ev) => { ev.stopPropagation(); handleSyncToCrm(lead.id); }}
+                                title="Sync to CRM"
+                                disabled={syncingCrm === lead.id}
+                                className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all disabled:opacity-50"
+                              >
+                                <GlobeIcon className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               title="Call"
                               className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"

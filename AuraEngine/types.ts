@@ -402,7 +402,7 @@ export interface AlertRule {
 
 // Module 5: Workflow Automation
 export type TriggerType = 'score_change' | 'status_change' | 'lead_created' | 'time_elapsed' | 'tag_added' | 'content_generated';
-export type ActionType = 'send_email' | 'update_status' | 'add_tag' | 'assign_user' | 'generate_content' | 'create_alert' | 'move_to_segment';
+export type ActionType = 'send_email' | 'update_status' | 'add_tag' | 'assign_user' | 'generate_content' | 'create_alert' | 'move_to_segment' | 'notify_slack' | 'sync_crm' | 'fire_webhook';
 
 export interface AutomationTrigger {
   type: TriggerType;
@@ -693,4 +693,29 @@ export interface ImageGenRequest {
 export interface ImageGenResponse {
   generationId: string;
   images: { id: string; baseImageUrl: string; finalImageUrl?: string }[];
+}
+
+// ── Integration Hub ──
+
+export interface Integration {
+  id: string;
+  provider: string;
+  category: string;
+  status: 'connected' | 'disconnected' | 'error';
+  credentials: Record<string, string>;
+  metadata: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface WebhookConfig {
+  id: string;
+  name: string;
+  url: string;
+  trigger_event: string;
+  is_active: boolean;
+  secret?: string;
+  last_fired?: string;
+  success_rate: number;
+  fire_count: number;
+  fail_count: number;
 }

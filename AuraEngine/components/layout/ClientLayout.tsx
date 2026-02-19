@@ -11,6 +11,7 @@ import DailyBriefing from '../dashboard/DailyBriefing';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { useIntegrations } from '../../lib/integrations';
 
 interface ClientLayoutProps {
   user: User;
@@ -27,6 +28,8 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gPressedRef = useRef(false);
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { integrations: integrationStatuses } = useIntegrations();
+  const activeIntegrationCount = integrationStatuses.filter(i => i.status === 'connected').length;
 
   const navItems = [
     { label: 'Main Dashboard', path: '/portal', icon: <Target size={20} /> },
@@ -41,7 +44,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChart size={20} /> },
     { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranch size={20} /> },
     { label: 'AI Prompt Studio', path: '/portal/model-training', icon: <SlidersHorizontal size={20} /> },
-    { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} /> },
+    { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },
     { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCard size={20} /> },
     { label: 'Help Center', path: '/portal/help', icon: <HelpCircle size={20} /> },
     { label: 'User Manual', path: '/portal/manual', icon: <BookOpen size={20} /> },
