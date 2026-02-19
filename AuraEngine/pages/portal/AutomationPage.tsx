@@ -19,8 +19,10 @@ import { generateWorkflowOptimization } from '../../lib/gemini';
 import {
   fetchCampaignHistory,
   fetchCampaignRecipients,
+  fetchBatchEmailSummary,
   type CampaignSummary,
   type CampaignRecipient,
+  type BatchEmailSummary,
 } from '../../lib/emailTracking';
 import {
   BoltIcon, PlusIcon, XIcon, CheckIcon, SparklesIcon, ClockIcon,
@@ -238,6 +240,9 @@ const AutomationPage: React.FC = () => {
   const [campaignRecipients, setCampaignRecipients] = useState<CampaignRecipient[]>([]);
   const [campaignRecipientsLoading, setCampaignRecipientsLoading] = useState(false);
 
+  // ─── Already-emailed lead tracking ───
+  const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
+
   // ─── Real execution data ───
   const [executionLog, setExecutionLog] = useState<ExecutionLogEntry[]>([]);
   const [realNodePerformance, setRealNodePerformance] = useState<NodePerformanceMetric[]>([]);
@@ -258,6 +263,16 @@ const AutomationPage: React.FC = () => {
     };
     fetchLeads();
   }, [user?.id]);
+
+  // ─── Load email summary for all leads (already-emailed detection) ───
+  useEffect(() => {
+    if (leads.length === 0) return;
+    let cancelled = false;
+    fetchBatchEmailSummary(leads.map(l => l.id)).then(map => {
+      if (!cancelled) setEmailSummaryMap(map);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [leads]);
 
   // ─── Load workflows from Supabase on mount ───
   useEffect(() => {
@@ -686,6 +701,10 @@ const AutomationPage: React.FC = () => {
       // Refresh campaigns panel if open
       if (showCampaignsPanel) {
         fetchCampaignHistory().then(setCampaignHistory).catch(() => {});
+      }
+      // Refresh emailed-lead badges
+      if (leads.length > 0) {
+        fetchBatchEmailSummary(leads.map(l => l.id)).then(setEmailSummaryMap).catch(() => {});
       }
     } catch (err) {
       setTestResults({
@@ -1732,6 +1751,7 @@ const AutomationPage: React.FC = () => {
                   {filteredLeads.map(lead => {
                     const isSelected = testLeadIds.has(lead.id);
                     const hasEmail = !!lead.email;
+                    const emailed = emailSummaryMap.get(lead.id);
                     return (
                       <label
                         key={lead.id}
@@ -1750,6 +1770,9 @@ const AutomationPage: React.FC = () => {
                             <span className="text-sm font-bold text-slate-800 truncate">{lead.name}</span>
                             {!hasEmail && (
                               <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded text-[9px] font-black shrink-0">NO EMAIL</span>
+                            )}
+                            {emailed?.hasSent && (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black shrink-0">EMAILED</span>
                             )}
                           </div>
                           <div className="flex items-center space-x-2 mt-0.5">
@@ -1962,6 +1985,7 @@ const AutomationPage: React.FC = () => {
                         <input type="checkbox" checked={testLeadIds.has(lead.id)} onChange={() => toggleTestLead(lead.id)} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                         <span className="text-sm text-slate-700 flex-1 truncate">{lead.name}</span>
                         {!lead.email && <span className="text-[9px] font-black text-rose-500">NO EMAIL</span>}
+                        {emailSummaryMap.get(lead.id)?.hasSent && <span className="text-[9px] font-black text-amber-600">EMAILED</span>}
                         <span className="text-xs text-slate-400">Score: {lead.score}</span>
                       </label>
                     )) : (
