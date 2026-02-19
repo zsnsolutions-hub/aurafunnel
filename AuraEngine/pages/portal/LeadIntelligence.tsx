@@ -2,6 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { fetchBatchEmailSummary, fetchLeadEmailEngagement } from '../../lib/emailTracking';
+import type { BatchEmailSummary } from '../../lib/emailTracking';
+import type { EmailEngagement, AIInsight } from '../../types';
+import { generateProgrammaticInsights } from '../../lib/insights';
+import { getWorkflowStats } from '../../lib/automationEngine';
 import {
   BrainIcon, TargetIcon, FlameIcon, SparklesIcon, TrendUpIcon, TrendDownIcon,
   RefreshIcon, FilterIcon, DownloadIcon, SlidersIcon, MailIcon, GlobeIcon,
@@ -124,6 +129,21 @@ const renderStars = (score: number) => {
   );
 };
 
+// Map insight IDs to portal navigation targets
+const getInsightNavigationTarget = (insight: AIInsight): string | undefined => {
+  switch (insight.id) {
+    case 'score-hot': return '/portal/leads?scoreFilter=50-100';
+    case 'score-cold': return '/portal/leads?scoreFilter=0-40';
+    case 'conversion-new': return '/portal/leads?statusFilter=New';
+    case 'conversion-rate': return '/portal/leads?statusFilter=Qualified';
+    case 'conversion-lost': return '/portal/leads?statusFilter=Lost';
+    case 'company-cluster': return '/portal/leads';
+    case 'timing-recent': return '/portal/leads';
+    case 'score-avg': return '/portal/intelligence';
+    default: return undefined;
+  }
+};
+
 const LeadIntelligence: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
@@ -143,6 +163,13 @@ const LeadIntelligence: React.FC = () => {
   const [focusedLeadIndex, setFocusedLeadIndex] = useState(-1);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [alertThresholds, setAlertThresholds] = useState({ hot: 75, warm: 50, cold: 25 });
+
+  // ── Real Data State ──
+  const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
+  const [selectedLeadEngagement, setSelectedLeadEngagement] = useState<EmailEngagement | null>(null);
+  const [engagementLoading, setEngagementLoading] = useState(false);
+  const [realInsights, setRealInsights] = useState<AIInsight[]>([]);
+  const [workflowStats, setWorkflowStats] = useState<{ totalWorkflows: number; activeWorkflows: number; totalExecutions: number; totalLeadsProcessed: number; successRate: number } | null>(null);
 
   // ─── Fetch ───
   const fetchData = useCallback(async () => {
@@ -171,6 +198,35 @@ const LeadIntelligence: React.FC = () => {
   }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Batch email summary ──
+  useEffect(() => {
+    if (leads.length === 0) return;
+    const leadIds = leads.map(l => l.id);
+    fetchBatchEmailSummary(leadIds).then(map => setEmailSummaryMap(map)).catch(console.error);
+  }, [leads]);
+
+  // ── Real insights ──
+  useEffect(() => {
+    if (leads.length === 0) { setRealInsights([]); return; }
+    setRealInsights(generateProgrammaticInsights(leads));
+  }, [leads]);
+
+  // ── Workflow stats ──
+  useEffect(() => {
+    if (!user?.id) return;
+    getWorkflowStats(user.id).then(stats => setWorkflowStats(stats)).catch(console.error);
+  }, [user?.id]);
+
+  // ── Per-lead engagement ──
+  useEffect(() => {
+    if (!selectedLeadId) { setSelectedLeadEngagement(null); return; }
+    setEngagementLoading(true);
+    fetchLeadEmailEngagement(selectedLeadId)
+      .then(data => setSelectedLeadEngagement(data))
+      .catch(console.error)
+      .finally(() => setEngagementLoading(false));
+  }, [selectedLeadId]);
 
   // ─── Computed ───
   const buckets = useMemo(() => {
@@ -259,20 +315,28 @@ const LeadIntelligence: React.FC = () => {
     }).sort((a, b) => b.delta - a.delta);
   }, [leads]);
 
-  // ── AI Recommendations ──
+  // ── AI Recommendations (from real insights) ──
   const aiRecommendations = useMemo(() => {
-    const recs: { id: string; priority: 'high' | 'medium' | 'low'; title: string; description: string; action: string }[] = [];
-    const stale = leads.filter(l => l.status === 'New' && l.score > 50);
-    if (stale.length > 0) recs.push({ id: 'stale', priority: 'high', title: 'High-Score Leads Uncontacted', description: `${stale.length} lead${stale.length > 1 ? 's' : ''} with score >50 still in "New" status. Contact within 24hrs for best conversion.`, action: 'View Leads' });
-    const hotNoQual = leads.filter(l => l.score > 80 && l.status !== 'Qualified');
-    if (hotNoQual.length > 0) recs.push({ id: 'hotnoq', priority: 'high', title: 'Hot Leads Need Qualification', description: `${hotNoQual.length} lead${hotNoQual.length > 1 ? 's' : ''} scoring 80+ are not yet qualified. Move to qualified or schedule meetings.`, action: 'Review' });
-    if (kpiStats.scoreVariance > 25) recs.push({ id: 'variance', priority: 'medium', title: 'High Score Variance', description: `Score variance of ${kpiStats.scoreVariance} indicates inconsistent lead quality. Consider tightening lead sources.`, action: 'Analyze' });
-    if (kpiStats.hotPct < 15) recs.push({ id: 'lowhot', priority: 'medium', title: 'Low Hot Lead Percentage', description: `Only ${kpiStats.hotPct}% of leads are hot. Focus on nurturing warm leads with targeted content.`, action: 'Create Content' });
-    const coldLeads = leads.filter(l => l.score <= 25);
-    if (coldLeads.length > 5) recs.push({ id: 'cold', priority: 'low', title: 'Cold Lead Cleanup', description: `${coldLeads.length} cold leads. Consider archiving or running a re-engagement campaign.`, action: 'Clean Up' });
-    if (recs.length === 0) recs.push({ id: 'healthy', priority: 'low', title: 'Pipeline Looking Healthy', description: 'No urgent issues detected. Keep monitoring engagement patterns and score trends.', action: 'Dashboard' });
-    return recs;
-  }, [leads, kpiStats]);
+    if (realInsights.length === 0) return [];
+    return realInsights.map(insight => {
+      const priorityMap: Record<string, 'high' | 'medium' | 'low'> = {
+        score: insight.confidence > 85 ? 'high' : 'medium',
+        conversion: 'high',
+        engagement: 'medium',
+        company: 'medium',
+        timing: 'low',
+      };
+      return {
+        id: insight.id,
+        priority: priorityMap[insight.category] || 'medium',
+        title: insight.title,
+        description: insight.description,
+        action: insight.action || 'View Details',
+        confidence: insight.confidence,
+        navigateTo: getInsightNavigationTarget(insight),
+      };
+    });
+  }, [realInsights]);
 
   // ── Engagement Heatmap Data ──
   const engagementHeatmap = useMemo(() => {
@@ -292,21 +356,43 @@ const LeadIntelligence: React.FC = () => {
   // ── Signal Strength Data ──
   const signalStrengths = useMemo(() => {
     if (!leadFactors) return [];
+    // Use real email engagement data when available
+    const emailSignal = selectedLeadEngagement && selectedLeadEngagement.totalSent > 0
+      ? Math.min(100, Math.round(
+          ((selectedLeadEngagement.uniqueOpens / Math.max(1, selectedLeadEngagement.totalSent)) * 60) +
+          ((selectedLeadEngagement.uniqueClicks / Math.max(1, selectedLeadEngagement.totalSent)) * 40)
+        ))
+      : leadFactors.emailEngagement;
     return [
-      { label: 'Email', value: leadFactors.emailEngagement, color: '#6366f1' },
+      { label: 'Email', value: emailSignal, color: '#6366f1' },
       { label: 'Website', value: leadFactors.websiteActivity, color: '#8b5cf6' },
       { label: 'Company', value: leadFactors.companyFit, color: '#10b981' },
       { label: 'Social', value: Math.min(100, leadFactors.emailEngagement - 10 + Math.floor(Math.random() * 20)), color: '#f59e0b' },
       { label: 'Content', value: Math.min(100, leadFactors.websiteActivity - 5 + Math.floor(Math.random() * 15)), color: '#ef4444' },
       { label: 'Timing', value: Math.min(100, 30 + Math.floor(Math.random() * 40)), color: '#64748b' },
     ];
-  }, [leadFactors]);
+  }, [leadFactors, selectedLeadEngagement]);
 
   // ─── Handlers ───
-  const handleRefreshScores = () => {
+  const handleRefreshScores = async () => {
     setRefreshing(true);
-    setAiConfidence(+(92 + Math.random() * 5).toFixed(1));
-    setTimeout(() => setRefreshing(false), 1200);
+    try {
+      await fetchData();
+      if (leads.length > 0) {
+        const leadIds = leads.map(l => l.id);
+        const [summaryMap, wfStats] = await Promise.all([
+          fetchBatchEmailSummary(leadIds),
+          user?.id ? getWorkflowStats(user.id) : Promise.resolve(null),
+        ]);
+        setEmailSummaryMap(summaryMap);
+        setRealInsights(generateProgrammaticInsights(leads));
+        if (wfStats) setWorkflowStats(wfStats);
+      }
+    } catch (err) {
+      console.error('Refresh error:', err);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleWeightChange = (id: string, newWeight: number) => {
@@ -455,17 +541,25 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* KPI STATS ROW                                                */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      {leads.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {[
+      {leads.length > 0 && (() => {
+        const emailEngagedCount = Array.from(emailSummaryMap.values()).filter(s => s.hasOpened).length;
+        const potentialClientsCount = Array.from(emailSummaryMap.values()).filter(s => s.openCount >= 2).length;
+        const kpiCards: { label: string; value: string; icon: React.ReactNode; color: string; sub: string; onClick?: () => void }[] = [
             { label: 'Leads Analyzed', value: kpiStats.leadsAnalyzed.toString(), icon: <UsersIcon className="w-4 h-4" />, color: 'indigo', sub: `${buckets.hot.count} hot` },
             { label: 'Avg Score', value: kpiStats.avgScore.toString(), icon: <TargetIcon className="w-4 h-4" />, color: kpiStats.avgScore >= 60 ? 'emerald' : 'amber', sub: `Median: ${kpiStats.medianScore}` },
             { label: 'Hot Lead %', value: `${kpiStats.hotPct}%`, icon: <FlameIcon className="w-4 h-4" />, color: 'rose', sub: `${buckets.hot.count} of ${leads.length}` },
-            { label: 'AI Confidence', value: `${aiConfidence}%`, icon: <BrainIcon className="w-4 h-4" />, color: 'violet', sub: 'Model accuracy' },
+            { label: 'Email Engaged', value: emailEngagedCount.toString(), icon: <MailIcon className="w-4 h-4" />, color: 'violet', sub: `of ${leads.length} leads opened` },
             { label: 'Score Variance', value: kpiStats.scoreVariance.toString(), icon: <ActivityIcon className="w-4 h-4" />, color: kpiStats.scoreVariance > 25 ? 'amber' : 'slate', sub: kpiStats.scoreVariance > 25 ? 'High spread' : 'Normal' },
-            { label: 'Factors Active', value: `${factors.filter(f => f.enabled).length}/${factors.length}`, icon: <SlidersIcon className="w-4 h-4" />, color: 'sky', sub: `${factors.reduce((a, b) => a + b.weight, 0)}% allocated` },
-          ].map((stat, i) => (
-            <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-all group">
+            { label: 'Potential Clients', value: potentialClientsCount.toString(), icon: <StarIcon className="w-4 h-4" />, color: 'sky', sub: '2+ email opens', onClick: () => navigate('/portal/leads?followUp=true') },
+        ];
+        return (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {kpiCards.map((stat, i) => (
+            <div
+              key={i}
+              onClick={stat.onClick}
+              className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-all group ${stat.onClick ? 'cursor-pointer' : ''}`}
+            >
               <div className="flex items-center justify-between mb-2">
                 <span className={`p-2 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 group-hover:scale-110 transition-transform`}>
                   {stat.icon}
@@ -476,6 +570,28 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
               <p className="text-[10px] text-slate-400 mt-1">{stat.sub}</p>
             </div>
           ))}
+        </div>
+        );
+      })()}
+
+      {/* ── Workflow Stats Bar ── */}
+      {workflowStats && workflowStats.totalWorkflows > 0 && (
+        <div className="flex items-center space-x-6 px-5 py-3 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="flex items-center space-x-1.5 text-xs text-slate-600">
+            <BoltIcon className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="font-bold">{workflowStats.totalLeadsProcessed}</span>
+            <span className="text-slate-400">leads automated</span>
+          </div>
+          <div className="flex items-center space-x-1.5 text-xs text-slate-600">
+            <CheckIcon className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="font-bold">{workflowStats.successRate}%</span>
+            <span className="text-slate-400">success rate</span>
+          </div>
+          <div className="flex items-center space-x-1.5 text-xs text-slate-600">
+            <ClockIcon className="w-3.5 h-3.5 text-amber-500" />
+            <span className="font-bold">{workflowStats.activeWorkflows}</span>
+            <span className="text-slate-400">active workflows</span>
+          </div>
         </div>
       )}
 
@@ -504,7 +620,18 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                 </div>
                 <h4 className="text-xs font-bold text-slate-800 mb-1">{rec.title}</h4>
                 <p className="text-[11px] text-slate-500 leading-relaxed">{rec.description}</p>
-                <button className="mt-3 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center space-x-1">
+                {rec.confidence && (
+                  <div className="mt-2 flex items-center space-x-2">
+                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-indigo-400 rounded-full transition-all duration-500" style={{ width: `${rec.confidence}%` }}></div>
+                    </div>
+                    <span className="text-[9px] font-bold text-slate-400">{rec.confidence}%</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => { if (rec.navigateTo) navigate(rec.navigateTo); }}
+                  className="mt-3 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center space-x-1"
+                >
                   <span>{rec.action}</span>
                   <ArrowRightIcon className="w-3 h-3" />
                 </button>
@@ -525,6 +652,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                 <TrendUpIcon className="w-5 h-5 text-emerald-600" />
                 <span>Portfolio Score Trend</span>
                 <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase">30 days</span>
+                <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Simulated</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">Aggregate score health across all leads</p>
             </div>
@@ -894,6 +1022,13 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
+                      onClick={() => navigate('/portal/content')}
+                      className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm"
+                    >
+                      <MailIcon className="w-3.5 h-3.5" />
+                      <span>Send Email</span>
+                    </button>
+                    <button
                       onClick={() => navigate(`/portal/leads/${selectedLead.id}`)}
                       className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
                     >
@@ -945,20 +1080,42 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                       <MailIcon className="w-4 h-4 text-indigo-600" />
                       <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Email Engagement</span>
                     </div>
-                    <div className="mb-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] text-slate-400">Score</span>
-                        <span className="text-xs font-black text-indigo-600">{leadFactors.emailEngagement}%</span>
+                    {engagementLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="w-5 h-5 border-2 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
                       </div>
-                      <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${leadFactors.emailEngagement}%` }}></div>
-                      </div>
-                    </div>
-                    <div className="space-y-1 text-xs text-slate-500">
-                      <p>&bull; Opens: {leadFactors.emailOpens} emails ({Math.round(parseInt(leadFactors.emailOpens) / 15 * 100)}%)</p>
-                      <p>&bull; Clicks: {leadFactors.emailClicks} emails ({Math.round(parseInt(leadFactors.emailClicks) / 15 * 100)}%)</p>
-                      <p>&bull; Replies: {leadFactors.emailReplies} emails</p>
-                    </div>
+                    ) : selectedLeadEngagement && selectedLeadEngagement.totalSent > 0 ? (
+                      <>
+                        <div className="mb-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] text-slate-400">Open Rate</span>
+                            <span className="text-xs font-black text-indigo-600">
+                              {Math.round((selectedLeadEngagement.uniqueOpens / Math.max(1, selectedLeadEngagement.totalSent)) * 100)}%
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.round((selectedLeadEngagement.uniqueOpens / Math.max(1, selectedLeadEngagement.totalSent)) * 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        <div className="space-y-1 text-xs text-slate-500">
+                          <p>&bull; Sent: {selectedLeadEngagement.totalSent} emails</p>
+                          <p>&bull; Opens: {selectedLeadEngagement.totalOpens} total ({selectedLeadEngagement.uniqueOpens} unique)</p>
+                          <p>&bull; Clicks: {selectedLeadEngagement.totalClicks} total ({selectedLeadEngagement.uniqueClicks} unique)</p>
+                          <p>&bull; Bounced: {selectedLeadEngagement.totalBounced}</p>
+                          {selectedLeadEngagement.lastOpenedAt && (
+                            <p>&bull; Last opened: {new Date(selectedLeadEngagement.lastOpenedAt).toLocaleDateString()}</p>
+                          )}
+                          {selectedLeadEngagement.topClickedLink && (
+                            <p>&bull; Top link: <a href={selectedLeadEngagement.topClickedLink.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">{selectedLeadEngagement.topClickedLink.label}</a> ({selectedLeadEngagement.topClickedLink.clicks} clicks)</p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-400 py-2">No email engagement data yet</p>
+                    )}
                   </div>
 
                   {/* Website Activity */}
@@ -1033,7 +1190,10 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                 {analysisTab === 'engagement' && (
                   <div className="space-y-4">
                     <div>
-                      <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Weekly Engagement Heatmap</p>
+                      <div className="flex items-center space-x-2 mb-3">
+                        <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Weekly Engagement Heatmap</p>
+                        <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Simulated</span>
+                      </div>
                       <p className="text-[11px] text-slate-400 mb-4">Darker cells indicate higher engagement intensity during that time slot.</p>
                       <div className="overflow-x-auto">
                         <table className="w-full">
@@ -1077,21 +1237,45 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                       </div>
                     </div>
 
-                    {/* Peak Activity Summary */}
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-indigo-50 rounded-xl p-3 text-center">
-                        <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Peak Day</p>
-                        <p className="text-sm font-black text-indigo-700 mt-1">Tuesday</p>
+                    {/* Recent Email Events / Peak Activity */}
+                    {selectedLeadEngagement && selectedLeadEngagement.recentEvents.length > 0 ? (
+                      <div>
+                        <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Recent Email Events</p>
+                        <div className="space-y-2">
+                          {selectedLeadEngagement.recentEvents.slice(0, 5).map((evt, i) => (
+                            <div key={i} className="flex items-center space-x-3 p-2 bg-slate-50 rounded-lg">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                evt.event_type === 'open' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'
+                              }`}>
+                                {evt.event_type === 'open' ? <EyeIcon className="w-3 h-3" /> : <CursorClickIcon className="w-3 h-3" />}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-xs font-bold text-slate-700 capitalize">{evt.event_type}</p>
+                              </div>
+                              <span className="text-[10px] text-slate-400">{new Date(evt.created_at).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="bg-violet-50 rounded-xl p-3 text-center">
-                        <p className="text-[10px] font-bold text-violet-500 uppercase tracking-wider">Peak Hour</p>
-                        <p className="text-sm font-black text-violet-700 mt-1">10:00 AM</p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-indigo-50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Peak Day</p>
+                          <p className="text-sm font-black text-indigo-700 mt-1">Tuesday</p>
+                          <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Simulated</span>
+                        </div>
+                        <div className="bg-violet-50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-bold text-violet-500 uppercase tracking-wider">Peak Hour</p>
+                          <p className="text-sm font-black text-violet-700 mt-1">10:00 AM</p>
+                          <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Simulated</span>
+                        </div>
+                        <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Sessions</p>
+                          <p className="text-sm font-black text-emerald-700 mt-1">{leadFactors.weeklyVisits * 4}</p>
+                          <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Simulated</span>
+                        </div>
                       </div>
-                      <div className="bg-emerald-50 rounded-xl p-3 text-center">
-                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Sessions</p>
-                        <p className="text-sm font-black text-emerald-700 mt-1">{leadFactors.weeklyVisits * 4}</p>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -1198,6 +1382,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                     <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
                       <ActivityIcon className="w-5 h-5 text-emerald-600" />
                       <span>Score Evolution Timeline</span>
+                      <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Simulated</span>
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">{selectedLead.name}&rsquo;s score over the last 8 weeks</p>
                   </div>
