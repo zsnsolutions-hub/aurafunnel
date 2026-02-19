@@ -14,9 +14,10 @@ import {
   DownloadIcon, FlameIcon, SlidersIcon, ArrowRightIcon, StarIcon,
   LinkedInIcon, RecycleIcon, LayersIcon, GridIcon, DocumentIcon,
   KeyboardIcon, HelpCircleIcon, BrainIcon, ActivityIcon, CalendarIcon,
-  TagIcon, MessageIcon, SendIcon, AlertTriangleIcon, CameraIcon
+  TagIcon, MessageIcon, SendIcon, AlertTriangleIcon, CameraIcon, CursorClickIcon
 } from '../../components/Icons';
 import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
+import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal';
 import { useIntegrations } from '../../lib/integrations';
 
 interface LayoutContext {
@@ -351,6 +352,7 @@ const ContentStudio: React.FC = () => {
   const [linkedinCopied, setLinkedinCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
+  const [showCtaBuilder, setShowCtaBuilder] = useState(false);
   const [emailImages, setEmailImages] = useState<string[]>([]);
 
   // ─── AI Generation ───
@@ -2045,6 +2047,13 @@ const ContentStudio: React.FC = () => {
                       >
                         <SparklesIcon className="w-3 h-3" />
                         <span>AI Generate</span>
+                      </button>
+                      <button
+                        onClick={() => setShowCtaBuilder(true)}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-all"
+                      >
+                        <CursorClickIcon className="w-3 h-3" />
+                        <span>Add CTA</span>
                       </button>
                       <div className="relative">
                         <button
@@ -3756,6 +3765,15 @@ const ContentStudio: React.FC = () => {
           setEmailImages(prev => [...prev, url]);
         }
       }} businessProfile={user.businessProfile} insertLabel={contentMode === 'linkedin' ? 'Use in Post' : 'Use in Email'} />
+      <CTAButtonBuilderModal
+        open={showCtaBuilder}
+        onClose={() => setShowCtaBuilder(false)}
+        onInsert={(html) => {
+          if (activeVariant) {
+            updateVariantField('body', activeVariant.body + '\n\n' + html);
+          }
+        }}
+      />
     </div>
   );
 };

@@ -8,9 +8,10 @@ import {
   ArrowRightIcon, ArrowLeftIcon, CalendarIcon, SendIcon, SplitIcon, ChartIcon,
   TrendUpIcon, TrendDownIcon, TargetIcon, FlameIcon, RefreshIcon,
   KeyboardIcon, BrainIcon, LayersIcon, ActivityIcon, TagIcon, StarIcon, GridIcon,
-  AlertTriangleIcon, ChevronDownIcon, CameraIcon
+  AlertTriangleIcon, ChevronDownIcon, CameraIcon, CursorClickIcon
 } from '../../components/Icons';
 import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
+import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal';
 import { supabase } from '../../lib/supabase';
 import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance, fetchCampaignHistory, fetchCampaignRecipients, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { EmailPerformanceEntry, CampaignSummary, CampaignRecipient, ConnectedEmailProvider } from '../../lib/emailTracking';
@@ -359,6 +360,7 @@ const ContentGen: React.FC = () => {
   const [deliveryProgress, setDeliveryProgress] = useState<{ current: number; total: number } | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
+  const [showCtaBuilder, setShowCtaBuilder] = useState(false);
   const [emailImages, setEmailImages] = useState<string[]>([]);
   const [showPromptLibrary, setShowPromptLibrary] = useState(false);
   const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
@@ -2029,6 +2031,14 @@ const ContentGen: React.FC = () => {
                           />
                         </div>
                         <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => setShowCtaBuilder(true)}
+                            className="flex items-center space-x-1 px-2 py-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-[10px] font-bold"
+                            title="Add CTA Button"
+                          >
+                            <CursorClickIcon className="w-3.5 h-3.5" />
+                            <span>CTA</span>
+                          </button>
                           <button onClick={generateABVariant} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Create A/B variant">
                             <SplitIcon className="w-4 h-4" />
                           </button>
@@ -3442,6 +3452,15 @@ const ContentGen: React.FC = () => {
         </div>
       )}
 
+      <CTAButtonBuilderModal
+        open={showCtaBuilder}
+        onClose={() => setShowCtaBuilder(false)}
+        onInsert={(html) => {
+          if (activeBlock) {
+            updateBlock('body', activeBlock.body + '\n\n' + html);
+          }
+        }}
+      />
       <ImageGeneratorDrawer
         open={showImageGen}
         onClose={() => setShowImageGen(false)}
