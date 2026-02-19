@@ -3342,7 +3342,7 @@ const ContentStudio: React.FC = () => {
           ))}
         </div>
       )}
-      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} onInsertImage={(url) => setEmailImages(prev => [...prev, url])} />
+      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} onInsertImage={(url) => setEmailImages(prev => [...prev, url])} businessProfile={user.businessProfile} />
     </div>
   );
 };

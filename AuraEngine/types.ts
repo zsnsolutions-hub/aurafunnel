@@ -588,6 +588,7 @@ export interface ImageGenRequest {
   aspectRatio: ImageAspectRatio;
   n: number;
   brand: ImageGenBrandSettings;
+  businessProfile?: BusinessProfile;
 }
 
 export interface ImageGenResponse {

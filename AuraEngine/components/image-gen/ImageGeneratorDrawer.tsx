@@ -8,6 +8,7 @@ import type {
   ImageAspectRatio,
   ImageGenBrandSettings,
   ImageGenGeneratedImage,
+  BusinessProfile,
 } from '../../types';
 import { SparklesIcon } from '../Icons';
 
@@ -17,6 +18,7 @@ interface ImageGeneratorDrawerProps {
   moduleType: ImageModuleType;
   moduleId?: string;
   onInsertImage?: (imageUrl: string) => void;
+  businessProfile?: BusinessProfile;
 }
 
 const ASPECT_OPTIONS: { value: ImageAspectRatio; label: string; icon: string }[] = [
@@ -38,7 +40,7 @@ const DEFAULT_BRAND: ImageGenBrandSettings = {
 };
 
 const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
-  open, onClose, moduleType: initialModuleType, moduleId, onInsertImage,
+  open, onClose, moduleType: initialModuleType, moduleId, onInsertImage, businessProfile,
 }) => {
   const [moduleType, setModuleType] = useState<ImageModuleType>(initialModuleType);
   const [prompt, setPrompt] = useState('');
@@ -79,6 +81,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
         aspectRatio,
         n: variations,
         brand,
+        businessProfile,
       });
 
       const images = res.images.map(img => ({

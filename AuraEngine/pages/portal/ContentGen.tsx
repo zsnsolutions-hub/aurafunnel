@@ -3310,6 +3310,7 @@ const ContentGen: React.FC = () => {
         onClose={() => setShowImageGen(false)}
         moduleType="newsletter"
         onInsertImage={(url) => setEmailImages(prev => [...prev, url])}
+        businessProfile={user.businessProfile}
       />
     </div>
   );

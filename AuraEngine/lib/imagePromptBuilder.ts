@@ -9,6 +9,7 @@ import type {
   ImageModuleType,
   ImageAspectRatio,
   ImageGenBrandSettings,
+  BusinessProfile,
 } from '../types';
 
 // ── Module-specific preset library ──
@@ -81,17 +82,33 @@ export function buildImagePrompt(opts: {
   presetId?: string;
   aspectRatio: ImageAspectRatio;
   brand: ImageGenBrandSettings;
+  businessProfile?: BusinessProfile;
 }): string {
   const parts: string[] = [];
 
-  // 1) Module preset (if selected)
+  // 1) Business context — gives the model understanding of what the company does
+  const bp = opts.businessProfile;
+  if (bp) {
+    const ctxParts: string[] = [];
+    if (bp.companyName) ctxParts.push(`Company: ${bp.companyName}`);
+    if (bp.industry) ctxParts.push(`Industry: ${bp.industry}`);
+    if (bp.productsServices) ctxParts.push(`Products/Services: ${bp.productsServices}`);
+    if (bp.targetAudience) ctxParts.push(`Target audience: ${bp.targetAudience}`);
+    if (bp.valueProp) ctxParts.push(`Value proposition: ${bp.valueProp}`);
+    if (bp.businessDescription) ctxParts.push(`About: ${bp.businessDescription}`);
+    if (ctxParts.length > 0) {
+      parts.push(`Create an image for a business: ${ctxParts.join('. ')}.`);
+    }
+  }
+
+  // 2) Module preset (if selected)
   if (opts.presetId) {
     const presets = MODULE_PRESETS[opts.moduleType] || [];
     const preset = presets.find(p => p.id === opts.presetId);
     if (preset) parts.push(preset.prompt);
   }
 
-  // 2) User free-text prompt
+  // 3) User free-text prompt
   if (opts.userPrompt.trim()) {
     parts.push(opts.userPrompt.trim());
   }
