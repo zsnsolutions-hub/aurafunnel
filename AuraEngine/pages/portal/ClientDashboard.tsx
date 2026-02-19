@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Lead, ContentType, User, DashboardQuickStats, AIInsight, ManualList, FunnelStage } from '../../types';
 import {
-  FlameIcon, BoltIcon, SparklesIcon, TargetIcon, ChartIcon, TrendUpIcon, CreditCardIcon,
+  FlameIcon, SparklesIcon, TargetIcon, ChartIcon, TrendUpIcon, CreditCardIcon,
   KeyboardIcon, XIcon, TrendDownIcon, ActivityIcon, ShieldIcon, CheckIcon,
   AlertTriangleIcon, ClockIcon, UsersIcon, LayersIcon, BrainIcon, PieChartIcon,
   StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
   PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon
 } from '../../components/Icons';
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
-import { getWorkflowStats } from '../../lib/automationEngine';
+
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
@@ -85,7 +85,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     predictedConversions: 0, recommendations: 0, leadsYesterday: 0, hotLeadsYesterday: 0
   });
   const [statsLoading, setStatsLoading] = useState(true);
-  const [automationStats, setAutomationStats] = useState({ activeWorkflows: 0, totalLeadsProcessed: 0 });
+
 
   // AI Insights
   const [insights, setInsights] = useState<AIInsight[]>([]);
@@ -417,14 +417,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         hotLeadsYesterday: hotLeadsYesterdayCount
       });
 
-      // Fetch automation stats
-      try {
-        const wfStats = await getWorkflowStats(user.id);
-        setAutomationStats({
-          activeWorkflows: wfStats.activeWorkflows,
-          totalLeadsProcessed: wfStats.totalLeadsProcessed,
-        });
-      } catch { /* automation tables may not exist yet */ }
     } catch (err) {
       console.error("Stats fetch error:", err);
     } finally {
@@ -853,24 +845,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       <QuickStatsRow stats={quickStats} loading={statsLoading}>
         <EmailPerformanceCard />
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl group-hover:bg-amber-600 group-hover:text-white transition-colors duration-300">
-              <BoltIcon className="w-5 h-5" />
-            </div>
-          </div>
-          <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Automations</h3>
-          {statsLoading ? (
-            <div className="h-8 w-20 bg-slate-100 animate-pulse rounded-lg mt-1" />
-          ) : (
-            <p className="text-2xl font-bold text-slate-900 mt-1 font-heading tracking-tight">
-              {automationStats.activeWorkflows} <span className="text-sm font-semibold text-slate-400">active</span>
-            </p>
-          )}
-          {!statsLoading && automationStats.totalLeadsProcessed > 0 && (
-            <p className="text-[10px] text-slate-400 mt-1">{automationStats.totalLeadsProcessed.toLocaleString()} leads processed</p>
-          )}
-        </div>
       </QuickStatsRow>
 
       {/* ══════════════════════════════════════════════════════════════ */}
