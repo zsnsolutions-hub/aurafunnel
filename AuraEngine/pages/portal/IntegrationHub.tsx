@@ -2774,7 +2774,13 @@ const IntegrationHub: React.FC = () => {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end space-x-2">
+              <button
+                onClick={() => setEmailSetupId(null)}
+                className="px-4 py-2.5 text-slate-500 text-xs font-bold hover:text-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 onClick={handleEmailSetupTest}
                 disabled={emailSetupTesting}
@@ -2792,32 +2798,24 @@ const IntegrationHub: React.FC = () => {
                   </>
                 )}
               </button>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setEmailSetupId(null)}
-                  className="px-4 py-2.5 text-slate-500 text-xs font-bold hover:text-slate-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEmailSetupActivate}
-                  disabled={emailSetupSaving || emailSetupResult !== 'sent'}
-                  title={emailSetupResult !== 'sent' ? 'Send a successful test email first' : ''}
-                  className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
-                >
-                  {emailSetupSaving ? (
-                    <>
-                      <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckIcon className="w-3.5 h-3.5" />
-                      <span>Save &amp; Activate</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={handleEmailSetupActivate}
+                disabled={emailSetupSaving || emailSetupResult !== 'sent'}
+                title={emailSetupResult !== 'sent' ? 'Send a successful test email first' : ''}
+                className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+              >
+                {emailSetupSaving ? (
+                  <>
+                    <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckIcon className="w-3.5 h-3.5" />
+                    <span>Save &amp; Activate</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

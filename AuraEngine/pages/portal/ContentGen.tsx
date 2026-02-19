@@ -375,6 +375,10 @@ const ContentGen: React.FC = () => {
   const [campaignRecipientsLoading, setCampaignRecipientsLoading] = useState(false);
   const [connectedProvider, setConnectedProvider] = useState<ConnectedEmailProvider | null>(null);
   const [providerLoading, setProviderLoading] = useState(false);
+  const [showTestEmailModal, setShowTestEmailModal] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [testEmailSending, setTestEmailSending] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; error?: string } | null>(null);
 
   // ── Business Brief State ──
   const [customContext, setCustomContext] = useState('');
@@ -1008,6 +1012,30 @@ const ContentGen: React.FC = () => {
     });
     handleSave();
     setTimeout(() => setDeliveryConfirmed(false), 3000);
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress.trim() || !activeBlock || testEmailSending) return;
+    setTestEmailSending(true);
+    setTestEmailResult(null);
+    try {
+      const footer = buildEmailFooter(user);
+      const htmlBody = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">${activeBlock.body.split('\n').map(l => l.trim() ? `<p style="margin:0 0 12px;">${l}</p>` : '').join('')}${footer}</div>`;
+      const result = await sendTrackedEmail({
+        toEmail: testEmailAddress.trim(),
+        subject: activeBlock.subject || 'Test Email',
+        htmlBody,
+        leadId: undefined,
+        trackOpens: true,
+        trackClicks: true,
+        provider: connectedProvider?.provider as EmailProvider,
+        fromName: connectedProvider?.from_name,
+      });
+      setTestEmailResult({ success: result.success, error: result.error });
+    } catch (err) {
+      setTestEmailResult({ success: false, error: err instanceof Error ? err.message : 'Failed to send test email' });
+    }
+    setTestEmailSending(false);
   };
 
   // ── Prompt Library ──
@@ -2035,6 +2063,17 @@ const ContentGen: React.FC = () => {
                           className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all resize-none font-mono"
                           placeholder="Start writing or generate content with AI..."
                         />
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[10px] text-slate-400">Words: {activeBlock.body.split(/\s+/).filter(Boolean).length}</span>
+                          <button
+                            onClick={() => { setTestEmailResult(null); setShowTestEmailModal(true); }}
+                            disabled={!connectedProvider}
+                            className="flex items-center space-x-1 px-2.5 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <MailIcon className="w-3 h-3" />
+                            <span>Send Test</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Attached Images */}
@@ -3305,6 +3344,93 @@ const ContentGen: React.FC = () => {
       )}
 
       {/* Image Generator Drawer */}
+      {/* ═══ TEST EMAIL MODAL ═══ */}
+      {showTestEmailModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTestEmailModal(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <MailIcon className="w-5 h-5 text-amber-500" />
+                <span className="text-sm font-black text-slate-900">Send Test Email</span>
+              </div>
+              <button onClick={() => setShowTestEmailModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              {testEmailResult ? (
+                <div className="text-center py-4">
+                  <div className={`w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center ${testEmailResult.success ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+                    {testEmailResult.success ? <CheckIcon className="w-7 h-7 text-emerald-600" /> : <AlertTriangleIcon className="w-7 h-7 text-rose-600" />}
+                  </div>
+                  <h3 className="text-base font-black text-slate-900">{testEmailResult.success ? 'Test Email Sent!' : 'Send Failed'}</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {testEmailResult.success
+                      ? <>Sent to <span className="font-bold text-slate-700">{testEmailAddress}</span> &mdash; check your inbox</>
+                      : testEmailResult.error || 'Something went wrong'}
+                  </p>
+                  <div className="flex items-center justify-center space-x-2 mt-4">
+                    <button
+                      onClick={() => setTestEmailResult(null)}
+                      className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"
+                    >
+                      Send Another
+                    </button>
+                    <button
+                      onClick={() => setShowTestEmailModal(false)}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Recipient Email</label>
+                  <input
+                    type="email"
+                    value={testEmailAddress}
+                    onChange={e => setTestEmailAddress(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSendTestEmail(); }}
+                    placeholder="you@example.com"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                    autoFocus
+                  />
+                  {!connectedProvider && (
+                    <p className="text-[10px] text-amber-600 font-semibold mt-2">No email provider connected. Connect one in Integration Hub first.</p>
+                  )}
+                  <div className="flex items-center justify-end space-x-2 mt-4">
+                    <button
+                      onClick={() => setShowTestEmailModal(false)}
+                      className="px-4 py-2.5 text-slate-500 text-xs font-bold hover:text-slate-700 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSendTestEmail}
+                      disabled={testEmailSending || !testEmailAddress.trim() || !connectedProvider}
+                      className="flex items-center space-x-2 px-5 py-2.5 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 transition-all shadow-lg shadow-amber-200 disabled:opacity-50"
+                    >
+                      {testEmailSending ? (
+                        <>
+                          <RefreshIcon className="w-3.5 h-3.5 animate-spin" />
+                          <span>Sending...</span>
+                        </>
+                      ) : (
+                        <>
+                          <SendIcon className="w-3.5 h-3.5" />
+                          <span>Send Test</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <ImageGeneratorDrawer
         open={showImageGen}
         onClose={() => setShowImageGen(false)}

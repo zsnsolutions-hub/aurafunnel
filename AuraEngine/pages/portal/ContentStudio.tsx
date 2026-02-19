@@ -1435,24 +1435,14 @@ const ContentStudio: React.FC = () => {
             <span>{aiGenerating ? 'Generating...' : 'Generate with AI'}</span>
           </button>
           {contentMode === 'email' && (
-            <>
-              <button
-                onClick={() => { setTestEmailResult(null); setShowTestEmailModal(true); }}
-                disabled={!connectedProvider}
-                className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <MailIcon className="w-4 h-4" />
-                <span>Send Test</span>
-              </button>
-              <button
-                onClick={() => { setSendResult(null); setShowSendModal(true); }}
-                disabled={!connectedProvider}
-                className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <SendIcon className="w-4 h-4" />
-                <span>Send Emails</span>
-              </button>
-            </>
+            <button
+              onClick={() => { setSendResult(null); setShowSendModal(true); }}
+              disabled={!connectedProvider}
+              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <SendIcon className="w-4 h-4" />
+              <span>Send Emails</span>
+            </button>
           )}
           <button onClick={handleSave} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
             {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
@@ -2160,6 +2150,14 @@ const ContentStudio: React.FC = () => {
                       <span className="text-[10px] text-slate-400">
                         Tags used: {(activeVariant.body.match(/\{\{[^}]+\}\}/g) || []).length}
                       </span>
+                      <button
+                        onClick={() => { setTestEmailResult(null); setShowTestEmailModal(true); }}
+                        disabled={!connectedProvider}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <MailIcon className="w-3 h-3" />
+                        <span>Send Test</span>
+                      </button>
                     </div>
                   </div>
                 </div>
