@@ -589,6 +589,7 @@ export interface ImageGenRequest {
   n: number;
   brand: ImageGenBrandSettings;
   businessProfile?: BusinessProfile;
+  plans?: Plan[];
 }
 
 export interface ImageGenResponse {

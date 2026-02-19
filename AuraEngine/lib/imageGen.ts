@@ -30,6 +30,7 @@ export async function generateImages(req: ImageGenRequest): Promise<ImageGenResp
     aspectRatio: req.aspectRatio,
     brand: req.brand,
     businessProfile: req.businessProfile,
+    plans: req.plans,
   });
 
   const count = Math.max(1, Math.min(4, req.n));

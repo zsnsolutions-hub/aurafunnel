@@ -3,12 +3,14 @@ import { Drawer } from '../ui/Drawer';
 import PreviewGrid from './PreviewGrid';
 import { MODULE_PRESETS } from '../../lib/imagePromptBuilder';
 import { generateImages } from '../../lib/imageGen';
+import { supabase } from '../../lib/supabase';
 import type {
   ImageModuleType,
   ImageAspectRatio,
   ImageGenBrandSettings,
   ImageGenGeneratedImage,
   BusinessProfile,
+  Plan,
 } from '../../types';
 import { SparklesIcon } from '../Icons';
 
@@ -52,10 +54,18 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<ImageGenGeneratedImage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
 
   useEffect(() => {
     if (open) setModuleType(initialModuleType);
   }, [open, initialModuleType]);
+
+  useEffect(() => {
+    if (!open) return;
+    supabase.from('plans').select('*').order('credits', { ascending: true })
+      .then(({ data }) => { if (data) setPlans(data); })
+      .catch(console.error);
+  }, [open]);
 
   const handlePresetClick = (id: string, presetPrompt: string) => {
     if (presetId === id) {
@@ -83,6 +93,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
         n: variations,
         brand,
         businessProfile,
+        plans,
       });
 
       const images = res.images.map(img => ({

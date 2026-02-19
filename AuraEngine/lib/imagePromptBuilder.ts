@@ -10,6 +10,7 @@ import type {
   ImageAspectRatio,
   ImageGenBrandSettings,
   BusinessProfile,
+  Plan,
 } from '../types';
 
 // ── Module-specific preset library ──
@@ -128,6 +129,7 @@ export function buildImagePrompt(opts: {
   aspectRatio: ImageAspectRatio;
   brand: ImageGenBrandSettings;
   businessProfile?: BusinessProfile;
+  plans?: Plan[];
 }): string {
   const parts: string[] = [];
 
@@ -146,6 +148,15 @@ export function buildImagePrompt(opts: {
     if (ctxParts.length > 0) {
       parts.push(`Create an image for a business: ${ctxParts.join('. ')}.`);
     }
+  }
+
+  // 1b) Pricing plans — real product/service data to use instead of placeholder text
+  if (opts.plans && opts.plans.length > 0) {
+    const planDescs = opts.plans.map(p => {
+      const features = p.features?.slice(0, 3).join(', ') || '';
+      return `${p.name} at ${p.price}${features ? ` (${features})` : ''}`;
+    });
+    parts.push(`The business offers these plans: ${planDescs.join('; ')}. Use these real plan names and prices instead of any placeholder or lorem ipsum text.`);
   }
 
   // 2) Module preset (if selected)
