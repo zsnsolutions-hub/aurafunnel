@@ -74,6 +74,51 @@ export function isValidHex(hex: string): boolean {
   return /^#[0-9A-Fa-f]{6}$/.test(hex);
 }
 
+// ── Hex to readable color name ──
+
+function hexToColorName(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2 / 255;
+
+  if (l < 0.15) return 'very dark (near black)';
+  if (l > 0.9) return 'very light (near white)';
+
+  if (max - min < 30) {
+    if (l < 0.4) return 'dark gray';
+    if (l > 0.7) return 'light gray';
+    return 'gray';
+  }
+
+  const hue = (() => {
+    if (max === min) return 0;
+    const d = max - min;
+    let h = 0;
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+    return h;
+  })();
+
+  const sat = max - min > 100 ? 'vibrant' : 'muted';
+  const lightness = l < 0.35 ? 'dark' : l > 0.65 ? 'light' : '';
+
+  let name = '';
+  if (hue < 15 || hue >= 345) name = 'red';
+  else if (hue < 45) name = 'orange';
+  else if (hue < 70) name = 'yellow';
+  else if (hue < 160) name = 'green';
+  else if (hue < 200) name = 'teal';
+  else if (hue < 260) name = 'blue';
+  else if (hue < 290) name = 'purple';
+  else if (hue < 345) name = 'pink';
+
+  return [lightness, sat, name].filter(Boolean).join(' ');
+}
+
 // ── Main prompt builder ──
 
 export function buildImagePrompt(opts: {
@@ -118,15 +163,15 @@ export function buildImagePrompt(opts: {
   // 3) Aspect ratio instruction
   parts.push(`Image format: ${ASPECT_LABELS[opts.aspectRatio]}.`);
 
-  // 4) Brand colours
+  // 4) Brand colours (described as names, never hex codes — avoids text rendering on image)
   const { colors } = opts.brand;
   if (colors) {
     const colorParts: string[] = [];
-    if (isValidHex(colors.primary)) colorParts.push(`primary ${colors.primary}`);
-    if (isValidHex(colors.secondary)) colorParts.push(`secondary ${colors.secondary}`);
-    if (isValidHex(colors.accent)) colorParts.push(`accent ${colors.accent}`);
+    if (isValidHex(colors.primary)) colorParts.push(`primary color is ${hexToColorName(colors.primary)}`);
+    if (isValidHex(colors.secondary)) colorParts.push(`secondary color is ${hexToColorName(colors.secondary)}`);
+    if (isValidHex(colors.accent)) colorParts.push(`accent color is ${hexToColorName(colors.accent)}`);
     if (colorParts.length > 0) {
-      parts.push(`Use brand colors: ${colorParts.join(', ')}. Keep layout minimal with ample whitespace.`);
+      parts.push(`Use a color scheme where the ${colorParts.join(', ')}. Keep layout minimal with ample whitespace.`);
     }
     if (colors.bgStyle && BG_STYLE_DESC[colors.bgStyle]) {
       parts.push(`Background: ${BG_STYLE_DESC[colors.bgStyle]}.`);
