@@ -209,8 +209,11 @@ const AutomationPage: React.FC = () => {
   const [dbLoaded, setDbLoaded] = useState(false);
   const [showWorkflowList, setShowWorkflowList] = useState(false);
 
-  // ─── Test lead selection ───
+  // ─── Lead selection ───
   const [testLeadIds, setTestLeadIds] = useState<Set<string>>(new Set());
+  const [showLeadPanel, setShowLeadPanel] = useState(true);
+  const [leadScoreFilter, setLeadScoreFilter] = useState<number>(0);
+  const [leadStatusFilter, setLeadStatusFilter] = useState<string>('all');
 
   // ─── Enhanced Wireframe State ───
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -601,18 +604,25 @@ const AutomationPage: React.FC = () => {
     }
 
     try {
-      const results = await executeWorkflowEngine(
-        {
-          id: workflow.id,
-          name: workflow.name,
-          description: workflow.description,
-          status: workflow.status,
-          nodes: workflow.nodes,
-          createdAt: workflow.createdAt,
-          stats: workflow.stats,
-        },
-        selectedLeads
-      );
+      // Wrap execution in a 30-second timeout to prevent infinite spinning
+      const timeoutMs = 30_000;
+      const results = await Promise.race([
+        executeWorkflowEngine(
+          {
+            id: workflow.id,
+            name: workflow.name,
+            description: workflow.description,
+            status: workflow.status,
+            nodes: workflow.nodes,
+            createdAt: workflow.createdAt,
+            stats: workflow.stats,
+          },
+          selectedLeads
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Execution timed out after 30 seconds. Check your API keys and Supabase edge functions.')), timeoutMs)
+        ),
+      ]);
 
       setExecutionResults(results);
 
@@ -780,6 +790,31 @@ const AutomationPage: React.FC = () => {
       return next;
     });
   }, []);
+
+  // ─── Filtered leads for selection ───
+  const filteredLeads = useMemo(() => {
+    return leads.filter(l => {
+      if (l.score < leadScoreFilter) return false;
+      if (leadStatusFilter !== 'all' && l.status !== leadStatusFilter) return false;
+      return true;
+    });
+  }, [leads, leadScoreFilter, leadStatusFilter]);
+
+  const selectAllFilteredLeads = useCallback(() => {
+    setTestLeadIds(prev => {
+      const next = new Set(prev);
+      filteredLeads.forEach(l => next.add(l.id));
+      return next;
+    });
+  }, [filteredLeads]);
+
+  const deselectAllLeads = useCallback(() => {
+    setTestLeadIds(new Set());
+  }, []);
+
+  const leadsWithEmail = useMemo(() => filteredLeads.filter(l => l.email), [filteredLeads]);
+  const selectedLeadCount = testLeadIds.size;
+  const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every(l => testLeadIds.has(l.id));
 
   // ─── Keyboard Shortcuts ───
   useEffect(() => {
@@ -1563,6 +1598,167 @@ const AutomationPage: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* TARGET LEADS PANEL — visible in main view & wizard Step 2    */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {(!wizardActive || wizardStep === 2) && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <button
+            onClick={() => setShowLeadPanel(s => !s)}
+            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors rounded-2xl"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                <UsersIcon className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-black text-slate-900 font-heading text-sm">Target Leads</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {selectedLeadCount > 0
+                    ? `${selectedLeadCount} lead${selectedLeadCount !== 1 ? 's' : ''} selected · ${leadsWithEmail.filter(l => testLeadIds.has(l.id)).length} with email`
+                    : leads.length > 0
+                      ? `${leads.length} leads available — select who receives emails`
+                      : 'No leads in pipeline — add leads first'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              {selectedLeadCount > 0 && (
+                <span className="px-2.5 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-black">
+                  {selectedLeadCount} selected
+                </span>
+              )}
+              <svg className={`w-4 h-4 text-slate-400 transition-transform ${showLeadPanel ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+
+          {showLeadPanel && (
+            <div className="px-6 pb-5 border-t border-slate-100">
+              {/* Filters & Actions */}
+              <div className="flex flex-wrap items-center gap-3 py-4">
+                <div className="flex items-center space-x-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Min Score</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={leadScoreFilter}
+                    onChange={e => setLeadScoreFilter(Number(e.target.value) || 0)}
+                    className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-center focus:ring-2 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Status</label>
+                  <select
+                    value={leadStatusFilter}
+                    onChange={e => setLeadStatusFilter(e.target.value)}
+                    className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-sky-500 outline-none"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="New">New</option>
+                    <option value="Contacted">Contacted</option>
+                    <option value="Qualified">Qualified</option>
+                    <option value="Proposal">Proposal</option>
+                    <option value="Won">Won</option>
+                    <option value="Lost">Lost</option>
+                  </select>
+                </div>
+                <div className="flex-1" />
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''} match filters
+                  {filteredLeads.length !== leadsWithEmail.length && ` · ${filteredLeads.filter(l => !l.email).length} without email`}
+                </span>
+                <button
+                  onClick={allFilteredSelected ? deselectAllLeads : selectAllFilteredLeads}
+                  className="px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-all hover:bg-slate-50"
+                >
+                  {allFilteredSelected ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+
+              {/* Lead List */}
+              {filteredLeads.length > 0 ? (
+                <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                  {filteredLeads.map(lead => {
+                    const isSelected = testLeadIds.has(lead.id);
+                    const hasEmail = !!lead.email;
+                    return (
+                      <label
+                        key={lead.id}
+                        className={`flex items-center px-4 py-3 cursor-pointer transition-colors ${
+                          isSelected ? 'bg-sky-50' : 'hover:bg-slate-50'
+                        } ${!hasEmail ? 'opacity-50' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleTestLead(lead.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 shrink-0"
+                        />
+                        <div className="ml-3 flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-bold text-slate-800 truncate">{lead.name}</span>
+                            {!hasEmail && (
+                              <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded text-[9px] font-black shrink-0">NO EMAIL</span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2 mt-0.5">
+                            {lead.company && <span className="text-[11px] text-slate-400 truncate">{lead.company}</span>}
+                            {lead.email && <span className="text-[11px] text-slate-300 truncate">{lead.email}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3 shrink-0 ml-3">
+                          <span className={`text-xs font-black ${
+                            lead.score >= 75 ? 'text-emerald-600' : lead.score >= 50 ? 'text-amber-600' : 'text-slate-400'
+                          }`}>
+                            {lead.score}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                            lead.status === 'Qualified' ? 'bg-emerald-50 text-emerald-600'
+                            : lead.status === 'Contacted' ? 'bg-sky-50 text-sky-600'
+                            : lead.status === 'New' ? 'bg-indigo-50 text-indigo-600'
+                            : 'bg-slate-50 text-slate-500'
+                          }`}>
+                            {lead.status || 'New'}
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-8 text-center border border-dashed border-slate-200 rounded-xl">
+                  <UsersIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-500">No leads match filters</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {leads.length === 0
+                      ? 'Add leads in the Lead Management page first.'
+                      : 'Try adjusting the score or status filters above.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Selection summary */}
+              {selectedLeadCount > 0 && (
+                <div className="mt-3 flex items-center justify-between px-1">
+                  <p className="text-xs text-slate-500">
+                    <strong className="text-slate-700">{selectedLeadCount}</strong> lead{selectedLeadCount !== 1 ? 's' : ''} will be processed when you click <strong>Test</strong> or <strong>Run Simulation</strong>
+                  </p>
+                  <button
+                    onClick={deselectAllLeads}
+                    className="text-[11px] text-rose-500 font-bold hover:text-rose-600 transition-colors"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* WIZARD STEP 3: CONFIGURE EACH STEP                           */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {wizardActive && wizardStep === 3 && (
@@ -1697,16 +1893,30 @@ const AutomationPage: React.FC = () => {
               <div className="px-6 py-5 space-y-4">
                 {/* Select Test Leads */}
                 <div>
-                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Select Test Leads</p>
-                  <div className="max-h-32 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-3">
-                    {leads.length > 0 ? leads.slice(0, 8).map(lead => (
-                      <label key={lead.id} className="flex items-center space-x-2 cursor-pointer">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Select Test Leads</p>
+                    {leads.length > 0 && (
+                      <button
+                        onClick={allFilteredSelected ? deselectAllLeads : selectAllFilteredLeads}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700"
+                      >
+                        {allFilteredSelected ? 'Deselect All' : `Select All (${leads.length})`}
+                      </button>
+                    )}
+                  </div>
+                  {selectedLeadCount > 0 && (
+                    <p className="text-[10px] text-sky-600 font-bold mb-2">{selectedLeadCount} lead{selectedLeadCount !== 1 ? 's' : ''} selected</p>
+                  )}
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-3">
+                    {leads.length > 0 ? leads.map(lead => (
+                      <label key={lead.id} className={`flex items-center space-x-2 cursor-pointer px-2 py-1.5 rounded-lg transition-colors ${testLeadIds.has(lead.id) ? 'bg-sky-50' : 'hover:bg-slate-50'}`}>
                         <input type="checkbox" checked={testLeadIds.has(lead.id)} onChange={() => toggleTestLead(lead.id)} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                        <span className="text-sm text-slate-700">{lead.name}</span>
+                        <span className="text-sm text-slate-700 flex-1 truncate">{lead.name}</span>
+                        {!lead.email && <span className="text-[9px] font-black text-rose-500">NO EMAIL</span>}
                         <span className="text-xs text-slate-400">Score: {lead.score}</span>
                       </label>
                     )) : (
-                      <p className="text-xs text-slate-400 italic">No leads available. A sample lead will be used.</p>
+                      <p className="text-xs text-slate-400 italic">No leads available. Add leads in the Lead Management page first.</p>
                     )}
                   </div>
                 </div>

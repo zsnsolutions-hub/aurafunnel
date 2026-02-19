@@ -318,6 +318,9 @@ export async function sendTrackedEmail(
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
     const res = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
       method: 'POST',
       headers: {
@@ -334,8 +337,10 @@ export async function sendTrackedEmail(
         track_opens: params.trackOpens ?? true,
         track_clicks: params.trackClicks ?? true,
       }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
     const data = await res.json();
     return {
       success: data.success ?? false,
@@ -344,9 +349,12 @@ export async function sendTrackedEmail(
       error: data.error ?? undefined,
     };
   } catch (err) {
+    const msg = (err as Error).name === 'AbortError'
+      ? 'Email send timed out (10s)'
+      : `Network error: ${(err as Error).message}`;
     return {
       success: false,
-      error: `Network error: ${(err as Error).message}`,
+      error: msg,
     };
   }
 }

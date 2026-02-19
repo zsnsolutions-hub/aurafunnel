@@ -1495,20 +1495,23 @@ BODY: [rewritten HTML email body]`;
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      // Wrap the API call in a proper timeout since AbortController
+      // cannot be passed to the GoogleGenAI SDK
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: {
+            systemInstruction: 'You are an expert B2B email copywriter. Rewrite emails to feel personally crafted for each recipient. Keep them concise, human, and action-oriented. Always use the exact output format requested.',
+            temperature: 0.8,
+            topP: 0.9,
+          }
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini API timed out')), TIMEOUT_MS)
+        ),
+      ]);
 
-      const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: prompt,
-        config: {
-          systemInstruction: 'You are an expert B2B email copywriter. Rewrite emails to feel personally crafted for each recipient. Keep them concise, human, and action-oriented. Always use the exact output format requested.',
-          temperature: 0.8,
-          topP: 0.9,
-        }
-      });
-
-      clearTimeout(timeoutId);
       const text = response.text || '';
 
       const subjectMatch = text.match(/SUBJECT:\s*(.+?)(?:\n|$)/);
