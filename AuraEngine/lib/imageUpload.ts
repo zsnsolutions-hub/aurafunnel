@@ -25,7 +25,11 @@ export async function uploadBase64Image(dataUri: string): Promise<string> {
   const { error: uploadErr } = await supabase.storage
     .from('image-gen-assets')
     .upload(path, blob, { upsert: true, contentType: mimeType });
-  if (uploadErr) throw new Error(uploadErr.message || 'Image upload failed');
+  if (uploadErr) throw new Error(
+    uploadErr.message === 'Bucket not found'
+      ? 'Storage bucket "image-gen-assets" not found. Run the image-gen migration or create the bucket in Supabase Dashboard.'
+      : uploadErr.message || 'Image upload failed'
+  );
 
   // Return public URL
   const { data: urlData } = supabase.storage
