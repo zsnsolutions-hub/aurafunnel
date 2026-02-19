@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { User, Lead, ReportType, ExportFormat, AlertRule, AlertType, AlertNotifyMethod } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { generateProgrammaticInsights } from '../../lib/insights';
+import { useAnalyticsData, computeTrend } from '../../hooks/useAnalyticsData';
 import {
   ChartIcon, TrendUpIcon, TrendDownIcon, TargetIcon, SparklesIcon, CreditCardIcon,
   PieChartIcon, DownloadIcon, FilterIcon, AlertTriangleIcon, BellIcon, RefreshIcon,
@@ -134,32 +135,12 @@ const VIZ_OPTIONS: { id: VizType; label: string; desc: string; icon: React.React
 
 const PIE_COLORS = ['#6366f1', '#8b5cf6', '#a855f7', '#f59e0b', '#10b981', '#f43f5e'];
 
-// ─── Simulated Campaign Data ───
-const generateCampaignData = (leads: Lead[]) => {
-  const totalLeads = leads.length || 1;
-  const hotCount = leads.filter(l => l.score > 80).length;
-  return [
-    { name: 'Q4 Launch Sequence', sent: Math.max(120, totalLeads * 3), openRate: 45.2, clickRate: 12.1, convRate: 4.2 },
-    { name: 'Product Update Blast', sent: Math.max(85, totalLeads * 2), openRate: 38.7, clickRate: 8.4, convRate: 2.8 },
-    { name: 'Webinar Follow-up', sent: Math.max(42, totalLeads), openRate: 52.3, clickRate: 15.2, convRate: 6.1 },
-    { name: 'Re-engagement Series', sent: Math.max(65, Math.round(totalLeads * 1.5)), openRate: 28.4, clickRate: 5.6, convRate: 1.9 },
-    { name: 'Hot Lead Nurture', sent: Math.max(30, hotCount * 2), openRate: 61.8, clickRate: 22.3, convRate: 9.4 },
-  ];
-};
-
-// ─── Simulated AI Performance Data ───
-const AI_PERFORMANCE_DATA = [
-  { model: 'Lead Scoring', accuracy: 94.2, speed: '1.2s', costPer: '$0.08', satisfaction: 92 },
-  { model: 'Content Generation', accuracy: 88.5, speed: '4.5s', costPer: '$0.15', satisfaction: 87 },
-  { model: 'Predictive Analytics', accuracy: 91.3, speed: '2.1s', costPer: '$0.10', satisfaction: 90 },
-  { model: 'Email Optimization', accuracy: 86.7, speed: '3.2s', costPer: '$0.12', satisfaction: 85 },
-  { model: 'Sentiment Analysis', accuracy: 89.1, speed: '1.8s', costPer: '$0.06', satisfaction: 88 },
-];
+// (Simulated data removed — replaced with real Supabase queries via useAnalyticsData hook)
 
 const AnalyticsPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [leadsLoading, setLeadsLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
 
@@ -208,13 +189,16 @@ const AnalyticsPage: React.FC = () => {
   const [showPredictiveForecast, setShowPredictiveForecast] = useState(false);
   const [showChannelAttribution, setShowChannelAttribution] = useState(false);
 
-  // ─── Fetch ───
+  // ─── Real Analytics Data Hook ───
+  const { data: analyticsData, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalyticsData(user?.id, dateRange, comparisonMode);
+
+  // ─── Fetch Leads ───
   const fetchData = useCallback(async () => {
     if (!user?.id) {
-      setLoading(false);
+      setLeadsLoading(false);
       return;
     }
-    setLoading(true);
+    setLeadsLoading(true);
     try {
       const { data: leadsData, error } = await supabase
         .from('leads')
@@ -232,17 +216,24 @@ const AnalyticsPage: React.FC = () => {
     } catch (err: unknown) {
       console.error('Analytics fetch error:', err instanceof Error ? err.message : err);
     } finally {
-      setLoading(false);
+      setLeadsLoading(false);
     }
   }, [user?.id]);
 
+  const handleRefreshAll = useCallback(() => {
+    fetchData();
+    refreshAnalytics();
+  }, [fetchData, refreshAnalytics]);
+
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const loading = leadsLoading || analyticsLoading;
 
   useEffect(() => {
     try { localStorage.setItem(`aura_alerts_${user?.id}`, JSON.stringify(alerts)); } catch {}
   }, [alerts, user?.id]);
 
-  // ─── Computed Metrics ───
+  // ─── Computed Metrics (real data) ───
   const metrics = useMemo(() => {
     const total = leads.length;
     const hot = leads.filter(l => l.score > 80).length;
@@ -250,27 +241,28 @@ const AnalyticsPage: React.FC = () => {
     const convRate = total > 0 ? ((qualified / total) * 100) : 0;
     const avgScore = total > 0 ? Math.round(leads.reduce((a, b) => a + b.score, 0) / total) : 0;
 
-    // Simulated response time based on score distribution
-    const avgResponseHrs = total > 0 ? Math.max(0.4, 3.5 - (avgScore / 40)) : 0;
+    // Real email metrics from analytics hook
+    const emailsSent = analyticsData.emailAnalytics.totalSent;
+    const openRate = analyticsData.emailAnalytics.openRate;
 
-    // Simulated ROI
-    const planCost = user?.plan === 'Pro' ? 149 : user?.plan === 'Enterprise' ? 499 : 29;
-    const roi = qualified > 0 ? Math.round((qualified * 500 - planCost) / planCost * 100) : 0;
+    // Real workflow ROI from Supabase
+    const workflowRoi = analyticsData.workflowAnalytics.totalWorkflowRoi;
 
-    // Simulated trend deltas (percentage changes from "last period")
-    const totalTrend = total > 5 ? 12 : total > 0 ? 5 : 0;
-    const hotTrend = hot > 2 ? 8 : hot > 0 ? 3 : 0;
-    const convTrend = convRate > 5 ? 2.3 : convRate > 0 ? 0.5 : 0;
-    const responseTrend = avgResponseHrs > 1 ? -0.3 : -0.1;
-    const roiTrend = roi > 100 ? 120 : roi > 0 ? 45 : 0;
+    // Real trend deltas via comparison mode
+    const prevEmail = analyticsData.prevEmailAnalytics;
+    const emailSentTrend = prevEmail ? computeTrend(emailsSent, prevEmail.totalSent) : { value: 0, label: '--', up: true };
+    const openRateTrend = prevEmail ? computeTrend(openRate, prevEmail.openRate) : { value: 0, label: '--', up: true };
+    const prevWf = analyticsData.prevWorkflowAnalytics;
+    const roiTrend = prevWf ? computeTrend(workflowRoi, prevWf.totalWorkflowRoi) : { value: 0, label: '--', up: true };
 
     return {
-      total, hot, convRate: +convRate.toFixed(1), avgResponseHrs: +avgResponseHrs.toFixed(1), roi,
-      totalTrend, hotTrend, convTrend, responseTrend, roiTrend, avgScore
+      total, hot, convRate: +convRate.toFixed(1), avgScore,
+      emailsSent, openRate, workflowRoi,
+      emailSentTrend, openRateTrend, roiTrend
     };
-  }, [leads, user?.plan]);
+  }, [leads, analyticsData]);
 
-  // ─── 30-day Trend Line Data ───
+  // ─── Lead Generation Trend (real data, no simulated baseline) ───
   const trendData = useMemo(() => {
     const days = parseInt(dateRange);
     const data: { day: string; leads: number; conversions: number }[] = [];
@@ -287,68 +279,82 @@ const AnalyticsPage: React.FC = () => {
         return ld.getFullYear() === d.getFullYear() && ld.getMonth() === d.getMonth() && ld.getDate() === d.getDate();
       });
 
-      // If real data is sparse, add simulated baseline
-      const base = dayLeads.length > 0 ? dayLeads.length : Math.floor(Math.random() * 4) + 1;
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-
       data.push({
         day: label,
-        leads: isWeekend ? Math.max(1, Math.floor(base * 0.5)) : base,
-        conversions: dayLeads.filter(l => l.status === 'Qualified').length || (Math.random() > 0.6 ? 1 : 0),
+        leads: dayLeads.length,
+        conversions: dayLeads.filter(l => l.status === 'Qualified' || l.status === 'Converted').length,
       });
     }
     return data;
   }, [leads, dateRange]);
 
-  // ─── Funnel Data ───
+  // ─── Funnel Data (real status counts) ───
   const funnelStages = useMemo(() => {
-    const total = leads.length || 100;
-    const contacted = leads.filter(l => l.status !== 'New').length || Math.round(total * 0.38);
-    const qualified = leads.filter(l => l.status === 'Qualified').length || Math.round(total * 0.15);
-    const hot = leads.filter(l => l.score > 80).length || Math.round(total * 0.035);
-    const converted = Math.round(qualified * 0.57) || Math.round(total * 0.02);
+    const total = leads.length;
+    const contacted = leads.filter(l => l.status === 'Contacted').length;
+    const qualified = leads.filter(l => l.status === 'Qualified').length;
+    const converted = leads.filter(l => l.status === 'Converted').length;
+    const lost = leads.filter(l => l.status === 'Lost').length;
 
     return [
-      { label: 'Awareness', count: total, color: '#6366f1' },
-      { label: 'Interest', count: contacted, color: '#8b5cf6' },
-      { label: 'Intent', count: qualified, color: '#a855f7' },
-      { label: 'Decision', count: hot, color: '#f59e0b' },
-      { label: 'Action', count: converted, color: '#10b981' },
+      { label: 'New', count: leads.filter(l => l.status === 'New').length, color: '#6366f1' },
+      { label: 'Contacted', count: contacted, color: '#8b5cf6' },
+      { label: 'Qualified', count: qualified, color: '#a855f7' },
+      { label: 'Converted', count: converted, color: '#10b981' },
+      { label: 'Lost', count: lost, color: '#ef4444' },
     ];
   }, [leads]);
 
-  const campaignData = useMemo(() => generateCampaignData(leads), [leads]);
-
-  // ─── Derived Insights & Recommendations ───
+  // ─── Data-Driven Insights & Recommendations ───
   const weeklyInsights = useMemo(() => {
     const items: string[] = [];
-    const hotPct = metrics.total > 0 ? Math.round((metrics.hot / metrics.total) * 100) : 0;
+    const ea = analyticsData.emailAnalytics;
+    const wa = analyticsData.workflowAnalytics;
+    const newLeads = leads.filter(l => l.status === 'New').length;
 
-    if (hotPct > 10) items.push(`Tech leads convert ${Math.max(2, Math.round(hotPct / 5))}x faster than average`);
-    else items.push('High-score leads respond 2.5x faster to personalized emails');
-
-    items.push('Tuesday emails get 40% more opens than other days');
-    items.push('Case studies drive highest engagement across all content types');
-
-    if (metrics.convRate > 5) items.push(`Qualification rate of ${metrics.convRate}% exceeds industry benchmark`);
-    else items.push('Adding social proof to outreach increases reply rate by 35%');
+    if (ea.totalSent > 0) {
+      items.push(`Sent ${ea.totalSent} emails with ${ea.openRate}% open rate and ${ea.clickRate}% click rate`);
+    }
+    if (ea.bounceRate > 5) {
+      items.push(`Bounce rate is ${ea.bounceRate}% — consider cleaning your email list`);
+    }
+    if (wa.totalExecutions > 0) {
+      items.push(`${wa.totalExecutions} workflow executions with ${wa.successRate}% success rate`);
+    }
+    if (metrics.hot > 0) {
+      items.push(`${metrics.hot} hot leads (score > 80) ready for immediate outreach`);
+    }
+    if (newLeads > 0) {
+      items.push(`${newLeads} leads haven't been contacted yet — automate outreach`);
+    }
+    if (metrics.convRate > 5) {
+      items.push(`Qualification rate of ${metrics.convRate}% exceeds industry benchmark`);
+    }
+    if (items.length === 0) {
+      items.push('Start sending emails and running workflows to generate insights');
+    }
 
     return items.slice(0, 4);
-  }, [metrics]);
+  }, [metrics, analyticsData, leads]);
 
   const recommendations = useMemo(() => {
     const recs: string[] = [];
-    if (metrics.hot > 3) recs.push(`Increase tech industry targeting by 30%`);
-    else recs.push('Expand lead sourcing to adjacent industries');
+    const ea = analyticsData.emailAnalytics;
+    const wa = analyticsData.workflowAnalytics;
+    const ta = analyticsData.taskAnalytics;
+    const newLeads = leads.filter(l => l.status === 'New').length;
 
-    recs.push('Shift email sends to Tuesday AM for peak engagement');
-    recs.push('Create 3 more case studies this month');
-
-    if (metrics.total > 20) recs.push('Set up automated follow-ups for leads idle 7+ days');
-    else recs.push('Increase lead volume with content marketing campaigns');
+    if (ea.bounceRate > 5) recs.push(`Bounce rate is ${ea.bounceRate}% — clean your email list`);
+    if (newLeads > 5) recs.push(`${newLeads} leads uncontacted — set up automated outreach`);
+    if (wa.failedCount > 0) recs.push(`${wa.failedCount} workflow executions failed — review error logs`);
+    if (ta.overdue > 0) recs.push(`${ta.overdue} strategy tasks overdue — prioritize completion`);
+    if (ea.totalSent === 0) recs.push('Send your first email campaign to start tracking engagement');
+    if (wa.totalExecutions === 0) recs.push('Create a workflow to automate your lead pipeline');
+    if (metrics.total > 20 && metrics.hot < 3) recs.push('Enrich lead profiles to improve scoring accuracy');
+    if (recs.length === 0) recs.push('Great work! Keep monitoring your pipeline for new opportunities');
 
     return recs.slice(0, 4);
-  }, [metrics]);
+  }, [metrics, analyticsData, leads]);
 
   // ─── Score Distribution ───
   const scoreDistribution = useMemo(() => {
@@ -363,70 +369,86 @@ const AnalyticsPage: React.FC = () => {
       const bucket = buckets.find(b => l.score >= b.min && l.score <= b.max);
       if (bucket) bucket.count++;
     });
-    // Add simulated baseline if sparse
-    if (leads.length < 5) {
-      buckets[0].count = Math.max(buckets[0].count, 8);
-      buckets[1].count = Math.max(buckets[1].count, 15);
-      buckets[2].count = Math.max(buckets[2].count, 22);
-      buckets[3].count = Math.max(buckets[3].count, 12);
-      buckets[4].count = Math.max(buckets[4].count, 5);
-    }
     return buckets;
   }, [leads]);
 
-  // ─── Lead Source Breakdown ───
+  // ─── Lead Source Breakdown (real data, includes imports) ───
   const leadSourceBreakdown = useMemo(() => {
     const sourceMap: Record<string, number> = {};
     leads.forEach(l => {
       const source = l.source || 'Unknown';
       sourceMap[source] = (sourceMap[source] || 0) + 1;
     });
+    // Add Apollo imports as a source if present
+    const importTotal = analyticsData.importAnalytics.totalImported;
+    if (importTotal > 0 && !sourceMap['Apollo Import']) {
+      sourceMap['Apollo Import'] = importTotal;
+    }
     const entries = Object.entries(sourceMap).map(([name, value]) => ({ name, value }));
     if (entries.length === 0) {
-      return [
-        { name: 'LinkedIn', value: 35 },
-        { name: 'Website', value: 28 },
-        { name: 'Referral', value: 18 },
-        { name: 'Cold Outreach', value: 12 },
-        { name: 'Webinar', value: 7 },
-      ];
+      return [{ name: 'No data', value: 0 }];
     }
     return entries.sort((a, b) => b.value - a.value).slice(0, 6);
-  }, [leads]);
+  }, [leads, analyticsData.importAnalytics]);
 
-  // ─── Industry Benchmarks ───
+  // ─── Industry Benchmarks (real "Yours" column) ───
   const benchmarks = useMemo(() => [
     { metric: 'Conversion Rate', yours: metrics.convRate, industry: 3.2, top10: 8.5, unit: '%' },
-    { metric: 'Avg Response Time', yours: metrics.avgResponseHrs, industry: 5.0, top10: 1.2, unit: ' hrs', lower: true },
-    { metric: 'AI Score', yours: metrics.avgScore, industry: 65, top10: 88, unit: '' },
+    { metric: 'Open Rate', yours: metrics.openRate, industry: 21.5, top10: 45.0, unit: '%' },
+    { metric: 'Click Rate', yours: analyticsData.emailAnalytics.clickRate, industry: 2.6, top10: 8.0, unit: '%' },
     { metric: 'Hot Lead %', yours: metrics.total > 0 ? Math.round((metrics.hot / metrics.total) * 100) : 0, industry: 8, top10: 18, unit: '%' },
-    { metric: 'ROI', yours: metrics.roi, industry: 150, top10: 420, unit: '%' },
-  ], [metrics]);
+    { metric: 'Workflow Success', yours: analyticsData.workflowAnalytics.successRate, industry: 85, top10: 97, unit: '%' },
+  ], [metrics, analyticsData]);
 
-  // ─── Cohort Analysis ───
+  // ─── Cohort Analysis (real weekly cohorts from leads) ───
   const cohortData = useMemo(() => {
-    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    const totalLeads = Math.max(leads.length, 20);
-    return weeks.map((week, i) => {
-      const cohortSize = Math.round(totalLeads * (0.3 - i * 0.04)) + Math.floor(Math.random() * 5);
-      const retained = Math.round(cohortSize * (0.85 - i * 0.08));
-      const converted = Math.round(retained * (0.15 + Math.random() * 0.1));
-      const avgScore = Math.round(65 + Math.random() * 20);
-      const retentionRate = cohortSize > 0 ? Math.round((retained / cohortSize) * 100) : 0;
-      return { week, cohortSize, retained, converted, avgScore, retentionRate };
-    });
+    if (leads.length === 0) return [];
+    // Group leads by the week they were created
+    const weekMap = new Map<string, Lead[]>();
+    const now = new Date();
+    for (const lead of leads) {
+      if (!lead.created_at) continue;
+      const created = new Date(lead.created_at);
+      const weeksAgo = Math.floor((now.getTime() - created.getTime()) / (7 * 86400000));
+      if (weeksAgo > 3) continue; // Only last 4 weeks
+      const label = `Week ${4 - weeksAgo}`;
+      if (!weekMap.has(label)) weekMap.set(label, []);
+      weekMap.get(label)!.push(lead);
+    }
+    // Sort so Week 1 is oldest
+    return ['Week 1', 'Week 2', 'Week 3', 'Week 4']
+      .filter(w => weekMap.has(w))
+      .map(week => {
+        const cohort = weekMap.get(week)!;
+        const cohortSize = cohort.length;
+        const retained = cohort.filter(l => l.status !== 'Lost').length;
+        const converted = cohort.filter(l => l.status === 'Qualified' || l.status === 'Converted').length;
+        const avgScore = cohortSize > 0 ? Math.round(cohort.reduce((s, l) => s + l.score, 0) / cohortSize) : 0;
+        const retentionRate = cohortSize > 0 ? Math.round((retained / cohortSize) * 100) : 0;
+        return { week, cohortSize, retained, converted, avgScore, retentionRate };
+      });
   }, [leads]);
 
   const cohortHealthScore = useMemo(() => {
+    if (cohortData.length === 0) return 0;
     const avgRetention = cohortData.reduce((s, c) => s + c.retentionRate, 0) / cohortData.length;
     return Math.round(avgRetention);
   }, [cohortData]);
 
-  // ─── Predictive Forecast ───
+  // ─── Predictive Forecast (real period-over-period growth) ───
   const forecastData = useMemo(() => {
-    const baseLeads = Math.max(leads.length, 10);
-    const growthRate = metrics.totalTrend > 0 ? 1 + (metrics.totalTrend / 100) : 1.05;
+    const baseLeads = leads.length;
+    // Calculate real growth rate from lead trend over date range
+    const days = parseInt(dateRange);
+    const now = new Date();
+    const halfPoint = new Date(now);
+    halfPoint.setDate(halfPoint.getDate() - Math.floor(days / 2));
+    const firstHalf = leads.filter(l => l.created_at && new Date(l.created_at) < halfPoint).length;
+    const secondHalf = leads.filter(l => l.created_at && new Date(l.created_at) >= halfPoint).length;
+    const growthRate = firstHalf > 0 ? 1 + ((secondHalf - firstHalf) / firstHalf) : 1.05;
     const baseConvRate = metrics.convRate > 0 ? metrics.convRate / 100 : 0.03;
+    const hotPct = baseLeads > 0 ? metrics.hot / baseLeads : 0.1;
+
     const periods = [
       { label: 'Next 30 Days', days: 30 },
       { label: 'Next 60 Days', days: 60 },
@@ -434,50 +456,65 @@ const AnalyticsPage: React.FC = () => {
     ];
     return periods.map(p => {
       const factor = p.days / 30;
-      const projectedLeads = Math.round(baseLeads * Math.pow(growthRate, factor));
-      const projectedConversions = Math.round(projectedLeads * baseConvRate * (1 + factor * 0.02));
-      const projectedHot = Math.round(projectedLeads * 0.12 * (1 + factor * 0.03));
+      const projectedLeads = Math.round(baseLeads * Math.pow(Math.max(growthRate, 1), factor));
+      const projectedConversions = Math.round(projectedLeads * baseConvRate);
+      const projectedHot = Math.round(projectedLeads * hotPct);
       const confidence = Math.max(60, 92 - Math.round(factor * 12));
       return { ...p, projectedLeads, projectedConversions, projectedHot, confidence };
     });
-  }, [leads, metrics]);
+  }, [leads, metrics, dateRange]);
 
   const forecastTrend = useMemo(() => {
     const data: { day: string; actual: number; predicted: number }[] = [];
     const totalDays = 14;
+    const avgDaily = leads.length > 0 ? leads.length / parseInt(dateRange) : 0;
     for (let i = 0; i < totalDays; i++) {
       const d = new Date();
       d.setDate(d.getDate() - (totalDays - i - 1));
       const label = `${d.getMonth() + 1}/${d.getDate()}`;
-      const base = Math.max(leads.length / 30, 1);
+      // Actual: count leads created on that day
+      const dayLeads = leads.filter(l => {
+        if (!l.created_at) return false;
+        const ld = new Date(l.created_at);
+        return ld.getFullYear() === d.getFullYear() && ld.getMonth() === d.getMonth() && ld.getDate() === d.getDate();
+      }).length;
       data.push({
         day: label,
-        actual: i < 7 ? Math.round(base * (0.8 + Math.random() * 0.4)) : 0,
-        predicted: Math.round(base * (0.9 + i * 0.02 + Math.random() * 0.3)),
+        actual: dayLeads,
+        predicted: Math.round(avgDaily * (1 + i * 0.01)),
       });
     }
     return data;
-  }, [leads]);
+  }, [leads, dateRange]);
 
-  // ─── Channel Attribution ───
+  // ─── Channel Attribution (real derivation from lead sources) ───
   const channelAttribution = useMemo(() => {
-    const channels = [
-      { name: 'LinkedIn', leads: Math.round(leads.length * 0.35) || 18, conversions: 0, cost: 450, avgScore: 74, touchpoints: 2.3 },
-      { name: 'Website', leads: Math.round(leads.length * 0.28) || 14, conversions: 0, cost: 200, avgScore: 68, touchpoints: 1.8 },
-      { name: 'Referral', leads: Math.round(leads.length * 0.18) || 9, conversions: 0, cost: 50, avgScore: 82, touchpoints: 1.2 },
-      { name: 'Cold Outreach', leads: Math.round(leads.length * 0.12) || 6, conversions: 0, cost: 300, avgScore: 55, touchpoints: 3.5 },
-      { name: 'Webinar', leads: Math.round(leads.length * 0.07) || 4, conversions: 0, cost: 150, avgScore: 71, touchpoints: 2.0 },
-    ];
-    channels.forEach(c => { c.conversions = Math.round(c.leads * (c.avgScore / 100) * 0.15); });
-    const totalLeads = channels.reduce((s, c) => s + c.leads, 0);
-    const totalCost = channels.reduce((s, c) => s + c.cost, 0);
-    return channels.map(c => ({
-      ...c,
-      pct: totalLeads > 0 ? Math.round((c.leads / totalLeads) * 100) : 0,
-      cpl: c.leads > 0 ? Math.round(c.cost / c.leads) : 0,
-      roi: c.conversions > 0 ? Math.round(((c.conversions * 500) - c.cost) / c.cost * 100) : 0,
-      attribution: Math.round(((c.leads / Math.max(totalLeads, 1)) * 40) + ((c.avgScore / 100) * 30) + ((1 / Math.max(c.touchpoints, 1)) * 30)),
-    })).sort((a, b) => b.attribution - a.attribution);
+    const sourceMap = new Map<string, { leads: number; totalScore: number; conversions: number }>();
+    leads.forEach(l => {
+      const source = l.source || 'Unknown';
+      const entry = sourceMap.get(source) ?? { leads: 0, totalScore: 0, conversions: 0 };
+      entry.leads++;
+      entry.totalScore += l.score;
+      if (l.status === 'Qualified' || l.status === 'Converted') entry.conversions++;
+      sourceMap.set(source, entry);
+    });
+
+    const totalLeads = leads.length;
+    const channels = Array.from(sourceMap.entries()).map(([name, data]) => {
+      const avgScore = data.leads > 0 ? Math.round(data.totalScore / data.leads) : 0;
+      const pct = totalLeads > 0 ? Math.round((data.leads / totalLeads) * 100) : 0;
+      const attribution = Math.round(((data.leads / Math.max(totalLeads, 1)) * 50) + ((avgScore / 100) * 50));
+      return {
+        name,
+        leads: data.leads,
+        conversions: data.conversions,
+        avgScore,
+        pct,
+        attribution,
+      };
+    }).sort((a, b) => b.attribution - a.attribution);
+
+    return channels;
   }, [leads]);
 
   // ─── Keyboard Shortcuts ───
@@ -496,7 +533,7 @@ const AnalyticsPage: React.FC = () => {
       }
 
       const shortcuts: Record<string, () => void> = {
-        'r': () => fetchData(),
+        'r': () => handleRefreshAll(),
         'g': () => openReportBuilder(),
         'a': () => setShowAlertModal(true),
         'b': () => setShowBenchmarks(prev => !prev),
@@ -521,11 +558,9 @@ const AnalyticsPage: React.FC = () => {
   // ─── Handlers ───
   const refreshInsights = useCallback(() => {
     setInsightsLoading(true);
-    setTimeout(() => {
-      const newInsights = generateProgrammaticInsights(leads);
-      setInsights(newInsights);
-      setInsightsLoading(false);
-    }, 800);
+    const newInsights = generateProgrammaticInsights(leads);
+    setInsights(newInsights);
+    setInsightsLoading(false);
   }, [leads]);
 
   const handleGenerateReport = () => {
@@ -540,7 +575,7 @@ const AnalyticsPage: React.FC = () => {
   const handleDownloadReport = () => {
     const reportType = REPORT_TYPES.find(r => r.type === selectedReportType);
     if (selectedFormat === 'csv') {
-      const csvContent = `Report Type,${reportType?.label}\nTotal Leads,${leads.length}\nConversion Rate,${metrics.convRate}%\nAI Score,${metrics.avgScore}\nROI,${metrics.roi}%\n\nLead Name,Company,Score,Status\n${leads.map(l => `${l.name},${l.company},${l.score},${l.status}`).join('\n')}`;
+      const csvContent = `Report Type,${reportType?.label}\nTotal Leads,${leads.length}\nConversion Rate,${metrics.convRate}%\nAI Score,${metrics.avgScore}\nEmails Sent,${metrics.emailsSent}\nOpen Rate,${metrics.openRate}%\n\nLead Name,Company,Score,Status\n${leads.map(l => `${l.name},${l.company},${l.score},${l.status}`).join('\n')}`;
       const blob = new Blob([csvContent], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -554,7 +589,7 @@ const AnalyticsPage: React.FC = () => {
   };
 
   const handleExportInsights = () => {
-    const content = `AuraFunnel AI Insights Report\nGenerated: ${new Date().toLocaleDateString()}\n\n--- Top Insights ---\n${weeklyInsights.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}\n\n--- Recommendations ---\n${recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\n--- Key Metrics ---\nTotal Leads: ${metrics.total}\nHot Leads: ${metrics.hot}\nConversion Rate: ${metrics.convRate}%\nAvg Response: ${metrics.avgResponseHrs} hrs\nROI: ${metrics.roi}%`;
+    const content = `AuraFunnel AI Insights Report\nGenerated: ${new Date().toLocaleDateString()}\n\n--- Top Insights ---\n${weeklyInsights.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}\n\n--- Recommendations ---\n${recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\n--- Key Metrics ---\nTotal Leads: ${metrics.total}\nHot Leads: ${metrics.hot}\nConversion Rate: ${metrics.convRate}%\nEmails Sent: ${metrics.emailsSent}\nOpen Rate: ${metrics.openRate}%\nWorkflow ROI: ${metrics.workflowRoi}%`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -600,86 +635,90 @@ const AnalyticsPage: React.FC = () => {
     setReportGenerating(true);
     setReportReady(false);
 
-    setTimeout(() => {
-      const findings: ReportFinding[] = [];
+    // Generate synchronously from fetched real data (no setTimeout delay)
+    const findings: ReportFinding[] = [];
+    const ea = analyticsData.emailAnalytics;
+    const wa = analyticsData.workflowAnalytics;
+    const ca = analyticsData.contentAnalytics;
+    const ai = analyticsData.aiUsageAnalytics;
 
-      // Generate findings based on real data
-      if (selectedMetrics.includes('conversion_rate')) {
+    if (selectedMetrics.includes('conversion_rate')) {
+      findings.push({
+        title: `Conversion rate is ${metrics.convRate}%`,
+        detail: `${leads.filter(l => l.status === 'Qualified').length} qualified out of ${metrics.total} total leads`,
+        action: metrics.convRate > 5 ? 'Maintain current qualifying criteria' : 'Refine lead scoring to improve qualification',
+        trend: metrics.convRate > 3.2 ? 'up' : 'flat',
+        delta: `${metrics.convRate}%`,
+      });
+    }
+
+    if (selectedMetrics.includes('campaign_perf')) {
+      const topCamp = analyticsData.campaignPerformance[0];
+      if (topCamp) {
         findings.push({
-          title: `Conversion rate ${metrics.convTrend > 0 ? 'increased' : 'held steady at'} ${metrics.convRate}%`,
-          detail: metrics.hot > 3 ? 'Driven by tech industry leads with scores above 80' : 'Steady performance across all segments',
-          action: metrics.hot > 3 ? 'Increase tech industry targeting by 30%' : 'Expand targeting to new industries',
-          trend: metrics.convTrend > 0 ? 'up' : 'flat',
-          delta: `${metrics.convTrend > 0 ? '+' : ''}${metrics.convTrend}%`,
+          title: `Top campaign: ${topCamp.name} (${topCamp.sent} sent)`,
+          detail: `Open rate: ${topCamp.openRate}%, Click rate: ${topCamp.clickRate}%`,
+          action: 'Apply successful patterns to other campaigns',
+          trend: topCamp.openRate > 30 ? 'up' : 'flat',
+          delta: `${topCamp.openRate}% opens`,
         });
-      }
-
-      if (selectedMetrics.includes('team_response')) {
+      } else {
         findings.push({
-          title: `Team response time improved to ${metrics.avgResponseHrs} hours`,
-          detail: 'Sarah Chen had fastest response (0.8h avg), Alex Rivera improved by 45%',
-          action: 'Share Sarah\'s best practices with the team via internal wiki',
-          trend: 'up',
-          delta: '-0.5 hrs',
-        });
-      }
-
-      if (selectedMetrics.includes('ai_accuracy')) {
-        findings.push({
-          title: 'AI accuracy remained at 94%',
-          detail: 'Consistent performance across all lead scoring models. Sentiment analysis improved by 2%.',
-          action: 'No changes needed. Schedule model review in 30 days.',
+          title: 'No campaigns running yet',
+          detail: `${ea.totalSent} individual emails sent. Consider creating sequences for better tracking.`,
+          action: 'Create your first email sequence',
           trend: 'flat',
-          delta: '+0.2%',
+          delta: '0 campaigns',
         });
       }
+    }
 
-      if (selectedMetrics.includes('cost_per_lead') || selectedMetrics.includes('roi')) {
-        findings.push({
-          title: `Cost per lead decreased to $${Math.max(8, 24 - metrics.total * 0.3).toFixed(2)}`,
-          detail: 'More efficient campaigns and improved targeting reduced acquisition costs',
-          action: 'Reallocate budget from underperforming channels to top performers',
-          trend: 'up',
-          delta: '-$2.40',
-        });
-      }
+    if (selectedMetrics.includes('ai_accuracy') && ai.requestCount > 0) {
+      findings.push({
+        title: `${ai.requestCount} AI requests using ${ai.totalTokens.toLocaleString()} tokens`,
+        detail: `Average ${ai.avgTokensPerRequest} tokens per request across the period`,
+        action: ai.avgTokensPerRequest > 2000 ? 'Optimize prompts to reduce token usage' : 'Token usage is efficient',
+        trend: 'flat',
+        delta: `${ai.avgTokensPerRequest} avg`,
+      });
+    }
 
-      if (selectedMetrics.includes('campaign_perf')) {
-        findings.push({
-          title: 'Hot Lead Nurture campaign outperforms by 3.2x',
-          detail: '61.8% open rate and 22.3% click rate. Personalized subject lines drove performance.',
-          action: 'Apply personalization strategy to all campaigns',
-          trend: 'up',
-          delta: '+3.2x',
-        });
-      }
+    if (selectedMetrics.includes('lead_volume')) {
+      const topSource = leadSourceBreakdown[0];
+      findings.push({
+        title: `Pipeline has ${metrics.total} leads (${metrics.hot} hot)`,
+        detail: topSource ? `Top source: ${topSource.name} with ${topSource.value} leads` : 'No source data available',
+        action: metrics.hot > 3 ? 'Prioritize hot lead outreach' : 'Focus on enriching lead profiles',
+        trend: metrics.total > 10 ? 'up' : 'flat',
+        delta: `${metrics.total} leads`,
+      });
+    }
 
-      if (selectedMetrics.includes('lead_volume')) {
-        findings.push({
-          title: `Pipeline grew to ${metrics.total} leads (${metrics.hot} hot)`,
-          detail: `${Math.round(metrics.total * 0.35)} leads from LinkedIn, ${Math.round(metrics.total * 0.25)} from website, rest from other sources`,
-          action: 'Increase LinkedIn budget by 20% based on lead quality metrics',
-          trend: 'up',
-          delta: `+${metrics.totalTrend}%`,
-        });
-      }
+    if (selectedMetrics.includes('content_engagement') && ca.totalPosts > 0) {
+      findings.push({
+        title: `${ca.totalPosts} blog posts created (${ca.published} published)`,
+        detail: `${ca.drafts} drafts, ${ca.pendingReview} pending review`,
+        action: ca.drafts > 2 ? 'Review and publish pending drafts' : 'Maintain content cadence',
+        trend: ca.published > 0 ? 'up' : 'flat',
+        delta: `${ca.published} published`,
+      });
+    }
 
-      if (selectedMetrics.includes('content_engagement')) {
-        findings.push({
-          title: 'Case studies drive 2.3x higher engagement',
-          detail: 'Blog articles with data-backed claims had 40% higher read-through rates',
-          action: 'Produce 3 more data-driven case studies this month',
-          trend: 'up',
-          delta: '+2.3x',
-        });
-      }
+    if (selectedMetrics.includes('roi') && wa.totalExecutions > 0) {
+      findings.push({
+        title: `Workflows: ${wa.totalExecutions} executions at ${wa.successRate}% success`,
+        detail: `${wa.totalLeadsProcessed} leads processed, ${wa.failedCount} failures`,
+        action: wa.failedCount > 0 ? 'Investigate failed workflow executions' : 'Workflows running smoothly',
+        trend: wa.successRate > 90 ? 'up' : wa.successRate > 70 ? 'flat' : 'down',
+        delta: `${wa.successRate}% success`,
+      });
+    }
 
-      setReportFindings(findings.slice(0, 6));
-      setReportGenerating(false);
-      setReportReady(true);
-      setReportStep(3);
-    }, 2500);
-  }, [selectedMetrics, metrics]);
+    setReportFindings(findings.slice(0, 6));
+    setReportGenerating(false);
+    setReportReady(true);
+    setReportStep(3);
+  }, [selectedMetrics, metrics, analyticsData, leads, leadSourceBreakdown]);
 
   const generateShareLink = () => {
     const link = `https://app.aurafunnel.io/reports/shared/${Date.now().toString(36)}`;
@@ -747,7 +786,7 @@ const AnalyticsPage: React.FC = () => {
             <span className="text-[10px] font-bold text-slate-400">
               Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
-            <button onClick={fetchData} className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors">
+            <button onClick={handleRefreshAll} className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors">
               <RefreshIcon className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
@@ -836,20 +875,20 @@ const AnalyticsPage: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: 'Total Leads', value: metrics.total.toLocaleString(), trend: metrics.totalTrend, trendLabel: `+${metrics.totalTrend}%`, up: true, color: 'indigo', icon: <TargetIcon className="w-4 h-4" /> },
-          { label: 'Hot Leads', value: metrics.hot.toLocaleString(), trend: metrics.hotTrend, trendLabel: `+${metrics.hotTrend}%`, up: true, color: 'rose', icon: <FlameIcon className="w-4 h-4" /> },
-          { label: 'Conv. Rate', value: `${metrics.convRate}%`, trend: metrics.convTrend, trendLabel: `+${metrics.convTrend}%`, up: true, color: 'emerald', icon: <TrendUpIcon className="w-4 h-4" /> },
-          { label: 'Avg. Response', value: `${metrics.avgResponseHrs}h`, trend: metrics.responseTrend, trendLabel: `${metrics.responseTrend}h`, up: false, color: 'amber', icon: <ClockIcon className="w-4 h-4" /> },
-          { label: 'AI Score', value: metrics.avgScore, trend: 2, trendLabel: '+2 pts', up: true, color: 'violet', icon: <BrainIcon className="w-4 h-4" /> },
-          { label: 'ROI', value: `${metrics.roi}%`, trend: metrics.roiTrend, trendLabel: `+${metrics.roiTrend}%`, up: true, color: 'cyan', icon: <CreditCardIcon className="w-4 h-4" /> },
+          { label: 'Total Leads', value: metrics.total.toLocaleString(), trendLabel: comparisonMode ? metrics.emailSentTrend.label : '', up: true, color: 'indigo', icon: <TargetIcon className="w-4 h-4" /> },
+          { label: 'Hot Leads', value: metrics.hot.toLocaleString(), trendLabel: '', up: true, color: 'rose', icon: <FlameIcon className="w-4 h-4" /> },
+          { label: 'Conv. Rate', value: `${metrics.convRate}%`, trendLabel: '', up: true, color: 'emerald', icon: <TrendUpIcon className="w-4 h-4" /> },
+          { label: 'Emails Sent', value: metrics.emailsSent.toLocaleString(), trendLabel: comparisonMode ? metrics.emailSentTrend.label : '', up: metrics.emailSentTrend.up, color: 'amber', icon: <MailIcon className="w-4 h-4" /> },
+          { label: 'Open Rate', value: `${metrics.openRate}%`, trendLabel: comparisonMode ? metrics.openRateTrend.label : '', up: metrics.openRateTrend.up, color: 'violet', icon: <EyeIcon className="w-4 h-4" /> },
+          { label: 'Workflow ROI', value: `${metrics.workflowRoi}%`, trendLabel: comparisonMode ? metrics.roiTrend.label : '', up: metrics.roiTrend.up, color: 'cyan', icon: <CreditCardIcon className="w-4 h-4" /> },
         ].map((m, i) => (
           <div key={i} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between mb-2">
               <div className={`w-8 h-8 rounded-lg bg-${m.color}-50 flex items-center justify-center text-${m.color}-600`}>
                 {m.icon}
               </div>
-              {m.trend !== 0 && (
-                <span className={`inline-flex items-center space-x-0.5 text-[10px] font-bold ${m.up ? 'text-emerald-600' : 'text-emerald-600'}`}>
+              {m.trendLabel && (
+                <span className={`inline-flex items-center space-x-0.5 text-[10px] font-bold ${m.up ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {m.up ? <TrendUpIcon className="w-3 h-3" /> : <TrendDownIcon className="w-3 h-3" />}
                   <span>{m.trendLabel}</span>
                 </span>
@@ -857,7 +896,7 @@ const AnalyticsPage: React.FC = () => {
             </div>
             <p className="text-xl font-black text-slate-900">{m.value}</p>
             <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">{m.label}</p>
-            {comparisonMode && (
+            {comparisonMode && m.trendLabel && (
               <p className="text-[10px] font-semibold text-indigo-500 mt-1">vs prev: {m.trendLabel}</p>
             )}
           </div>
@@ -953,6 +992,80 @@ const AnalyticsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* EMAIL ENGAGEMENT CHART (NEW — real data) */}
+          {analyticsData.emailTimeSeries.length > 0 && analyticsData.emailTimeSeries.some(d => d.sent > 0) ? (
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-slate-800 font-heading">Email Engagement</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{DATE_RANGE_LABELS[dateRange]} &middot; Opens, clicks, bounces</p>
+                </div>
+                <div className="flex items-center space-x-3 text-xs">
+                  <span className="flex items-center space-x-1.5"><span className="w-3 h-1.5 bg-indigo-500 rounded-full"></span><span className="text-slate-500 font-medium">Opens</span></span>
+                  <span className="flex items-center space-x-1.5"><span className="w-3 h-1.5 bg-emerald-500 rounded-full"></span><span className="text-slate-500 font-medium">Clicks</span></span>
+                  <span className="flex items-center space-x-1.5"><span className="w-3 h-1.5 bg-rose-400 rounded-full"></span><span className="text-slate-500 font-medium">Bounces</span></span>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={analyticsData.emailTimeSeries}>
+                  <defs>
+                    <linearGradient id="emailOpens" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="emailClicks" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                  <Area type="monotone" dataKey="opens" stroke="#6366f1" fill="url(#emailOpens)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="clicks" stroke="#10b981" fill="url(#emailClicks)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="bounces" stroke="#f43f5e" fill="none" strokeWidth={1.5} strokeDasharray="4 4" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-8 border border-slate-100 shadow-sm text-center">
+              <MailIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-500">No email data yet</p>
+              <p className="text-xs text-slate-400 mt-1">Send emails from workflows to start tracking engagement</p>
+            </div>
+          )}
+
+          {/* WORKFLOW PERFORMANCE CHART (NEW — real data) */}
+          {analyticsData.workflowAnalytics.workflowBreakdown.length > 0 ? (
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-slate-800 font-heading">Workflow Performance</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {analyticsData.workflowAnalytics.totalExecutions} executions &middot; {analyticsData.workflowAnalytics.successRate}% success &middot; {analyticsData.workflowAnalytics.totalLeadsProcessed} leads processed
+                  </p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={analyticsData.workflowAnalytics.workflowBreakdown}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                  <Bar dataKey="successCount" name="Success" fill="#10b981" radius={[4, 4, 0, 0]} stackId="a" />
+                  <Bar dataKey="failedCount" name="Failed" fill="#ef4444" radius={[4, 4, 0, 0]} stackId="a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-8 border border-slate-100 shadow-sm text-center">
+              <BoltIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-500">No workflow data yet</p>
+              <p className="text-xs text-slate-400 mt-1">Create and run workflows to see execution metrics</p>
+            </div>
+          )}
+
           {/* SCORE DISTRIBUTION + LEAD SOURCE CHARTS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Lead Score Distribution */}
@@ -1024,112 +1137,112 @@ const AnalyticsPage: React.FC = () => {
 
           {/* DATA TABLES */}
           <div className="space-y-6">
-            {/* Top Performing Campaigns */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h3 className="font-bold text-slate-800 font-heading">Top Performing Campaigns</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Email sequence performance across active campaigns</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Campaign</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Sent</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Open %</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Click %</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Conv.</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {campaignData.map((c, i) => (
-                      <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-3.5">
-                          <span className="font-semibold text-sm text-slate-800">{c.name}</span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className="text-sm font-semibold text-slate-600">{c.sent.toLocaleString()}</span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className={`text-sm font-bold ${c.openRate > 50 ? 'text-emerald-600' : c.openRate > 35 ? 'text-amber-600' : 'text-slate-600'}`}>
-                            {c.openRate}%
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className={`text-sm font-bold ${c.clickRate > 15 ? 'text-emerald-600' : c.clickRate > 8 ? 'text-amber-600' : 'text-slate-600'}`}>
-                            {c.clickRate}%
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-bold ${
-                            c.convRate > 5 ? 'bg-emerald-50 text-emerald-700' : c.convRate > 3 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-600'
-                          }`}>
-                            {c.convRate}%
-                          </span>
-                        </td>
+            {/* Top Performing Campaigns (real from scheduled_emails) */}
+            {analyticsData.campaignPerformance.length > 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <h3 className="font-bold text-slate-800 font-heading">Top Performing Campaigns</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Email sequence performance from real campaigns</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Campaign</th>
+                        <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Sent</th>
+                        <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Open %</th>
+                        <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Click %</th>
+                        <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Conv.</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {analyticsData.campaignPerformance.map((c, i) => (
+                        <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-3.5">
+                            <span className="font-semibold text-sm text-slate-800">{c.name}</span>
+                          </td>
+                          <td className="px-6 py-3.5 text-right">
+                            <span className="text-sm font-semibold text-slate-600">{c.sent.toLocaleString()}</span>
+                          </td>
+                          <td className="px-6 py-3.5 text-right">
+                            <span className={`text-sm font-bold ${c.openRate > 50 ? 'text-emerald-600' : c.openRate > 35 ? 'text-amber-600' : 'text-slate-600'}`}>
+                              {c.openRate}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-3.5 text-right">
+                            <span className={`text-sm font-bold ${c.clickRate > 15 ? 'text-emerald-600' : c.clickRate > 8 ? 'text-amber-600' : 'text-slate-600'}`}>
+                              {c.clickRate}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-3.5 text-right">
+                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-bold ${
+                              c.convRate > 5 ? 'bg-emerald-50 text-emerald-700' : c.convRate > 3 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-600'
+                            }`}>
+                              {c.convRate}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-white rounded-2xl p-8 border border-slate-100 shadow-sm text-center">
+                <SendIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                <p className="text-sm font-bold text-slate-500">No campaigns yet</p>
+                <p className="text-xs text-slate-400 mt-1">Create a workflow with email steps to start tracking campaign performance</p>
+              </div>
+            )}
 
-            {/* AI Performance Metrics */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h3 className="font-bold text-slate-800 font-heading">AI Performance Metrics</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Model accuracy, speed, and cost efficiency</p>
+            {/* AI Usage Metrics (real from ai_usage_logs) */}
+            {analyticsData.aiUsageAnalytics.requestCount > 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <h3 className="font-bold text-slate-800 font-heading">AI Usage Metrics</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Real token usage and request volume from ai_usage_logs</p>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-3 gap-4 mb-5">
+                    <div className="text-center p-3 bg-slate-50 rounded-xl">
+                      <p className="text-xl font-black text-indigo-600">{analyticsData.aiUsageAnalytics.requestCount.toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Requests</p>
+                    </div>
+                    <div className="text-center p-3 bg-slate-50 rounded-xl">
+                      <p className="text-xl font-black text-violet-600">{analyticsData.aiUsageAnalytics.totalTokens.toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Tokens Used</p>
+                    </div>
+                    <div className="text-center p-3 bg-slate-50 rounded-xl">
+                      <p className="text-xl font-black text-amber-600">{analyticsData.aiUsageAnalytics.avgTokensPerRequest.toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Avg Tokens/Req</p>
+                    </div>
+                  </div>
+                  {analyticsData.aiUsageAnalytics.tokensByDay.some(d => d.tokens > 0) && (
+                    <ResponsiveContainer width="100%" height={180}>
+                      <AreaChart data={analyticsData.aiUsageAnalytics.tokensByDay}>
+                        <defs>
+                          <linearGradient id="aiTokens" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} />
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="day" tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                        <YAxis tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                        <Area type="monotone" dataKey="tokens" stroke="#8b5cf6" fill="url(#aiTokens)" strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Model</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Acc. %</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Speed</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Cost/Req</th>
-                      <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Satis.</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {AI_PERFORMANCE_DATA.map((row, i) => (
-                      <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-3.5">
-                          <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
-                              <SparklesIcon className="w-4 h-4" />
-                            </div>
-                            <span className="font-semibold text-sm text-slate-800">{row.model}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className={`text-sm font-bold ${row.accuracy > 90 ? 'text-emerald-600' : row.accuracy > 85 ? 'text-amber-600' : 'text-rose-600'}`}>
-                            {row.accuracy}%
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className="text-sm font-semibold text-slate-600">{row.speed}</span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className="text-sm font-semibold text-slate-600">{row.costPer}</span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${row.satisfaction > 90 ? 'bg-emerald-500' : row.satisfaction > 85 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                                style={{ width: `${row.satisfaction}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-xs font-bold text-slate-500">{row.satisfaction}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            ) : (
+              <div className="bg-white rounded-2xl p-8 border border-slate-100 shadow-sm text-center">
+                <BrainIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                <p className="text-sm font-bold text-slate-500">No AI usage data yet</p>
+                <p className="text-xs text-slate-400 mt-1">Use AI features like lead scoring and content generation to see usage metrics</p>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -1216,6 +1329,27 @@ const AnalyticsPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* AI Usage Card (NEW — real data) */}
+          {analyticsData.aiUsageAnalytics.requestCount > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+              <h3 className="font-bold text-slate-800 text-sm font-heading mb-3">AI Usage</h3>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="text-center p-2 bg-slate-50 rounded-lg">
+                  <p className="text-lg font-black text-violet-600">{analyticsData.aiUsageAnalytics.totalTokens.toLocaleString()}</p>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase">Tokens</p>
+                </div>
+                <div className="text-center p-2 bg-slate-50 rounded-lg">
+                  <p className="text-lg font-black text-indigo-600">{analyticsData.aiUsageAnalytics.requestCount}</p>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase">Requests</p>
+                </div>
+              </div>
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full" style={{ width: `${Math.min(100, (analyticsData.aiUsageAnalytics.totalTokens / 100000) * 100)}%` }} />
+              </div>
+              <p className="text-[9px] text-slate-400 font-medium mt-1">{analyticsData.aiUsageAnalytics.avgTokensPerRequest} avg tokens/request</p>
             </div>
           )}
 
@@ -1639,10 +1773,10 @@ const AnalyticsPage: React.FC = () => {
                     ) : vizType === 'scorecard' ? (
                       <div className="grid grid-cols-4 gap-3">
                         {[
-                          { label: 'Total Leads', value: metrics.total, delta: `+${metrics.totalTrend}%` },
-                          { label: 'Conv. Rate', value: `${metrics.convRate}%`, delta: `+${metrics.convTrend}%` },
-                          { label: 'Avg Response', value: `${metrics.avgResponseHrs}h`, delta: `${metrics.responseTrend}h` },
-                          { label: 'ROI', value: `${metrics.roi}%`, delta: `+${metrics.roiTrend}%` },
+                          { label: 'Total Leads', value: metrics.total, delta: `${metrics.total}` },
+                          { label: 'Conv. Rate', value: `${metrics.convRate}%`, delta: `${metrics.convRate}%` },
+                          { label: 'Open Rate', value: `${metrics.openRate}%`, delta: `${metrics.openRate}%` },
+                          { label: 'Emails Sent', value: metrics.emailsSent, delta: `${metrics.emailsSent}` },
                         ].map(sc => (
                           <div key={sc.label} className="bg-white rounded-xl p-4 text-center border border-slate-100">
                             <p className="text-xl font-black text-slate-900">{sc.value}</p>
@@ -1662,12 +1796,12 @@ const AnalyticsPage: React.FC = () => {
                           </tr></thead>
                           <tbody>
                             {[
-                              { m: 'Total Leads', v: metrics.total.toString(), c: `+${metrics.totalTrend}%` },
-                              { m: 'Hot Leads', v: metrics.hot.toString(), c: `+${metrics.hotTrend}%` },
-                              { m: 'Conversion Rate', v: `${metrics.convRate}%`, c: `+${metrics.convTrend}%` },
-                              { m: 'Avg Response', v: `${metrics.avgResponseHrs} hrs`, c: `${metrics.responseTrend} hrs` },
-                              { m: 'ROI', v: `${metrics.roi}%`, c: `+${metrics.roiTrend}%` },
-                              { m: 'Avg AI Score', v: metrics.avgScore.toString(), c: '+2' },
+                              { m: 'Total Leads', v: metrics.total.toString(), c: `${metrics.total}` },
+                              { m: 'Hot Leads', v: metrics.hot.toString(), c: `${metrics.hot}` },
+                              { m: 'Conversion Rate', v: `${metrics.convRate}%`, c: `${metrics.convRate}%` },
+                              { m: 'Emails Sent', v: `${metrics.emailsSent}`, c: comparisonMode ? metrics.emailSentTrend.label : '--' },
+                              { m: 'Open Rate', v: `${metrics.openRate}%`, c: comparisonMode ? metrics.openRateTrend.label : '--' },
+                              { m: 'Avg AI Score', v: metrics.avgScore.toString(), c: `${metrics.avgScore}` },
                             ].map(r => (
                               <tr key={r.m} className="border-b border-slate-50">
                                 <td className="py-2.5 text-xs font-medium text-slate-700">{r.m}</td>
@@ -1987,6 +2121,13 @@ const AnalyticsPage: React.FC = () => {
               {/* Cohort Table */}
               <div className="space-y-3">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Weekly Cohorts</h4>
+                {cohortData.length === 0 && (
+                  <div className="p-6 text-center">
+                    <UsersIcon className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-500">No cohort data yet</p>
+                    <p className="text-xs text-slate-400 mt-1">Add leads to see weekly cohort analysis</p>
+                  </div>
+                )}
                 {cohortData.map((c, i) => (
                   <div key={i} className="p-4 bg-slate-50 rounded-xl">
                     <div className="flex items-center justify-between mb-2">
@@ -2123,7 +2264,7 @@ const AnalyticsPage: React.FC = () => {
                   <h4 className="text-sm font-bold text-indigo-800">Forecast Analysis</h4>
                 </div>
                 <p className="text-xs text-indigo-700 leading-relaxed">
-                  Based on current growth trends ({metrics.totalTrend > 0 ? `+${metrics.totalTrend}%` : 'flat'} MoM),
+                  Based on current pipeline of {metrics.total} leads,
                   your pipeline is projected to reach {forecastData[2]?.projectedLeads || 0} leads in 90 days.
                   {metrics.convRate > 3
                     ? ` Strong ${metrics.convRate}% conversion rate suggests ${forecastData[2]?.projectedConversions || 0} potential conversions.`
@@ -2172,7 +2313,7 @@ const AnalyticsPage: React.FC = () => {
                       </div>
                       <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black">{ch.attribution} attr. score</span>
                     </div>
-                    <div className="grid grid-cols-5 gap-1.5 text-center">
+                    <div className="grid grid-cols-3 gap-1.5 text-center">
                       <div className="p-1.5 bg-white rounded-lg">
                         <p className="text-sm font-black text-slate-700">{ch.leads}</p>
                         <p className="text-[7px] font-bold text-slate-400 uppercase">Leads</p>
@@ -2182,16 +2323,8 @@ const AnalyticsPage: React.FC = () => {
                         <p className="text-[7px] font-bold text-slate-400 uppercase">Conv</p>
                       </div>
                       <div className="p-1.5 bg-white rounded-lg">
-                        <p className="text-sm font-black text-amber-600">${ch.cpl}</p>
-                        <p className="text-[7px] font-bold text-slate-400 uppercase">CPL</p>
-                      </div>
-                      <div className="p-1.5 bg-white rounded-lg">
                         <p className="text-sm font-black text-indigo-600">{ch.avgScore}</p>
-                        <p className="text-[7px] font-bold text-slate-400 uppercase">Score</p>
-                      </div>
-                      <div className="p-1.5 bg-white rounded-lg">
-                        <p className={`text-sm font-black ${ch.roi > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{ch.roi}%</p>
-                        <p className="text-[7px] font-bold text-slate-400 uppercase">ROI</p>
+                        <p className="text-[7px] font-bold text-slate-400 uppercase">Avg Score</p>
                       </div>
                     </div>
                     <div className="mt-2">
@@ -2210,16 +2343,16 @@ const AnalyticsPage: React.FC = () => {
               {/* Attribution Summary */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="p-3 bg-slate-50 rounded-xl text-center">
-                  <p className="text-lg font-black text-slate-700">${channelAttribution.reduce((s, c) => s + c.cost, 0)}</p>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase">Total Spend</p>
+                  <p className="text-lg font-black text-slate-700">{channelAttribution.reduce((s, c) => s + c.leads, 0)}</p>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase">Total Leads</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl text-center">
                   <p className="text-lg font-black text-emerald-600">{channelAttribution.reduce((s, c) => s + c.conversions, 0)}</p>
                   <p className="text-[8px] font-bold text-slate-400 uppercase">Total Conv</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl text-center">
-                  <p className="text-lg font-black text-indigo-600">${channelAttribution.reduce((s, c) => s + c.leads, 0) > 0 ? Math.round(channelAttribution.reduce((s, c) => s + c.cost, 0) / channelAttribution.reduce((s, c) => s + c.leads, 0)) : 0}</p>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase">Blended CPL</p>
+                  <p className="text-lg font-black text-indigo-600">{channelAttribution.length}</p>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase">Channels</p>
                 </div>
               </div>
 
@@ -2230,12 +2363,13 @@ const AnalyticsPage: React.FC = () => {
                   <h4 className="text-sm font-bold text-emerald-800">Attribution Insight</h4>
                 </div>
                 <p className="text-xs text-emerald-700 leading-relaxed">
-                  {channelAttribution[0]?.name || 'Top channel'} has the highest attribution score ({channelAttribution[0]?.attribution || 0}).
-                  {channelAttribution[0]?.roi > 100
-                    ? ` With ${channelAttribution[0]?.roi}% ROI, consider increasing budget allocation by 20%.`
+                  {channelAttribution[0]?.name || 'Top channel'} has the highest attribution score ({channelAttribution[0]?.attribution || 0})
+                  with {channelAttribution[0]?.leads || 0} leads and avg score of {channelAttribution[0]?.avgScore || 0}.
+                  {channelAttribution[0]?.conversions > 0
+                    ? ` ${channelAttribution[0]?.conversions} conversions from this channel — consider increasing focus.`
                     : ' Focus on improving conversion quality through better targeting.'}
-                  {channelAttribution.find(c => c.name === 'Referral')?.avgScore > 75
-                    ? ' Referral leads have highest quality scores — invest in referral programs.'
+                  {channelAttribution.find(c => c.avgScore > 75)
+                    ? ` ${channelAttribution.find(c => c.avgScore > 75)?.name} leads have highest quality scores.`
                     : ''}
                 </p>
               </div>
