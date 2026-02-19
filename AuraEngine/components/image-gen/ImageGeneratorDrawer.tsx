@@ -16,6 +16,7 @@ import type {
 import { SparklesIcon } from '../Icons';
 import ModuleFieldsPanel from './ModuleFieldsPanel';
 import { buildDefaultModuleFields } from '../../lib/moduleFieldDefaults';
+import { uploadBase64Image } from '../../lib/imageUpload';
 
 interface ImageGeneratorDrawerProps {
   open: boolean;
@@ -24,6 +25,7 @@ interface ImageGeneratorDrawerProps {
   moduleId?: string;
   onInsertImage?: (imageUrl: string) => void;
   businessProfile?: BusinessProfile;
+  insertLabel?: string;
 }
 
 const ASPECT_OPTIONS: { value: ImageAspectRatio; label: string; icon: string }[] = [
@@ -45,7 +47,7 @@ const DEFAULT_BRAND: ImageGenBrandSettings = {
 };
 
 const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
-  open, onClose, moduleType: initialModuleType, moduleId, onInsertImage, businessProfile,
+  open, onClose, moduleType: initialModuleType, moduleId, onInsertImage, businessProfile, insertLabel,
 }) => {
   const [moduleType, setModuleType] = useState<ImageModuleType>(initialModuleType);
   const [prompt, setPrompt] = useState('');
@@ -62,6 +64,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
   const [generated, setGenerated] = useState<ImageGenGeneratedImage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [insertingIds, setInsertingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open) setModuleType(initialModuleType);
@@ -98,6 +101,19 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
     } else {
       setPresetId(id);
       setPrompt(presetPrompt);
+    }
+  };
+
+  const handleInsertImage = async (url: string, imgId: string) => {
+    if (!onInsertImage) return;
+    setInsertingIds(prev => new Set(prev).add(imgId));
+    try {
+      const publicUrl = url.startsWith('data:') ? await uploadBase64Image(url) : url;
+      onInsertImage(publicUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Image upload failed');
+    } finally {
+      setInsertingIds(prev => { const next = new Set(prev); next.delete(imgId); return next; });
     }
   };
 
@@ -289,7 +305,9 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
         <PreviewGrid
           images={generated}
           loading={generating}
-          onInsert={onInsertImage}
+          onInsert={onInsertImage ? handleInsertImage : undefined}
+          insertLabel={insertLabel}
+          insertingIds={insertingIds}
         />
       </div>
     </Drawer>

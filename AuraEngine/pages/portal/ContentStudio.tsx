@@ -2010,6 +2010,27 @@ const ContentStudio: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Attached Images */}
+                {emailImages.length > 0 && (
+                  <div className="mt-3">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Attached Images</span>
+                    <div className="mt-1.5 flex flex-wrap gap-2">
+                      {emailImages.map((url, idx) => (
+                        <div key={idx} className="relative group">
+                          <img src={url} alt={`Image ${idx + 1}`} className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
+                          <button
+                            onClick={() => setEmailImages(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <XIcon className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">These images will be included with your post.</p>
+                  </div>
+                )}
+
                 {/* Hashtag suggestions */}
                 <div className="mt-4 pt-3 border-t border-slate-100">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Suggested Hashtags</p>
@@ -2055,6 +2076,16 @@ const ContentStudio: React.FC = () => {
                       {linkedinCopied ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
                       <span>{linkedinCopied ? 'Copied!' : 'Copy to Clipboard'}</span>
                     </button>
+                    {emailImages.length > 0 && (
+                      <a
+                        href={emailImages[0]}
+                        download="linkedin-post-image.png"
+                        className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-200"
+                      >
+                        <DownloadIcon className="w-4 h-4" />
+                        <span>Download Image</span>
+                      </a>
+                    )}
                     <button
                       onClick={handleOpenLinkedin}
                       className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
@@ -2063,7 +2094,11 @@ const ContentStudio: React.FC = () => {
                       <span>Open LinkedIn</span>
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-2">Copy your post first, then paste it in the LinkedIn composer</p>
+                  <p className="text-[10px] text-slate-400 mt-2">
+                    {emailImages.length > 0
+                      ? 'Copy your post and download the image, then paste both in LinkedIn'
+                      : 'Copy your post first, then paste it in the LinkedIn composer'}
+                  </p>
                 </div>
               </div>
             )}
@@ -2172,6 +2207,12 @@ const ContentStudio: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  {/* Post image */}
+                  {emailImages.length > 0 && (
+                    <div className="border-t border-b border-slate-100">
+                      <img src={emailImages[0]} alt="Post image" className="w-full object-cover" />
+                    </div>
+                  )}
                   {/* Engagement bar */}
                   <div className="px-4 py-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
                     <span>👍 12 &middot; 💡 3</span>
@@ -2197,6 +2238,16 @@ const ContentStudio: React.FC = () => {
                     {linkedinCopied ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
                     <span>{linkedinCopied ? 'Copied!' : 'Copy to Clipboard'}</span>
                   </button>
+                  {emailImages.length > 0 && (
+                    <a
+                      href={emailImages[0]}
+                      download="linkedin-post-image.png"
+                      className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-200"
+                    >
+                      <DownloadIcon className="w-4 h-4" />
+                      <span>Download Image</span>
+                    </a>
+                  )}
                   <button
                     onClick={handleOpenLinkedin}
                     className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
@@ -2205,7 +2256,11 @@ const ContentStudio: React.FC = () => {
                     <span>Open LinkedIn</span>
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-2">Copy your post first, then paste it in the LinkedIn composer</p>
+                <p className="text-[10px] text-slate-400 mt-2">
+                  {emailImages.length > 0
+                    ? 'Copy your post and download the image, then paste both in LinkedIn'
+                    : 'Copy your post first, then paste it in the LinkedIn composer'}
+                </p>
               </div>
             )}
 
@@ -3342,7 +3397,7 @@ const ContentStudio: React.FC = () => {
           ))}
         </div>
       )}
-      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} onInsertImage={(url) => setEmailImages(prev => [...prev, url])} businessProfile={user.businessProfile} />
+      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} onInsertImage={(url) => setEmailImages(prev => [...prev, url])} businessProfile={user.businessProfile} insertLabel={contentMode === 'linkedin' ? 'Use in Post' : 'Use in Email'} />
     </div>
   );
 };

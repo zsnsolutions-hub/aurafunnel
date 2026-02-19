@@ -6,11 +6,13 @@ interface PreviewGridProps {
   images: ImageGenGeneratedImage[];
   loading: boolean;
   onSave?: (image: ImageGenGeneratedImage) => void;
-  onInsert?: (imageUrl: string) => void;
+  onInsert?: (imageUrl: string, imageId: string) => void;
   savedIds?: Set<string>;
+  insertLabel?: string;
+  insertingIds?: Set<string>;
 }
 
-const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onInsert, savedIds }) => {
+const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onInsert, savedIds, insertLabel = 'Use in Email', insertingIds }) => {
   const [insertedIds, setInsertedIds] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
@@ -66,18 +68,23 @@ const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onIn
                   </a>
                   {onInsert && (
                     <button
-                      onClick={() => { onInsert(url); setInsertedIds(prev => new Set(prev).add(img.id)); }}
+                      onClick={() => onInsert(url, img.id)}
+                      disabled={insertingIds?.has(img.id)}
                       className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                         insertedIds.has(img.id)
                           ? 'bg-emerald-500 text-white'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          : insertingIds?.has(img.id)
+                            ? 'bg-indigo-400 text-white cursor-not-allowed'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }`}
-                      title={insertedIds.has(img.id) ? 'Added' : 'Use in Email'}
+                      title={insertedIds.has(img.id) ? 'Added' : insertingIds?.has(img.id) ? 'Uploading…' : insertLabel}
                     >
                       {insertedIds.has(img.id) ? (
                         <span className="flex items-center space-x-1"><CheckIcon className="w-3.5 h-3.5" /><span>Added</span></span>
+                      ) : insertingIds?.has(img.id) ? (
+                        <span className="flex items-center space-x-1"><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /><span>Uploading…</span></span>
                       ) : (
-                        <span className="flex items-center space-x-1"><PlusIcon className="w-3.5 h-3.5" /><span>Use in Email</span></span>
+                        <span className="flex items-center space-x-1"><PlusIcon className="w-3.5 h-3.5" /><span>{insertLabel}</span></span>
                       )}
                     </button>
                   )}
