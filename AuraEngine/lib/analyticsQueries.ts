@@ -465,36 +465,10 @@ export async function fetchAIUsageAnalytics(
 }
 
 export async function fetchTaskAnalytics(
-  userId: string
+  _userId: string
 ): Promise<TaskAnalytics> {
-  const empty: TaskAnalytics = { total: 0, completed: 0, overdue: 0, byPriority: [] };
-
-  try {
-    const { data: tasks, error } = await supabase
-      .from('strategy_tasks')
-      .select('id, completed, priority, deadline')
-      .eq('user_id', userId);
-
-    if (error || !tasks || tasks.length === 0) return empty;
-
-  const total = tasks.length;
-  const completed = tasks.filter(t => t.completed).length;
-  const today = new Date().toISOString().split('T')[0];
-  const overdue = tasks.filter(t => !t.completed && t.deadline && t.deadline < today).length;
-
-  const priorityMap = new Map<string, number>();
-  for (const t of tasks) {
-    const p = t.priority ?? 'normal';
-    priorityMap.set(p, (priorityMap.get(p) ?? 0) + 1);
-  }
-
-  const byPriority = Array.from(priorityMap.entries())
-    .map(([priority, count]) => ({ priority, count }));
-
-  return { total, completed, overdue, byPriority };
-  } catch {
-    return empty;
-  }
+  // TODO: Enable when strategy_tasks table is created via supabase-migration-v3.sql
+  return { total: 0, completed: 0, overdue: 0, byPriority: [] };
 }
 
 export async function fetchImportAnalytics(
