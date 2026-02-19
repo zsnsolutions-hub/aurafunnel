@@ -95,6 +95,8 @@ export function buildImagePrompt(opts: {
     if (bp.productsServices) ctxParts.push(`Products/Services: ${bp.productsServices}`);
     if (bp.targetAudience) ctxParts.push(`Target audience: ${bp.targetAudience}`);
     if (bp.valueProp) ctxParts.push(`Value proposition: ${bp.valueProp}`);
+    if (bp.pricingModel) ctxParts.push(`Pricing model: ${bp.pricingModel}`);
+    if (bp.salesApproach) ctxParts.push(`Sales approach: ${bp.salesApproach}`);
     if (bp.businessDescription) ctxParts.push(`About: ${bp.businessDescription}`);
     if (ctxParts.length > 0) {
       parts.push(`Create an image for a business: ${ctxParts.join('. ')}.`);
