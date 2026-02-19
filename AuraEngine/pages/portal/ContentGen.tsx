@@ -221,26 +221,26 @@ const TEMPLATES: Record<string, TemplateOption[]> = {
 // ═══════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════
-function deriveAISuggestions(body: string): { icon: string; text: string }[] {
+function deriveAISuggestions(body: string): { icon: string; text: string; apply?: (body: string) => string }[] {
   if (!body || body.length < 20) return [];
-  const suggestions: { icon: string; text: string }[] = [];
+  const suggestions: { icon: string; text: string; apply?: (body: string) => string }[] = [];
 
   if (/\bachieve\b/i.test(body))
-    suggestions.push({ icon: '\u{1F4A1}', text: 'Try "scale {{goal}}" instead of "achieve" for stronger action' });
+    suggestions.push({ icon: '\u{1F4A1}', text: 'Try "scale {{goal}}" instead of "achieve" for stronger action', apply: b => b.replace(/\bachieve\b/gi, 'scale {{goal}}') });
   if (!/\d+%?/.test(body))
-    suggestions.push({ icon: '\u{1F4CA}', text: 'Add specific metric: "increase efficiency by 40%"' });
+    suggestions.push({ icon: '\u{1F4CA}', text: 'Add specific metric: "increase efficiency by 40%"', apply: b => b.trimEnd() + '\n\nOur clients typically see a 40% increase in efficiency within the first quarter.' });
   if (!/\b(used by|trusted by|join|companies|customers|clients)\b/i.test(body))
-    suggestions.push({ icon: '\u{1F3C6}', text: 'Include social proof: "Used by 500+ companies"' });
+    suggestions.push({ icon: '\u{1F3C6}', text: 'Include social proof: "Used by 500+ companies"', apply: b => b.trimEnd() + '\n\nTrusted by 500+ companies worldwide.' });
   if (!body.includes('?'))
-    suggestions.push({ icon: '\u{2753}', text: 'End with a question to boost response rates' });
+    suggestions.push({ icon: '\u{2753}', text: 'End with a question to boost response rates', apply: b => b.trimEnd() + '\n\nWould you be open to a quick 15-minute call this week?' });
   if (!/\{\{.+?\}\}/.test(body))
-    suggestions.push({ icon: '\u{1F3AF}', text: 'Add personalization tags like {{first_name}} to increase engagement' });
+    suggestions.push({ icon: '\u{1F3AF}', text: 'Add personalization tags like {{first_name}} to increase engagement', apply: b => 'Hi {{first_name}},\n\n' + b });
   if (body.split(/\s+/).length > 200)
     suggestions.push({ icon: '\u{2702}\u{FE0F}', text: 'Consider shortening \u2014 emails under 125 words have 50% higher response rates' });
   if (!/p\.?s\.?/i.test(body) && body.split(/\s+/).length > 60)
-    suggestions.push({ icon: '\u{1F4DD}', text: 'Add a P.S. line \u2014 it\'s the second most-read part of any email' });
+    suggestions.push({ icon: '\u{1F4DD}', text: 'Add a P.S. line \u2014 it\'s the second most-read part of any email', apply: b => b.trimEnd() + '\n\nP.S. I have a few ideas specifically for {{company}} \u2014 happy to share if you\'re interested.' });
   if (/\bhelp\b/i.test(body) && !/\bhelped\b/i.test(body))
-    suggestions.push({ icon: '\u{1F4A1}', text: 'Replace "help" with a specific verb like "enable", "empower", or "streamline"' });
+    suggestions.push({ icon: '\u{1F4A1}', text: 'Replace "help" with a specific verb like "enable", "empower", or "streamline"', apply: b => b.replace(/\bhelp\b/gi, 'empower') });
 
   return suggestions.slice(0, 3);
 }
@@ -487,9 +487,8 @@ const ContentGen: React.FC = () => {
     return () => { cancelled = true; };
   }, [selectedCampaignId]);
 
-  // ── Load connected email provider on mount + when reaching step 5 ──
+  // ── Load connected email provider on mount ──
   useEffect(() => {
-    if (wizardStep !== 5 && connectedProvider !== undefined) return;
     let cancelled = false;
     const loadProvider = async () => {
       setProviderLoading(true);
@@ -500,7 +499,7 @@ const ContentGen: React.FC = () => {
     };
     loadProvider();
     return () => { cancelled = true; };
-  }, [wizardStep]);
+  }, []);
 
   // ── Derived ──
   const segments = useMemo(() => [
@@ -2106,9 +2105,21 @@ const ContentGen: React.FC = () => {
                           </p>
                           <div className="space-y-2">
                             {aiSuggestions.map((s, i) => (
-                              <div key={i} className="flex items-start space-x-2">
+                              <div key={i} className="flex items-center space-x-2 group">
                                 <span className="text-sm shrink-0">{s.icon}</span>
-                                <p className="text-xs text-slate-600 leading-relaxed">{s.text}</p>
+                                <p className="text-xs text-slate-600 leading-relaxed flex-1">{s.text}</p>
+                                {s.apply && (
+                                  <button
+                                    onClick={() => {
+                                      if (activeBlock && s.apply) {
+                                        updateBlock('body', s.apply(activeBlock.body));
+                                      }
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-200 transition-all opacity-70 group-hover:opacity-100"
+                                  >
+                                    Apply
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
