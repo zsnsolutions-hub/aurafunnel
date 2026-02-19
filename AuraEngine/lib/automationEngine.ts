@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
-import { sendTrackedEmail } from './emailTracking';
-import type { Lead } from '../types';
+import { sendTrackedEmail, scheduleEmailBlock } from './emailTracking';
+import { personalizeForSend } from './personalization';
+import { generatePersonalizedEmail } from './gemini';
+import type { Lead, EmailTemplate } from '../types';
 
 // ─── Types ───
 
@@ -334,23 +336,101 @@ async function executeAction(
       if (!lead.email) {
         return { status: 'fail', message: 'No email address for this lead' };
       }
-      const templateId = (node.config.template as string) || 'welcome';
-      const subject = `${node.title} — ${lead.company}`;
-      const htmlBody = `<p>Hi ${lead.name},</p><p>This is an automated email from workflow step "${node.title}".</p><p>Template: ${templateId}</p>`;
 
-      const result = await sendTrackedEmail({
-        leadId: lead.id,
-        toEmail: lead.email,
-        subject,
-        htmlBody,
-        trackOpens: true,
-        trackClicks: true,
-      });
+      const templateCategory = (node.config.template as string) || 'welcome';
+      const aiEnabled = !!node.config.aiPersonalization;
+      const timing = (node.config.timing as string) || 'immediate';
+      const fallbackEnabled = !!node.config.fallbackEnabled;
+      const fallbackAction = (node.config.fallbackAction as string) || 'skip';
 
-      if (result.success) {
-        return { status: 'pass', message: `Email sent to ${lead.email} (template: ${templateId})` };
+      // Step 1: Resolve template content
+      let subject: string;
+      let htmlBody: string;
+
+      if (templateCategory === '__custom__') {
+        subject = (node.config.customSubject as string) || `${node.title} — ${lead.company}`;
+        htmlBody = (node.config.customBody as string) || `<p>Hi ${lead.name},</p><p>This is a message from ${node.title}.</p>`;
+      } else {
+        // Fetch from email_templates, preferring user template over default
+        const { data: templates } = await supabase
+          .from('email_templates')
+          .select('*')
+          .eq('category', templateCategory)
+          .or(`owner_id.eq.${userId},owner_id.is.null`)
+          .order('owner_id', { ascending: false, nullsFirst: false })
+          .limit(1);
+
+        const template = templates?.[0] as EmailTemplate | undefined;
+        if (template) {
+          subject = template.subject_template;
+          htmlBody = template.body_template;
+        } else {
+          subject = `${node.title} — ${lead.company}`;
+          htmlBody = `<p>Hi ${lead.name},</p><p>This is an automated email from "${node.title}".</p>`;
+        }
       }
-      return { status: 'fail', message: `Email failed: ${result.error}` };
+
+      // Step 2: Personalize with {{tags}}
+      subject = personalizeForSend(subject, lead);
+      htmlBody = personalizeForSend(htmlBody, lead);
+
+      // Step 3: AI enhancement (if enabled)
+      if (aiEnabled) {
+        try {
+          const aiResult = await generatePersonalizedEmail({
+            subjectTemplate: subject,
+            bodyTemplate: htmlBody,
+            lead,
+          });
+          subject = aiResult.subject;
+          htmlBody = aiResult.htmlBody;
+        } catch (err) {
+          console.warn('AI personalization failed, continuing with tag-resolved version:', err);
+        }
+      }
+
+      // Step 4: Send or schedule based on timing
+      try {
+        if (timing === 'immediate') {
+          const result = await sendTrackedEmail({
+            leadId: lead.id,
+            toEmail: lead.email,
+            subject,
+            htmlBody,
+            trackOpens: true,
+            trackClicks: true,
+          });
+
+          if (result.success) {
+            return { status: 'pass', message: `Email sent to ${lead.email} (template: ${templateCategory}${aiEnabled ? ', AI-enhanced' : ''})` };
+          }
+          throw new Error(result.error || 'Send failed');
+        } else {
+          // Schedule for later
+          const scheduledAt = calculateScheduledTime(timing);
+          const schedResult = await scheduleEmailBlock({
+            leads: [{ id: lead.id, email: lead.email, name: lead.name, company: lead.company, insights: lead.insights, score: lead.score, status: lead.status, lastActivity: lead.lastActivity, knowledgeBase: lead.knowledgeBase }],
+            subject,
+            htmlBody,
+            scheduledAt,
+            blockIndex: 0,
+            sequenceId: `wf-${node.id}-${Date.now()}`,
+          });
+
+          if (schedResult.scheduled > 0) {
+            return { status: 'pass', message: `Email scheduled for ${scheduledAt.toLocaleString()} to ${lead.email} (template: ${templateCategory}, timing: ${timing}${aiEnabled ? ', AI-enhanced' : ''})` };
+          }
+          throw new Error(schedResult.errors.join('; ') || 'Schedule failed');
+        }
+      } catch (sendErr) {
+        const errMsg = sendErr instanceof Error ? sendErr.message : 'Unknown send error';
+
+        // Step 5: Fallback on failure
+        if (fallbackEnabled) {
+          return executeFallback(fallbackAction, node, lead, userId, errMsg, { subject, htmlBody });
+        }
+        return { status: 'fail', message: `Email failed: ${errMsg}` };
+      }
     }
 
     case 'update_status': {
@@ -578,6 +658,98 @@ export async function getNodeAnalytics(
     avgDuration: n.executions > 0 ? parseFloat((n.totalDuration / n.executions / 1000).toFixed(1)) : 0,
     lastRun: n.lastRun,
   }));
+}
+
+// ─── Timing & Fallback Helpers ───
+
+export function calculateScheduledTime(timing: string): Date {
+  const now = new Date();
+  const result = new Date(now);
+
+  switch (timing) {
+    case 'morning': {
+      // Next 9:00 AM
+      result.setHours(9, 0, 0, 0);
+      if (result <= now) result.setDate(result.getDate() + 1);
+      break;
+    }
+    case 'afternoon': {
+      // Next 2:00 PM
+      result.setHours(14, 0, 0, 0);
+      if (result <= now) result.setDate(result.getDate() + 1);
+      break;
+    }
+    case 'optimal': {
+      // Next business day 10:30 AM
+      result.setHours(10, 30, 0, 0);
+      if (result <= now) result.setDate(result.getDate() + 1);
+      // Skip weekends
+      const day = result.getDay();
+      if (day === 0) result.setDate(result.getDate() + 1); // Sunday → Monday
+      if (day === 6) result.setDate(result.getDate() + 2); // Saturday → Monday
+      break;
+    }
+    default:
+      // immediate — shouldn't reach here, but return now
+      break;
+  }
+
+  return result;
+}
+
+async function executeFallback(
+  action: string,
+  node: WorkflowNode,
+  lead: Lead,
+  userId: string,
+  errorMsg: string,
+  emailContent?: { subject: string; htmlBody: string }
+): Promise<{ status: 'pass' | 'fail'; message: string }> {
+  switch (action) {
+    case 'create_alert': {
+      await supabase.from('audit_logs').insert({
+        user_id: userId,
+        action: 'AUTOMATION_ALERT',
+        details: `Fallback alert: Email to ${lead.name} (${lead.email}) failed at node "${node.title}". Error: ${errorMsg}`,
+      });
+      return { status: 'pass', message: `Email failed but fallback alert created. Error: ${errorMsg}` };
+    }
+
+    case 'create_task': {
+      await supabase.from('audit_logs').insert({
+        user_id: userId,
+        action: 'AUTOMATION_TASK_CREATED',
+        details: `Fallback task: Manually send email to ${lead.name} (${lead.email}). Original node: "${node.title}". Error: ${errorMsg}`,
+      });
+      return { status: 'pass', message: `Email failed but follow-up task created. Error: ${errorMsg}` };
+    }
+
+    case 'retry': {
+      // Schedule retry in 1 hour
+      const retryAt = new Date(Date.now() + 60 * 60 * 1000);
+      if (emailContent) {
+        const { error } = await supabase.from('scheduled_emails').insert({
+          owner_id: userId,
+          lead_id: lead.id,
+          to_email: lead.email,
+          subject: emailContent.subject,
+          html_body: emailContent.htmlBody,
+          scheduled_at: retryAt.toISOString(),
+          block_index: 0,
+          sequence_id: `retry-${node.id}-${Date.now()}`,
+          status: 'pending',
+        });
+        if (error) {
+          return { status: 'fail', message: `Email failed and retry scheduling also failed: ${error.message}` };
+        }
+      }
+      return { status: 'pass', message: `Email failed but retry scheduled for ${retryAt.toLocaleString()}. Error: ${errorMsg}` };
+    }
+
+    case 'skip':
+    default:
+      return { status: 'pass', message: `Email failed, skipping per fallback config. Error: ${errorMsg}` };
+  }
 }
 
 export async function getWorkflowStats(userId: string): Promise<{

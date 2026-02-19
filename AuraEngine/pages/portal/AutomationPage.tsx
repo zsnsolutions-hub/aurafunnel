@@ -109,6 +109,7 @@ const EMAIL_TEMPLATES = [
   { id: 'demo_invite', label: 'Demo Invitation', desc: 'Invite to a product demo' },
   { id: 'nurture', label: 'Nurture Content', desc: 'Educational value-add email' },
   { id: 'custom', label: 'Custom Template', desc: 'Start from scratch' },
+  { id: '__custom__', label: 'Write Custom Content', desc: 'Enter subject & body inline' },
 ];
 
 const NODE_TYPE_META: Record<NodeType, { label: string; color: string; icon: React.ReactNode; bgClass: string }> = {
@@ -160,14 +161,14 @@ const DEFAULT_WORKFLOW: Workflow = {
   status: 'active',
   nodes: [
     { id: 'n1', type: 'trigger', title: 'New lead added', description: 'Triggers when a lead enters the pipeline', config: { triggerType: 'lead_created' } },
-    { id: 'n2', type: 'action', title: 'AI scores lead', description: 'Automatically scores the lead using AI model', config: { model: 'gemini-3-flash', companyData: true, webBehavior: true, socialSignals: false, emailEngagement: true, frequency: 'real_time', threshold: 80, template: 'welcome', aiPersonalization: true, timing: 'immediate', fallbackEnabled: false } },
+    { id: 'n2', type: 'action', title: 'AI scores lead', description: 'Automatically scores the lead using AI model', config: { actionType: 'send_email', model: 'gemini-3-flash', companyData: true, webBehavior: true, socialSignals: false, emailEngagement: true, frequency: 'real_time', threshold: 80, template: 'welcome', aiPersonalization: true, timing: 'immediate', fallbackEnabled: false } },
     { id: 'n3', type: 'condition', title: 'Score > 50?', description: 'Check if lead score exceeds threshold', config: { field: 'score', operator: 'gt', value: 50 } },
-    { id: 'n4', type: 'action', title: 'Send welcome email', description: 'Personalized welcome with value proposition', config: { emailType: 'welcome', template: 'welcome', aiPersonalization: true, timing: 'immediate', fallbackEnabled: true, fallbackAction: 'create_task' } },
-    { id: 'n5', type: 'action', title: 'Add to nurture campaign', description: 'Enroll in drip nurture sequence', config: { campaign: 'nurture_sequence', template: 'nurture', aiPersonalization: false, timing: 'immediate', fallbackEnabled: false } },
+    { id: 'n4', type: 'action', title: 'Send welcome email', description: 'Personalized welcome with value proposition', config: { actionType: 'send_email', emailType: 'welcome', template: 'welcome', aiPersonalization: true, timing: 'immediate', fallbackEnabled: true, fallbackAction: 'create_task' } },
+    { id: 'n5', type: 'action', title: 'Add to nurture campaign', description: 'Enroll in drip nurture sequence', config: { actionType: 'send_email', campaign: 'nurture_sequence', template: 'nurture', aiPersonalization: false, timing: 'immediate', fallbackEnabled: false } },
     { id: 'n6', type: 'wait', title: 'Wait 2 days', description: 'Allow time for email engagement', config: { days: 2 } },
-    { id: 'n7', type: 'action', title: 'Check engagement', description: 'Evaluate email opens and clicks', config: { checkType: 'email_engagement', template: 'follow_up', aiPersonalization: true, timing: 'optimal', fallbackEnabled: false } },
+    { id: 'n7', type: 'action', title: 'Check engagement', description: 'Evaluate email opens and clicks', config: { actionType: 'send_email', checkType: 'email_engagement', template: 'follow_up', aiPersonalization: true, timing: 'optimal', fallbackEnabled: false } },
     { id: 'n8', type: 'condition', title: 'Score > 75?', description: 'Check if lead is sales-ready', config: { field: 'score', operator: 'gt', value: 75 } },
-    { id: 'n9', type: 'action', title: 'Notify sales team', description: 'Alert sales rep for immediate follow-up', config: { notifyType: 'sales_alert', template: 'demo_invite', aiPersonalization: true, timing: 'immediate', fallbackEnabled: true, fallbackAction: 'create_alert' } },
+    { id: 'n9', type: 'action', title: 'Notify sales team', description: 'Alert sales rep for immediate follow-up', config: { actionType: 'create_alert', notifyType: 'sales_alert', template: 'demo_invite', aiPersonalization: true, timing: 'immediate', fallbackEnabled: true, fallbackAction: 'create_alert' } },
   ],
   createdAt: new Date().toISOString(),
   stats: { leadsProcessed: 1242, conversionRate: 8.4, timeSavedHrs: 42, roi: 320 },
@@ -520,7 +521,7 @@ const AutomationPage: React.FC = () => {
       type,
       title: titles[type],
       description: descs[type],
-      config: type === 'wait' ? { days: 1 } : type === 'condition' ? { field: 'score', operator: 'gt', value: 50 } : { template: 'welcome', aiPersonalization: false, timing: 'immediate', fallbackEnabled: false },
+      config: type === 'wait' ? { days: 1 } : type === 'condition' ? { field: 'score', operator: 'gt', value: 50 } : { actionType: 'send_email', template: 'welcome', aiPersonalization: false, timing: 'immediate', fallbackEnabled: false },
     };
     setWorkflow(prev => ({ ...prev, nodes: [...prev.nodes, newNode] }));
     setSelectedNodeId(newNode.id);
@@ -1363,12 +1364,55 @@ const AutomationPage: React.FC = () => {
                       {selectedNode.type === 'action' && (
                         <>
                           <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Action Type</label>
+                            <select value={selectedNode.config.actionType as string || 'send_email'} onChange={e => updateNodeConfig(selectedNode.id, 'actionType', e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                              {ACTION_OPTIONS.map(a => (<option key={a.type} value={a.type}>{a.label}</option>))}
+                            </select>
+                          </div>
+
+                          {(selectedNode.config.actionType as string || 'send_email') === 'send_email' && (
+                          <>
+                          <div>
                             <label className="block text-xs font-bold text-slate-600 mb-1">Email Template</label>
                             <select value={selectedNode.config.template as string || 'welcome'} onChange={e => updateNodeConfig(selectedNode.id, 'template', e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                               {EMAIL_TEMPLATES.map(t => (<option key={t.id} value={t.id}>{t.label}</option>))}
                             </select>
                             <p className="text-[10px] text-slate-400 mt-1">{EMAIL_TEMPLATES.find(t => t.id === (selectedNode.config.template as string))?.desc}</p>
                           </div>
+
+                          {(selectedNode.config.template as string) === '__custom__' && (
+                            <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Subject Line</label>
+                                <input
+                                  type="text"
+                                  value={(selectedNode.config.customSubject as string) || ''}
+                                  onChange={e => updateNodeConfig(selectedNode.id, 'customSubject', e.target.value)}
+                                  placeholder="e.g. Hi {{first_name}}, quick question about {{company}}"
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Email Body (HTML)</label>
+                                <textarea
+                                  value={(selectedNode.config.customBody as string) || ''}
+                                  onChange={e => updateNodeConfig(selectedNode.id, 'customBody', e.target.value)}
+                                  placeholder="<p>Hi {{first_name}},</p><p>Your message here...</p>"
+                                  rows={5}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                                />
+                              </div>
+                              <p className="text-[10px] text-slate-400">
+                                Tags: {'{{first_name}}'}, {'{{company}}'}, {'{{industry}}'}, {'{{ai_insight}}'}, {'{{your_name}}'}, {'{{sender_company}}'}
+                              </p>
+                              {!(selectedNode.config.customSubject as string) && (
+                                <p className="text-[10px] text-amber-600 font-semibold">Warning: Subject line is empty</p>
+                              )}
+                              {!(selectedNode.config.customBody as string) && (
+                                <p className="text-[10px] text-amber-600 font-semibold">Warning: Email body is empty</p>
+                              )}
+                            </div>
+                          )}
 
                           <label className="flex items-center justify-between p-3 bg-violet-50 rounded-xl border border-violet-200 cursor-pointer group">
                             <div className="flex items-center space-x-2">
@@ -1416,6 +1460,34 @@ const AutomationPage: React.FC = () => {
                               <option value="retry">Retry after 1 hour</option>
                               <option value="skip">Skip and continue</option>
                             </select>
+                          )}
+                          </>
+                          )}
+
+                          {(selectedNode.config.actionType as string) === 'update_status' && (
+                            <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1">New Status</label>
+                              <select value={selectedNode.config.newStatus as string || 'Contacted'} onChange={e => updateNodeConfig(selectedNode.id, 'newStatus', e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="Contacted">Contacted</option>
+                                <option value="Qualified">Qualified</option>
+                                <option value="Converted">Converted</option>
+                                <option value="Lost">Lost</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {(selectedNode.config.actionType as string) === 'add_tag' && (
+                            <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1">Tag Name</label>
+                              <input type="text" value={(selectedNode.config.tag as string) || ''} onChange={e => updateNodeConfig(selectedNode.id, 'tag', e.target.value)} placeholder="e.g. Hot Lead, VIP, Nurture" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            </div>
+                          )}
+
+                          {(selectedNode.config.actionType as string) === 'assign_user' && (
+                            <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1">Assign To</label>
+                              <input type="text" value={(selectedNode.config.assignee as string) || ''} onChange={e => updateNodeConfig(selectedNode.id, 'assignee', e.target.value)} placeholder="e.g. sales@company.com" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            </div>
                           )}
                         </>
                       )}
@@ -1539,6 +1611,12 @@ const AutomationPage: React.FC = () => {
                       {node.type === 'action' && (
                         <>
                           <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Action</p>
+                            <p className="text-sm text-slate-700 font-semibold">{ACTION_OPTIONS.find(a => a.type === (node.config.actionType as string))?.label || 'Send Email'}</p>
+                          </div>
+                          {(node.config.actionType as string || 'send_email') === 'send_email' && (
+                          <>
+                          <div>
                             <p className="text-[10px] font-bold text-slate-400 uppercase">Template</p>
                             <p className="text-sm text-slate-700 font-semibold">{EMAIL_TEMPLATES.find(t => t.id === node.config.template)?.label || 'None'}</p>
                           </div>
@@ -1546,6 +1624,8 @@ const AutomationPage: React.FC = () => {
                             <p className="text-[10px] font-bold text-slate-400 uppercase">Timing</p>
                             <p className="text-sm text-slate-700 font-semibold capitalize">{(node.config.timing as string || 'immediate').replace('_', ' ')}</p>
                           </div>
+                          </>
+                          )}
                           <div>
                             <p className="text-[10px] font-bold text-slate-400 uppercase">AI</p>
                             <p className={`text-sm font-semibold ${node.config.aiPersonalization ? 'text-violet-600' : 'text-slate-400'}`}>

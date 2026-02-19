@@ -1446,6 +1446,112 @@ Output ONLY the caption text, ready to copy and paste. Do not include any meta-c
   }
 };
 
+// === Workflow Email Personalization ===
+
+export interface PersonalizeEmailInput {
+  subjectTemplate: string;  // already tag-resolved
+  bodyTemplate: string;     // already tag-resolved
+  lead: Lead;
+  businessProfile?: BusinessProfile;
+  tone?: ToneType;
+}
+
+export async function generatePersonalizedEmail(
+  input: PersonalizeEmailInput
+): Promise<{ subject: string; htmlBody: string; tokensUsed: number }> {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const leadContext = [
+    `Name: ${input.lead.name}`,
+    `Company: ${input.lead.company}`,
+    `Score: ${input.lead.score}/100`,
+    input.lead.insights ? `Insights: ${input.lead.insights}` : '',
+    input.lead.knowledgeBase?.industry ? `Industry: ${input.lead.knowledgeBase.industry}` : '',
+    input.lead.knowledgeBase?.companyOverview ? `Company Overview: ${input.lead.knowledgeBase.companyOverview}` : '',
+    input.lead.knowledgeBase?.talkingPoints?.length ? `Talking Points: ${input.lead.knowledgeBase.talkingPoints.join(', ')}` : '',
+    input.lead.knowledgeBase?.outreachAngle ? `Outreach Angle: ${input.lead.knowledgeBase.outreachAngle}` : '',
+  ].filter(Boolean).join('\n');
+
+  const toneLabel = input.tone || ToneType.PROFESSIONAL;
+
+  const prompt = `Rewrite the following email to feel more natural and tailored to this specific prospect. Keep the overall structure and CTA intact, but reference specific prospect details to make it feel personally crafted. Keep the body under 200 words. Output HTML for the body.
+
+PROSPECT CONTEXT:
+${leadContext}
+
+CURRENT SUBJECT:
+${input.subjectTemplate}
+
+CURRENT BODY:
+${input.bodyTemplate}
+
+TONE: ${toneLabel}
+${buildBusinessContext(input.businessProfile)}
+
+Respond in EXACTLY this format:
+SUBJECT: [rewritten subject line]
+BODY: [rewritten HTML email body]`;
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction: 'You are an expert B2B email copywriter. Rewrite emails to feel personally crafted for each recipient. Keep them concise, human, and action-oriented. Always use the exact output format requested.',
+          temperature: 0.8,
+          topP: 0.9,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text || '';
+
+      const subjectMatch = text.match(/SUBJECT:\s*(.+?)(?:\n|$)/);
+      const bodyMatch = text.match(/BODY:\s*([\s\S]*?)$/);
+
+      if (subjectMatch && bodyMatch) {
+        return {
+          subject: subjectMatch[1].trim(),
+          htmlBody: bodyMatch[1].trim(),
+          tokensUsed: response.usageMetadata?.totalTokenCount || 0,
+        };
+      }
+
+      // If parsing failed, fall back to original
+      console.warn('AI personalization response could not be parsed, using original content');
+      return {
+        subject: input.subjectTemplate,
+        htmlBody: input.bodyTemplate,
+        tokensUsed: response.usageMetadata?.totalTokenCount || 0,
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Email personalization attempt ${attempt} failed:`, errMsg);
+      if (attempt === MAX_RETRIES) {
+        // Graceful degradation: return original content
+        return {
+          subject: input.subjectTemplate,
+          htmlBody: input.bodyTemplate,
+          tokensUsed: 0,
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return {
+    subject: input.subjectTemplate,
+    htmlBody: input.bodyTemplate,
+    tokensUsed: 0,
+  };
+}
+
 export const parseEmailSequenceResponse = (rawText: string, config: EmailSequenceConfig): EmailStep[] => {
   const steps: EmailStep[] = [];
   const emailBlocks = rawText.split('===EMAIL_START===').filter(b => b.trim());

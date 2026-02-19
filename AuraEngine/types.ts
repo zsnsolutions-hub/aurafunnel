@@ -506,6 +506,18 @@ export interface TeamInvite {
   team_name?: string; // joined
 }
 
+export interface EmailTemplate {
+  id: string;
+  owner_id: string | null;
+  name: string;
+  category: 'welcome' | 'follow_up' | 'case_study' | 'demo_invite' | 'nurture' | 'custom';
+  subject_template: string;
+  body_template: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EmailEngagement {
   totalSent: number;
   totalOpens: number;
