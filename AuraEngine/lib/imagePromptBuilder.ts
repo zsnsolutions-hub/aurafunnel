@@ -11,6 +11,7 @@ import type {
   ImageGenBrandSettings,
   BusinessProfile,
   Plan,
+  ModuleFieldValues,
 } from '../types';
 
 // ── Module-specific preset library ──
@@ -130,36 +131,94 @@ export function buildImagePrompt(opts: {
   brand: ImageGenBrandSettings;
   businessProfile?: BusinessProfile;
   plans?: Plan[];
+  moduleFields?: ModuleFieldValues;
 }): string {
   const parts: string[] = [];
 
-  // 1) Business context — gives the model understanding of what the company does
+  const mf = opts.moduleFields;
+  const hasModuleFields = !!mf;
+
+  // 1) Business context — when moduleFields present, only include core identity to avoid bloat
   const bp = opts.businessProfile;
   if (bp) {
     const ctxParts: string[] = [];
     if (bp.companyName) ctxParts.push(`Company: ${bp.companyName}`);
     if (bp.industry) ctxParts.push(`Industry: ${bp.industry}`);
-    if (bp.productsServices) ctxParts.push(`Products/Services: ${bp.productsServices}`);
-    if (bp.targetAudience) ctxParts.push(`Target audience: ${bp.targetAudience}`);
-    if (bp.valueProp) ctxParts.push(`Value proposition: ${bp.valueProp}`);
-    if (bp.pricingModel) ctxParts.push(`Pricing model: ${bp.pricingModel}`);
-    if (bp.salesApproach) ctxParts.push(`Sales approach: ${bp.salesApproach}`);
-    if (bp.businessDescription) ctxParts.push(`About: ${bp.businessDescription}`);
-    if (bp.services?.length) {
-      ctxParts.push(`Services: ${bp.services.map(s => `${s.name}${s.description ? ' — ' + s.description : ''}`).join('; ')}`);
+    if (!hasModuleFields) {
+      if (bp.productsServices) ctxParts.push(`Products/Services: ${bp.productsServices}`);
+      if (bp.targetAudience) ctxParts.push(`Target audience: ${bp.targetAudience}`);
+      if (bp.valueProp) ctxParts.push(`Value proposition: ${bp.valueProp}`);
+      if (bp.pricingModel) ctxParts.push(`Pricing model: ${bp.pricingModel}`);
+      if (bp.salesApproach) ctxParts.push(`Sales approach: ${bp.salesApproach}`);
+      if (bp.businessDescription) ctxParts.push(`About: ${bp.businessDescription}`);
+      if (bp.services?.length) {
+        ctxParts.push(`Services: ${bp.services.map(s => `${s.name}${s.description ? ' — ' + s.description : ''}`).join('; ')}`);
+      }
+      if (bp.pricingTiers?.length) {
+        ctxParts.push(`Pricing tiers: ${bp.pricingTiers.map(t => `${t.name}${t.price ? ' at ' + t.price : ''}${t.features?.length ? ' (' + t.features.slice(0, 3).join(', ') + ')' : ''}`).join('; ')}`);
+      }
+      if (bp.competitiveAdvantage) ctxParts.push(`Competitive advantage: ${bp.competitiveAdvantage}`);
+      if (bp.uniqueSellingPoints?.length) ctxParts.push(`USPs: ${bp.uniqueSellingPoints.join(', ')}`);
     }
-    if (bp.pricingTiers?.length) {
-      ctxParts.push(`Pricing tiers: ${bp.pricingTiers.map(t => `${t.name}${t.price ? ' at ' + t.price : ''}${t.features?.length ? ' (' + t.features.slice(0, 3).join(', ') + ')' : ''}`).join('; ')}`);
-    }
-    if (bp.competitiveAdvantage) ctxParts.push(`Competitive advantage: ${bp.competitiveAdvantage}`);
-    if (bp.uniqueSellingPoints?.length) ctxParts.push(`USPs: ${bp.uniqueSellingPoints.join(', ')}`);
     if (ctxParts.length > 0) {
       parts.push(`Create an image for a business: ${ctxParts.join('. ')}.`);
     }
   }
 
-  // 1b) Pricing plans — real product/service data to use instead of placeholder text
-  if (opts.plans && opts.plans.length > 0) {
+  // 1b) Module-specific structured data — user-edited fields are more authoritative
+  if (mf) {
+    switch (mf.type) {
+      case 'newsletter': {
+        const f = mf.fields;
+        const nlParts: string[] = [];
+        if (f.headline) nlParts.push(`headline reads: "${f.headline}"`);
+        if (f.subheadline) nlParts.push(`subheadline: "${f.subheadline}"`);
+        if (f.ctaText) nlParts.push(`CTA says "${f.ctaText}"`);
+        if (f.targetAudience) nlParts.push(`targeting: ${f.targetAudience}`);
+        if (nlParts.length) parts.push(`The newsletter ${nlParts.join(', ')}.`);
+        break;
+      }
+      case 'pricing': {
+        const f = mf.fields;
+        if (f.tiers.length > 0) {
+          const tierDescs = f.tiers.map(t => {
+            let desc = t.name;
+            if (t.price) desc += ` at ${t.price}`;
+            if (t.features.length) desc += ` (${t.features.filter(Boolean).join(', ')})`;
+            if (t.featured) desc += ' [FEATURED]';
+            return desc;
+          });
+          parts.push(`Display these pricing plans: ${tierDescs.join('; ')}. Use real names and prices.`);
+        }
+        if (f.pricingModelSummary) parts.push(`Pricing model: ${f.pricingModelSummary}.`);
+        break;
+      }
+      case 'products': {
+        const f = mf.fields;
+        if (f.items.length > 0) {
+          const itemDescs = f.items.filter(i => i.name).map(i => `${i.name}${i.description ? ' — ' + i.description : ''}`);
+          if (itemDescs.length) parts.push(`Feature these products: ${itemDescs.join('; ')}.`);
+        }
+        const pts = f.sellingPoints.filter(Boolean);
+        if (pts.length) parts.push(`Key selling points: ${pts.join(', ')}.`);
+        break;
+      }
+      case 'services': {
+        const f = mf.fields;
+        if (f.items.length > 0) {
+          const itemDescs = f.items.filter(i => i.name).map(i => `${i.name}${i.description ? ' — ' + i.description : ''}`);
+          if (itemDescs.length) parts.push(`Showcase these services: ${itemDescs.join('; ')}.`);
+        }
+        if (f.companyStory) parts.push(`Company story: ${f.companyStory}.`);
+        if (f.differentiators) parts.push(`Differentiators: ${f.differentiators}.`);
+        break;
+      }
+    }
+  }
+
+  // 1c) Pricing plans — skip when pricing moduleFields has tiers populated (user-edited data is more authoritative)
+  const skipPlans = mf?.type === 'pricing' && mf.fields.tiers.length > 0;
+  if (!skipPlans && opts.plans && opts.plans.length > 0) {
     const planDescs = opts.plans.map(p => {
       const features = p.features?.slice(0, 3).join(', ') || '';
       return `${p.name} at ${p.price}${features ? ` (${features})` : ''}`;

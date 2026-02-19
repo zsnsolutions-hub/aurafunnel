@@ -626,6 +626,57 @@ export interface ImageGenGeneratedImage {
   created_at: string;
 }
 
+// ── Module-specific field types for image generation ──
+
+export interface NewsletterModuleFields {
+  headline: string;
+  subheadline: string;
+  ctaText: string;
+  targetAudience: string;
+}
+
+export interface PricingTierField {
+  id: string;
+  name: string;
+  price: string;
+  features: string[];
+  featured: boolean;
+}
+
+export interface PricingModuleFields {
+  tiers: PricingTierField[];
+  pricingModelSummary: string;
+}
+
+export interface ProductItemField {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface ProductsModuleFields {
+  items: ProductItemField[];
+  sellingPoints: string[];
+}
+
+export interface ServiceItemField {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface ServicesModuleFields {
+  items: ServiceItemField[];
+  companyStory: string;
+  differentiators: string;
+}
+
+export type ModuleFieldValues =
+  | { type: 'newsletter'; fields: NewsletterModuleFields }
+  | { type: 'pricing'; fields: PricingModuleFields }
+  | { type: 'products'; fields: ProductsModuleFields }
+  | { type: 'services'; fields: ServicesModuleFields };
+
 export interface ImageGenRequest {
   moduleType: ImageModuleType;
   moduleId?: string;
@@ -636,6 +687,7 @@ export interface ImageGenRequest {
   brand: ImageGenBrandSettings;
   businessProfile?: BusinessProfile;
   plans?: Plan[];
+  moduleFields?: ModuleFieldValues;
 }
 
 export interface ImageGenResponse {

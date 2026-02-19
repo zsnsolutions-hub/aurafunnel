@@ -31,6 +31,7 @@ export async function generateImages(req: ImageGenRequest): Promise<ImageGenResp
     brand: req.brand,
     businessProfile: req.businessProfile,
     plans: req.plans,
+    moduleFields: req.moduleFields,
   });
 
   const count = Math.max(1, Math.min(4, req.n));

@@ -11,8 +11,11 @@ import type {
   ImageGenGeneratedImage,
   BusinessProfile,
   Plan,
+  ModuleFieldValues,
 } from '../../types';
 import { SparklesIcon } from '../Icons';
+import ModuleFieldsPanel from './ModuleFieldsPanel';
+import { buildDefaultModuleFields } from '../../lib/moduleFieldDefaults';
 
 interface ImageGeneratorDrawerProps {
   open: boolean;
@@ -51,6 +54,10 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
   const [variations, setVariations] = useState(2);
   const [brand, setBrand] = useState<ImageGenBrandSettings>(DEFAULT_BRAND);
 
+  const [moduleFields, setModuleFields] = useState<ModuleFieldValues>(
+    buildDefaultModuleFields(initialModuleType, businessProfile)
+  );
+
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<ImageGenGeneratedImage[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +66,16 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
   useEffect(() => {
     if (open) setModuleType(initialModuleType);
   }, [open, initialModuleType]);
+
+  // Re-populate module fields when module type changes
+  useEffect(() => {
+    setModuleFields(buildDefaultModuleFields(moduleType, businessProfile));
+  }, [moduleType]);
+
+  // Re-populate module fields when drawer opens
+  useEffect(() => {
+    if (open) setModuleFields(buildDefaultModuleFields(moduleType, businessProfile));
+  }, [open]);
 
   // Auto-populate logoAssetId from business profile when drawer opens
   useEffect(() => {
@@ -101,6 +118,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
         brand,
         businessProfile,
         plans,
+        moduleFields,
       });
 
       const images = res.images.map(img => ({
@@ -172,13 +190,16 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
           </div>
         )}
 
-        {/* Prompt */}
+        {/* Module-specific fields */}
+        <ModuleFieldsPanel value={moduleFields} onChange={setModuleFields} />
+
+        {/* Additional Instructions (formerly Prompt) */}
         <div>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Prompt</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Additional Instructions</span>
           <textarea
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="Describe the image you want to generate…"
+            placeholder="Add any extra details or instructions..."
             rows={3}
             className="mt-1 w-full text-sm px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none resize-none"
           />
