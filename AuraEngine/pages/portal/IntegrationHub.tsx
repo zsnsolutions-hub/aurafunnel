@@ -446,6 +446,75 @@ const IntegrationHub: React.FC = () => {
     } : k));
   }, []);
 
+  // ─── Email Provider Setup Modal Handlers (defined early to avoid forward-ref issues) ───
+  const isSmtpProvider = (id: string) => id === 'smtp' || id === 'gmail';
+
+  const openEmailSetup = useCallback(async (id: string) => {
+    setEmailSetupApiKey('');
+    setEmailSetupSmtpHost(id === 'gmail' ? 'smtp.gmail.com' : '');
+    setEmailSetupSmtpPort(id === 'gmail' ? '587' : '587');
+    setEmailSetupSmtpUser('');
+    setEmailSetupSmtpPass('');
+    setEmailSetupFromEmail('');
+    setEmailSetupFromName('');
+    setEmailSetupResult(null);
+    setEmailSetupTesting(false);
+    setEmailSetupSaving(false);
+    setEmailSetupTestError('');
+
+    // Pre-fill from existing config if any
+    try {
+      const { data } = await supabase
+        .from('email_provider_configs')
+        .select('*')
+        .eq('provider', id)
+        .limit(1)
+        .single();
+      if (data) {
+        if (data.api_key) setEmailSetupApiKey(data.api_key);
+        if (data.smtp_host) setEmailSetupSmtpHost(data.smtp_host);
+        if (data.smtp_port) setEmailSetupSmtpPort(String(data.smtp_port));
+        if (data.smtp_user) setEmailSetupSmtpUser(data.smtp_user);
+        if (data.smtp_pass) setEmailSetupSmtpPass(data.smtp_pass);
+        if (data.from_email) setEmailSetupFromEmail(data.from_email);
+        if (data.from_name) setEmailSetupFromName(data.from_name);
+      }
+    } catch {}
+
+    setEmailSetupId(id);
+  }, []);
+
+  // ─── Generic Integration Setup Modal Handlers (defined early) ───
+  const openGenericSetup = useCallback(async (id: string) => {
+    setGenericSetupApiKey('');
+    setGenericSetupWebhookUrl('');
+    setGenericSetupInstanceUrl('');
+    setGenericSetupAccessToken('');
+    setGenericSetupMeasurementId('');
+    setGenericSetupApiSecret('');
+    setGenericSetupResult(null);
+    setGenericSetupError('');
+    setGenericSetupSaving(false);
+    setGenericSetupTesting(false);
+
+    // Pre-fill from existing DB config if any
+    try {
+      const dbIntegrations = await fetchIntegrationsFromDb();
+      const existing = dbIntegrations.find(d => d.provider === id);
+      if (existing && existing.credentials) {
+        const creds = existing.credentials;
+        if (creds.apiKey) setGenericSetupApiKey(creds.apiKey);
+        if (creds.webhookUrl) setGenericSetupWebhookUrl(creds.webhookUrl);
+        if (creds.instanceUrl) setGenericSetupInstanceUrl(creds.instanceUrl);
+        if (creds.accessToken) setGenericSetupAccessToken(creds.accessToken);
+        if (creds.measurementId) setGenericSetupMeasurementId(creds.measurementId);
+        if (creds.apiSecret) setGenericSetupApiSecret(creds.apiSecret);
+      }
+    } catch {}
+
+    setGenericSetupId(id);
+  }, []);
+
   const handleTestIntegration = useCallback(async (id: string) => {
     setTestingId(id);
     setTestResult(null);
@@ -539,73 +608,12 @@ const IntegrationHub: React.FC = () => {
   }, [EMAIL_PROVIDERS]);
 
   const handleReconnect = useCallback(async (id: string) => {
-    // Open the appropriate setup modal so user can verify credentials before reconnecting
-    // We set the ID directly here instead of calling openEmailSetup/openGenericSetup
-    // to avoid referencing functions defined later in the file.
     if (EMAIL_PROVIDERS.has(id)) {
-      setEmailSetupResult(null);
-      setEmailSetupTestError('');
-      setEmailSetupSaving(false);
-      setEmailSetupTesting(false);
-
-      // Pre-fill from existing config
-      const isSmtp = id === 'smtp' || id === 'gmail';
-      setEmailSetupApiKey('');
-      setEmailSetupSmtpHost(id === 'gmail' ? 'smtp.gmail.com' : '');
-      setEmailSetupSmtpPort(id === 'gmail' ? '587' : '587');
-      setEmailSetupSmtpUser('');
-      setEmailSetupSmtpPass('');
-      setEmailSetupFromEmail('');
-      setEmailSetupFromName('');
-
-      try {
-        const { data } = await supabase
-          .from('email_provider_configs')
-          .select('*')
-          .eq('provider', id)
-          .limit(1)
-          .single();
-        if (data) {
-          if (data.api_key) setEmailSetupApiKey(data.api_key);
-          if (data.smtp_host) setEmailSetupSmtpHost(data.smtp_host);
-          if (data.smtp_port) setEmailSetupSmtpPort(String(data.smtp_port));
-          if (data.smtp_user) setEmailSetupSmtpUser(data.smtp_user);
-          if (data.smtp_pass) setEmailSetupSmtpPass(data.smtp_pass);
-          if (data.from_email) setEmailSetupFromEmail(data.from_email);
-          if (data.from_name) setEmailSetupFromName(data.from_name);
-        }
-      } catch {}
-
-      setEmailSetupId(id);
+      openEmailSetup(id);
     } else {
-      setGenericSetupApiKey('');
-      setGenericSetupWebhookUrl('');
-      setGenericSetupInstanceUrl('');
-      setGenericSetupAccessToken('');
-      setGenericSetupMeasurementId('');
-      setGenericSetupApiSecret('');
-      setGenericSetupResult(null);
-      setGenericSetupError('');
-      setGenericSetupSaving(false);
-      setGenericSetupTesting(false);
-
-      try {
-        const dbIntegrations = await fetchIntegrationsFromDb();
-        const existing = dbIntegrations.find(d => d.provider === id);
-        if (existing && existing.credentials) {
-          const creds = existing.credentials;
-          if (creds.apiKey) setGenericSetupApiKey(creds.apiKey);
-          if (creds.webhookUrl) setGenericSetupWebhookUrl(creds.webhookUrl);
-          if (creds.instanceUrl) setGenericSetupInstanceUrl(creds.instanceUrl);
-          if (creds.accessToken) setGenericSetupAccessToken(creds.accessToken);
-          if (creds.measurementId) setGenericSetupMeasurementId(creds.measurementId);
-          if (creds.apiSecret) setGenericSetupApiSecret(creds.apiSecret);
-        }
-      } catch {}
-
-      setGenericSetupId(id);
+      openGenericSetup(id);
     }
-  }, [EMAIL_PROVIDERS]);
+  }, [EMAIL_PROVIDERS, openEmailSetup, openGenericSetup]);
 
   const handleConfigure = useCallback((id: string) => {
     const integ = integrations.find(i => i.id === id);
@@ -698,43 +706,6 @@ const IntegrationHub: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   }, [integrations, webhooks, user.name]);
-
-  // ─── Email Provider Setup Modal Handlers ───
-  const isSmtpProvider = (id: string) => id === 'smtp' || id === 'gmail';
-
-  const openEmailSetup = useCallback(async (id: string) => {
-    setEmailSetupApiKey('');
-    setEmailSetupSmtpHost(id === 'gmail' ? 'smtp.gmail.com' : '');
-    setEmailSetupSmtpPort(id === 'gmail' ? '587' : '587');
-    setEmailSetupSmtpUser('');
-    setEmailSetupSmtpPass('');
-    setEmailSetupFromEmail('');
-    setEmailSetupFromName('');
-    setEmailSetupResult(null);
-    setEmailSetupTesting(false);
-    setEmailSetupSaving(false);
-
-    // Pre-fill from existing config if any
-    try {
-      const { data } = await supabase
-        .from('email_provider_configs')
-        .select('*')
-        .eq('provider', id)
-        .limit(1)
-        .single();
-      if (data) {
-        if (data.api_key) setEmailSetupApiKey(data.api_key);
-        if (data.smtp_host) setEmailSetupSmtpHost(data.smtp_host);
-        if (data.smtp_port) setEmailSetupSmtpPort(String(data.smtp_port));
-        if (data.smtp_user) setEmailSetupSmtpUser(data.smtp_user);
-        if (data.smtp_pass) setEmailSetupSmtpPass(data.smtp_pass);
-        if (data.from_email) setEmailSetupFromEmail(data.from_email);
-        if (data.from_name) setEmailSetupFromName(data.from_name);
-      }
-    } catch {}
-
-    setEmailSetupId(id);
-  }, []);
 
   const handleEmailSetupTest = useCallback(async () => {
     if (!emailSetupId) return;
@@ -890,37 +861,6 @@ const IntegrationHub: React.FC = () => {
       setEmailSetupSaving(false);
     }
   }, [emailSetupId, emailSetupApiKey, emailSetupSmtpHost, emailSetupSmtpPort, emailSetupSmtpUser, emailSetupSmtpPass, emailSetupFromEmail, emailSetupFromName]);
-
-  // ─── Generic Integration Setup Modal Handlers ───
-  const openGenericSetup = useCallback(async (id: string) => {
-    setGenericSetupApiKey('');
-    setGenericSetupWebhookUrl('');
-    setGenericSetupInstanceUrl('');
-    setGenericSetupAccessToken('');
-    setGenericSetupMeasurementId('');
-    setGenericSetupApiSecret('');
-    setGenericSetupResult(null);
-    setGenericSetupError('');
-    setGenericSetupSaving(false);
-    setGenericSetupTesting(false);
-
-    // Pre-fill from existing DB config if any
-    try {
-      const dbIntegrations = await fetchIntegrationsFromDb();
-      const existing = dbIntegrations.find(d => d.provider === id);
-      if (existing && existing.credentials) {
-        const creds = existing.credentials;
-        if (creds.apiKey) setGenericSetupApiKey(creds.apiKey);
-        if (creds.webhookUrl) setGenericSetupWebhookUrl(creds.webhookUrl);
-        if (creds.instanceUrl) setGenericSetupInstanceUrl(creds.instanceUrl);
-        if (creds.accessToken) setGenericSetupAccessToken(creds.accessToken);
-        if (creds.measurementId) setGenericSetupMeasurementId(creds.measurementId);
-        if (creds.apiSecret) setGenericSetupApiSecret(creds.apiSecret);
-      }
-    } catch {}
-
-    setGenericSetupId(id);
-  }, []);
 
   const getGenericCredentials = useCallback((): Record<string, string> => {
     if (!genericSetupId) return {};
