@@ -384,31 +384,35 @@ export async function fetchContentAnalytics(
 ): Promise<ContentAnalytics> {
   const empty: ContentAnalytics = { totalPosts: 0, published: 0, drafts: 0, pendingReview: 0, postsByWeek: [] };
 
-  const { data: posts, error } = await supabase
-    .from('blog_posts')
-    .select('id, status, created_at')
-    .eq('author_id', userId)
-    .gte('created_at', from)
-    .lte('created_at', to);
+  try {
+    const { data: posts, error } = await supabase
+      .from('blog_posts')
+      .select('id, status, created_at')
+      .eq('author_id', userId)
+      .gte('created_at', from)
+      .lte('created_at', to);
 
-  if (error || !posts || posts.length === 0) return empty;
+    if (error || !posts || posts.length === 0) return empty;
 
-  const published = posts.filter(p => p.status === 'published').length;
-  const drafts = posts.filter(p => p.status === 'draft').length;
-  const pendingReview = posts.filter(p => p.status === 'pending_review').length;
+    const published = posts.filter(p => p.status === 'published').length;
+    const drafts = posts.filter(p => p.status === 'draft').length;
+    const pendingReview = posts.filter(p => p.status === 'pending_review').length;
 
-  // Group by week
-  const weekMap = new Map<string, number>();
-  for (const p of posts) {
-    const w = weekLabel(p.created_at);
-    weekMap.set(w, (weekMap.get(w) ?? 0) + 1);
+    // Group by week
+    const weekMap = new Map<string, number>();
+    for (const p of posts) {
+      const w = weekLabel(p.created_at);
+      weekMap.set(w, (weekMap.get(w) ?? 0) + 1);
+    }
+
+    const postsByWeek = Array.from(weekMap.entries())
+      .map(([week, count]) => ({ week, count }))
+      .sort((a, b) => a.week.localeCompare(b.week));
+
+    return { totalPosts: posts.length, published, drafts, pendingReview, postsByWeek };
+  } catch {
+    return empty;
   }
-
-  const postsByWeek = Array.from(weekMap.entries())
-    .map(([week, count]) => ({ week, count }))
-    .sort((a, b) => a.week.localeCompare(b.week));
-
-  return { totalPosts: posts.length, published, drafts, pendingReview, postsByWeek };
 }
 
 export async function fetchAIUsageAnalytics(
@@ -418,42 +422,46 @@ export async function fetchAIUsageAnalytics(
 ): Promise<AIUsageAnalytics> {
   const empty: AIUsageAnalytics = { totalTokens: 0, requestCount: 0, avgTokensPerRequest: 0, tokensByDay: [] };
 
-  const { data: logs, error } = await supabase
-    .from('ai_usage_logs')
-    .select('tokens_used, created_at')
-    .eq('user_id', userId)
-    .gte('created_at', from)
-    .lte('created_at', to);
+  try {
+    const { data: logs, error } = await supabase
+      .from('ai_usage_logs')
+      .select('tokens_used, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', from)
+      .lte('created_at', to);
 
-  if (error || !logs || logs.length === 0) return empty;
+    if (error || !logs || logs.length === 0) return empty;
 
-  const totalTokens = logs.reduce((s, l) => s + (l.tokens_used ?? 0), 0);
-  const requestCount = logs.length;
-  const avgTokensPerRequest = requestCount > 0 ? Math.round(totalTokens / requestCount) : 0;
+    const totalTokens = logs.reduce((s, l) => s + (l.tokens_used ?? 0), 0);
+    const requestCount = logs.length;
+    const avgTokensPerRequest = requestCount > 0 ? Math.round(totalTokens / requestCount) : 0;
 
-  // Group by day
-  const dayMap = new Map<string, { tokens: number; requests: number }>();
-  const days = daysBetween(from, to);
-  for (const d of days) {
-    dayMap.set(d, { tokens: 0, requests: 0 });
-  }
-
-  for (const log of logs) {
-    const dayKey = log.created_at.split('T')[0];
-    const entry = dayMap.get(dayKey);
-    if (entry) {
-      entry.tokens += log.tokens_used ?? 0;
-      entry.requests++;
+    // Group by day
+    const dayMap = new Map<string, { tokens: number; requests: number }>();
+    const days = daysBetween(from, to);
+    for (const d of days) {
+      dayMap.set(d, { tokens: 0, requests: 0 });
     }
+
+    for (const log of logs) {
+      const dayKey = log.created_at.split('T')[0];
+      const entry = dayMap.get(dayKey);
+      if (entry) {
+        entry.tokens += log.tokens_used ?? 0;
+        entry.requests++;
+      }
+    }
+
+    const tokensByDay = Array.from(dayMap.entries()).map(([d, v]) => ({
+      day: toDateLabel(d),
+      tokens: v.tokens,
+      requests: v.requests,
+    }));
+
+    return { totalTokens, requestCount, avgTokensPerRequest, tokensByDay };
+  } catch {
+    return empty;
   }
-
-  const tokensByDay = Array.from(dayMap.entries()).map(([d, v]) => ({
-    day: toDateLabel(d),
-    tokens: v.tokens,
-    requests: v.requests,
-  }));
-
-  return { totalTokens, requestCount, avgTokensPerRequest, tokensByDay };
 }
 
 export async function fetchTaskAnalytics(
@@ -461,12 +469,13 @@ export async function fetchTaskAnalytics(
 ): Promise<TaskAnalytics> {
   const empty: TaskAnalytics = { total: 0, completed: 0, overdue: 0, byPriority: [] };
 
-  const { data: tasks, error } = await supabase
-    .from('strategy_tasks')
-    .select('id, completed, priority, deadline')
-    .eq('user_id', userId);
+  try {
+    const { data: tasks, error } = await supabase
+      .from('strategy_tasks')
+      .select('id, completed, priority, deadline')
+      .eq('user_id', userId);
 
-  if (error || !tasks || tasks.length === 0) return empty;
+    if (error || !tasks || tasks.length === 0) return empty;
 
   const total = tasks.length;
   const completed = tasks.filter(t => t.completed).length;
@@ -483,6 +492,9 @@ export async function fetchTaskAnalytics(
     .map(([priority, count]) => ({ priority, count }));
 
   return { total, completed, overdue, byPriority };
+  } catch {
+    return empty;
+  }
 }
 
 export async function fetchImportAnalytics(
@@ -492,18 +504,22 @@ export async function fetchImportAnalytics(
 ): Promise<ImportAnalytics> {
   const empty: ImportAnalytics = { totalImported: 0, totalSkipped: 0, totalFailed: 0 };
 
-  const { data: logs, error } = await supabase
-    .from('apollo_import_logs')
-    .select('imported_count, skipped_count, failed_count')
-    .eq('user_id', userId)
-    .gte('created_at', from)
-    .lte('created_at', to);
+  try {
+    const { data: logs, error } = await supabase
+      .from('apollo_import_logs')
+      .select('imported_count, skipped_count, failed_count')
+      .eq('user_id', userId)
+      .gte('created_at', from)
+      .lte('created_at', to);
 
-  if (error || !logs || logs.length === 0) return empty;
+    if (error || !logs || logs.length === 0) return empty;
 
-  return {
-    totalImported: logs.reduce((s, l) => s + (l.imported_count ?? 0), 0),
-    totalSkipped: logs.reduce((s, l) => s + (l.skipped_count ?? 0), 0),
-    totalFailed: logs.reduce((s, l) => s + (l.failed_count ?? 0), 0),
-  };
+    return {
+      totalImported: logs.reduce((s, l) => s + (l.imported_count ?? 0), 0),
+      totalSkipped: logs.reduce((s, l) => s + (l.skipped_count ?? 0), 0),
+      totalFailed: logs.reduce((s, l) => s + (l.failed_count ?? 0), 0),
+    };
+  } catch {
+    return empty;
+  }
 }
