@@ -1,1757 +1,996 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, Link } from 'react-router-dom';
 import { User } from '../../types';
 import {
-  SparklesIcon, CogIcon, ChartIcon, TargetIcon, BoltIcon, RefreshIcon,
-  CheckIcon, XIcon, TrendUpIcon, TrendDownIcon, ClockIcon, DownloadIcon,
-  PlayIcon, PauseIcon, SlidersIcon, ShieldIcon, ActivityIcon, StarIcon,
-  FlameIcon, EyeIcon, ArrowLeftIcon, KeyboardIcon, BrainIcon, LayersIcon,
-  FilterIcon, PieChartIcon, UsersIcon, GitBranchIcon, AlertTriangleIcon
+  SparklesIcon, TargetIcon, BoltIcon, RefreshIcon, CheckIcon, XIcon,
+  ClockIcon, PlayIcon, SlidersIcon, EditIcon, EyeIcon, CopyIcon,
+  ChevronDownIcon, LayersIcon, MailIcon, BrainIcon, PieChartIcon,
+  GitBranchIcon, ZapIcon, RocketIcon, PenIcon, SendIcon, FilterIcon
 } from '../../components/Icons';
-import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine
-} from 'recharts';
+import { supabase } from '../../lib/supabase';
+import { PROMPT_REGISTRY, CATEGORY_META, type PromptCategory, type PromptRegistryEntry } from '../../lib/promptResolver';
 
 interface LayoutContext {
   user: User;
   refreshProfile: () => Promise<void>;
 }
 
-type ModelId = 'gemini-flash' | 'gemini-pro' | 'custom';
-type TrainingStatus = 'idle' | 'training' | 'paused' | 'complete';
-
-interface TrainingDataset {
+interface PromptRow {
   id: string;
-  name: string;
-  samples: number;
-  enabled: boolean;
+  owner_id: string | null;
+  prompt_key: string;
+  category: string;
+  display_name: string;
+  description: string;
+  system_instruction: string;
+  prompt_template: string;
+  temperature: number;
+  top_p: number;
+  version: number;
+  is_active: boolean;
+  is_default: boolean;
+  last_tested_at: string | null;
+  test_result: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-interface FocusArea {
+interface VersionRow {
   id: string;
-  name: string;
-  enabled: boolean;
+  prompt_id: string;
+  version: number;
+  system_instruction: string;
+  prompt_template: string;
+  temperature: number;
+  top_p: number;
+  change_note: string | null;
+  created_at: string;
 }
 
-interface TrainingParams {
-  epochs: number;
-  learningRate: number;
-  batchSize: number;
-  validationSplit: number;
-}
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  sales_outreach: <TargetIcon className="w-4 h-4" />,
+  analytics: <PieChartIcon className="w-4 h-4" />,
+  email: <MailIcon className="w-4 h-4" />,
+  content: <SparklesIcon className="w-4 h-4" />,
+  lead_research: <BrainIcon className="w-4 h-4" />,
+  blog: <PenIcon className="w-4 h-4" />,
+  social: <SendIcon className="w-4 h-4" />,
+  automation: <GitBranchIcon className="w-4 h-4" />,
+  strategy: <BoltIcon className="w-4 h-4" />,
+};
 
-interface EpochMetric {
-  epoch: number;
-  accuracy: number;
-  loss: number;
-  valAccuracy: number;
-  valLoss: number;
-}
+const CATEGORY_COLORS: Record<string, string> = {
+  sales_outreach: 'indigo',
+  analytics: 'blue',
+  email: 'emerald',
+  content: 'violet',
+  lead_research: 'amber',
+  blog: 'rose',
+  social: 'sky',
+  automation: 'orange',
+  strategy: 'teal',
+};
 
-interface ModelVersion {
-  version: string;
-  date: string;
-  accuracy: number;
-  speed: string;
-  cost: string;
-  notes: string;
-  active: boolean;
-}
-
-interface TrainingExperiment {
-  id: string;
-  name: string;
-  date: string;
-  model: ModelId;
-  epochs: number;
-  finalAccuracy: number;
-  finalLoss: number;
-  duration: string;
-  status: 'completed' | 'failed' | 'stopped';
-  improvement: number;
-}
-
-interface ModelBenchmark {
-  metric: string;
-  yours: number;
-  industry: number;
-  topTen: number;
-  unit: string;
-}
-
-const MOCK_EXPERIMENTS: TrainingExperiment[] = [
-  { id: 'exp1', name: 'Tech Lead Scoring v2', date: '2 days ago', model: 'gemini-flash', epochs: 50, finalAccuracy: 94.2, finalLoss: 0.028, duration: '18m', status: 'completed', improvement: 2.4 },
-  { id: 'exp2', name: 'Content Personalization', date: '5 days ago', model: 'gemini-pro', epochs: 100, finalAccuracy: 91.8, finalLoss: 0.041, duration: '42m', status: 'completed', improvement: 1.8 },
-  { id: 'exp3', name: 'Conversion Prediction', date: '1 week ago', model: 'gemini-flash', epochs: 25, finalAccuracy: 88.5, finalLoss: 0.065, duration: '8m', status: 'completed', improvement: 3.1 },
-  { id: 'exp4', name: 'Industry Adaptation', date: '1 week ago', model: 'custom', epochs: 200, finalAccuracy: 0, finalLoss: 0, duration: '1h 15m', status: 'failed', improvement: 0 },
-  { id: 'exp5', name: 'Timing Optimization', date: '2 weeks ago', model: 'gemini-flash', epochs: 50, finalAccuracy: 86.2, finalLoss: 0.078, duration: '16m', status: 'stopped', improvement: -0.5 },
-];
-
-const MODEL_BENCHMARKS: ModelBenchmark[] = [
-  { metric: 'Lead Scoring', yours: 94.2, industry: 82.5, topTen: 96.1, unit: '%' },
-  { metric: 'Content Quality', yours: 91.3, industry: 78.0, topTen: 93.8, unit: '%' },
-  { metric: 'Prediction Accuracy', yours: 92.1, industry: 80.4, topTen: 95.2, unit: '%' },
-  { metric: 'Response Speed', yours: 1.2, industry: 2.8, topTen: 0.8, unit: 's' },
-  { metric: 'Cost Efficiency', yours: 0.10, industry: 0.25, topTen: 0.08, unit: '$' },
-];
-
-const HYPERPARAMETER_PRESETS = [
-  { name: 'Quick Test', epochs: 10, lr: 0.01, batch: 64, split: 15, desc: 'Fast validation run' },
-  { name: 'Balanced', epochs: 50, lr: 0.001, batch: 32, split: 20, desc: 'Standard training config' },
-  { name: 'High Accuracy', epochs: 200, lr: 0.0001, batch: 16, split: 25, desc: 'Maximum accuracy, slower' },
-  { name: 'Cost Efficient', epochs: 25, lr: 0.005, batch: 128, split: 10, desc: 'Fast and cheap' },
-];
-
-const DEFAULT_DATASETS: TrainingDataset[] = [
-  { id: 'campaigns', name: 'Successful campaigns', samples: 1242, enabled: true },
-  { id: 'content', name: 'High-converting content', samples: 842, enabled: true },
-  { id: 'feedback', name: 'Customer feedback', samples: 524, enabled: false },
-  { id: 'industry', name: 'Industry-specific data (Tech)', samples: 896, enabled: true },
-  { id: 'competitor', name: 'Competitor analysis', samples: 312, enabled: false },
-];
-
-const DEFAULT_FOCUS_AREAS: FocusArea[] = [
-  { id: 'scoring', name: 'Lead Scoring Accuracy', enabled: true },
-  { id: 'personalization', name: 'Content Personalization', enabled: true },
-  { id: 'prediction', name: 'Conversion Prediction', enabled: true },
-  { id: 'timing', name: 'Timing Optimization', enabled: false },
-  { id: 'industry', name: 'Industry Adaptation', enabled: true },
-];
-
-const MODEL_VERSIONS: ModelVersion[] = [
-  { version: '4.2', date: 'Jan 15', accuracy: 94.2, speed: '1.2s', cost: '$0.10', notes: 'Tech focus added', active: true },
-  { version: '4.1', date: 'Jan 8', accuracy: 92.4, speed: '1.4s', cost: '$0.12', notes: 'Bug fixes', active: false },
-  { version: '4.0', date: 'Jan 1', accuracy: 91.8, speed: '1.5s', cost: '$0.14', notes: 'Major update', active: false },
-  { version: '3.2', date: 'Dec 24', accuracy: 89.7, speed: '1.6s', cost: '$0.15', notes: 'Holiday optimized', active: false },
-  { version: '3.1', date: 'Dec 15', accuracy: 88.2, speed: '1.7s', cost: '$0.16', notes: 'Initial release', active: false },
-];
-
-const COMPARISON_METRICS = [
-  { metric: 'Lead Scoring', current: 92.4, trained: 94.2, unit: '%', better: true },
-  { metric: 'Content Quality', current: 88.7, trained: 91.3, unit: '%', better: true },
-  { metric: 'Prediction', current: 89.5, trained: 92.1, unit: '%', better: true },
-  { metric: 'Speed', current: 1.4, trained: 1.2, unit: 's', better: true },
-  { metric: 'Cost/Request', current: 0.12, trained: 0.10, unit: '$', better: true },
-];
-
-// Generate realistic training curve data
-const generateTrainingCurve = (maxEpoch: number): EpochMetric[] => {
-  const data: EpochMetric[] = [];
-  for (let e = 1; e <= maxEpoch; e++) {
-    const progress = e / maxEpoch;
-    // Accuracy: starts ~65%, approaches ~94% with some noise
-    const baseAcc = 65 + 29 * (1 - Math.exp(-3.5 * progress));
-    const noise = (Math.random() - 0.5) * 1.5;
-    const accuracy = Math.min(96, +(baseAcc + noise).toFixed(1));
-
-    // Loss: starts ~0.48, decreases toward ~0.02
-    const baseLoss = 0.48 * Math.exp(-3.5 * progress) + 0.02;
-    const lossNoise = (Math.random() - 0.5) * 0.015;
-    const loss = Math.max(0.01, +(baseLoss + lossNoise).toFixed(3));
-
-    // Validation metrics slightly worse
-    const valAccuracy = Math.min(95, +(accuracy - 0.5 - Math.random() * 1.2).toFixed(1));
-    const valLoss = +(loss + 0.005 + Math.random() * 0.01).toFixed(3);
-
-    data.push({ epoch: e, accuracy, loss, valAccuracy, valLoss });
-  }
-  return data;
+const colorMap: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', dot: 'bg-indigo-500' },
+  blue: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' },
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  violet: { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200', dot: 'bg-violet-500' },
+  amber: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
+  rose: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500' },
+  sky: { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200', dot: 'bg-sky-500' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-500' },
+  teal: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', dot: 'bg-teal-500' },
 };
 
 const ModelTraining: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
-  const [selectedModel, setSelectedModel] = useState<ModelId>('gemini-flash');
-  const [datasets, setDatasets] = useState<TrainingDataset[]>(DEFAULT_DATASETS);
-  const [focusAreas, setFocusAreas] = useState<FocusArea[]>(DEFAULT_FOCUS_AREAS);
-  const [params, setParams] = useState<TrainingParams>({ epochs: 50, learningRate: 0.001, batchSize: 32, validationSplit: 20 });
-  const [status, setStatus] = useState<TrainingStatus>('idle');
-  const [currentEpoch, setCurrentEpoch] = useState(0);
-  const [trainingData, setTrainingData] = useState<EpochMetric[]>([]);
-  const [fullCurve] = useState<EpochMetric[]>(() => generateTrainingCurve(50));
-  const [showLogs, setShowLogs] = useState(false);
-  const [deployedVersion, setDeployedVersion] = useState('4.2');
-  const [versions, setVersions] = useState<ModelVersion[]>(MODEL_VERSIONS);
-  const [showRollbackConfirm, setShowRollbackConfirm] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ─── Enhanced Wireframe State ───
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const [showExperiments, setShowExperiments] = useState(false);
-  const [showBenchmarkPanel, setShowBenchmarkPanel] = useState(false);
-  const [showDataInsights, setShowDataInsights] = useState(false);
-  const [showPresets, setShowPresets] = useState(false);
-  const [showHyperTuning, setShowHyperTuning] = useState(false);
-  const [showDriftMonitor, setShowDriftMonitor] = useState(false);
-  const [showFeatureImportance, setShowFeatureImportance] = useState(false);
+  // ─── State ───
+  const [systemPrompts, setSystemPrompts] = useState<PromptRow[]>([]);
+  const [userPrompts, setUserPrompts] = useState<PromptRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(Object.keys(CATEGORY_META)));
 
-  // ─── Training Simulation ───
-  const startTraining = useCallback(() => {
-    setStatus('training');
-    setCurrentEpoch(0);
-    setTrainingData([]);
-  }, []);
+  // Editor state
+  const [editSystemInstruction, setEditSystemInstruction] = useState('');
+  const [editPromptTemplate, setEditPromptTemplate] = useState('');
+  const [editTemperature, setEditTemperature] = useState(0.7);
+  const [editTopP, setEditTopP] = useState(0.9);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const pauseTraining = () => setStatus('paused');
+  // Right panel
+  const [rightTab, setRightTab] = useState<'test' | 'history'>('test');
+  const [testInput, setTestInput] = useState('');
+  const [testOutput, setTestOutput] = useState('');
+  const [testRunning, setTestRunning] = useState(false);
+  const [testTime, setTestTime] = useState<number | null>(null);
+  const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
-  const resumeTraining = () => setStatus('training');
+  const templateRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    if (status === 'training') {
-      intervalRef.current = setInterval(() => {
-        setCurrentEpoch(prev => {
-          const next = prev + 1;
-          if (next > params.epochs) {
-            setStatus('complete');
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            return prev;
-          }
-          setTrainingData(td => [...td, fullCurve[next - 1]]);
-          return next;
-        });
-      }, 400); // Speed up for demo: ~20s for 50 epochs
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+  // ─── Data Loading ───
+  const loadPrompts = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Load system defaults
+      const { data: defaults } = await supabase
+        .from('user_prompts')
+        .select('*')
+        .is('owner_id', null)
+        .eq('is_default', true);
+
+      // Load user overrides
+      const { data: customs } = await supabase
+        .from('user_prompts')
+        .select('*')
+        .eq('owner_id', user.id);
+
+      setSystemPrompts(defaults || []);
+      setUserPrompts(customs || []);
+    } catch (err) {
+      console.error('Failed to load prompts:', err);
+    } finally {
+      setLoading(false);
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [status, params.epochs, fullCurve]);
+  }, [user.id]);
 
-  // ─── Computed ───
-  const latestMetric = trainingData.length > 0 ? trainingData[trainingData.length - 1] : null;
-  const totalSamples = datasets.filter(d => d.enabled).reduce((a, b) => a + b.samples, 0);
-  const enabledFocusCount = focusAreas.filter(f => f.enabled).length;
-  const timeRemaining = status === 'training' ? Math.max(0, Math.round((params.epochs - currentEpoch) * 0.4 / 60 * 100) / 100) : 0;
-  const progressPct = params.epochs > 0 ? Math.round((currentEpoch / params.epochs) * 100) : 0;
-
-  // ─── KPI Stats ───
-  const kpiStats = useMemo(() => {
-    const avgAccuracy = versions.length > 0 ? versions.reduce((s, v) => s + v.accuracy, 0) / versions.length : 0;
-    const bestVersion = versions.reduce((best, v) => v.accuracy > best.accuracy ? v : best, versions[0]);
-    const completedExperiments = MOCK_EXPERIMENTS.filter(e => e.status === 'completed');
-    const avgImprovement = completedExperiments.length > 0
-      ? completedExperiments.reduce((s, e) => s + e.improvement, 0) / completedExperiments.length
-      : 0;
-
-    return [
-      { label: 'Training Samples', value: totalSamples.toLocaleString(), icon: <LayersIcon className="w-5 h-5" />, color: 'indigo', trend: `${datasets.filter(d => d.enabled).length}/${datasets.length} datasets`, up: true },
-      { label: 'Focus Areas', value: `${enabledFocusCount}/${focusAreas.length}`, icon: <TargetIcon className="w-5 h-5" />, color: 'emerald', trend: focusAreas.filter(f => f.enabled).map(f => f.name.split(' ')[0]).join(', '), up: true },
-      { label: 'Best Accuracy', value: `${bestVersion?.accuracy || 0}%`, icon: <TrendUpIcon className="w-5 h-5" />, color: 'blue', trend: `v${bestVersion?.version || '?'} on ${bestVersion?.date || '?'}`, up: true },
-      { label: 'Avg Improvement', value: `+${avgImprovement.toFixed(1)}%`, icon: <SparklesIcon className="w-5 h-5" />, color: 'violet', trend: `${completedExperiments.length} completed runs`, up: avgImprovement > 0 },
-      { label: 'Model Versions', value: versions.length.toString(), icon: <GitBranchIcon className="w-5 h-5" />, color: 'amber', trend: `Active: v${deployedVersion}`, up: null },
-      { label: 'Cost/Request', value: versions[0]?.cost || '$0.10', icon: <ShieldIcon className="w-5 h-5" />, color: 'fuchsia', trend: `Speed: ${versions[0]?.speed || '1.2s'}`, up: true },
-    ];
-  }, [totalSamples, datasets, enabledFocusCount, focusAreas, versions, deployedVersion]);
-
-  // ─── Data Quality Insights ───
-  const dataInsights = useMemo(() => {
-    return datasets.map(ds => {
-      const quality = 70 + Math.floor(Math.random() * 30);
-      const freshness = ['Fresh', 'Recent', 'Aging', 'Stale'][Math.floor(Math.random() * 3)];
-      const coverage = 50 + Math.floor(Math.random() * 50);
-      return { ...ds, quality, freshness, coverage };
-    });
-  }, [datasets]);
-
-  // ─── Hyperparameter Tuning Analysis ───
-  const hyperTuningAnalysis = useMemo(() => {
-    const runs = MOCK_EXPERIMENTS.filter(e => e.status === 'completed');
-    const paramSensitivity = [
-      { param: 'Learning Rate', impact: 82, optimal: '0.001', range: '0.0001 - 0.01', direction: 'Lower is more stable' },
-      { param: 'Epochs', impact: 68, optimal: '50-100', range: '10 - 200', direction: 'Diminishing returns after 100' },
-      { param: 'Batch Size', impact: 45, optimal: '32', range: '8 - 128', direction: 'Smaller = better accuracy, slower' },
-      { param: 'Validation Split', impact: 31, optimal: '20%', range: '10% - 30%', direction: 'Higher = better generalization' },
-    ];
-
-    const gridSearch = [
-      { lr: 0.01, epochs: 25, accuracy: 86.4, loss: 0.082, time: '5m' },
-      { lr: 0.001, epochs: 50, accuracy: 94.2, loss: 0.028, time: '18m' },
-      { lr: 0.001, epochs: 100, accuracy: 94.8, loss: 0.022, time: '35m' },
-      { lr: 0.0001, epochs: 200, accuracy: 95.1, loss: 0.019, time: '72m' },
-      { lr: 0.005, epochs: 25, accuracy: 88.7, loss: 0.061, time: '8m' },
-      { lr: 0.0005, epochs: 50, accuracy: 93.1, loss: 0.034, time: '20m' },
-    ].sort((a, b) => b.accuracy - a.accuracy);
-
-    const bestConfig = gridSearch[0];
-    const efficiencyScore = Math.round((bestConfig.accuracy / parseInt(bestConfig.time)) * 10);
-
-    return { paramSensitivity, gridSearch, bestConfig, efficiencyScore, totalRuns: runs.length };
-  }, []);
-
-  // ─── Model Drift Monitor ───
-  const driftMetrics = useMemo(() => {
-    const weeks = Array.from({ length: 12 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (11 - i) * 7);
-      const baseAccuracy = 94.2;
-      const drift = Math.sin(i * 0.4) * 1.5 + (i > 8 ? -(i - 8) * 0.3 : 0);
-      const accuracy = Math.round((baseAccuracy + drift + (Math.random() - 0.5) * 0.8) * 10) / 10;
-      return {
-        week: `W${i + 1}`,
-        date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        accuracy,
-        predictions: Math.floor(Math.random() * 200) + 100,
-        errors: Math.floor(Math.random() * 15) + 2,
-      };
-    });
-
-    const currentAccuracy = weeks[weeks.length - 1].accuracy;
-    const peakAccuracy = Math.max(...weeks.map(w => w.accuracy));
-    const driftAmount = Math.round((peakAccuracy - currentAccuracy) * 10) / 10;
-    const driftStatus = driftAmount < 1 ? 'Stable' : driftAmount < 2 ? 'Minor Drift' : 'Significant Drift';
-    const totalPredictions = weeks.reduce((s, w) => s + w.predictions, 0);
-    const totalErrors = weeks.reduce((s, w) => s + w.errors, 0);
-    const errorRate = totalPredictions > 0 ? Math.round((totalErrors / totalPredictions) * 1000) / 10 : 0;
-
-    const alerts = [
-      ...(driftAmount >= 2 ? [{ severity: 'high' as const, message: `Accuracy dropped ${driftAmount}% from peak. Consider retraining.` }] : []),
-      ...(errorRate > 5 ? [{ severity: 'medium' as const, message: `Error rate at ${errorRate}%. Review recent predictions.` }] : []),
-      ...(weeks.slice(-3).every((w, i, arr) => i === 0 || w.accuracy < arr[i - 1].accuracy) ? [{ severity: 'medium' as const, message: 'Consistent accuracy decline over last 3 weeks.' }] : []),
-      { severity: 'low' as const, message: 'Data distribution shift detected in "Industry" dataset.' },
-    ];
-
-    return { weeks, currentAccuracy, peakAccuracy, driftAmount, driftStatus, totalPredictions, totalErrors, errorRate, alerts };
-  }, []);
-
-  // ─── Feature Importance ───
-  const featureImportance = useMemo(() => {
-    const features = [
-      { name: 'Lead Score', importance: 92, category: 'Core', correlation: 0.89, stability: 95 },
-      { name: 'Email Engagement', importance: 78, category: 'Behavioral', correlation: 0.72, stability: 88 },
-      { name: 'Company Size', importance: 71, category: 'Firmographic', correlation: 0.65, stability: 92 },
-      { name: 'Industry Match', importance: 65, category: 'Context', correlation: 0.58, stability: 85 },
-      { name: 'Page Visits', importance: 58, category: 'Behavioral', correlation: 0.51, stability: 78 },
-      { name: 'Content Downloads', importance: 52, category: 'Behavioral', correlation: 0.44, stability: 82 },
-      { name: 'Social Signals', importance: 41, category: 'Social', correlation: 0.35, stability: 70 },
-      { name: 'Time of Day', importance: 28, category: 'Temporal', correlation: 0.22, stability: 65 },
-    ].sort((a, b) => b.importance - a.importance);
-
-    const categoryBreakdown = ['Core', 'Behavioral', 'Firmographic', 'Context', 'Social', 'Temporal'].map(cat => {
-      const catFeatures = features.filter(f => f.category === cat);
-      return {
-        category: cat,
-        count: catFeatures.length,
-        avgImportance: catFeatures.length > 0 ? Math.round(catFeatures.reduce((s, f) => s + f.importance, 0) / catFeatures.length) : 0,
-        color: cat === 'Core' ? '#6366f1' : cat === 'Behavioral' ? '#10b981' : cat === 'Firmographic' ? '#f59e0b' :
-               cat === 'Context' ? '#8b5cf6' : cat === 'Social' ? '#ec4899' : '#64748b',
-      };
-    }).filter(c => c.count > 0);
-
-    const topFeature = features[0];
-    const avgCorrelation = Math.round(features.reduce((s, f) => s + f.correlation, 0) / features.length * 100) / 100;
-
-    return { features, categoryBreakdown, topFeature, avgCorrelation };
-  }, []);
-
-  // ─── Handlers ───
-  const toggleDataset = (id: string) => {
-    setDatasets(prev => prev.map(d => d.id === id ? { ...d, enabled: !d.enabled } : d));
-  };
-
-  const toggleFocus = (id: string) => {
-    setFocusAreas(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
-  };
-
-  const handleDeploy = () => {
-    const newVer = {
-      version: '4.3',
-      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      accuracy: latestMetric?.accuracy || 94.2,
-      speed: '1.1s',
-      cost: '$0.09',
-      notes: `Custom training: ${enabledFocusCount} focus areas`,
-      active: true,
-    };
-    setVersions(prev => [newVer, ...prev.map(v => ({ ...v, active: false }))]);
-    setDeployedVersion('4.3');
-    setStatus('idle');
-  };
-
-  const handleRollback = (version: string) => {
-    setVersions(prev => prev.map(v => ({ ...v, active: v.version === version })));
-    setDeployedVersion(version);
-    setShowRollbackConfirm(null);
-  };
-
-  const handleExportReport = () => {
-    const report = `AI Model Training Report
-Generated: ${new Date().toLocaleDateString()}
-User: ${user.name}
-
-MODEL CONFIGURATION
-- Base Model: ${selectedModel}
-- Epochs: ${params.epochs}
-- Learning Rate: ${params.learningRate}
-- Batch Size: ${params.batchSize}
-- Validation Split: ${params.validationSplit}%
-- Training Samples: ${totalSamples}
-
-TRAINING RESULTS
-- Final Accuracy: ${latestMetric?.accuracy || 'N/A'}%
-- Final Loss: ${latestMetric?.loss || 'N/A'}
-- Val Accuracy: ${latestMetric?.valAccuracy || 'N/A'}%
-- Epochs Completed: ${currentEpoch}/${params.epochs}
-
-MODEL COMPARISON
-${COMPARISON_METRICS.map(m => `- ${m.metric}: ${m.current}${m.unit} → ${m.trained}${m.unit}`).join('\n')}
-
-VERSION HISTORY
-${versions.map(v => `v${v.version} (${v.date}) - ${v.accuracy}% - ${v.notes}${v.active ? ' [ACTIVE]' : ''}`).join('\n')}`;
-
-    const blob = new Blob([report], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `model_training_report_${new Date().toISOString().split('T')[0]}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const applyPreset = useCallback((preset: typeof HYPERPARAMETER_PRESETS[0]) => {
-    setParams({ epochs: preset.epochs, learningRate: preset.lr, batchSize: preset.batch, validationSplit: preset.split });
-    setShowPresets(false);
-  }, []);
-
-  // ─── Keyboard Shortcuts ───
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
-      if (isInput) return;
+    loadPrompts();
+  }, [loadPrompts]);
 
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowShortcuts(s => !s); return; }
-      if (e.key === 'x' || e.key === 'X') { e.preventDefault(); setShowExperiments(s => !s); return; }
-      if (e.key === 'b' || e.key === 'B') { e.preventDefault(); setShowBenchmarkPanel(s => !s); return; }
-      if (e.key === 'd' || e.key === 'D') { e.preventDefault(); setShowDataInsights(s => !s); return; }
-      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setShowPresets(s => !s); return; }
-      if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHyperTuning(s => !s); return; }
-      if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setShowDriftMonitor(s => !s); return; }
-      if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setShowFeatureImportance(s => !s); return; }
-      if ((e.key === 'Enter' || e.key === 'r' || e.key === 'R') && status === 'idle') { e.preventDefault(); startTraining(); return; }
-      if (e.key === ' ' && status === 'training') { e.preventDefault(); pauseTraining(); return; }
-      if (e.key === ' ' && status === 'paused') { e.preventDefault(); resumeTraining(); return; }
-      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); handleExportReport(); return; }
-      if (e.key === 'Escape') {
-        setShowShortcuts(false);
-        setShowExperiments(false);
-        setShowBenchmarkPanel(false);
-        setShowDataInsights(false);
-        setShowPresets(false);
-        setShowHyperTuning(false);
-        setShowDriftMonitor(false);
-        setShowFeatureImportance(false);
+  // ─── Derived Data ───
+  // Build a synthetic PromptRow from registry defaults (used when DB has no data)
+  const getRegistryFallback = useCallback((key: string): PromptRow | null => {
+    const reg = PROMPT_REGISTRY.find(r => r.promptKey === key);
+    if (!reg) return null;
+    return {
+      id: `registry-${key}`,
+      owner_id: null,
+      prompt_key: key,
+      category: reg.category,
+      display_name: reg.displayName,
+      description: reg.description,
+      system_instruction: reg.defaultSystemInstruction,
+      prompt_template: reg.defaultPromptTemplate,
+      temperature: reg.defaultTemperature,
+      top_p: reg.defaultTopP,
+      version: 0,
+      is_active: true,
+      is_default: true,
+      last_tested_at: null,
+      test_result: null,
+      created_at: '',
+      updated_at: '',
+    };
+  }, []);
+
+  const getActivePrompt = useCallback((key: string): PromptRow | null => {
+    const userOverride = userPrompts.find(p => p.prompt_key === key && p.is_active);
+    if (userOverride) return userOverride;
+    const systemDefault = systemPrompts.find(p => p.prompt_key === key);
+    if (systemDefault) return systemDefault;
+    // Fallback to hardcoded registry defaults (works even without DB migration)
+    return getRegistryFallback(key);
+  }, [userPrompts, systemPrompts, getRegistryFallback]);
+
+  const isCustom = useCallback((key: string): boolean => {
+    return userPrompts.some(p => p.prompt_key === key && p.is_active);
+  }, [userPrompts]);
+
+  const promptsByCategory = useMemo(() => {
+    const grouped: Record<string, PromptRegistryEntry[]> = {};
+    for (const entry of PROMPT_REGISTRY) {
+      if (!grouped[entry.category]) grouped[entry.category] = [];
+      grouped[entry.category].push(entry);
+    }
+    return grouped;
+  }, []);
+
+  const selectedPrompt = selectedKey ? getActivePrompt(selectedKey) : null;
+  const selectedRegistry = selectedKey ? PROMPT_REGISTRY.find(r => r.promptKey === selectedKey) : null;
+  const selectedIsCustom = selectedKey ? isCustom(selectedKey) : false;
+
+  // The system default to show for comparison (from DB or registry)
+  const selectedSystemDefault = useMemo(() => {
+    if (!selectedKey) return null;
+    const dbDefault = systemPrompts.find(p => p.prompt_key === selectedKey);
+    if (dbDefault) return dbDefault;
+    return getRegistryFallback(selectedKey);
+  }, [selectedKey, systemPrompts, getRegistryFallback]);
+
+  // "View System Default" toggle
+  const [showSystemDefault, setShowSystemDefault] = useState(false);
+
+  // ─── Load Editor ───
+  useEffect(() => {
+    if (selectedPrompt) {
+      setEditSystemInstruction(selectedPrompt.system_instruction);
+      setEditPromptTemplate(selectedPrompt.prompt_template);
+      setEditTemperature(selectedPrompt.temperature);
+      setEditTopP(selectedPrompt.top_p);
+      setIsDirty(false);
+      setSaveMessage(null);
+      setShowSystemDefault(false);
+    }
+  }, [selectedPrompt?.id, selectedKey]);
+
+  // Track dirty state
+  useEffect(() => {
+    if (!selectedPrompt) return;
+    const dirty =
+      editSystemInstruction !== selectedPrompt.system_instruction ||
+      editPromptTemplate !== selectedPrompt.prompt_template ||
+      editTemperature !== selectedPrompt.temperature ||
+      editTopP !== selectedPrompt.top_p;
+    setIsDirty(dirty);
+  }, [editSystemInstruction, editPromptTemplate, editTemperature, editTopP, selectedPrompt]);
+
+  // ─── Load Version History ───
+  const loadVersions = useCallback(async (promptId: string) => {
+    setVersionsLoading(true);
+    const { data } = await supabase
+      .from('user_prompt_versions')
+      .select('*')
+      .eq('prompt_id', promptId)
+      .order('version', { ascending: false });
+    setVersions(data || []);
+    setVersionsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (selectedPrompt && selectedIsCustom) {
+      loadVersions(selectedPrompt.id);
+    } else {
+      setVersions([]);
+    }
+  }, [selectedPrompt?.id, selectedIsCustom, loadVersions]);
+
+  // ─── Save Prompt ───
+  const handleSave = async () => {
+    if (!selectedKey || !selectedRegistry) return;
+    setSaving(true);
+    setSaveMessage(null);
+
+    try {
+      const existingCustom = userPrompts.find(p => p.prompt_key === selectedKey && p.is_active);
+
+      if (existingCustom) {
+        // Update existing custom prompt
+        const newVersion = existingCustom.version + 1;
+
+        // Save version history
+        await supabase.from('user_prompt_versions').insert({
+          prompt_id: existingCustom.id,
+          owner_id: user.id,
+          version: existingCustom.version,
+          system_instruction: existingCustom.system_instruction,
+          prompt_template: existingCustom.prompt_template,
+          temperature: existingCustom.temperature,
+          top_p: existingCustom.top_p,
+          change_note: `Updated to v${newVersion}`,
+        });
+
+        // Update the prompt
+        const { error } = await supabase
+          .from('user_prompts')
+          .update({
+            system_instruction: editSystemInstruction,
+            prompt_template: editPromptTemplate,
+            temperature: editTemperature,
+            top_p: editTopP,
+            version: newVersion,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingCustom.id);
+
+        if (error) throw error;
+        setSaveMessage({ type: 'success', text: `Saved as Custom v${newVersion}` });
+      } else {
+        // Create new custom override
+        const { error } = await supabase.from('user_prompts').insert({
+          owner_id: user.id,
+          prompt_key: selectedKey,
+          category: selectedRegistry.category,
+          display_name: selectedRegistry.displayName,
+          description: selectedRegistry.description,
+          system_instruction: editSystemInstruction,
+          prompt_template: editPromptTemplate,
+          temperature: editTemperature,
+          top_p: editTopP,
+          version: 1,
+          is_active: true,
+          is_default: false,
+        });
+
+        if (error) throw error;
+        setSaveMessage({ type: 'success', text: 'Custom override created (v1)' });
+      }
+
+      await loadPrompts();
+    } catch (err: any) {
+      setSaveMessage({ type: 'error', text: err.message || 'Save failed' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ─── Reset to Default ───
+  const handleReset = async () => {
+    if (!selectedKey) return;
+    const existingCustom = userPrompts.find(p => p.prompt_key === selectedKey && p.is_active);
+    if (!existingCustom) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('user_prompts')
+        .delete()
+        .eq('id', existingCustom.id);
+
+      if (error) throw error;
+      setSaveMessage({ type: 'success', text: 'Reset to system default' });
+      await loadPrompts();
+    } catch (err: any) {
+      setSaveMessage({ type: 'error', text: err.message || 'Reset failed' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ─── Restore Version ───
+  const handleRestore = async (ver: VersionRow) => {
+    if (!selectedKey) return;
+    const existingCustom = userPrompts.find(p => p.prompt_key === selectedKey && p.is_active);
+    if (!existingCustom) return;
+
+    setSaving(true);
+    try {
+      const newVersion = existingCustom.version + 1;
+
+      // Save current as version history
+      await supabase.from('user_prompt_versions').insert({
+        prompt_id: existingCustom.id,
+        owner_id: user.id,
+        version: existingCustom.version,
+        system_instruction: existingCustom.system_instruction,
+        prompt_template: existingCustom.prompt_template,
+        temperature: existingCustom.temperature,
+        top_p: existingCustom.top_p,
+        change_note: `Rolled back to v${ver.version}`,
+      });
+
+      // Restore the old version
+      const { error } = await supabase
+        .from('user_prompts')
+        .update({
+          system_instruction: ver.system_instruction,
+          prompt_template: ver.prompt_template,
+          temperature: ver.temperature,
+          top_p: ver.top_p,
+          version: newVersion,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingCustom.id);
+
+      if (error) throw error;
+      setSaveMessage({ type: 'success', text: `Restored from v${ver.version}` });
+      await loadPrompts();
+    } catch (err: any) {
+      setSaveMessage({ type: 'error', text: err.message || 'Restore failed' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ─── Test Prompt ───
+  const handleTest = async () => {
+    if (!selectedKey) return;
+    setTestRunning(true);
+    setTestOutput('');
+    setTestTime(null);
+    const start = Date.now();
+
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.API_KEY;
+      if (!apiKey) {
+        setTestOutput('Error: No Gemini API key configured. Set VITE_GEMINI_API_KEY in your .env.local file.');
         return;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, startTraining]); // eslint-disable-line react-hooks/exhaustive-deps
+      const ai = new GoogleGenAI({ apiKey });
+
+      const samplePrompt = editPromptTemplate
+        .replace(/\{\{[^}]+\}\}/g, (match) => {
+          const key = match.replace(/\{\{|\}\}/g, '');
+          const samples: Record<string, string> = {
+            lead_name: 'Sarah Chen', company: 'TechCorp', score: '85',
+            insights: 'Recently raised Series B, expanding engineering team',
+            type: 'email', tone: 'professional', total_leads: '42',
+            avg_score: '72', status_breakdown: 'New: 15, Contacted: 12, Qualified: 10, Won: 5',
+            hot_leads: '8', lead_summary: 'Sarah Chen (TechCorp) - Score: 85, Status: Qualified',
+            topic: 'AI-Powered Sales Automation', post_title: 'The Future of B2B Sales',
+            post_url: 'https://example.com/blog/future-b2b-sales',
+            content: testInput || 'Sample content for analysis',
+            user_prompt: testInput || 'Analyze my pipeline health',
+            pipeline_context: 'Total Leads: 42, Avg Score: 72, Hot: 8',
+          };
+          return samples[key] || `[${key}]`;
+        });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: samplePrompt,
+        config: {
+          systemInstruction: editSystemInstruction,
+          temperature: editTemperature,
+          topP: editTopP,
+        },
+      });
+
+      const elapsed = Date.now() - start;
+      setTestOutput(response.text || 'No output generated.');
+      setTestTime(elapsed);
+
+      // Update last_tested_at if custom prompt exists
+      const customPrompt = userPrompts.find(p => p.prompt_key === selectedKey && p.is_active);
+      if (customPrompt) {
+        await supabase
+          .from('user_prompts')
+          .update({ last_tested_at: new Date().toISOString(), test_result: (response.text || '').slice(0, 500) })
+          .eq('id', customPrompt.id);
+      }
+    } catch (err: any) {
+      setTestOutput(`Test failed: ${err.message || 'Unknown error'}`);
+      setTestTime(Date.now() - start);
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
+  // ─── Insert Placeholder ───
+  const insertPlaceholder = (placeholder: string) => {
+    if (!templateRef.current) return;
+    const ta = templateRef.current;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const val = editPromptTemplate;
+    setEditPromptTemplate(val.substring(0, start) + placeholder + val.substring(end));
+    setTimeout(() => {
+      ta.selectionStart = ta.selectionEnd = start + placeholder.length;
+      ta.focus();
+    }, 0);
+  };
+
+  // ─── KPI Stats ───
+  const customCount = userPrompts.filter(p => p.is_active).length;
+  const categoriesWithCustom = new Set(userPrompts.filter(p => p.is_active).map(p => p.category)).size;
+  const lastTest = userPrompts
+    .filter(p => p.last_tested_at)
+    .sort((a, b) => new Date(b.last_tested_at!).getTime() - new Date(a.last_tested_at!).getTime())[0];
+
+  const kpiStats = [
+    { label: 'Custom Prompts', value: customCount.toString(), icon: <EditIcon className="w-5 h-5" />, color: 'indigo', sub: `of ${PROMPT_REGISTRY.length} available` },
+    { label: 'Categories Configured', value: categoriesWithCustom.toString(), icon: <LayersIcon className="w-5 h-5" />, color: 'emerald', sub: `of ${Object.keys(CATEGORY_META).length} total` },
+    { label: 'Last Test Run', value: lastTest?.last_tested_at ? new Date(lastTest.last_tested_at).toLocaleDateString() : 'Never', icon: <PlayIcon className="w-5 h-5" />, color: 'blue', sub: lastTest ? lastTest.display_name : 'No tests yet' },
+    { label: 'Active Overrides', value: `${customCount}/${PROMPT_REGISTRY.length}`, icon: <SlidersIcon className="w-5 h-5" />, color: 'violet', sub: `${PROMPT_REGISTRY.length - customCount} using defaults` },
+  ];
+
+  // ─── Render ───
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* HEADER                                                       */}
-      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
-            <CogIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-              AI Model Training Studio
-            </h1>
-            <p className="text-slate-400 text-xs mt-0.5">
-              Train, compare &amp; deploy AI models &middot; Active: v{deployedVersion}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">AI Prompt Studio</h1>
+          <p className="text-sm text-gray-500 mt-1">Customize the AI prompts that power every feature across AuraFunnel</p>
         </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setShowExperiments(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showExperiments ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <ClockIcon className="w-3.5 h-3.5" />
-            <span>Experiments</span>
-          </button>
-          <button
-            onClick={() => setShowBenchmarkPanel(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showBenchmarkPanel ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <ChartIcon className="w-3.5 h-3.5" />
-            <span>Benchmarks</span>
-          </button>
-          <button
-            onClick={() => setShowDataInsights(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showDataInsights ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <PieChartIcon className="w-3.5 h-3.5" />
-            <span>Data Quality</span>
-          </button>
-          <button
-            onClick={() => setShowHyperTuning(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showHyperTuning ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <SlidersIcon className="w-3.5 h-3.5" />
-            <span>Tuning</span>
-          </button>
-          <button
-            onClick={() => setShowDriftMonitor(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showDriftMonitor ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <AlertTriangleIcon className="w-3.5 h-3.5" />
-            <span>Drift</span>
-          </button>
-          <button
-            onClick={() => setShowFeatureImportance(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showFeatureImportance ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <LayersIcon className="w-3.5 h-3.5" />
-            <span>Features</span>
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <span>Shortcuts</span>
-          </button>
-
-          <span className={`flex items-center space-x-1.5 px-3 py-2 rounded-full text-xs font-bold ${
-            status === 'training' ? 'bg-emerald-50 text-emerald-700' :
-            status === 'paused' ? 'bg-amber-50 text-amber-700' :
-            status === 'complete' ? 'bg-indigo-50 text-indigo-700' :
-            'bg-slate-50 text-slate-500'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${
-              status === 'training' ? 'bg-emerald-500 animate-pulse' :
-              status === 'paused' ? 'bg-amber-500' :
-              status === 'complete' ? 'bg-indigo-500' :
-              'bg-slate-300'
-            }`}></span>
-            <span>{status === 'idle' ? 'Ready' : status === 'training' ? 'Training...' : status === 'paused' ? 'Paused' : 'Complete'}</span>
-          </span>
-          <div className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-full text-xs font-bold text-slate-600">
-            <TargetIcon className="w-3.5 h-3.5 text-indigo-600" />
-            <span>v{deployedVersion}</span>
-          </div>
-        </div>
+        <button
+          onClick={loadPrompts}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors text-sm font-medium"
+        >
+          <RefreshIcon className="w-4 h-4" />
+          Refresh
+        </button>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* KPI STATS BANNER                                               */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {kpiStats.map((stat, i) => (
-          <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-all group">
-            <div className="flex items-center justify-between mb-2">
-              <div className={`w-9 h-9 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                {stat.icon}
+      {/* KPI Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        {kpiStats.map((stat) => {
+          const c = colorMap[stat.color] || colorMap.indigo;
+          return (
+            <div key={stat.label} className="bg-white rounded-2xl border border-gray-100 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-10 h-10 rounded-xl ${c.bg} ${c.text} flex items-center justify-center`}>
+                  {stat.icon}
+                </div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{stat.label}</div>
               </div>
-              {stat.up !== null && (
-                stat.up ? <TrendUpIcon className="w-3.5 h-3.5 text-emerald-500" /> : <TrendDownIcon className="w-3.5 h-3.5 text-rose-500" />
-              )}
+              <div className="text-2xl font-black text-gray-900">{stat.value}</div>
+              <div className="text-xs text-gray-500 mt-1">{stat.sub}</div>
             </div>
-            <p className="text-xl font-black text-slate-900">{stat.value}</p>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{stat.label}</p>
-            <p className="text-[10px] text-slate-400 mt-1 truncate">{stat.trend}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* MAIN 3-COLUMN LAYOUT                                         */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col xl:flex-row gap-5">
+      {/* 3-Panel Layout */}
+      <div className="grid grid-cols-12 gap-4" style={{ minHeight: '70vh' }}>
 
-        {/* ─── LEFT: Training Configuration (30%) ─── */}
-        <div className="xl:w-[30%] space-y-5">
-
-          {/* Model Selection */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Model Selection</h3>
-            <div className="space-y-2">
-              {([
-                { id: 'gemini-flash' as ModelId, label: 'Gemini Flash', desc: 'Fast, cost-effective', badge: 'Current' },
-                { id: 'gemini-pro' as ModelId, label: 'Gemini Pro', desc: 'Higher accuracy', badge: null },
-                { id: 'custom' as ModelId, label: 'Custom Fine-tuned', desc: 'Your data, your model', badge: null },
-              ]).map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => setSelectedModel(m.id)}
-                  disabled={status === 'training'}
-                  className={`w-full flex items-center space-x-3 p-3 rounded-xl border-2 transition-all text-left ${
-                    selectedModel === m.id
-                      ? 'border-indigo-600 bg-indigo-50'
-                      : 'border-slate-100 hover:border-slate-200'
-                  } disabled:opacity-50`}
-                >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                    selectedModel === m.id ? 'border-indigo-600' : 'border-slate-300'
-                  }`}>
-                    {selectedModel === m.id && <div className="w-2 h-2 rounded-full bg-indigo-600"></div>}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-slate-800">{m.label}</p>
-                    <p className="text-[10px] text-slate-400">{m.desc}</p>
-                  </div>
-                  {m.badge && (
-                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-bold uppercase">{m.badge}</span>
-                  )}
-                </button>
-              ))}
-            </div>
+        {/* ─── Left Sidebar: Category Navigator ─── */}
+        <div className="col-span-3 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-gray-100">
+            <h2 className="text-sm font-bold text-gray-900">Prompt Categories</h2>
+            <p className="text-[10px] text-gray-400 mt-1">{PROMPT_REGISTRY.length} prompts across {Object.keys(CATEGORY_META).length} categories</p>
           </div>
 
-          {/* Training Data */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Training Data</h3>
-              <span className="text-[10px] font-bold text-indigo-600">{totalSamples.toLocaleString()} samples</span>
-            </div>
-            <div className="space-y-2">
-              {datasets.map(ds => (
-                <button
-                  key={ds.id}
-                  onClick={() => toggleDataset(ds.id)}
-                  disabled={status === 'training'}
-                  className="w-full flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors text-left disabled:opacity-50"
-                >
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
-                    ds.enabled ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
-                  }`}>
-                    {ds.enabled && <CheckIcon className="w-3 h-3" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-slate-700 truncate">{ds.name}</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-400 shrink-0">{ds.samples.toLocaleString()}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {Object.entries(promptsByCategory).map(([cat, entries]) => {
+              const meta = CATEGORY_META[cat as PromptCategory];
+              const color = CATEGORY_COLORS[cat] || 'gray';
+              const cm = colorMap[color] || colorMap.indigo;
+              const isExpanded = expandedCategories.has(cat);
+              const customInCat = entries.filter(e => isCustom(e.promptKey)).length;
 
-          {/* Training Parameters */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Training Parameters</h3>
-              <button
-                onClick={() => setShowPresets(s => !s)}
-                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
-              >
-                Presets
-              </button>
-            </div>
-            {showPresets && (
-              <div className="mb-3 space-y-1.5">
-                {HYPERPARAMETER_PRESETS.map(preset => (
+              return (
+                <div key={cat}>
                   <button
-                    key={preset.name}
-                    onClick={() => applyPreset(preset)}
-                    disabled={status === 'training'}
-                    className="w-full text-left p-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 transition-all disabled:opacity-50"
+                    onClick={() => setExpandedCategories(prev => {
+                      const next = new Set(prev);
+                      if (next.has(cat)) next.delete(cat);
+                      else next.add(cat);
+                      return next;
+                    })}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-indigo-700">{preset.name}</span>
-                      <span className="text-[9px] text-indigo-500 font-medium">{preset.epochs}ep &middot; lr={preset.lr}</span>
+                    <div className={`w-6 h-6 rounded-md ${cm.bg} ${cm.text} flex items-center justify-center flex-shrink-0`}>
+                      {CATEGORY_ICONS[cat]}
                     </div>
-                    <p className="text-[10px] text-indigo-500 mt-0.5">{preset.desc}</p>
+                    <span className="text-xs font-semibold text-gray-700 flex-1 truncate">{meta?.label || cat}</span>
+                    {customInCat > 0 && (
+                      <span className={`text-[9px] font-bold ${cm.text} ${cm.bg} px-1.5 py-0.5 rounded-full`}>
+                        {customInCat}
+                      </span>
+                    )}
+                    <ChevronDownIcon className={`w-3 h-3 text-gray-400 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                   </button>
-                ))}
-              </div>
-            )}
-            <div className="space-y-3">
-              {([
-                { label: 'Epochs', key: 'epochs' as keyof TrainingParams, options: [10, 25, 50, 100, 200] },
-                { label: 'Learning Rate', key: 'learningRate' as keyof TrainingParams, options: [0.01, 0.005, 0.001, 0.0005, 0.0001] },
-                { label: 'Batch Size', key: 'batchSize' as keyof TrainingParams, options: [8, 16, 32, 64, 128] },
-                { label: 'Validation Split', key: 'validationSplit' as keyof TrainingParams, options: [10, 15, 20, 25, 30] },
-              ]).map(p => (
-                <div key={p.key} className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-600">{p.label}</span>
-                  <select
-                    value={params[p.key]}
-                    onChange={e => setParams(prev => ({ ...prev, [p.key]: parseFloat(e.target.value) }))}
-                    disabled={status === 'training'}
-                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none disabled:opacity-50"
-                  >
-                    {p.options.map(o => (
-                      <option key={o} value={o}>{p.key === 'validationSplit' ? `${o}%` : o}</option>
-                    ))}
-                  </select>
+
+                  {isExpanded && (
+                    <div className="ml-4 space-y-0.5">
+                      {entries.map(entry => {
+                        const custom = isCustom(entry.promptKey);
+                        const isSelected = selectedKey === entry.promptKey;
+                        return (
+                          <button
+                            key={entry.promptKey}
+                            onClick={() => {
+                              setSelectedKey(entry.promptKey);
+                              setTestOutput('');
+                              setTestInput('');
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left transition-all text-xs ${
+                              isSelected
+                                ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                                : 'hover:bg-gray-50 text-gray-600'
+                            }`}
+                          >
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                              custom ? 'bg-emerald-500' : 'bg-gray-300'
+                            }`} />
+                            <span className="truncate">{entry.displayName}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Focus Areas */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Focus Areas</h3>
-              <span className="text-[10px] font-bold text-indigo-600">{enabledFocusCount} active</span>
-            </div>
-            <div className="space-y-2">
-              {focusAreas.map(fa => (
-                <button
-                  key={fa.id}
-                  onClick={() => toggleFocus(fa.id)}
-                  disabled={status === 'training'}
-                  className="w-full flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors text-left disabled:opacity-50"
-                >
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
-                    fa.enabled ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
-                  }`}>
-                    {fa.enabled && <CheckIcon className="w-3 h-3" />}
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">{fa.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="space-y-2">
-            {status === 'idle' && (
-              <button
-                onClick={startTraining}
-                disabled={totalSamples === 0}
-                className="w-full flex items-center justify-center space-x-2 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50"
-              >
-                <PlayIcon className="w-4 h-4" />
-                <span>Start Training</span>
-              </button>
-            )}
-            {status === 'training' && (
-              <button
-                onClick={pauseTraining}
-                className="w-full flex items-center justify-center space-x-2 py-3.5 bg-amber-600 text-white rounded-xl font-bold text-sm hover:bg-amber-700 transition-all shadow-lg shadow-amber-200"
-              >
-                <PauseIcon className="w-4 h-4" />
-                <span>Pause Training</span>
-              </button>
-            )}
-            {status === 'paused' && (
-              <button
-                onClick={resumeTraining}
-                className="w-full flex items-center justify-center space-x-2 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
-              >
-                <PlayIcon className="w-4 h-4" />
-                <span>Resume Training</span>
-              </button>
-            )}
-            {status === 'complete' && (
-              <button
-                onClick={() => setStatus('idle')}
-                className="w-full flex items-center justify-center space-x-2 py-3.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
-              >
-                <RefreshIcon className="w-4 h-4" />
-                <span>New Training Run</span>
-              </button>
-            )}
+              );
+            })}
           </div>
         </div>
 
-        {/* ─── CENTER: Training Progress (40%) ─── */}
-        <div className="xl:w-[40%] space-y-5">
-
-          {/* Progress Bar */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
-                  <ActivityIcon className="w-5 h-5 text-emerald-600" />
-                  <span>Training Progress</span>
-                  {status === 'training' && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>}
-                </h3>
-              </div>
-              {(status === 'training' || status === 'paused') && (
-                <span className="text-xs text-slate-400">
-                  ~{timeRemaining > 1 ? `${Math.round(timeRemaining)} min` : `${Math.round(timeRemaining * 60)}s`} remaining
-                </span>
-              )}
-            </div>
-
-            {/* Epoch + Metrics */}
-            <div className="flex items-center space-x-6 mb-4">
-              <div>
-                <p className="text-2xl font-black text-slate-900">{currentEpoch}<span className="text-sm text-slate-400">/{params.epochs}</span></p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Epochs</p>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-emerald-600">{latestMetric?.accuracy || '—'}%</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Accuracy</p>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-amber-600">{latestMetric?.loss || '—'}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Loss</p>
+        {/* ─── Center Panel: Prompt Editor ─── */}
+        <div className="col-span-5 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+          {!selectedKey ? (
+            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+              <div className="text-center">
+                <SlidersIcon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="font-medium">Select a prompt to edit</p>
+                <p className="text-xs mt-1">Choose from the categories on the left</p>
               </div>
             </div>
-
-            {/* Progress bar */}
-            <div className="h-3 bg-slate-100 rounded-full overflow-hidden mb-1">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  status === 'complete' ? 'bg-indigo-600' :
-                  status === 'paused' ? 'bg-amber-500' :
-                  'bg-gradient-to-r from-emerald-500 to-teal-500'
-                }`}
-                style={{ width: `${progressPct}%` }}
-              ></div>
-            </div>
-            <p className="text-[10px] text-slate-400 text-right">{progressPct}% complete</p>
-          </div>
-
-          {/* Accuracy Chart */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <h3 className="font-bold text-slate-800 text-sm font-heading mb-3">Accuracy</h3>
-            {trainingData.length > 1 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={trainingData}>
-                  <defs>
-                    <linearGradient id="accGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="epoch" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                  <YAxis domain={[60, 100]} tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                  <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
-                  <Area type="monotone" dataKey="accuracy" stroke="#10b981" strokeWidth={2} fill="url(#accGrad)" name="Training" />
-                  <Line type="monotone" dataKey="valAccuracy" stroke="#6366f1" strokeWidth={1.5} strokeDasharray="5 5" dot={false} name="Validation" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[200px] flex items-center justify-center text-slate-300">
-                <div className="text-center">
-                  <ChartIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs font-semibold">Start training to see accuracy curve</p>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center space-x-4 mt-2">
-              <span className="flex items-center space-x-1.5 text-[10px] text-slate-500"><span className="w-3 h-1 bg-emerald-500 rounded-full"></span><span>Training</span></span>
-              <span className="flex items-center space-x-1.5 text-[10px] text-slate-500"><span className="w-3 h-1 bg-indigo-500 rounded-full border-dashed"></span><span>Validation</span></span>
-            </div>
-          </div>
-
-          {/* Loss Chart */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <h3 className="font-bold text-slate-800 text-sm font-heading mb-3">Loss</h3>
-            {trainingData.length > 1 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={trainingData}>
-                  <defs>
-                    <linearGradient id="lossGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="epoch" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                  <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
-                  <Area type="monotone" dataKey="loss" stroke="#f59e0b" strokeWidth={2} fill="url(#lossGrad)" name="Training" />
-                  <Line type="monotone" dataKey="valLoss" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 5" dot={false} name="Validation" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[200px] flex items-center justify-center text-slate-300">
-                <div className="text-center">
-                  <ChartIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs font-semibold">Start training to see loss curve</p>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center space-x-4 mt-2">
-              <span className="flex items-center space-x-1.5 text-[10px] text-slate-500"><span className="w-3 h-1 bg-amber-500 rounded-full"></span><span>Training</span></span>
-              <span className="flex items-center space-x-1.5 text-[10px] text-slate-500"><span className="w-3 h-1 bg-rose-500 rounded-full"></span><span>Validation</span></span>
-            </div>
-          </div>
-
-          {/* Training Controls */}
-          {(status === 'training' || status === 'paused') && (
-            <div className="flex items-center space-x-2">
-              <button onClick={() => setShowLogs(!showLogs)} className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-                <EyeIcon className="w-3.5 h-3.5" />
-                <span>{showLogs ? 'Hide' : 'View'} Logs</span>
-              </button>
-            </div>
-          )}
-
-          {/* Training Logs */}
-          {showLogs && trainingData.length > 0 && (
-            <div className="bg-slate-900 rounded-2xl p-4 max-h-48 overflow-y-auto">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Training Logs</p>
-              <div className="font-mono text-[11px] text-slate-400 space-y-0.5">
-                {trainingData.slice(-10).map(d => (
-                  <p key={d.epoch}>
-                    <span className="text-emerald-400">Epoch {d.epoch}/{params.epochs}</span>
-                    {' — '}acc: <span className="text-white">{d.accuracy}%</span>
-                    {' — '}loss: <span className="text-amber-400">{d.loss}</span>
-                    {' — '}val_acc: <span className="text-indigo-400">{d.valAccuracy}%</span>
-                    {' — '}val_loss: <span className="text-rose-400">{d.valLoss}</span>
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ─── RIGHT: Comparison & Validation (30%) ─── */}
-        <div className="xl:w-[30%] space-y-5">
-
-          {/* Model Comparison */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-800 text-sm font-heading">Current vs. New Model</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="text-left px-4 py-2 text-[10px] font-black text-slate-500 uppercase">Metric</th>
-                    <th className="text-right px-4 py-2 text-[10px] font-black text-slate-500 uppercase">Current</th>
-                    <th className="text-right px-4 py-2 text-[10px] font-black text-slate-500 uppercase">Trained</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {COMPARISON_METRICS.map(m => {
-                    const diff = m.trained - m.current;
-                    const pctDiff = m.metric === 'Speed' ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}s` :
-                      m.metric === 'Cost/Request' ? `${Math.round((diff / m.current) * 100)}%` :
-                      `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`;
+          ) : (
+            <>
+              {/* Editor Header */}
+              <div className="p-4 border-b border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <h2 className="text-lg font-bold text-gray-900">{selectedRegistry?.displayName}</h2>
+                  {(() => {
+                    const cat = selectedRegistry?.category || '';
+                    const color = CATEGORY_COLORS[cat] || 'gray';
+                    const cm = colorMap[color] || colorMap.indigo;
                     return (
-                      <tr key={m.metric} className="hover:bg-slate-50/50">
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{m.metric}</td>
-                        <td className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">
-                          {m.metric === 'Cost/Request' ? `$${m.current}` : `${m.current}${m.unit}`}
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <span className="text-xs font-bold text-slate-800">
-                            {m.metric === 'Cost/Request' ? `$${m.trained}` : `${m.trained}${m.unit}`}
-                          </span>
-                          <span className={`ml-1 text-[10px] font-bold ${m.better ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            ({pctDiff})
-                          </span>
-                        </td>
-                      </tr>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cm.bg} ${cm.text}`}>
+                        {CATEGORY_META[cat as PromptCategory]?.label || cat}
+                      </span>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Validation Results */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Validation Results</h3>
-            <div className="space-y-2.5">
-              {[
-                { label: 'Test Set Accuracy', value: '93.8%', color: 'emerald' },
-                { label: 'Overfitting', value: 'Minimal', color: 'emerald' },
-                { label: 'Generalization', value: 'Excellent', color: 'emerald' },
-                { label: 'Industry Adaptation', value: '+24% improvement', color: 'indigo' },
-              ].map(v => (
-                <div key={v.label} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50">
-                  <span className="text-xs font-semibold text-slate-600">{v.label}</span>
-                  <span className={`text-xs font-black text-${v.color}-600`}>{v.value}</span>
+                  })()}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    selectedIsCustom
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {selectedIsCustom ? `Custom v${selectedPrompt?.version || 1}` : 'System Default'}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
+                <p className="text-xs text-gray-500">{selectedRegistry?.description}</p>
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  This is the prompt sent to Gemini when the <span className="font-semibold text-gray-500">{selectedRegistry?.displayName}</span> feature runs. The placeholders below get replaced with real data at runtime.
+                </p>
 
-          {/* Business Impact */}
-          <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-5 text-white shadow-lg">
-            <h3 className="text-[10px] font-black text-indigo-200 uppercase tracking-wider mb-3">Business Impact Forecast</h3>
-            <div className="space-y-3">
-              <div>
-                <p className="text-[10px] text-indigo-200">Conversion Rate</p>
-                <p className="text-xl font-black">+2.3% <span className="text-sm text-indigo-200">expected increase</span></p>
+                {/* Used In */}
+                {selectedRegistry && selectedRegistry.usedIn.length > 0 && (
+                  <div className="mt-3 bg-slate-50 rounded-xl border border-slate-100 p-3">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Used in</p>
+                    <div className="space-y-1.5">
+                      {selectedRegistry.usedIn.map((loc, i) => (
+                        <Link
+                          key={i}
+                          to={loc.route}
+                          className="flex items-center gap-2.5 group"
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-indigo-600 group-hover:text-indigo-800 transition-colors">{loc.page}</span>
+                          <span className="text-[10px] text-slate-400">&mdash;</span>
+                          <span className="text-[11px] text-slate-500 group-hover:text-slate-700 transition-colors">{loc.feature}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div>
-                <p className="text-[10px] text-indigo-200">Revenue Impact</p>
-                <p className="text-xl font-black">+$42K<span className="text-sm text-indigo-200">/month</span></p>
-              </div>
-              <div>
-                <p className="text-[10px] text-indigo-200">Time Saved</p>
-                <p className="text-xl font-black">8 hrs<span className="text-sm text-indigo-200">/week</span></p>
-              </div>
-            </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-2">
-            {status === 'complete' && (
-              <button
-                onClick={handleDeploy}
-                className="w-full flex items-center justify-center space-x-2 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
-              >
-                <BoltIcon className="w-4 h-4" />
-                <span>Deploy New Model</span>
-              </button>
-            )}
+              {/* Editor Body */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+                {/* View System Default (when user has custom override) */}
+                {selectedIsCustom && selectedSystemDefault && (
+                  <div className="border border-amber-200 bg-amber-50/50 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setShowSystemDefault(prev => !prev)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left"
+                    >
+                      <EyeIcon className="w-3.5 h-3.5 text-amber-600" />
+                      <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest flex-1">
+                        View Original System Default
+                      </span>
+                      <ChevronDownIcon className={`w-3 h-3 text-amber-500 transition-transform ${showSystemDefault ? '' : '-rotate-90'}`} />
+                    </button>
+                    {showSystemDefault && (
+                      <div className="px-3 pb-3 space-y-2">
+                        <div>
+                          <p className="text-[9px] font-bold text-amber-600 uppercase mb-1">System Instruction</p>
+                          <pre className="text-[11px] text-gray-600 bg-white rounded-lg border border-amber-100 p-2 whitespace-pre-wrap font-mono max-h-24 overflow-y-auto">{selectedSystemDefault.system_instruction}</pre>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-amber-600 uppercase mb-1">Prompt Template</p>
+                          <pre className="text-[11px] text-gray-600 bg-white rounded-lg border border-amber-100 p-2 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">{selectedSystemDefault.prompt_template}</pre>
+                        </div>
+                        <div className="flex gap-3 text-[10px] text-amber-700">
+                          <span>Temp: {selectedSystemDefault.temperature}</span>
+                          <span>Top-P: {selectedSystemDefault.top_p}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* System Instruction */}
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 block">
+                    System Instruction (AI Persona)
+                  </label>
+                  <textarea
+                    value={editSystemInstruction}
+                    onChange={e => setEditSystemInstruction(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 resize-y"
+                    placeholder="Define the AI's role and personality..."
+                  />
+                </div>
+
+                {/* Prompt Template */}
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 block">
+                    Prompt Template
+                  </label>
+                  <textarea
+                    ref={templateRef}
+                    value={editPromptTemplate}
+                    onChange={e => setEditPromptTemplate(e.target.value)}
+                    rows={12}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 resize-y"
+                    placeholder="Write your prompt template with {{placeholders}}..."
+                  />
+                </div>
+
+                {/* Available Placeholders */}
+                {selectedRegistry && selectedRegistry.placeholders.length > 0 && (
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 block">
+                      Available Placeholders (click to insert)
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedRegistry.placeholders.map(ph => (
+                        <button
+                          key={ph}
+                          onClick={() => insertPlaceholder(ph)}
+                          className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[11px] font-mono font-medium rounded-lg hover:bg-indigo-100 transition-colors"
+                        >
+                          {ph}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Temperature & Top-P */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                      <span>Temperature</span>
+                      <span className="text-indigo-600">{editTemperature.toFixed(2)}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={editTemperature}
+                      onChange={e => setEditTemperature(parseFloat(e.target.value))}
+                      className="w-full accent-indigo-600"
+                    />
+                    <div className="flex justify-between text-[9px] text-gray-400 mt-0.5">
+                      <span>Precise</span>
+                      <span>Creative</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                      <span>Top-P</span>
+                      <span className="text-indigo-600">{editTopP.toFixed(2)}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={editTopP}
+                      onChange={e => setEditTopP(parseFloat(e.target.value))}
+                      className="w-full accent-indigo-600"
+                    />
+                    <div className="flex justify-between text-[9px] text-gray-400 mt-0.5">
+                      <span>Focused</span>
+                      <span>Diverse</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Editor Footer */}
+              <div className="p-4 border-t border-gray-100 flex items-center gap-3">
+                {saveMessage && (
+                  <div className={`flex items-center gap-1.5 text-xs font-medium mr-auto ${
+                    saveMessage.type === 'success' ? 'text-emerald-600' : 'text-red-500'
+                  }`}>
+                    {saveMessage.type === 'success' ? <CheckIcon className="w-3.5 h-3.5" /> : <XIcon className="w-3.5 h-3.5" />}
+                    {saveMessage.text}
+                  </div>
+                )}
+                {!saveMessage && <div className="flex-1" />}
+
+                {selectedIsCustom && (
+                  <button
+                    onClick={handleReset}
+                    disabled={saving}
+                    className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Reset to Default
+                  </button>
+                )}
+                <button
+                  onClick={handleTest}
+                  disabled={testRunning}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-900 text-white text-xs font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  <PlayIcon className="w-3.5 h-3.5" />
+                  {testRunning ? 'Testing...' : 'Test Prompt'}
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={!isDirty || saving}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                  <CheckIcon className="w-3.5 h-3.5" />
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ─── Right Panel: Test & History ─── */}
+        <div className="col-span-4 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+          {/* Tab Switcher */}
+          <div className="flex border-b border-gray-100">
             <button
-              onClick={handleExportReport}
-              className="w-full flex items-center justify-center space-x-2 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
+              onClick={() => setRightTab('test')}
+              className={`flex-1 px-4 py-3 text-xs font-semibold transition-colors ${
+                rightTab === 'test'
+                  ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
-              <DownloadIcon className="w-4 h-4" />
-              <span>Export Report</span>
+              <div className="flex items-center justify-center gap-1.5">
+                <PlayIcon className="w-3.5 h-3.5" />
+                Test Output
+              </div>
+            </button>
+            <button
+              onClick={() => setRightTab('history')}
+              className={`flex-1 px-4 py-3 text-xs font-semibold transition-colors ${
+                rightTab === 'history'
+                  ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-1.5">
+                <ClockIcon className="w-3.5 h-3.5" />
+                Version History
+              </div>
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* MODEL PERFORMANCE HISTORY                                    */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
-              <ClockIcon className="w-5 h-5 text-violet-600" />
-              <span>Model Performance History</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Version control &amp; rollback &middot; {versions.length} versions</p>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Version</th>
-                <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Date</th>
-                <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Accuracy</th>
-                <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Speed</th>
-                <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Cost</th>
-                <th className="text-left px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Notes</th>
-                <th className="text-right px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {versions.map(v => (
-                <tr key={v.version} className={`hover:bg-slate-50/50 transition-colors ${v.active ? 'bg-emerald-50/30' : ''}`}>
-                  <td className="px-6 py-3.5">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-black text-sm text-slate-800">v{v.version}</span>
-                      {v.active && (
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold uppercase">Active</span>
-                      )}
+          {/* Tab Content */}
+          <div className="flex-1 overflow-y-auto">
+            {rightTab === 'test' ? (
+              <div className="p-4 space-y-4">
+                {!selectedKey ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Select a prompt to test</p>
+                ) : (
+                  <>
+                    {/* Sample Input */}
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 block">
+                        Sample Input (optional context)
+                      </label>
+                      <textarea
+                        value={testInput}
+                        onChange={e => setTestInput(e.target.value)}
+                        rows={3}
+                        placeholder="Add custom context for your test run..."
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 resize-y"
+                      />
                     </div>
-                  </td>
-                  <td className="px-6 py-3.5 text-sm text-slate-600">{v.date}</td>
-                  <td className="px-6 py-3.5 text-right">
-                    <span className={`text-sm font-bold ${v.accuracy > 92 ? 'text-emerald-600' : v.accuracy > 89 ? 'text-amber-600' : 'text-slate-600'}`}>
-                      {v.accuracy}%
-                    </span>
-                  </td>
-                  <td className="px-6 py-3.5 text-right text-sm font-semibold text-slate-600">{v.speed}</td>
-                  <td className="px-6 py-3.5 text-right text-sm font-semibold text-slate-600">{v.cost}</td>
-                  <td className="px-6 py-3.5 text-sm text-slate-500">{v.notes}</td>
-                  <td className="px-6 py-3.5 text-right">
-                    {!v.active ? (
-                      showRollbackConfirm === v.version ? (
-                        <div className="flex items-center justify-end space-x-1.5">
-                          <button
-                            onClick={() => handleRollback(v.version)}
-                            className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-bold hover:bg-amber-700 transition-all"
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            onClick={() => setShowRollbackConfirm(null)}
-                            className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-bold hover:bg-slate-200 transition-all"
-                          >
-                            Cancel
-                          </button>
-                        </div>
+
+                    {/* Run Button */}
+                    <button
+                      onClick={handleTest}
+                      disabled={testRunning}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50"
+                    >
+                      {testRunning ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white" />
+                          Running test...
+                        </>
                       ) : (
+                        <>
+                          <RocketIcon className="w-3.5 h-3.5" />
+                          Run Test
+                        </>
+                      )}
+                    </button>
+
+                    {/* Test Result */}
+                    {testOutput && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                            AI Output
+                          </label>
+                          {testTime !== null && (
+                            <span className="text-[10px] font-medium text-gray-400 flex items-center gap-1">
+                              <ClockIcon className="w-3 h-3" />
+                              {(testTime / 1000).toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
+                        <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 max-h-96 overflow-y-auto">
+                          <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+                            {testOutput}
+                          </pre>
+                        </div>
                         <button
-                          onClick={() => setShowRollbackConfirm(v.version)}
-                          className="flex items-center space-x-1 px-2.5 py-1 bg-slate-50 text-slate-500 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-all"
+                          onClick={() => navigator.clipboard.writeText(testOutput)}
+                          className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-gray-500 hover:text-indigo-600 transition-colors"
                         >
-                          <ArrowLeftIcon className="w-3 h-3" />
-                          <span>Rollback</span>
+                          <CopyIcon className="w-3 h-3" />
+                          Copy output
                         </button>
-                      )
-                    ) : (
-                      <span className="text-[10px] font-bold text-emerald-600">Deployed</span>
+                      </div>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* EXPERIMENT HISTORY SIDEBAR                                     */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {showExperiments && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowExperiments(false)} />
-          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-slate-900 font-heading">Experiment History</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Previous training runs and their results</p>
+                  </>
+                )}
               </div>
-              <button onClick={() => setShowExperiments(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
-                <XIcon className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-              {/* Summary */}
-              <div className="grid grid-cols-3 gap-2 mb-2">
-                {[
-                  { label: 'Total Runs', value: MOCK_EXPERIMENTS.length, color: 'slate' },
-                  { label: 'Completed', value: MOCK_EXPERIMENTS.filter(e => e.status === 'completed').length, color: 'emerald' },
-                  { label: 'Best Acc', value: `${Math.max(...MOCK_EXPERIMENTS.filter(e => e.status === 'completed').map(e => e.finalAccuracy))}%`, color: 'indigo' },
-                ].map((s, i) => (
-                  <div key={i} className={`p-3 bg-${s.color}-50 rounded-xl text-center`}>
-                    <p className={`text-lg font-black text-${s.color}-700`}>{s.value}</p>
-                    <p className={`text-[9px] font-bold text-${s.color}-500 uppercase`}>{s.label}</p>
+            ) : (
+              <div className="p-4 space-y-3">
+                {!selectedKey ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Select a prompt to see history</p>
+                ) : !selectedIsCustom ? (
+                  <div className="text-center py-8">
+                    <ClockIcon className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                    <p className="text-xs text-gray-400">System default — no version history</p>
+                    <p className="text-[10px] text-gray-300 mt-1">Save a custom override to start tracking versions</p>
                   </div>
-                ))}
-              </div>
-
-              {/* Experiment Cards */}
-              {MOCK_EXPERIMENTS.map(exp => (
-                <div key={exp.id} className="p-4 bg-white rounded-xl border border-slate-200 hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-bold text-slate-800">{exp.name}</h4>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                      exp.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
-                      exp.status === 'failed' ? 'bg-rose-50 text-rose-700' :
-                      'bg-amber-50 text-amber-700'
-                    }`}>
-                      {exp.status}
-                    </span>
+                ) : versionsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600" />
                   </div>
-                  <p className="text-[10px] text-slate-400 mb-2">{exp.date} &middot; {exp.model} &middot; {exp.duration}</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div>
-                      <p className="text-xs font-bold text-slate-700">{exp.epochs}</p>
-                      <p className="text-[9px] text-slate-400">Epochs</p>
-                    </div>
-                    <div>
-                      <p className={`text-xs font-bold ${exp.finalAccuracy > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {exp.finalAccuracy > 0 ? `${exp.finalAccuracy}%` : '—'}
-                      </p>
-                      <p className="text-[9px] text-slate-400">Accuracy</p>
-                    </div>
-                    <div>
-                      <p className={`text-xs font-bold ${exp.finalLoss > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
-                        {exp.finalLoss > 0 ? exp.finalLoss : '—'}
-                      </p>
-                      <p className="text-[9px] text-slate-400">Loss</p>
-                    </div>
-                    <div>
-                      <p className={`text-xs font-bold ${exp.improvement > 0 ? 'text-emerald-600' : exp.improvement < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                        {exp.improvement !== 0 ? `${exp.improvement > 0 ? '+' : ''}${exp.improvement}%` : '—'}
-                      </p>
-                      <p className="text-[9px] text-slate-400">Δ Accuracy</p>
-                    </div>
+                ) : versions.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ClockIcon className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                    <p className="text-xs text-gray-400">No previous versions yet</p>
+                    <p className="text-[10px] text-gray-300 mt-1">History is saved each time you update the prompt</p>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* MODEL BENCHMARKS SIDEBAR                                      */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {showBenchmarkPanel && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowBenchmarkPanel(false)} />
-          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-slate-900 font-heading">Industry Benchmarks</h3>
-                <p className="text-xs text-slate-400 mt-0.5">How your models compare to industry standards</p>
-              </div>
-              <button onClick={() => setShowBenchmarkPanel(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
-                <XIcon className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {/* Benchmark Chart */}
-              <div className="p-4 bg-slate-50 rounded-xl">
-                <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Accuracy Benchmarks</p>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={MODEL_BENCHMARKS.filter(b => b.unit === '%')} layout="vertical" margin={{ left: 80, right: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                    <YAxis dataKey="metric" type="category" tick={{ fontSize: 10 }} stroke="#94a3b8" width={80} />
-                    <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
-                    <Bar dataKey="industry" fill="#94a3b8" name="Industry Avg" radius={[0, 4, 4, 0]} barSize={8} />
-                    <Bar dataKey="yours" fill="#6366f1" name="Your Model" radius={[0, 4, 4, 0]} barSize={8} />
-                    <Bar dataKey="topTen" fill="#10b981" name="Top 10%" radius={[0, 4, 4, 0]} barSize={8} />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="flex items-center justify-center space-x-4 mt-2">
-                  <span className="flex items-center space-x-1.5 text-[10px] text-slate-500"><span className="w-3 h-1.5 bg-slate-400 rounded-full"></span><span>Industry</span></span>
-                  <span className="flex items-center space-x-1.5 text-[10px] text-slate-500"><span className="w-3 h-1.5 bg-indigo-500 rounded-full"></span><span>Yours</span></span>
-                  <span className="flex items-center space-x-1.5 text-[10px] text-slate-500"><span className="w-3 h-1.5 bg-emerald-500 rounded-full"></span><span>Top 10%</span></span>
-                </div>
-              </div>
-
-              {/* Detailed Benchmark Cards */}
-              {MODEL_BENCHMARKS.map((bm, i) => {
-                const isSpeed = bm.unit === 's';
-                const isCost = bm.unit === '$';
-                const yoursIsBetter = isSpeed || isCost ? bm.yours <= bm.industry : bm.yours >= bm.industry;
-                const percentile = isSpeed || isCost
-                  ? Math.round(((bm.industry - bm.yours) / bm.industry) * 100)
-                  : Math.round(((bm.yours - bm.industry) / bm.industry) * 100);
-                return (
-                  <div key={i} className="p-4 bg-white rounded-xl border border-slate-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-bold text-slate-800">{bm.metric}</h4>
-                      <span className={`text-xs font-black ${yoursIsBetter ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {yoursIsBetter ? `+${Math.abs(percentile)}% above avg` : `${Math.abs(percentile)}% below avg`}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="text-center p-2 bg-slate-50 rounded-lg">
-                        <p className="text-xs font-bold text-slate-500">{isCost ? '$' : ''}{bm.industry}{bm.unit === '%' ? '%' : bm.unit === 's' ? 's' : ''}</p>
-                        <p className="text-[9px] text-slate-400 font-medium">Industry</p>
-                      </div>
-                      <div className={`text-center p-2 rounded-lg ${yoursIsBetter ? 'bg-indigo-50' : 'bg-rose-50'}`}>
-                        <p className={`text-xs font-black ${yoursIsBetter ? 'text-indigo-700' : 'text-rose-700'}`}>{isCost ? '$' : ''}{bm.yours}{bm.unit === '%' ? '%' : bm.unit === 's' ? 's' : ''}</p>
-                        <p className="text-[9px] text-indigo-500 font-medium">Yours</p>
-                      </div>
-                      <div className="text-center p-2 bg-emerald-50 rounded-lg">
-                        <p className="text-xs font-bold text-emerald-700">{isCost ? '$' : ''}{bm.topTen}{bm.unit === '%' ? '%' : bm.unit === 's' ? 's' : ''}</p>
-                        <p className="text-[9px] text-emerald-500 font-medium">Top 10%</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* DATA QUALITY INSIGHTS SIDEBAR                                 */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {showDataInsights && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowDataInsights(false)} />
-          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-slate-900 font-heading">Data Quality Insights</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Quality analysis of your training datasets</p>
-              </div>
-              <button onClick={() => setShowDataInsights(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
-                <XIcon className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {/* Overall Data Health */}
-              <div className="p-4 bg-gradient-to-r from-indigo-50 to-violet-50 rounded-xl border border-indigo-100">
-                <p className="text-xs font-black text-indigo-700 uppercase tracking-wider mb-2">Overall Data Health</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <p className="text-2xl font-black text-indigo-900">{totalSamples.toLocaleString()}</p>
-                    <p className="text-[10px] text-indigo-500 font-bold">Total Samples</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-emerald-700">
-                      {dataInsights.length > 0 ? Math.round(dataInsights.reduce((s, d) => s + d.quality, 0) / dataInsights.length) : 0}%
+                ) : (
+                  <>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      {versions.length} version{versions.length !== 1 ? 's' : ''}
                     </p>
-                    <p className="text-[10px] text-emerald-600 font-bold">Avg Quality</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-violet-700">
-                      {dataInsights.length > 0 ? Math.round(dataInsights.reduce((s, d) => s + d.coverage, 0) / dataInsights.length) : 0}%
-                    </p>
-                    <p className="text-[10px] text-violet-500 font-bold">Avg Coverage</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Per-Dataset Quality */}
-              {dataInsights.map((ds, i) => (
-                <div key={i} className={`p-4 rounded-xl border ${ds.enabled ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800">{ds.name}</h4>
-                      <p className="text-[10px] text-slate-400">{ds.samples.toLocaleString()} samples &middot; {ds.enabled ? 'Enabled' : 'Disabled'}</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                      ds.freshness === 'Fresh' ? 'bg-emerald-50 text-emerald-700' :
-                      ds.freshness === 'Recent' ? 'bg-blue-50 text-blue-700' :
-                      ds.freshness === 'Aging' ? 'bg-amber-50 text-amber-700' :
-                      'bg-rose-50 text-rose-700'
-                    }`}>
-                      {ds.freshness}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] mb-1">
-                        <span className="font-bold text-slate-500">Quality Score</span>
-                        <span className={`font-black ${ds.quality >= 85 ? 'text-emerald-600' : ds.quality >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>{ds.quality}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-1.5">
-                        <div
-                          className={`h-full rounded-full ${ds.quality >= 85 ? 'bg-emerald-500' : ds.quality >= 70 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                          style={{ width: `${ds.quality}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] mb-1">
-                        <span className="font-bold text-slate-500">Feature Coverage</span>
-                        <span className="font-black text-indigo-600">{ds.coverage}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-1.5">
-                        <div className="h-full rounded-full bg-indigo-500" style={{ width: `${ds.coverage}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* Recommendations */}
-              <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                <div className="flex items-center space-x-2 mb-2">
-                  <AlertTriangleIcon className="w-4 h-4 text-amber-600" />
-                  <p className="text-xs font-black text-amber-700 uppercase tracking-wider">Suggestions</p>
-                </div>
-                <div className="space-y-1.5">
-                  {dataInsights.filter(d => !d.enabled).length > 0 && (
-                    <p className="text-xs text-amber-700">Enable {dataInsights.filter(d => !d.enabled).length} disabled dataset(s) for broader training coverage.</p>
-                  )}
-                  {dataInsights.some(d => d.quality < 80) && (
-                    <p className="text-xs text-amber-700">Some datasets have low quality scores. Consider data cleaning.</p>
-                  )}
-                  {dataInsights.some(d => d.freshness === 'Stale' || d.freshness === 'Aging') && (
-                    <p className="text-xs text-amber-700">Update aging datasets with fresh data for better model accuracy.</p>
-                  )}
-                  <p className="text-xs text-amber-700">Adding more customer feedback data could improve personalization by ~12%.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* HYPERPARAMETER TUNING SIDEBAR                                  */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {showHyperTuning && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowHyperTuning(false)} />
-          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-                  <SlidersIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-black text-slate-900">Hyperparameter Tuning</h2>
-                  <p className="text-[10px] text-slate-400">Parameter sensitivity & grid search results</p>
-                </div>
-              </div>
-              <button onClick={() => setShowHyperTuning(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Best Configuration */}
-              <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100">
-                <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider mb-2">Optimal Configuration</p>
-                <p className="text-3xl font-black text-slate-900">{hyperTuningAnalysis.bestConfig.accuracy}%</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  lr={hyperTuningAnalysis.bestConfig.lr} &middot; {hyperTuningAnalysis.bestConfig.epochs} epochs &middot; {hyperTuningAnalysis.bestConfig.time}
-                </p>
-                <div className="mt-3 px-3 py-1.5 bg-white/80 rounded-lg inline-block">
-                  <span className="text-[10px] font-black text-amber-700 uppercase tracking-wider">Efficiency Score: {hyperTuningAnalysis.efficiencyScore}</span>
-                </div>
-              </div>
-
-              {/* Parameter Sensitivity */}
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Parameter Sensitivity</p>
-                <div className="space-y-3">
-                  {hyperTuningAnalysis.paramSensitivity.map(ps => (
-                    <div key={ps.param} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-800">{ps.param}</span>
-                        <span className="text-xs font-black text-amber-600">{ps.impact}% impact</span>
-                      </div>
-                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mb-2">
-                        <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full" style={{ width: `${ps.impact}%` }} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-[10px]">
-                        <div>
-                          <span className="text-slate-400">Optimal: </span>
-                          <span className="font-bold text-slate-700">{ps.optimal}</span>
+                    {versions.map(ver => (
+                      <div key={ver.id} className="bg-gray-50 rounded-xl border border-gray-100 p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-gray-700">v{ver.version}</span>
+                          <span className="text-[10px] text-gray-400">
+                            {new Date(ver.created_at).toLocaleDateString()} {new Date(ver.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                        <div>
-                          <span className="text-slate-400">Range: </span>
-                          <span className="font-bold text-slate-700">{ps.range}</span>
+                        {ver.change_note && (
+                          <p className="text-[10px] text-gray-500 mb-2">{ver.change_note}</p>
+                        )}
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400 mb-2">
+                          <span>Temp: {ver.temperature}</span>
+                          <span>Top-P: {ver.top_p}</span>
                         </div>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1 italic">{ps.direction}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Grid Search Results */}
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Grid Search Results</p>
-                <div className="space-y-2">
-                  {hyperTuningAnalysis.gridSearch.map((gs, idx) => (
-                    <div key={idx} className={`p-3 rounded-xl border ${idx === 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center space-x-2">
-                          {idx === 0 && <StarIcon className="w-3.5 h-3.5 text-emerald-600" />}
-                          <span className="text-xs font-bold text-slate-800">lr={gs.lr} &middot; {gs.epochs}ep</span>
-                        </div>
-                        <span className={`text-xs font-black ${idx === 0 ? 'text-emerald-600' : 'text-slate-600'}`}>{gs.accuracy}%</span>
-                      </div>
-                      <div className="flex items-center space-x-3 text-[10px] text-slate-400">
-                        <span>Loss: {gs.loss}</span>
-                        <span>Time: {gs.time}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Insight */}
-              <div className="p-4 bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl text-white">
-                <div className="flex items-center space-x-2 mb-2">
-                  <BrainIcon className="w-4 h-4 text-amber-200" />
-                  <p className="text-[10px] font-black text-amber-200 uppercase tracking-wider">AI Tuning Insight</p>
-                </div>
-                <p className="text-xs text-amber-100 leading-relaxed">
-                  Learning rate has the highest impact at {hyperTuningAnalysis.paramSensitivity[0].impact}%. Your current config (lr=0.001, 50 epochs) achieves {hyperTuningAnalysis.bestConfig.accuracy}% accuracy. Increasing to 100 epochs yields only +0.6% gain at 2x cost — diminishing returns detected.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* MODEL DRIFT MONITOR SIDEBAR                                   */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {showDriftMonitor && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowDriftMonitor(false)} />
-          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
-                  <AlertTriangleIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-black text-slate-900">Model Drift Monitor</h2>
-                  <p className="text-[10px] text-slate-400">Performance degradation & drift alerts</p>
-                </div>
-              </div>
-              <button onClick={() => setShowDriftMonitor(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Drift Gauge */}
-              <div className="text-center p-6 rounded-2xl bg-slate-50 border border-slate-100">
-                <svg className="w-24 h-24 mx-auto mb-4" viewBox="0 0 96 96">
-                  <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                  <circle cx="48" cy="48" r="40" fill="none"
-                    stroke={driftMetrics.driftStatus === 'Stable' ? '#10b981' : driftMetrics.driftStatus === 'Minor Drift' ? '#f59e0b' : '#ef4444'}
-                    strokeWidth="8"
-                    strokeDasharray={`${(driftMetrics.currentAccuracy / 100) * 251.3} 251.3`}
-                    strokeLinecap="round" transform="rotate(-90 48 48)" />
-                  <text x="48" y="44" textAnchor="middle" className="text-xl font-black" fill="#1e293b">{driftMetrics.currentAccuracy}</text>
-                  <text x="48" y="58" textAnchor="middle" className="text-[8px] font-bold" fill="#94a3b8">ACCURACY</text>
-                </svg>
-                <p className={`text-sm font-black ${
-                  driftMetrics.driftStatus === 'Stable' ? 'text-emerald-600' :
-                  driftMetrics.driftStatus === 'Minor Drift' ? 'text-amber-600' : 'text-rose-600'
-                }`}>{driftMetrics.driftStatus}</p>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  {driftMetrics.driftAmount > 0 ? `${driftMetrics.driftAmount}% below peak (${driftMetrics.peakAccuracy}%)` : 'At peak performance'}
-                </p>
-              </div>
-
-              {/* Summary Cards */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 bg-indigo-50 rounded-xl text-center border border-indigo-100">
-                  <p className="text-xl font-black text-indigo-700">{driftMetrics.totalPredictions}</p>
-                  <p className="text-[9px] font-bold text-indigo-500">Predictions</p>
-                </div>
-                <div className="p-3 bg-rose-50 rounded-xl text-center border border-rose-100">
-                  <p className="text-xl font-black text-rose-700">{driftMetrics.totalErrors}</p>
-                  <p className="text-[9px] font-bold text-rose-500">Errors</p>
-                </div>
-                <div className="p-3 bg-amber-50 rounded-xl text-center border border-amber-100">
-                  <p className="text-xl font-black text-amber-700">{driftMetrics.errorRate}%</p>
-                  <p className="text-[9px] font-bold text-amber-500">Error Rate</p>
-                </div>
-              </div>
-
-              {/* 12-Week Accuracy Trend */}
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">12-Week Accuracy Trend</p>
-                <div className="bg-slate-900 rounded-xl p-5">
-                  <div className="flex items-end space-x-1.5 h-24 mb-3">
-                    {driftMetrics.weeks.map((w, idx) => {
-                      const height = ((w.accuracy - 88) / 8) * 100;
-                      const color = w.accuracy >= 94 ? 'from-emerald-500 to-emerald-400' :
-                                    w.accuracy >= 92 ? 'from-amber-500 to-amber-400' : 'from-rose-500 to-rose-400';
-                      return (
-                        <div key={idx} className="flex-1 flex flex-col items-center" title={`${w.date}: ${w.accuracy}%`}>
-                          <div className={`w-full bg-gradient-to-t ${color} rounded-t`} style={{ height: `${Math.max(height, 5)}%` }} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex space-x-1.5">
-                    {driftMetrics.weeks.map((w, idx) => (
-                      <div key={idx} className="flex-1 text-center">
-                        <p className="text-[7px] text-slate-500 font-bold">{w.week}</p>
+                        <button
+                          onClick={() => handleRestore(ver)}
+                          disabled={saving}
+                          className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 transition-colors disabled:opacity-50"
+                        >
+                          Restore this version
+                        </button>
                       </div>
                     ))}
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
-
-              {/* Active Alerts */}
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Active Alerts</p>
-                <div className="space-y-2">
-                  {driftMetrics.alerts.map((alert, idx) => (
-                    <div key={idx} className={`p-3 rounded-xl border ${
-                      alert.severity === 'high' ? 'bg-rose-50 border-rose-100' :
-                      alert.severity === 'medium' ? 'bg-amber-50 border-amber-100' :
-                      'bg-blue-50 border-blue-100'
-                    }`}>
-                      <div className="flex items-start space-x-2">
-                        <AlertTriangleIcon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${
-                          alert.severity === 'high' ? 'text-rose-600' :
-                          alert.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
-                        }`} />
-                        <div>
-                          <span className={`text-[9px] font-black uppercase ${
-                            alert.severity === 'high' ? 'text-rose-600' :
-                            alert.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
-                          }`}>{alert.severity}</span>
-                          <p className="text-xs text-slate-700 mt-0.5">{alert.message}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Insight */}
-              <div className="p-4 bg-gradient-to-r from-rose-600 to-pink-600 rounded-2xl text-white">
-                <div className="flex items-center space-x-2 mb-2">
-                  <BrainIcon className="w-4 h-4 text-rose-200" />
-                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-wider">AI Drift Insight</p>
-                </div>
-                <p className="text-xs text-rose-100 leading-relaxed">
-                  {driftMetrics.driftStatus === 'Stable'
-                    ? 'Model performance is stable. Continue monitoring weekly. Consider scheduled retraining every 30 days to prevent gradual drift.'
-                    : driftMetrics.driftStatus === 'Minor Drift'
-                    ? `Minor drift of ${driftMetrics.driftAmount}% detected. Schedule a retraining session with fresh data within the next 2 weeks to maintain accuracy above 93%.`
-                    : `Significant drift detected (${driftMetrics.driftAmount}%). Immediate retraining recommended. Check for data distribution changes in recent datasets.`}
-                </p>
-              </div>
-            </div>
+            )}
           </div>
         </div>
-      )}
 
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* FEATURE IMPORTANCE SIDEBAR                                     */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {showFeatureImportance && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowFeatureImportance(false)} />
-          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center">
-                  <LayersIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-black text-slate-900">Feature Importance</h2>
-                  <p className="text-[10px] text-slate-400">Feature ranking & correlation analysis</p>
-                </div>
-              </div>
-              <button onClick={() => setShowFeatureImportance(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Top Feature Highlight */}
-              <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100">
-                <p className="text-[10px] font-black text-sky-600 uppercase tracking-wider mb-2">Most Important Feature</p>
-                <p className="text-2xl font-black text-slate-900">{featureImportance.topFeature.name}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {featureImportance.topFeature.importance}% importance &middot; {featureImportance.topFeature.correlation} correlation
-                </p>
-                <div className="mt-3 flex items-center justify-center space-x-4">
-                  <div className="px-3 py-1.5 bg-white/80 rounded-lg">
-                    <p className="text-sm font-black text-sky-700">{featureImportance.features.length}</p>
-                    <p className="text-[9px] text-slate-400">Features</p>
-                  </div>
-                  <div className="px-3 py-1.5 bg-white/80 rounded-lg">
-                    <p className="text-sm font-black text-sky-700">{featureImportance.avgCorrelation}</p>
-                    <p className="text-[9px] text-slate-400">Avg Corr.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Category Breakdown */}
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Category Distribution</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {featureImportance.categoryBreakdown.map(cat => (
-                    <div key={cat.category} className="p-2.5 bg-slate-50 rounded-xl text-center border border-slate-100">
-                      <div className="w-3 h-3 rounded-full mx-auto mb-1.5" style={{ backgroundColor: cat.color }} />
-                      <p className="text-sm font-black text-slate-900">{cat.avgImportance}%</p>
-                      <p className="text-[8px] font-bold text-slate-400">{cat.category}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Feature Rankings */}
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Feature Rankings</p>
-                <div className="space-y-2">
-                  {featureImportance.features.map((feat, idx) => (
-                    <div key={feat.name} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black text-white ${
-                          idx === 0 ? 'bg-sky-500' : idx === 1 ? 'bg-sky-400' : idx === 2 ? 'bg-sky-300' : 'bg-slate-300'
-                        }`}>{idx + 1}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-800">{feat.name}</span>
-                            <span className="text-xs font-black text-sky-600">{feat.importance}%</span>
-                          </div>
-                          <span className="text-[9px] text-slate-400">{feat.category}</span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-2">
-                        <div className="h-full bg-sky-500 rounded-full" style={{ width: `${feat.importance}%` }} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-[10px]">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Correlation</span>
-                          <span className="font-bold text-slate-700">{feat.correlation}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Stability</span>
-                          <span className={`font-bold ${feat.stability >= 85 ? 'text-emerald-600' : feat.stability >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>{feat.stability}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Insight */}
-              <div className="p-4 bg-gradient-to-r from-sky-600 to-cyan-600 rounded-2xl text-white">
-                <div className="flex items-center space-x-2 mb-2">
-                  <BrainIcon className="w-4 h-4 text-sky-200" />
-                  <p className="text-[10px] font-black text-sky-200 uppercase tracking-wider">AI Feature Insight</p>
-                </div>
-                <p className="text-xs text-sky-100 leading-relaxed">
-                  Lead Score dominates at {featureImportance.topFeature.importance}% importance. Behavioral features (Email Engagement, Page Visits, Content Downloads) collectively account for significant predictive power. Consider enriching Social Signals data — it has low stability ({featureImportance.features.find(f => f.name === 'Social Signals')?.stability}%) which may improve with more training data.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* KEYBOARD SHORTCUTS MODAL                                      */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {showShortcuts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center space-x-2">
-                <KeyboardIcon className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-black text-slate-900 font-heading">Keyboard Shortcuts</h3>
-              </div>
-              <button onClick={() => setShowShortcuts(false)} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors">
-                <XIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-6">
-              <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Actions</h4>
-                <div className="space-y-2">
-                  {[
-                    { key: 'R / Enter', label: 'Start training' },
-                    { key: 'Space', label: 'Pause / Resume' },
-                    { key: 'E', label: 'Export report' },
-                    { key: 'P', label: 'Hyper presets' },
-                  ].map((s, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                      <span className="text-sm text-slate-600">{s.label}</span>
-                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Panels</h4>
-                <div className="space-y-2">
-                  {[
-                    { key: 'X', label: 'Experiments' },
-                    { key: 'B', label: 'Benchmarks' },
-                    { key: 'D', label: 'Data quality' },
-                    { key: 'H', label: 'Hyper tuning' },
-                    { key: 'M', label: 'Drift monitor' },
-                    { key: 'F', label: 'Feature importance' },
-                  ].map((s, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                      <span className="text-sm text-slate-600">{s.label}</span>
-                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">System</h4>
-                <div className="space-y-2">
-                  {[
-                    { key: '?', label: 'Shortcuts' },
-                    { key: 'Esc', label: 'Close all panels' },
-                  ].map((s, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                      <span className="text-sm text-slate-600">{s.label}</span>
-                      <kbd className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500">{s.key}</kbd>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

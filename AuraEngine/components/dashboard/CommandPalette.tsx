@@ -43,7 +43,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
     { id: 'nav-blog', label: 'Guest Posts', description: 'Blog drafts & publishing', category: 'navigation', icon: <EditIcon className="w-4 h-4" />, action: () => navigate('/portal/blog') },
     { id: 'nav-analytics', label: 'Analytics Hub', description: 'Performance analytics', category: 'navigation', icon: <PieChartIcon className="w-4 h-4" />, shortcut: 'G N', action: () => navigate('/portal/analytics') },
     { id: 'nav-automation', label: 'Automation Engine', description: 'Workflow automation', category: 'navigation', icon: <GitBranchIcon className="w-4 h-4" />, action: () => navigate('/portal/automation') },
-    { id: 'nav-training', label: 'Model Training', description: 'AI model training studio', category: 'navigation', icon: <SlidersIcon className="w-4 h-4" />, action: () => navigate('/portal/model-training') },
+    { id: 'nav-training', label: 'AI Prompt Studio', description: 'Customize AI prompts and templates', category: 'navigation', icon: <SlidersIcon className="w-4 h-4" />, action: () => navigate('/portal/model-training') },
     { id: 'nav-integrations', label: 'Integration Hub', description: 'Connected systems & APIs', category: 'navigation', icon: <PlugIcon className="w-4 h-4" />, action: () => navigate('/portal/integrations') },
     { id: 'nav-billing', label: 'Billing & Tiers', description: 'Subscription management', category: 'navigation', icon: <CreditCardIcon className="w-4 h-4" />, action: () => navigate('/portal/billing') },
     { id: 'nav-help', label: 'Help Center', description: 'FAQs and support', category: 'navigation', icon: <HelpCircleIcon className="w-4 h-4" />, shortcut: '?', action: () => navigate('/portal/help') },
@@ -55,7 +55,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
     { id: 'act-report', label: 'Run Analytics Report', description: 'Generate performance report', category: 'action', icon: <ChartIcon className="w-4 h-4" />, action: () => navigate('/portal/analytics') },
     { id: 'act-email', label: 'Compose Email Sequence', description: 'Open email sequence builder', category: 'action', icon: <MailIcon className="w-4 h-4" />, action: () => navigate('/portal/content-studio') },
     { id: 'act-import', label: 'Import Leads (CSV)', description: 'Bulk import leads from file', category: 'action', icon: <DownloadIcon className="w-4 h-4" />, action: () => navigate('/portal/leads') },
-    { id: 'act-train', label: 'Start Model Training', description: 'Train a new AI model version', category: 'action', icon: <RefreshIcon className="w-4 h-4" />, action: () => navigate('/portal/model-training') },
+    { id: 'act-train', label: 'Open Prompt Studio', description: 'Customize AI prompts and templates', category: 'action', icon: <RefreshIcon className="w-4 h-4" />, action: () => navigate('/portal/model-training') },
   ], [navigate]);
 
   const filteredCommands = useMemo(() => {

@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead, BusinessProfile, BusinessAnalysisResult, KnowledgeBase } from "../types";
 import { supabase } from "./supabase";
+import { resolvePrompt } from "./promptResolver";
 
 const buildBusinessContext = (profile?: BusinessProfile): string => {
   if (!profile) return '';
@@ -97,44 +98,38 @@ export interface AIResponse {
   prompt_version: number;
 }
 
-export const generateLeadContent = async (lead: Lead, type: ContentType, businessProfile?: BusinessProfile): Promise<AIResponse> => {
+export const generateLeadContent = async (lead: Lead, type: ContentType, businessProfile?: BusinessProfile, userId?: string): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  // 1. Fetch Latest Active Prompt
-  const { data: activePrompt, error: promptError } = await supabase
-    .from('ai_prompts')
-    .select('*')
-    .eq('name', 'sales_outreach')
-    .eq('is_active', true)
-    .single();
 
-  const pName = activePrompt?.name || 'default_sales_outreach';
-  const pVersion = activePrompt?.version || 0;
-  
-  // 2. Prepare Context
-  const systemInstruction = `You are a world-class B2B sales development representative specializing in hyper-personalized outreach. 
-Your goal is to generate high-conversion ${type} content that feels human, researched, and valuable. 
-Avoid generic corporate jargon. Focus on the prospect's pain points and industry context.`;
-
-  // Use dynamic template from DB if available, otherwise fallback to standard prompt
-  const basePromptTemplate = activePrompt?.template || 
-    `TARGET PROSPECT DATA:
+  const resolved = await resolvePrompt('sales_outreach', userId, {
+    systemInstruction: `You are a world-class B2B sales development representative specializing in hyper-personalized outreach.
+Your goal is to generate high-conversion ${type} content that feels human, researched, and valuable.
+Avoid generic corporate jargon. Focus on the prospect's pain points and industry context.`,
+    promptTemplate: `TARGET PROSPECT DATA:
     Name: {{lead_name}}
     Title/Role: Lead
     Company: {{company}}
     Intelligence Score: {{score}}/100
     AI-Detected Insights: {{insights}}
-    
+
     CONTENT TYPE: {{type}}
-    
+
     REQUIREMENTS:
     1. Reference the company name naturally.
     2. Leverage the intelligence insight to show deep research.
     3. Include a soft but clear Call to Action (CTA).
     4. Maintain a {{tone}} tone.
-    5. Do not exceed 150 words.`;
+    5. Do not exceed 150 words.`,
+    temperature: 0.8,
+    topP: 0.9,
+  });
 
-  const finalPrompt = basePromptTemplate
+  const pName = resolved.isCustom ? 'sales_outreach_custom' : 'sales_outreach';
+  const pVersion = resolved.promptVersion;
+
+  const systemInstruction = resolved.systemInstruction;
+
+  const finalPrompt = resolved.promptTemplate
     .replace('{{lead_name}}', lead.name)
     .replace('{{company}}', lead.company)
     .replace('{{score}}', lead.score.toString())
@@ -154,14 +149,14 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
         contents: finalPrompt,
         config: {
           systemInstruction,
-          temperature: 0.8,
-          topP: 0.9,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
           topK: 40,
         }
       });
 
       clearTimeout(timeoutId);
-      
+
       const text = response.text;
       if (!text) throw new Error("Empty response from intelligence engine.");
       
@@ -199,7 +194,7 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
   };
 };
 
-export const generateDashboardInsights = async (leads: Lead[], businessProfile?: BusinessProfile): Promise<string> => {
+export const generateDashboardInsights = async (leads: Lead[], businessProfile?: BusinessProfile, userId?: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const leadSummary = leads.slice(0, 20).map(l =>
@@ -213,16 +208,18 @@ export const generateDashboardInsights = async (leads: Lead[], businessProfile?:
     ? Math.round(leads.reduce((a, b) => a + b.score, 0) / leads.length)
     : 0;
 
-  const prompt = `You are an AI sales strategist analyzing a B2B lead pipeline. Provide 3-5 actionable insights based on this data.
+  const resolved = await resolvePrompt('dashboard_insights', userId, {
+    systemInstruction: 'You are a senior B2B sales analytics AI. Provide actionable, data-driven insights. Be concise and specific.',
+    promptTemplate: `You are an AI sales strategist analyzing a B2B lead pipeline. Provide 3-5 actionable insights based on this data.
 
 PIPELINE SUMMARY:
-- Total Leads: ${leads.length}
-- Average Score: ${avgScore}/100
-- Status Breakdown: ${Object.entries(statusBreakdown).map(([k, v]) => `${k}: ${v}`).join(', ')}
-- Hot Leads (score > 80): ${leads.filter(l => l.score > 80).length}
+- Total Leads: {{total_leads}}
+- Average Score: {{avg_score}}/100
+- Status Breakdown: {{status_breakdown}}
+- Hot Leads (score > 80): {{hot_leads}}
 
 TOP LEADS:
-${leadSummary}
+{{lead_summary}}
 
 Provide concise, data-driven recommendations. Focus on:
 1. Which leads to prioritize and why
@@ -230,7 +227,18 @@ Provide concise, data-driven recommendations. Focus on:
 3. Suggested next actions
 4. Timing recommendations
 
-Keep response under 300 words. Be specific, not generic.${buildBusinessContext(businessProfile)}`;
+Keep response under 300 words. Be specific, not generic.`,
+    temperature: 0.7,
+    topP: 0.9,
+  });
+
+  const prompt = resolved.promptTemplate
+    .replace('{{total_leads}}', leads.length.toString())
+    .replace('{{avg_score}}', avgScore.toString())
+    .replace('{{status_breakdown}}', Object.entries(statusBreakdown).map(([k, v]) => `${k}: ${v}`).join(', '))
+    .replace('{{hot_leads}}', leads.filter(l => l.score > 80).length.toString())
+    .replace('{{lead_summary}}', leadSummary)
+    + buildBusinessContext(businessProfile);
 
   try {
     const controller = new AbortController();
@@ -240,9 +248,9 @@ Keep response under 300 words. Be specific, not generic.${buildBusinessContext(b
       model: MODEL_NAME,
       contents: prompt,
       config: {
-        systemInstruction: 'You are a senior B2B sales analytics AI. Provide actionable, data-driven insights. Be concise and specific.',
-        temperature: 0.7,
-        topP: 0.9,
+        systemInstruction: resolved.systemInstruction,
+        temperature: resolved.temperature,
+        topP: resolved.topP,
       }
     });
 
@@ -273,7 +281,8 @@ const GOAL_LABELS: Record<string, string> = {
 export const generateEmailSequence = async (
   leads: Lead[],
   config: EmailSequenceConfig,
-  businessProfile?: BusinessProfile
+  businessProfile?: BusinessProfile,
+  userId?: string
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -293,28 +302,30 @@ export const generateEmailSequence = async (
   const cadenceDays = CADENCE_DAYS[config.cadence] || 2;
   const goalLabel = GOAL_LABELS[config.goal] || config.goal;
 
-  const prompt = `Generate a ${config.sequenceLength}-email outreach sequence for B2B sales.
+  const resolved = await resolvePrompt('email_sequence', userId, {
+    systemInstruction: `You are an expert email sequence copywriter for B2B sales. Generate high-converting email sequences that feel human and personalized. Tone: ${config.tone}.`,
+    promptTemplate: `Generate a {{sequence_length}}-email outreach sequence for B2B sales.
 
 TARGET AUDIENCE (sample leads):
-${leadContext}
+{{lead_context}}
 
 SEQUENCE CONFIG:
-- Goal: ${goalLabel}
-- Number of Emails: ${config.sequenceLength}
-- Cadence: Every ${cadenceDays} day(s)
-- Tone: ${config.tone}
-- Total leads in audience: ${config.audienceLeadIds.length}
+- Goal: {{goal_label}}
+- Number of Emails: {{sequence_length}}
+- Cadence: Every {{cadence_days}} day(s)
+- Tone: {{tone}}
+- Total leads in audience: {{audience_count}}
 
 REQUIREMENTS:
 1. Each email must have a clear subject line and body.
-2. Use ONLY these personalization placeholders: {{first_name}}, {{company}}, {{ai_insight}}, {{your_name}}. Do NOT use {{industry}}, {{pain_point}}, {{benefit}}, {{solution}}, {{insight_1}}, {{goal}}, or any other placeholders — write the actual specific values inline based on the lead data provided above.
+2. Use ONLY these personalization placeholders: {{first_name}}, {{company}}, {{ai_insight}}, {{your_name}}.
 3. Each email should build on the previous, escalating urgency naturally.
 4. Email 1: Introduction & value proposition
 5. Final email: Break-up email with last chance CTA
 6. Keep each email under 200 words.
-7. Match the ${config.tone} tone consistently.
-8. Use the lead's Knowledge Base data (website, LinkedIn, notes) to tailor messaging to their specific company and context.
-${buildBusinessContext(businessProfile)}
+7. Match the {{tone}} tone consistently.
+8. Use the lead's Knowledge Base data to tailor messaging.
+
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS (repeat for each email):
 ===EMAIL_START===
 STEP: [number]
@@ -322,7 +333,19 @@ DELAY: Day [number]
 SUBJECT: [subject line]
 BODY:
 [email body]
-===EMAIL_END===`;
+===EMAIL_END===`,
+    temperature: 0.85,
+    topP: 0.9,
+  });
+
+  const prompt = resolved.promptTemplate
+    .replace(/\{\{sequence_length\}\}/g, config.sequenceLength.toString())
+    .replace('{{lead_context}}', leadContext)
+    .replace('{{goal_label}}', goalLabel)
+    .replace('{{cadence_days}}', cadenceDays.toString())
+    .replace(/\{\{tone\}\}/g, config.tone)
+    .replace('{{audience_count}}', config.audienceLeadIds.length.toString())
+    + buildBusinessContext(businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -334,9 +357,9 @@ BODY:
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: `You are an expert email sequence copywriter for B2B sales. Generate high-converting email sequences that feel human and personalized. Tone: ${config.tone}.`,
-          temperature: 0.85,
-          topP: 0.9,
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
           topK: 40,
         }
       });
@@ -349,8 +372,8 @@ BODY:
         text,
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
-        prompt_name: 'email_sequence_builder',
-        prompt_version: 1
+        prompt_name: 'email_sequence',
+        prompt_version: resolved.promptVersion
       };
     } catch (error: unknown) {
       attempt++;
@@ -360,15 +383,15 @@ BODY:
           text: `SEQUENCE GENERATION FAILED: ${errMsg}`,
           tokens_used: 0,
           model_name: MODEL_NAME,
-          prompt_name: 'email_sequence_builder',
-          prompt_version: 1
+          prompt_name: 'email_sequence',
+          prompt_version: resolved.promptVersion
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'email_sequence_builder', prompt_version: 1 };
+  return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'email_sequence', prompt_version: resolved.promptVersion };
 };
 
 export const generateContentByCategory = async (
@@ -376,74 +399,72 @@ export const generateContentByCategory = async (
   category: ContentCategory,
   tone: ToneType,
   additionalContext?: string,
-  businessProfile?: BusinessProfile
+  businessProfile?: BusinessProfile,
+  userId?: string
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const categoryPrompts: Record<ContentCategory, { system: string; prompt: string }> = {
+  // Map ContentCategory to prompt keys
+  const categoryKeyMap: Record<ContentCategory, string> = {
+    [ContentCategory.EMAIL_SEQUENCE]: 'content_email',
+    [ContentCategory.LANDING_PAGE]: 'content_landing_page',
+    [ContentCategory.SOCIAL_MEDIA]: 'content_social',
+    [ContentCategory.BLOG_ARTICLE]: 'content_blog',
+    [ContentCategory.REPORT]: 'content_report',
+    [ContentCategory.PROPOSAL]: 'content_proposal',
+    [ContentCategory.AD_COPY]: 'content_ad',
+  };
+
+  const hardcodedPrompts: Record<ContentCategory, { system: string; prompt: string }> = {
     [ContentCategory.EMAIL_SEQUENCE]: {
       system: 'You are an expert email copywriter.',
-      prompt: `Write a compelling cold email for ${lead.name} at ${lead.company}. Score: ${lead.score}. Insights: ${lead.insights}. Tone: ${tone}. Use ONLY these placeholders: {{first_name}}, {{company}}, {{your_name}}. Write all other details (industry, pain points, benefits, solutions) as actual specific content based on the lead data. Under 200 words.`
+      prompt: `Write a compelling cold email for {{lead_name}} at {{company}}. Score: {{score}}. Insights: {{insights}}. Tone: {{tone}}. Use ONLY these placeholders: {{first_name}}, {{company}}, {{your_name}}. Write all other details as actual specific content. Under 200 words.`
     },
     [ContentCategory.LANDING_PAGE]: {
       system: 'You are a conversion-focused landing page copywriter.',
-      prompt: `Create landing page copy targeting ${lead.company} in their industry. Include:
-- Hero headline & subheadline (use {{company}} tag)
-- 3 benefit bullets
-- Social proof section placeholder
-- CTA section
-Use ONLY {{company}} and {{first_name}} as placeholders. Write industry, pain points, and benefits as actual content. Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
+      prompt: `Create landing page copy targeting {{company}} in their industry. Include:\n- Hero headline & subheadline (use {{company}} tag)\n- 3 benefit bullets\n- Social proof section placeholder\n- CTA section\nUse ONLY {{company}} and {{first_name}} as placeholders. Tone: {{tone}}. Lead insights: {{insights}}.`
     },
     [ContentCategory.SOCIAL_MEDIA]: {
       system: 'You are a B2B social media strategist.',
-      prompt: `Generate 3 LinkedIn posts targeting professionals like ${lead.name} at ${lead.company}.
-Each post should:
-- Hook in first line
-- Provide value
-- End with engagement question or CTA
-Use ONLY {{first_name}} and {{company}} as placeholders. Write industry details and insights as actual content. Tone: ${tone}. Industry insights: ${lead.insights}. ${additionalContext || ''}`
+      prompt: `Generate 3 LinkedIn posts targeting professionals like {{lead_name}} at {{company}}.\nEach post should:\n- Hook in first line\n- Provide value\n- End with engagement question or CTA\nUse ONLY {{first_name}} and {{company}} as placeholders. Tone: {{tone}}. Industry insights: {{insights}}.`
     },
     [ContentCategory.BLOG_ARTICLE]: {
       system: 'You are a B2B content marketing expert.',
-      prompt: `Write a blog article outline + intro targeting companies like ${lead.company}.
-- Title (SEO-optimized)
-- 5-section outline with key points
-- Full intro paragraph (150 words)
-- Meta description
-Do NOT use any {{...}} placeholders. Write all content with specific details. Tone: ${tone}. Industry context: ${lead.insights}. ${additionalContext || ''}`
+      prompt: `Write a blog article outline + intro targeting companies like {{company}}.\n- Title (SEO-optimized)\n- 5-section outline with key points\n- Full intro paragraph (150 words)\n- Meta description\nDo NOT use any placeholders. Write all content with specific details. Tone: {{tone}}. Industry context: {{insights}}.`
     },
     [ContentCategory.REPORT]: {
       system: 'You are a B2B research analyst and report writer.',
-      prompt: `Create a whitepaper/report outline for ${lead.company}'s industry:
-- Executive Summary
-- 4-5 key sections with bullet points
-- Data points to include (suggest specific metrics)
-- Conclusion with CTA
-Do NOT use any {{...}} placeholders. Write all content with specific details. Tone: ${tone}. Context: ${lead.insights}. ${additionalContext || ''}`
+      prompt: `Create a whitepaper/report outline for {{company}}'s industry:\n- Executive Summary\n- 4-5 key sections with bullet points\n- Data points to include\n- Conclusion with CTA\nDo NOT use any placeholders. Tone: {{tone}}. Context: {{insights}}.`
     },
     [ContentCategory.PROPOSAL]: {
       system: 'You are a senior sales proposal writer.',
-      prompt: `Draft a business proposal for ${lead.name} at ${lead.company}:
-- Opening (reference their company and challenges)
-- Problem Statement
-- Proposed Solution (3 key deliverables)
-- Timeline
-- Pricing placeholder
-- Next Steps / CTA
-Use ONLY {{first_name}}, {{company}}, {{your_name}} as placeholders. Write all other details as actual specific content. Tone: ${tone}. Lead score: ${lead.score}. Insights: ${lead.insights}. ${additionalContext || ''}`
+      prompt: `Draft a business proposal for {{lead_name}} at {{company}}:\n- Opening (reference their company and challenges)\n- Problem Statement\n- Proposed Solution (3 key deliverables)\n- Timeline\n- Pricing placeholder\n- Next Steps / CTA\nUse ONLY {{first_name}}, {{company}}, {{your_name}} as placeholders. Tone: {{tone}}. Lead score: {{score}}. Insights: {{insights}}.`
     },
     [ContentCategory.AD_COPY]: {
       system: 'You are a performance marketing copywriter specializing in high-converting B2B ad copy.',
-      prompt: `Create compelling ad copy targeting ${lead.company}'s industry:
-- Google Search Ad: 3 headlines (max 30 chars each) + 2 descriptions (max 90 chars each)
-- LinkedIn Sponsored Ad: Headline + body (max 150 words) + CTA
-- A/B variant with a different angle
-Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
+      prompt: `Create compelling ad copy targeting {{company}}'s industry:\n- Google Search Ad: 3 headlines (max 30 chars each) + 2 descriptions (max 90 chars each)\n- LinkedIn Sponsored Ad: Headline + body (max 150 words) + CTA\n- A/B variant with a different angle\nTone: {{tone}}. Lead insights: {{insights}}.`
     }
   };
 
-  const catConfig = categoryPrompts[category];
-  const finalCategoryPrompt = catConfig.prompt + buildBusinessContext(businessProfile);
+  const promptKey = categoryKeyMap[category];
+  const fallbackConfig = hardcodedPrompts[category];
+
+  const resolved = await resolvePrompt(promptKey, userId, {
+    systemInstruction: fallbackConfig.system,
+    promptTemplate: fallbackConfig.prompt,
+    temperature: 0.8,
+    topP: 0.9,
+  });
+
+  const finalCategoryPrompt = resolved.promptTemplate
+    .replace(/\{\{lead_name\}\}/g, lead.name)
+    .replace(/\{\{company\}\}/g, lead.company)
+    .replace(/\{\{score\}\}/g, lead.score.toString())
+    .replace(/\{\{insights\}\}/g, lead.insights)
+    .replace(/\{\{tone\}\}/g, tone)
+    .replace(/\{\{first_name\}\}/g, lead.name.split(' ')[0])
+    + (additionalContext ? ` ${additionalContext}` : '')
+    + buildBusinessContext(businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -455,9 +476,9 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
         model: MODEL_NAME,
         contents: finalCategoryPrompt,
         config: {
-          systemInstruction: catConfig.system,
-          temperature: 0.8,
-          topP: 0.9,
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
           topK: 40,
         }
       });
@@ -470,8 +491,8 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
         text,
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
-        prompt_name: `content_${category.toLowerCase().replace(/\s+/g, '_')}`,
-        prompt_version: 1
+        prompt_name: promptKey,
+        prompt_version: resolved.promptVersion
       };
     } catch (error: unknown) {
       attempt++;
@@ -481,21 +502,22 @@ Tone: ${tone}. Lead insights: ${lead.insights}. ${additionalContext || ''}`
           text: `GENERATION FAILED: ${errMsg}`,
           tokens_used: 0,
           model_name: MODEL_NAME,
-          prompt_name: `content_${category.toLowerCase().replace(/\s+/g, '_')}`,
-          prompt_version: 1
+          prompt_name: promptKey,
+          prompt_version: resolved.promptVersion
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'content_gen', prompt_version: 1 };
+  return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: promptKey, prompt_version: resolved.promptVersion };
 };
 
 export const generateLeadResearch = async (
   lead: Pick<Lead, 'name' | 'company' | 'email' | 'insights'>,
   socialUrls: Record<string, string>,
-  businessProfile?: BusinessProfile
+  businessProfile?: BusinessProfile,
+  userId?: string
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -506,41 +528,54 @@ export const generateLeadResearch = async (
 
   const emailDomain = lead.email?.includes('@') ? lead.email.split('@')[1] : '';
 
-  const prompt = `Research the following B2B lead comprehensively. Search the web, scrape their company website, LinkedIn profile, and any news or press mentions.
+  const resolved = await resolvePrompt('lead_research', userId, {
+    systemInstruction: 'You are a senior B2B research analyst with access to web search. Produce comprehensive, actionable intelligence briefs using real web data. Search thoroughly for the lead and their company. Always use the exact delimited format requested.',
+    promptTemplate: `Research the following B2B lead comprehensively.
 
 LEAD DATA:
-- Name: ${lead.name}
-- Company: ${lead.company}
-${emailDomain ? `- Email Domain: ${emailDomain}` : ''}
-${lead.insights ? `- Existing Insights: ${lead.insights}` : ''}
+- Name: {{lead_name}}
+- Company: {{company}}
+{{email_domain}}
+{{insights}}
 
 SOCIAL / WEB PRESENCE:
-${urlContext || 'None provided'}
+{{url_context}}
 
 RESEARCH INSTRUCTIONS:
-1. Search the company website for pages mentioning "${lead.name}" by name — look for team pages, about pages, blog posts, case studies.
+1. Search the company website for pages mentioning the lead by name.
 2. Search LinkedIn for the lead's profile, activity, and recent posts.
-3. Look for news articles, press releases, podcast appearances, or conference talks.
+3. Look for news articles, press releases, podcast appearances.
 4. Identify the company's industry, size, products, and recent milestones.
-5. Find potential common ground or mutual connections with the sender's business.
-6. Identify the lead's recent projects, publications, or notable achievements.
+5. Find potential common ground with the sender's business.
+6. Identify the lead's recent projects, publications, or achievements.
 
 Respond using EXACTLY this delimited format (every field required):
 
-===FIELD===TITLE: [Job title or role, e.g. "VP of Engineering"]===END===
-===FIELD===INDUSTRY: [Industry sector, e.g. "B2B SaaS"]===END===
-===FIELD===EMPLOYEE_COUNT: [Approximate company size, e.g. "50-200"]===END===
+===FIELD===TITLE: [Job title]===END===
+===FIELD===INDUSTRY: [Industry sector]===END===
+===FIELD===EMPLOYEE_COUNT: [Approximate company size]===END===
 ===FIELD===LOCATION: [City, State, Country]===END===
-===FIELD===COMPANY_OVERVIEW: [What this company does, approximate size/stage, and industry positioning — 2-3 sentences]===END===
-===FIELD===TALKING_POINTS: [3-4 conversation starters separated by | pipes, e.g. "Recent Series B funding | Open-source contributions to React | Spoke at DevConf 2025"]===END===
-===FIELD===OUTREACH_ANGLE: [The single best angle to open a conversation, 2-3 sentences]===END===
-===FIELD===RISK_FACTORS: [1-2 potential objections separated by | pipes]===END===
-===FIELD===MENTIONED_ON_WEBSITE: [If the lead is mentioned on their company website, quote what was found. Otherwise write "Not found"]===END===
-===FIELD===RESEARCH_BRIEF: [Full 150-250 word research summary combining all findings]===END===
+===FIELD===COMPANY_OVERVIEW: [2-3 sentences]===END===
+===FIELD===TALKING_POINTS: [3-4 items separated by | pipes]===END===
+===FIELD===OUTREACH_ANGLE: [2-3 sentences]===END===
+===FIELD===RISK_FACTORS: [1-2 items separated by | pipes]===END===
+===FIELD===MENTIONED_ON_WEBSITE: [Quote or "Not found"]===END===
+===FIELD===RESEARCH_BRIEF: [150-250 word summary]===END===
 
-Be specific and data-driven. Reference actual findings from web search when available.${buildBusinessContext(businessProfile)}`;
+Be specific and data-driven.`,
+    temperature: 0.3,
+    topP: 0.9,
+  });
 
-  const systemInstruction = 'You are a senior B2B research analyst with access to web search. Produce comprehensive, actionable intelligence briefs using real web data. Search thoroughly for the lead and their company. Always use the exact delimited format requested.';
+  const prompt = resolved.promptTemplate
+    .replace('{{lead_name}}', lead.name)
+    .replace('{{company}}', lead.company)
+    .replace('{{email_domain}}', emailDomain ? `- Email Domain: ${emailDomain}` : '')
+    .replace('{{insights}}', lead.insights ? `- Existing Insights: ${lead.insights}` : '')
+    .replace('{{url_context}}', urlContext || 'None provided')
+    + buildBusinessContext(businessProfile);
+
+  const systemInstruction = resolved.systemInstruction;
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -556,8 +591,8 @@ Be specific and data-driven. Reference actual findings from web search when avai
           contents: prompt,
           config: {
             systemInstruction,
-            temperature: 0.3,
-            topP: 0.9,
+            temperature: resolved.temperature,
+            topP: resolved.topP,
             tools: [{ googleSearch: {} }],
           }
         });
@@ -569,8 +604,8 @@ Be specific and data-driven. Reference actual findings from web search when avai
           contents: prompt,
           config: {
             systemInstruction,
-            temperature: 0.3,
-            topP: 0.9,
+            temperature: resolved.temperature,
+            topP: resolved.topP,
           }
         });
       }
@@ -584,7 +619,7 @@ Be specific and data-driven. Reference actual findings from web search when avai
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
         prompt_name: 'lead_research',
-        prompt_version: 2
+        prompt_version: resolved.promptVersion
       };
     } catch (error: unknown) {
       attempt++;
@@ -686,7 +721,8 @@ const parseAnalysisJSON = (text: string): BusinessAnalysisResult | null => {
 
 export const analyzeBusinessFromWeb = async (
   websiteUrl: string,
-  socialUrls?: { linkedin?: string; twitter?: string; instagram?: string; facebook?: string }
+  socialUrls?: { linkedin?: string; twitter?: string; instagram?: string; facebook?: string },
+  userId?: string
 ): Promise<AIResponse & { analysis: BusinessAnalysisResult | null }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -697,17 +733,19 @@ export const analyzeBusinessFromWeb = async (
         .join('\n')
     : '';
 
-  const prompt = `Research the following company and extract structured business intelligence.
+  const resolved = await resolvePrompt('business_analysis', userId, {
+    systemInstruction: 'You are a business intelligence analyst. Extract structured company data from websites and online presence. Always respond with valid JSON only.',
+    promptTemplate: `Research the following company and extract structured business intelligence.
 
-COMPANY WEBSITE: ${websiteUrl}
-${socialContext ? `\nSOCIAL MEDIA PROFILES:\n${socialContext}` : ''}
+COMPANY WEBSITE: {{website_url}}
+{{social_context}}
 
 Analyze the company's website and any available online information. Look specifically for:
-- Contact pages, footer sections, and "About Us" pages for phone numbers, email addresses, and physical addresses
+- Contact pages, footer sections, and "About Us" pages
 - Social media links in the website header, footer, or contact page
 - Company information, products, target market, and business model
 
-Return a JSON object with the following structure. Each field must have a "value" (string) and "confidence" (number 0-100, how certain you are about this information).
+Return a JSON object with the following structure. Each field must have a "value" (string) and "confidence" (number 0-100).
 
 {
   "companyName": { "value": "...", "confidence": 0-100 },
@@ -717,28 +755,30 @@ Return a JSON object with the following structure. Each field must have a "value
   "valueProp": { "value": "...", "confidence": 0-100 },
   "pricingModel": { "value": "...", "confidence": 0-100 },
   "salesApproach": { "value": "...", "confidence": 0-100 },
-  "phone": { "value": "+1 555-123-4567", "confidence": 0-100 },
-  "businessEmail": { "value": "contact@example.com", "confidence": 0-100 },
-  "address": { "value": "123 Main St, City, State ZIP", "confidence": 0-100 },
-  "socialLinks": {
-    "linkedin": "https://linkedin.com/company/...",
-    "twitter": "https://twitter.com/...",
-    "instagram": "https://instagram.com/...",
-    "facebook": "https://facebook.com/..."
-  },
-  "followUpQuestions": ["question1", "question2"]
+  "phone": { "value": "...", "confidence": 0-100 },
+  "businessEmail": { "value": "...", "confidence": 0-100 },
+  "address": { "value": "...", "confidence": 0-100 },
+  "socialLinks": { ... },
+  "followUpQuestions": ["..."]
 }
 
 Guidelines:
-- For fields you can confidently determine from the website, set confidence 80-100
+- For fields you can confidently determine, set confidence 80-100
 - For fields you can reasonably infer, set confidence 50-79
-- For fields you're uncertain about, set confidence below 50 and provide your best guess
-- For phone, businessEmail, and address: only include if actually found on the website. Set confidence to 0 and value to "" if not found
-- For socialLinks: only include platforms that have actual URLs found on the website. Omit platforms not found
+- For uncertain fields, set confidence below 50
+- For phone, businessEmail, address: only include if found. Set confidence to 0 and value to "" if not found
+- For socialLinks: only include platforms found on the website
 - Generate 2-4 follow-up questions for fields with confidence below 70
-- Return ONLY valid JSON, no markdown or explanation`;
+- Return ONLY valid JSON`,
+    temperature: 0.3,
+    topP: 0.9,
+  });
 
-  const systemInstruction = 'You are a business intelligence analyst. Extract structured company data from websites and online presence. Always respond with valid JSON only.';
+  const prompt = resolved.promptTemplate
+    .replace('{{website_url}}', websiteUrl)
+    .replace('{{social_context}}', socialContext ? `\nSOCIAL MEDIA PROFILES:\n${socialContext}` : '');
+
+  const systemInstruction = resolved.systemInstruction;
 
   // Try with Google Search grounding first
   let attempt = 0;
@@ -754,8 +794,8 @@ Guidelines:
           contents: prompt,
           config: {
             systemInstruction,
-            temperature: 0.3,
-            topP: 0.9,
+            temperature: resolved.temperature,
+            topP: resolved.topP,
             tools: [{ googleSearch: {} }],
           }
         });
@@ -767,8 +807,8 @@ Guidelines:
           contents: prompt,
           config: {
             systemInstruction,
-            temperature: 0.3,
-            topP: 0.9,
+            temperature: resolved.temperature,
+            topP: resolved.topP,
           }
         });
       }
@@ -783,8 +823,8 @@ Guidelines:
         text: text,
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
-        prompt_name: 'business_analysis_web',
-        prompt_version: 1,
+        prompt_name: 'business_analysis',
+        prompt_version: resolved.promptVersion,
         analysis
       };
     } catch (error: unknown) {
@@ -817,7 +857,8 @@ Guidelines:
 
 export const generateFollowUpQuestions = async (
   currentProfile: BusinessProfile,
-  previousQA?: { field: string; question: string; answer: string }[]
+  previousQA?: { field: string; question: string; answer: string }[],
+  userId?: string
 ): Promise<{ questions: { field: string; question: string; placeholder: string }[]; tokens_used: number }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -833,13 +874,15 @@ export const generateFollowUpQuestions = async (
   const emptyFields = ['companyName', 'industry', 'productsServices', 'targetAudience', 'valueProp', 'pricingModel', 'salesApproach']
     .filter(f => !currentProfile[f as keyof BusinessProfile]);
 
-  const prompt = `Based on this partially-filled business profile, generate 2-4 targeted follow-up questions to fill in the gaps.
+  const resolved = await resolvePrompt('follow_up_questions', userId, {
+    systemInstruction: 'You are a business strategy consultant. Ask insightful questions to understand a company. Always respond with valid JSON only.',
+    promptTemplate: `Based on this partially-filled business profile, generate 2-4 targeted follow-up questions to fill in the gaps.
 
 CURRENT PROFILE:
-${profileContext || 'No fields filled yet'}
+{{profile_context}}
 
-EMPTY/MISSING FIELDS: ${emptyFields.join(', ') || 'None'}
-${previousContext}
+EMPTY/MISSING FIELDS: {{empty_fields}}
+{{previous_context}}
 
 Return a JSON object with this structure:
 {
@@ -851,10 +894,17 @@ Return a JSON object with this structure:
 Guidelines:
 - Only ask about fields that are empty or vague
 - Don't repeat questions already answered
-- Each question should map to exactly one BusinessProfile field (companyName, industry, productsServices, targetAudience, valueProp, pricingModel, salesApproach)
-- Make questions conversational and specific, not generic
+- Make questions conversational and specific
 - Provide helpful placeholder text
-- Return ONLY valid JSON`;
+- Return ONLY valid JSON`,
+    temperature: 0.5,
+    topP: 0.9,
+  });
+
+  const prompt = resolved.promptTemplate
+    .replace('{{profile_context}}', profileContext || 'No fields filled yet')
+    .replace('{{empty_fields}}', emptyFields.join(', ') || 'None')
+    .replace('{{previous_context}}', previousContext);
 
   try {
     const controller = new AbortController();
@@ -864,9 +914,9 @@ Guidelines:
       model: MODEL_NAME,
       contents: prompt,
       config: {
-        systemInstruction: 'You are a business strategy consultant. Ask insightful questions to understand a company. Always respond with valid JSON only.',
-        temperature: 0.5,
-        topP: 0.9,
+        systemInstruction: resolved.systemInstruction,
+        temperature: resolved.temperature,
+        topP: resolved.topP,
       }
     });
 
@@ -898,7 +948,8 @@ export const generateCommandCenterResponse = async (
   mode: 'analyst' | 'strategist' | 'coach' | 'creative',
   leads: Lead[],
   conversationHistory: { role: 'user' | 'ai'; content: string }[],
-  businessProfile?: BusinessProfile
+  businessProfile?: BusinessProfile,
+  userId?: string
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -957,7 +1008,15 @@ ${buildBusinessContext(businessProfile)}`;
     parts: [{ text: `${contextBlock}\n\nUSER REQUEST:\n${userPrompt}` }],
   });
 
-  const systemInstruction = MODE_SYSTEM_INSTRUCTIONS[mode] || MODE_SYSTEM_INSTRUCTIONS.analyst;
+  const defaultSystemInstruction = MODE_SYSTEM_INSTRUCTIONS[mode] || MODE_SYSTEM_INSTRUCTIONS.analyst;
+  const promptKey = `command_center_${mode}`;
+
+  const resolved = await resolvePrompt(promptKey, userId, {
+    systemInstruction: defaultSystemInstruction,
+    promptTemplate: `{{pipeline_context}}\n\nUSER REQUEST:\n{{user_prompt}}`,
+    temperature: mode === 'creative' ? 0.85 : 0.7,
+    topP: 0.9,
+  });
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -969,9 +1028,9 @@ ${buildBusinessContext(businessProfile)}`;
         model: MODEL_NAME,
         contents,
         config: {
-          systemInstruction,
-          temperature: mode === 'creative' ? 0.85 : 0.7,
-          topP: 0.9,
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
           topK: 40,
         }
       });
@@ -984,44 +1043,45 @@ ${buildBusinessContext(businessProfile)}`;
         text,
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
-        prompt_name: `command_center_${mode}`,
-        prompt_version: 1,
+        prompt_name: promptKey,
+        prompt_version: resolved.promptVersion,
       };
     } catch (error: unknown) {
       attempt++;
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
       console.warn(`Command Center Gemini attempt ${attempt} failed:`, errMsg);
       if (attempt === MAX_RETRIES) {
-        // Return empty text to signal caller to use fallback
         return {
           text: '',
           tokens_used: 0,
           model_name: MODEL_NAME,
-          prompt_name: `command_center_${mode}`,
-          prompt_version: 1,
+          prompt_name: promptKey,
+          prompt_version: resolved.promptVersion,
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: `command_center_${mode}`, prompt_version: 1 };
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: promptKey, prompt_version: resolved.promptVersion };
 };
 
 export const generateContentSuggestions = async (
   content: string,
   mode: 'email' | 'linkedin' | 'proposal',
-  businessProfile?: BusinessProfile
+  businessProfile?: BusinessProfile,
+  userId?: string
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const modeLabel = mode === 'email' ? 'cold email' : mode === 'linkedin' ? 'LinkedIn post' : 'sales proposal';
 
-  const prompt = `Analyze the following ${modeLabel} content and return exactly 5 improvement suggestions.
+  const resolved = await resolvePrompt('content_suggestions', userId, {
+    systemInstruction: 'You are a senior content optimization specialist for B2B sales. Analyze content and provide specific, actionable improvement suggestions. Always use the exact delimited format requested.',
+    promptTemplate: `Analyze the following content and return exactly 5 improvement suggestions.
 
 CONTENT TO ANALYZE:
-${content}
-${buildBusinessContext(businessProfile)}
+{{content}}
 
 For each suggestion, use this exact delimited format:
 
@@ -1030,23 +1090,20 @@ TYPE: [one of: word|metric|personalization|structure|cta]
 CATEGORY: [one of: high|medium|style]
 TITLE: [short actionable title, max 10 words]
 DESCRIPTION: [1-2 sentences explaining why this matters]
-ORIGINAL_TEXT: [for word/metric/personalization types: quote the EXACT text from the content above that should be replaced. For structure/cta types: leave empty]
-REPLACEMENT: [the improved replacement text that should replace ORIGINAL_TEXT, or new content to append for structure/cta]
-IMPACT_LABEL: [e.g. "+12% opens" or "+8% engagement"]
-IMPACT_PERCENT: [number only, e.g. 12]
+ORIGINAL_TEXT: [exact quote to replace, or empty for structure/cta]
+REPLACEMENT: [improved text]
+IMPACT_LABEL: [e.g. "+12% opens"]
+IMPACT_PERCENT: [number only]
 ===END_SUGGESTION===
 
-CRITICAL INSTRUCTIONS:
-- For word, metric, and personalization suggestions: ORIGINAL_TEXT must be an EXACT quote from the content above (verbatim, case-sensitive). REPLACEMENT is what it should be changed to.
-- For structure and cta suggestions: ORIGINAL_TEXT should be empty. REPLACEMENT is the new content to append.
-- Every suggestion MUST have a non-empty REPLACEMENT field.
+Return exactly 5 suggestions.`,
+    temperature: 0.7,
+    topP: 0.9,
+  });
 
-Return exactly 5 suggestions. Focus on:
-1. Word choice improvements (stronger verbs, action-oriented language)
-2. Metrics/data that could be added for credibility
-3. Personalization opportunities
-4. Structural improvements (formatting, length, flow)
-5. CTA strength and urgency`;
+  const prompt = resolved.promptTemplate
+    .replace('{{content}}', content)
+    + buildBusinessContext(businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1058,9 +1115,9 @@ Return exactly 5 suggestions. Focus on:
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: `You are a senior content optimization specialist for B2B sales. Analyze content and provide specific, actionable improvement suggestions. Always use the exact delimited format requested.`,
-          temperature: 0.7,
-          topP: 0.9,
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
         }
       });
 
@@ -1073,7 +1130,7 @@ Return exactly 5 suggestions. Focus on:
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
         prompt_name: 'content_suggestions',
-        prompt_version: 1
+        prompt_version: resolved.promptVersion
       };
     } catch (error: unknown) {
       attempt++;
@@ -1084,14 +1141,14 @@ Return exactly 5 suggestions. Focus on:
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: 'content_suggestions',
-          prompt_version: 1
+          prompt_version: resolved.promptVersion
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'content_suggestions', prompt_version: 1 };
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'content_suggestions', prompt_version: resolved.promptVersion };
 };
 
 // === Pipeline Strategy Generation ===
@@ -1116,7 +1173,8 @@ export interface PipelineStrategyResponse {
 }
 
 export const generatePipelineStrategy = async (
-  input: PipelineStrategyInput
+  input: PipelineStrategyInput,
+  userId?: string
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -1124,32 +1182,42 @@ export const generatePipelineStrategy = async (
     .map(([k, v]) => `${k}: ${v}`)
     .join(', ');
 
-  const prompt = `Analyze this B2B sales pipeline and generate strategic recommendations.
+  const resolved = await resolvePrompt('pipeline_strategy', userId, {
+    systemInstruction: 'You are a senior B2B sales strategist. Analyze pipeline data and produce actionable strategy recommendations. Always use the exact delimited format requested.',
+    promptTemplate: `Analyze this B2B sales pipeline and generate strategic recommendations.
 
 PIPELINE DATA:
-- Total Leads: ${input.totalLeads}
-- Average Lead Score: ${input.avgScore}/100
-- Status Breakdown: ${statusStr}
-- Hot Leads (score > 80): ${input.hotLeads}
-- Emails Sent: ${input.emailsSent}
-- Emails Opened: ${input.emailsOpened}
-- Conversion Rate: ${input.conversionRate}%
-- Recent Activity: ${input.recentActivity}
+- Total Leads: {{total_leads}}
+- Average Lead Score: {{avg_score}}/100
+- Status Breakdown: {{status_breakdown}}
+- Hot Leads (score > 80): {{hot_leads}}
+- Emails Sent: {{emails_sent}}
+- Emails Opened: {{emails_opened}}
+- Conversion Rate: {{conversion_rate}}%
+- Recent Activity: {{recent_activity}}
 
-Respond using EXACTLY this delimited format (every field required):
+Respond using EXACTLY this delimited format:
 
-===FIELD===RECOMMENDATIONS: [3-5 strategic recommendations separated by | pipes, e.g. "Focus outreach on the 5 hot leads scoring above 80 — they have the highest conversion potential | Re-engage stale New leads with a drip email sequence"]===END===
-===FIELD===SPRINT_GOALS: [4 goals, each on a new line, in format: title|target|current|unit|deadline, e.g.
-Qualify Pipeline Leads|15|4|leads|2026-03-01
-Send Outreach Emails|30|12|emails|2026-03-01
-Complete Strategy Tasks|10|3|tasks|2026-03-01
-Convert Hot Leads|5|1|conversions|2026-03-01]===END===
-===FIELD===RISKS: [2-4 risk factors separated by | pipes, e.g. "Pipeline is top-heavy with unqualified leads | Low email open rate suggests messaging needs improvement"]===END===
-===FIELD===PRIORITY_ACTIONS: [Top 3 immediate actions separated by | pipes, e.g. "Call the top 3 hot leads today | Send follow-up emails to Contacted leads | Review and update stale lead scores"]===END===
+===FIELD===RECOMMENDATIONS: [3-5 items separated by | pipes]===END===
+===FIELD===SPRINT_GOALS: [4 goals, format: title|target|current|unit|deadline]===END===
+===FIELD===RISKS: [2-4 items separated by | pipes]===END===
+===FIELD===PRIORITY_ACTIONS: [Top 3 items separated by | pipes]===END===
 
-Be specific and data-driven. Reference actual numbers from the pipeline data.${buildBusinessContext(input.businessProfile)}`;
+Be specific and data-driven.`,
+    temperature: 0.7,
+    topP: 0.9,
+  });
 
-  const systemInstruction = 'You are a senior B2B sales strategist. Analyze pipeline data and produce actionable strategy recommendations. Always use the exact delimited format requested.';
+  const prompt = resolved.promptTemplate
+    .replace('{{total_leads}}', input.totalLeads.toString())
+    .replace('{{avg_score}}', input.avgScore.toString())
+    .replace('{{status_breakdown}}', statusStr)
+    .replace('{{hot_leads}}', input.hotLeads.toString())
+    .replace('{{emails_sent}}', input.emailsSent.toString())
+    .replace('{{emails_opened}}', input.emailsOpened.toString())
+    .replace('{{conversion_rate}}', input.conversionRate.toString())
+    .replace('{{recent_activity}}', input.recentActivity)
+    + buildBusinessContext(input.businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1161,9 +1229,9 @@ Be specific and data-driven. Reference actual numbers from the pipeline data.${b
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction,
-          temperature: 0.7,
-          topP: 0.9,
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
         }
       });
 
@@ -1176,7 +1244,7 @@ Be specific and data-driven. Reference actual numbers from the pipeline data.${b
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
         prompt_name: 'pipeline_strategy',
-        prompt_version: 1,
+        prompt_version: resolved.promptVersion,
       };
     } catch (error: unknown) {
       attempt++;
@@ -1188,14 +1256,14 @@ Be specific and data-driven. Reference actual numbers from the pipeline data.${b
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: 'pipeline_strategy',
-          prompt_version: 1,
+          prompt_version: resolved.promptVersion,
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'pipeline_strategy', prompt_version: 1 };
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'pipeline_strategy', prompt_version: resolved.promptVersion };
 };
 
 export const parsePipelineStrategyResponse = (text: string): PipelineStrategyResponse => {
@@ -1261,54 +1329,75 @@ export interface BlogContentParams {
   businessProfile?: BusinessProfile;
 }
 
-export const generateBlogContent = async (params: BlogContentParams): Promise<AIResponse> => {
+export const generateBlogContent = async (params: BlogContentParams, userId?: string): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+  const modeKeyMap: Record<BlogContentMode, string> = {
+    full_draft: 'blog_full_draft',
+    outline_only: 'blog_outline',
+    improve: 'blog_improve',
+    expand: 'blog_expand',
+  };
+
   const modeInstructions: Record<BlogContentMode, string> = {
-    full_draft: `Write a complete, publication-ready blog post about "${params.topic}". Include:
+    full_draft: `Write a complete, publication-ready blog post about "{{topic}}". Include:
 - An engaging title (if not provided)
 - Introduction that hooks the reader
 - 3-5 well-structured sections with ## headings
 - Practical examples or data points
 - A compelling conclusion with a call to action
 - Target 600-1200 words
-- Use markdown formatting throughout`,
-    outline_only: `Create a detailed blog post outline for "${params.topic}". Include:
+- Use markdown formatting throughout
+{{tone_guide}}{{category_guide}}{{keyword_guide}}
+
+Output the blog content in clean markdown format.`,
+    outline_only: `Create a detailed blog post outline for "{{topic}}". Include:
 - A compelling title suggestion
 - Introduction summary (2-3 sentences)
-- 5-7 section headings (##) with 2-3 bullet points each describing what to cover
+- 5-7 section headings (##) with 2-3 bullet points each
 - Conclusion summary
 - 3 suggested keywords for SEO
-- Format in markdown`,
-    improve: `Rewrite and improve the following blog content about "${params.topic}". Make it more:
+- Format in markdown
+{{tone_guide}}{{category_guide}}{{keyword_guide}}`,
+    improve: `Rewrite and improve the following blog content about "{{topic}}". Make it more:
 - Engaging and readable
 - Well-structured with clear headings
 - Professional yet conversational
 - SEO-friendly
-- Keep the core message but enhance the quality significantly
 
 EXISTING CONTENT TO IMPROVE:
-${params.existingContent || '(No content provided)'}`,
-    expand: `Expand the following blog content about "${params.topic}". The current content is too thin. For each section:
+{{existing_content}}
+{{tone_guide}}{{category_guide}}{{keyword_guide}}`,
+    expand: `Expand the following blog content about "{{topic}}". For each section:
 - Add more detail, examples, and depth
-- Include relevant statistics or data points where appropriate
+- Include relevant statistics or data points
 - Add transition sentences between sections
 - Ensure each section is at least 150 words
-- Maintain the existing structure but make it more comprehensive
 
 EXISTING CONTENT TO EXPAND:
-${params.existingContent || '(No content provided)'}`,
+{{existing_content}}
+{{tone_guide}}{{category_guide}}{{keyword_guide}}`,
   };
+
+  const promptKey = modeKeyMap[params.mode];
+  const resolved = await resolvePrompt(promptKey, userId, {
+    systemInstruction: 'You are an expert blog content writer specializing in B2B and technology topics. You write engaging, well-researched content in clean markdown format. Your posts are SEO-friendly and provide genuine value to readers.',
+    promptTemplate: modeInstructions[params.mode],
+    temperature: params.mode === 'outline_only' ? 0.7 : 0.85,
+    topP: 0.9,
+  });
 
   const toneGuide = params.tone ? `\nTONE: Write in a ${params.tone} tone.` : '';
   const categoryGuide = params.category ? `\nCATEGORY: This is a ${params.category} post.` : '';
   const keywordGuide = params.keywords?.length ? `\nKEYWORDS TO INCLUDE: ${params.keywords.join(', ')}` : '';
 
-  const prompt = `${modeInstructions[params.mode]}${toneGuide}${categoryGuide}${keywordGuide}${buildBusinessContext(params.businessProfile)}
-
-Output the blog content in clean markdown format. Do not include any meta-commentary or instructions in the output — only the blog content itself.`;
-
-  const systemInstruction = 'You are an expert blog content writer specializing in B2B and technology topics. You write engaging, well-researched content in clean markdown format. Your posts are SEO-friendly and provide genuine value to readers.';
+  const prompt = resolved.promptTemplate
+    .replace('{{topic}}', params.topic)
+    .replace('{{existing_content}}', params.existingContent || '(No content provided)')
+    .replace('{{tone_guide}}', toneGuide)
+    .replace('{{category_guide}}', categoryGuide)
+    .replace('{{keyword_guide}}', keywordGuide)
+    + buildBusinessContext(params.businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1320,9 +1409,9 @@ Output the blog content in clean markdown format. Do not include any meta-commen
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction,
-          temperature: params.mode === 'outline_only' ? 0.7 : 0.85,
-          topP: 0.9,
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
           topK: 40,
         }
       });
@@ -1335,8 +1424,8 @@ Output the blog content in clean markdown format. Do not include any meta-commen
         text,
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
-        prompt_name: `blog_content_${params.mode}`,
-        prompt_version: 1,
+        prompt_name: promptKey,
+        prompt_version: resolved.promptVersion,
       };
     } catch (error: unknown) {
       attempt++;
@@ -1347,15 +1436,15 @@ Output the blog content in clean markdown format. Do not include any meta-commen
           text: `GENERATION FAILED: ${errMsg}`,
           tokens_used: 0,
           model_name: MODEL_NAME,
-          prompt_name: `blog_content_${params.mode}`,
-          prompt_version: 1,
+          prompt_name: promptKey,
+          prompt_version: resolved.promptVersion,
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: `blog_content_${params.mode}`, prompt_version: 1 };
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: promptKey, prompt_version: resolved.promptVersion };
 };
 
 // === Social Media Caption Generation ===
@@ -1370,25 +1459,25 @@ export interface SocialCaptionParams {
   businessProfile?: BusinessProfile;
 }
 
-export const generateSocialCaption = async (params: SocialCaptionParams): Promise<AIResponse> => {
+export const generateSocialCaption = async (params: SocialCaptionParams, userId?: string): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+  const promptKey = `social_${params.platform}`;
+
   const platformRules: Record<SocialPlatform, string> = {
-    linkedin: `Write a LinkedIn post to share this blog article. Include:
-- A hook in the first line that stops the scroll (no hashtags in the hook)
-- 2-3 sentences expanding on the key insight from the article
+    linkedin: `Write a LinkedIn post. Include:
+- A hook in the first line that stops the scroll
+- 2-3 sentences expanding on the key insight
 - A clear call to action to read the full post
 - 3-5 relevant hashtags at the end
 - Professional but conversational tone
-- Maximum 300 words
-- Use line breaks for readability`,
-    twitter: `Write a tweet (max 280 characters including the URL) to share this blog article. Include:
+- Maximum 300 words`,
+    twitter: `Write a tweet (max 280 characters including URL). Include:
 - A punchy, attention-grabbing message
 - The key takeaway in 1-2 sentences
 - 1-2 relevant hashtags
-- Leave room for the URL (assume 23 characters for the link)
-- Keep it concise and engaging`,
-    facebook: `Write a Facebook post to share this blog article. Include:
+- Leave room for the URL (23 characters)`,
+    facebook: `Write a Facebook post. Include:
 - An engaging opening question or statement
 - A brief summary of what readers will learn
 - A call to action to click through
@@ -1396,18 +1485,28 @@ export const generateSocialCaption = async (params: SocialCaptionParams): Promis
 - Maximum 200 words`,
   };
 
-  const prompt = `Generate a social media caption for sharing this blog post:
+  const resolved = await resolvePrompt(promptKey, userId, {
+    systemInstruction: 'You are an expert social media copywriter for B2B brands. Write engaging, platform-native captions that drive clicks. Output only the caption text.',
+    promptTemplate: `Generate a social media caption for sharing this blog post:
 
-BLOG POST TITLE: ${params.postTitle}
-${params.postExcerpt ? `EXCERPT: ${params.postExcerpt}` : ''}
-POST URL: ${params.postUrl}
+BLOG POST TITLE: {{post_title}}
+{{post_excerpt}}
+POST URL: {{post_url}}
 
 PLATFORM: ${params.platform.toUpperCase()}
 
 ${platformRules[params.platform]}
-${buildBusinessContext(params.businessProfile)}
 
-Output ONLY the caption text, ready to copy and paste. Do not include any meta-commentary.`;
+Output ONLY the caption text.`,
+    temperature: 0.85,
+    topP: 0.9,
+  });
+
+  const prompt = resolved.promptTemplate
+    .replace('{{post_title}}', params.postTitle)
+    .replace('{{post_excerpt}}', params.postExcerpt ? `EXCERPT: ${params.postExcerpt}` : '')
+    .replace('{{post_url}}', params.postUrl)
+    + buildBusinessContext(params.businessProfile);
 
   try {
     const controller = new AbortController();
@@ -1417,9 +1516,9 @@ Output ONLY the caption text, ready to copy and paste. Do not include any meta-c
       model: MODEL_NAME,
       contents: prompt,
       config: {
-        systemInstruction: 'You are an expert social media copywriter for B2B brands. Write engaging, platform-native captions that drive clicks. Output only the caption text.',
-        temperature: 0.85,
-        topP: 0.9,
+        systemInstruction: resolved.systemInstruction,
+        temperature: resolved.temperature,
+        topP: resolved.topP,
       }
     });
 
@@ -1431,8 +1530,8 @@ Output ONLY the caption text, ready to copy and paste. Do not include any meta-c
       text,
       tokens_used: response.usageMetadata?.totalTokenCount || 0,
       model_name: MODEL_NAME,
-      prompt_name: `social_caption_${params.platform}`,
-      prompt_version: 1,
+      prompt_name: promptKey,
+      prompt_version: resolved.promptVersion,
     };
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -1440,8 +1539,8 @@ Output ONLY the caption text, ready to copy and paste. Do not include any meta-c
       text: `Caption generation failed: ${errMsg}`,
       tokens_used: 0,
       model_name: MODEL_NAME,
-      prompt_name: `social_caption_${params.platform}`,
-      prompt_version: 1,
+      prompt_name: promptKey,
+      prompt_version: resolved.promptVersion,
     };
   }
 };
@@ -1457,7 +1556,8 @@ export interface PersonalizeEmailInput {
 }
 
 export async function generatePersonalizedEmail(
-  input: PersonalizeEmailInput
+  input: PersonalizeEmailInput,
+  userId?: string
 ): Promise<{ subject: string; htmlBody: string; tokensUsed: number }> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -1474,23 +1574,34 @@ export async function generatePersonalizedEmail(
 
   const toneLabel = input.tone || ToneType.PROFESSIONAL;
 
-  const prompt = `Rewrite the following email to feel more natural and tailored to this specific prospect. Keep the overall structure and CTA intact, but reference specific prospect details to make it feel personally crafted. Keep the body under 200 words. Output HTML for the body.
+  const resolved = await resolvePrompt('email_personalization', userId, {
+    systemInstruction: 'You are an expert B2B email copywriter. Rewrite emails to feel personally crafted for each recipient. Keep them concise, human, and action-oriented. Always use the exact output format requested.',
+    promptTemplate: `Rewrite the following email to feel more natural and tailored to this specific prospect. Keep the overall structure and CTA intact. Keep the body under 200 words. Output HTML for the body.
 
 PROSPECT CONTEXT:
-${leadContext}
+{{lead_context}}
 
 CURRENT SUBJECT:
-${input.subjectTemplate}
+{{subject_template}}
 
 CURRENT BODY:
-${input.bodyTemplate}
+{{body_template}}
 
-TONE: ${toneLabel}
-${buildBusinessContext(input.businessProfile)}
+TONE: {{tone}}
 
 Respond in EXACTLY this format:
 SUBJECT: [rewritten subject line]
-BODY: [rewritten HTML email body]`;
+BODY: [rewritten HTML email body]`,
+    temperature: 0.8,
+    topP: 0.9,
+  });
+
+  const prompt = resolved.promptTemplate
+    .replace('{{lead_context}}', leadContext)
+    .replace('{{subject_template}}', input.subjectTemplate)
+    .replace('{{body_template}}', input.bodyTemplate)
+    .replace('{{tone}}', toneLabel)
+    + buildBusinessContext(input.businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1502,9 +1613,9 @@ BODY: [rewritten HTML email body]`;
           model: MODEL_NAME,
           contents: prompt,
           config: {
-            systemInstruction: 'You are an expert B2B email copywriter. Rewrite emails to feel personally crafted for each recipient. Keep them concise, human, and action-oriented. Always use the exact output format requested.',
-            temperature: 0.8,
-            topP: 0.9,
+            systemInstruction: resolved.systemInstruction,
+            temperature: resolved.temperature,
+            topP: resolved.topP,
           }
         }),
         new Promise<never>((_, reject) =>
@@ -1606,7 +1717,8 @@ export interface WorkflowOptimizationInput {
 
 export const generateWorkflowOptimization = async (
   input: WorkflowOptimizationInput,
-  businessProfile?: BusinessProfile
+  businessProfile?: BusinessProfile,
+  userId?: string
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -1614,24 +1726,38 @@ export const generateWorkflowOptimization = async (
     `${i + 1}. [${n.type.toUpperCase()}] ${n.title} — ${n.description}`
   ).join('\n');
 
-  const prompt = `Analyze this automation workflow and suggest specific improvements.
+  const resolved = await resolvePrompt('workflow_optimization', userId, {
+    systemInstruction: 'You are a marketing automation expert. Analyze workflows and provide specific, data-driven optimization suggestions. Be concise and actionable.',
+    promptTemplate: `Analyze this automation workflow and suggest specific improvements.
 
 WORKFLOW NODES:
-${nodesSummary}
+{{nodes_summary}}
 
 PERFORMANCE STATS:
-- Leads Processed: ${input.stats.leadsProcessed}
-- Conversion Rate: ${input.stats.conversionRate}%
-- Time Saved: ${input.stats.timeSavedHrs} hours
-- ROI: ${input.stats.roi}%
-- Available Leads: ${input.leadCount}
+- Leads Processed: {{leads_processed}}
+- Conversion Rate: {{conversion_rate}}%
+- Time Saved: {{time_saved_hrs}} hours
+- ROI: {{roi}}%
+- Available Leads: {{lead_count}}
 
-Provide 3-5 specific, actionable suggestions to improve this workflow. Each suggestion should:
+Provide 3-5 specific, actionable suggestions. Each suggestion should:
 - Reference specific nodes by name when relevant
-- Include expected impact (e.g. "+15% conversion", "saves 2hrs/week")
+- Include expected impact
 - Be immediately implementable
 
-Return each suggestion on its own line, prefixed with "- ". No headers, no numbering, just the bullet points.${buildBusinessContext(businessProfile)}`;
+Return each suggestion on its own line, prefixed with "- ".`,
+    temperature: 0.7,
+    topP: 0.9,
+  });
+
+  const prompt = resolved.promptTemplate
+    .replace('{{nodes_summary}}', nodesSummary)
+    .replace('{{leads_processed}}', input.stats.leadsProcessed.toString())
+    .replace('{{conversion_rate}}', input.stats.conversionRate.toString())
+    .replace('{{time_saved_hrs}}', input.stats.timeSavedHrs.toString())
+    .replace('{{roi}}', input.stats.roi.toString())
+    .replace('{{lead_count}}', input.leadCount.toString())
+    + buildBusinessContext(businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1643,9 +1769,9 @@ Return each suggestion on its own line, prefixed with "- ". No headers, no numbe
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: 'You are a marketing automation expert. Analyze workflows and provide specific, data-driven optimization suggestions. Be concise and actionable.',
-          temperature: 0.7,
-          topP: 0.9,
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
         }
       });
 
@@ -1658,7 +1784,7 @@ Return each suggestion on its own line, prefixed with "- ". No headers, no numbe
         tokens_used: response.usageMetadata?.totalTokenCount || 0,
         model_name: MODEL_NAME,
         prompt_name: 'workflow_optimization',
-        prompt_version: 1,
+        prompt_version: resolved.promptVersion,
       };
     } catch (error: unknown) {
       attempt++;
@@ -1670,12 +1796,12 @@ Return each suggestion on its own line, prefixed with "- ". No headers, no numbe
           tokens_used: 0,
           model_name: MODEL_NAME,
           prompt_name: 'workflow_optimization',
-          prompt_version: 1,
+          prompt_version: resolved.promptVersion,
         };
       }
       await new Promise(res => setTimeout(res, 1000 * attempt));
     }
   }
 
-  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'workflow_optimization', prompt_version: 1 };
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'workflow_optimization', prompt_version: resolved.promptVersion };
 };
