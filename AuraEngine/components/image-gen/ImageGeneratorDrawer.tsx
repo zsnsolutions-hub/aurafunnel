@@ -60,9 +60,10 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
   const handlePresetClick = (id: string, presetPrompt: string) => {
     if (presetId === id) {
       setPresetId(undefined);
+      setPrompt('');
     } else {
       setPresetId(id);
-      if (!prompt.trim()) setPrompt(presetPrompt);
+      setPrompt(presetPrompt);
     }
   };
 
