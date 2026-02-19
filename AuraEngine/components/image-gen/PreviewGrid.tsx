@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import type { ImageGenGeneratedImage } from '../../types';
-import { CheckIcon, DownloadIcon, EyeIcon, XIcon } from '../Icons';
+import { CheckIcon, DownloadIcon, EyeIcon, XIcon, PlusIcon } from '../Icons';
 
 interface PreviewGridProps {
   images: ImageGenGeneratedImage[];
   loading: boolean;
   onSave?: (image: ImageGenGeneratedImage) => void;
+  onInsert?: (imageUrl: string) => void;
   savedIds?: Set<string>;
 }
 
-const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, savedIds }) => {
+const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onInsert, savedIds }) => {
+  const [insertedIds, setInsertedIds] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   if (loading) {
@@ -62,6 +64,23 @@ const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, save
                   >
                     <DownloadIcon className="w-4 h-4" />
                   </a>
+                  {onInsert && (
+                    <button
+                      onClick={() => { onInsert(url); setInsertedIds(prev => new Set(prev).add(img.id)); }}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                        insertedIds.has(img.id)
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      }`}
+                      title={insertedIds.has(img.id) ? 'Added' : 'Use in Email'}
+                    >
+                      {insertedIds.has(img.id) ? (
+                        <span className="flex items-center space-x-1"><CheckIcon className="w-3.5 h-3.5" /><span>Added</span></span>
+                      ) : (
+                        <span className="flex items-center space-x-1"><PlusIcon className="w-3.5 h-3.5" /><span>Use in Email</span></span>
+                      )}
+                    </button>
+                  )}
                   {onSave && (
                     <button
                       onClick={() => onSave(img)}

@@ -347,6 +347,7 @@ const ContentStudio: React.FC = () => {
   const [linkedinCopied, setLinkedinCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
+  const [emailImages, setEmailImages] = useState<string[]>([]);
 
   // ─── AI Generation ───
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -512,6 +513,13 @@ const ContentStudio: React.FC = () => {
   // ─── Computed ───
   const activeStep = steps[activeStepIdx];
   const activeVariant = activeStep?.variants.find(v => v.id === activeStep.activeVariantId) || activeStep?.variants[0];
+
+  const buildHtmlBody = (bodyText: string, footer: string) => {
+    const imagesHtml = emailImages.length > 0
+      ? emailImages.map(url => `<div style="margin-bottom:16px;"><img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`).join('')
+      : '';
+    return `<div>${imagesHtml}${bodyText.replace(/\n/g, '<br />')}</div>${footer}`;
+  };
 
   const aggregatePerformance = useMemo(() => {
     if (!activeVariant) return { openRate: 0, clickRate: 0, replyRate: 0, conversion: 0 };
@@ -1085,7 +1093,7 @@ const ContentStudio: React.FC = () => {
         // Send first step immediately
         const firstStep = steps[0];
         const v = firstStep.variants.find(vr => vr.id === firstStep.activeVariantId) || firstStep.variants[0];
-        const htmlBody = `<div>${v.body.replace(/\n/g, '<br />')}</div>${footer}`;
+        const htmlBody = buildHtmlBody(v.body, footer);
         const result = await sendTrackedEmailBatch(
           eligibleLeads,
           v.subject,
@@ -1121,7 +1129,7 @@ const ContentStudio: React.FC = () => {
           const scheduledAt = new Date();
           scheduledAt.setDate(scheduledAt.getDate() + delayDays);
 
-          const stepHtml = `<div>${sv.body.replace(/\n/g, '<br />')}</div>${footer}`;
+          const stepHtml = buildHtmlBody(sv.body, footer);
           await scheduleEmailBlock({
             leads: eligibleLeads,
             subject: sv.subject,
@@ -1144,7 +1152,7 @@ const ContentStudio: React.FC = () => {
           const delayDays = delayMatch ? parseInt(delayMatch[0], 10) : i * 2;
           const scheduledAt = new Date(baseDate.getTime() + delayDays * 86400000);
 
-          const stepHtml = `<div>${sv.body.replace(/\n/g, '<br />')}</div>${footer}`;
+          const stepHtml = buildHtmlBody(sv.body, footer);
           await scheduleEmailBlock({
             leads: eligibleLeads,
             subject: sv.subject,
@@ -1922,6 +1930,25 @@ const ContentStudio: React.FC = () => {
                       Tags used: {(activeVariant.body.match(/\{\{[^}]+\}\}/g) || []).length}
                     </span>
                   </div>
+                  {emailImages.length > 0 && (
+                    <div className="mt-3">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Attached Images</span>
+                      <div className="mt-1.5 flex flex-wrap gap-2">
+                        {emailImages.map((url, idx) => (
+                          <div key={idx} className="relative group">
+                            <img src={url} alt={`Image ${idx + 1}`} className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
+                            <button
+                              onClick={() => setEmailImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <XIcon className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">These images will be included at the top of your email.</p>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -3315,7 +3342,7 @@ const ContentStudio: React.FC = () => {
           ))}
         </div>
       )}
-      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} />
+      <ImageGeneratorDrawer open={showImageGen} onClose={() => setShowImageGen(false)} moduleType={contentMode === 'linkedin' ? 'services' : contentMode === 'proposal' ? 'products' : 'newsletter'} onInsertImage={(url) => setEmailImages(prev => [...prev, url])} />
     </div>
   );
 };

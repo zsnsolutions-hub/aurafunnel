@@ -359,6 +359,7 @@ const ContentGen: React.FC = () => {
   const [deliveryProgress, setDeliveryProgress] = useState<{ current: number; total: number } | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
+  const [emailImages, setEmailImages] = useState<string[]>([]);
   const [showPromptLibrary, setShowPromptLibrary] = useState(false);
   const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -526,6 +527,14 @@ const ContentGen: React.FC = () => {
   [targetLeads, excludedLeadIds]);
 
   const activeBlock = blocks[activeBlockIdx] || null;
+
+  const buildHtmlBody = (bodyText: string, footer: string) => {
+    const imagesHtml = emailImages.length > 0
+      ? emailImages.map(url => `<div style="margin-bottom:16px;"><img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`).join('')
+      : '';
+    return `<div>${imagesHtml}${bodyText.replace(/\n/g, '<br />')}</div>${footer}`;
+  };
+
   const aiSuggestions = useMemo(() => deriveAISuggestions(activeBlock?.body || ''), [activeBlock?.body]);
   const predictions = useMemo(() => derivePredictions(activeBlock?.subject || '', activeBlock?.body || ''), [activeBlock?.subject, activeBlock?.body]);
   const currentTemplates = TEMPLATES[contentType] || [];
@@ -888,7 +897,7 @@ const ContentGen: React.FC = () => {
           setDeliveryProgress({ current: 1, total: blocks.length });
           const firstBlock = blocks[0];
           const footer = buildEmailFooter(user.businessProfile);
-          const htmlBody = `<div>${firstBlock.body.replace(/\n/g, '<br />')}</div>${footer}`;
+          const htmlBody = buildHtmlBody(firstBlock.body, footer);
           const result = await sendTrackedEmailBatch(
             eligibleLeads,
             firstBlock.subject,
@@ -947,7 +956,7 @@ const ContentGen: React.FC = () => {
             const scheduledAt = new Date();
             scheduledAt.setDate(scheduledAt.getDate() + delayDays);
 
-            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>${footer}`;
+            const htmlBody = buildHtmlBody(block.body, footer);
             await scheduleEmailBlock({
               leads: eligibleLeads,
               subject: block.subject,
@@ -972,7 +981,7 @@ const ContentGen: React.FC = () => {
             const delayDays = extractDelayDays(block.title, i);
             const scheduledAt = new Date(baseDate.getTime() + delayDays * 86400000);
 
-            const htmlBody = `<div>${block.body.replace(/\n/g, '<br />')}</div>${scheduledFooter}`;
+            const htmlBody = buildHtmlBody(block.body, scheduledFooter);
             await scheduleEmailBlock({
               leads: eligibleLeads,
               subject: block.subject,
@@ -2027,6 +2036,27 @@ const ContentGen: React.FC = () => {
                           placeholder="Start writing or generate content with AI..."
                         />
                       </div>
+
+                      {/* Attached Images */}
+                      {emailImages.length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Attached Images</span>
+                          <div className="mt-1.5 flex flex-wrap gap-2">
+                            {emailImages.map((url, idx) => (
+                              <div key={idx} className="relative group">
+                                <img src={url} alt={`Image ${idx + 1}`} className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
+                                <button
+                                  onClick={() => setEmailImages(prev => prev.filter((_, i) => i !== idx))}
+                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <XIcon className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1">These images will be included at the top of your email.</p>
+                        </div>
+                      )}
 
                       {/* AI Suggestions */}
                       {aiSuggestions.length > 0 && (
@@ -3250,6 +3280,13 @@ const ContentGen: React.FC = () => {
                     )}
                   </div>
                   <p className="text-sm font-bold text-slate-800 mb-3">{replaceTagsForPreview(block.subject)}</p>
+                  {emailImages.length > 0 && i === 0 && (
+                    <div className="mb-3 space-y-2">
+                      {emailImages.map((url, imgIdx) => (
+                        <img key={imgIdx} src={url} alt="" className="max-w-full rounded-xl border border-slate-200" />
+                      ))}
+                    </div>
+                  )}
                   <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{replaceTagsForPreview(block.body)}</div>
                 </div>
               ))}
@@ -3272,6 +3309,7 @@ const ContentGen: React.FC = () => {
         open={showImageGen}
         onClose={() => setShowImageGen(false)}
         moduleType="newsletter"
+        onInsertImage={(url) => setEmailImages(prev => [...prev, url])}
       />
     </div>
   );
