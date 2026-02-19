@@ -5,8 +5,10 @@ import {
   KeyboardIcon, XIcon, TrendDownIcon, ActivityIcon, ShieldIcon, CheckIcon,
   AlertTriangleIcon, ClockIcon, UsersIcon, LayersIcon, BrainIcon, PieChartIcon,
   StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
-  PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon
+  PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon,
+  BellIcon
 } from '../../components/Icons';
+import { fetchBatchEmailSummary, type BatchEmailSummary } from '../../lib/emailTracking';
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 
 import { supabase } from '../../lib/supabase';
@@ -104,6 +106,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [isAddingLead, setIsAddingLead] = useState(false);
   const [researchingLeadIds, setResearchingLeadIds] = useState<Set<string>>(new Set());
 
+  // Email summary for follow-up detection
+  const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
+
   // Content Generation States
   const [contentType, setContentType] = useState<ContentType>(ContentType.EMAIL);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -112,6 +117,20 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
   // Trend data
   const trendData = useMemo(() => generateTrendData(leads), [leads]);
+
+  // Fetch batch email summary for follow-up detection
+  useEffect(() => {
+    if (leads.length === 0) return;
+    fetchBatchEmailSummary(leads.map(l => l.id)).then(setEmailSummaryMap);
+  }, [leads]);
+
+  // Leads that need follow-up (opened emails 2+ times)
+  const followUpLeads = useMemo(() => {
+    return leads.filter(l => {
+      const summary = emailSummaryMap.get(l.id);
+      return summary && summary.openCount >= 2;
+    });
+  }, [leads, emailSummaryMap]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -846,6 +865,32 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       <QuickStatsRow stats={quickStats} loading={statsLoading}>
         <EmailPerformanceCard />
       </QuickStatsRow>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  FOLLOW-UP ALERT CARD                                         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {followUpLeads.length > 0 && (
+        <button
+          onClick={() => navigate('/portal/leads?followUp=true')}
+          className="w-full bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200 rounded-2xl p-5 flex items-center justify-between hover:shadow-md hover:border-amber-300 transition-all group text-left"
+        >
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-amber-100 rounded-xl group-hover:bg-amber-200 transition-colors">
+              <BellIcon className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 font-heading text-sm">Follow-up Needed</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                <span className="font-bold text-amber-700">{followUpLeads.length}</span> {followUpLeads.length === 1 ? 'lead' : 'leads'} opened your emails multiple times — potential clients
+              </p>
+            </div>
+          </div>
+          <span className="px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-xs font-bold group-hover:bg-amber-200 transition-colors flex items-center space-x-1.5">
+            <span>View Leads</span>
+            <ArrowRightIcon className="w-3.5 h-3.5" />
+          </span>
+        </button>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  TWO-PANEL LAYOUT: Left (30%) + Right (70%)                   */}

@@ -139,6 +139,7 @@ const LeadManagement: React.FC = () => {
   const [companySizeFilter, setCompanySizeFilter] = useState<Set<string>>(new Set());
   const [tagFilter, setTagFilter] = useState<Set<LeadTag>>(new Set());
   const [emailEngagementFilter, setEmailEngagementFilter] = useState<Set<'sent' | 'opened' | 'clicked'>>(new Set());
+  const [followUpFilter, setFollowUpFilter] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // ── Selection State ──
@@ -217,6 +218,12 @@ const LeadManagement: React.FC = () => {
       searchParams.delete('emailFilter');
       setSearchParams(searchParams, { replace: true });
     }
+    const fu = searchParams.get('followUp');
+    if (fu === 'true') {
+      setFollowUpFilter(true);
+      searchParams.delete('followUp');
+      setSearchParams(searchParams, { replace: true });
+    }
   }, []);
 
   // ── Fetch ──
@@ -285,6 +292,12 @@ const LeadManagement: React.FC = () => {
         return true;
       });
     }
+    if (followUpFilter) {
+      result = result.filter(l => {
+        const summary = emailSummaryMap.get(l.id);
+        return summary && summary.openCount >= 2;
+      });
+    }
 
     // Sort
     result.sort((a, b) => {
@@ -299,7 +312,7 @@ const LeadManagement: React.FC = () => {
     });
 
     return result;
-  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, emailSummaryMap, sortBy, sortDir]);
+  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, emailSummaryMap, sortBy, sortDir]);
 
   // ── KPI Stats ──
   const kpiStats = useMemo(() => {
@@ -426,7 +439,7 @@ const LeadManagement: React.FC = () => {
     return filteredLeads.slice(start, start + PER_PAGE);
   }, [filteredLeads, currentPage]);
 
-  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery]);
 
   // ── Selection Helpers ──
   const allOnPageSelected = paginatedLeads.length > 0 && paginatedLeads.every(l => selectedIds.has(l.id));
@@ -469,6 +482,7 @@ const LeadManagement: React.FC = () => {
     setCompanySizeFilter(new Set());
     setTagFilter(new Set());
     setEmailEngagementFilter(new Set());
+    setFollowUpFilter(false);
     setSearchQuery('');
   };
 
@@ -826,7 +840,7 @@ const LeadManagement: React.FC = () => {
 
   const activeFilterCount = [
     statusFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
-    companySizeFilter.size > 0, tagFilter.size > 0, emailEngagementFilter.size > 0,
+    companySizeFilter.size > 0, tagFilter.size > 0, emailEngagementFilter.size > 0, followUpFilter,
   ].filter(Boolean).length;
 
   const rangeStart = (currentPage - 1) * PER_PAGE + 1;
@@ -1264,6 +1278,19 @@ const LeadManagement: React.FC = () => {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Follow-up Filter */}
+            <div className="mb-5">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Follow-up</label>
+              <button
+                onClick={() => setFollowUpFilter(f => !f)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
+                  followUpFilter ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-200'
+                }`}
+              >
+                Potential Clients (2+ opens)
+              </button>
             </div>
 
             {/* Score Distribution */}
@@ -1777,6 +1804,7 @@ const LeadManagement: React.FC = () => {
                                   {summary.hasSent && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600">Email</span>}
                                   {summary.hasOpened && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-600">Opened</span>}
                                   {summary.hasClicked && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600">Clicked</span>}
+                                  {summary.openCount >= 2 && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-50 text-orange-600">Follow-up</span>}
                                 </>
                               );
                             })()}
