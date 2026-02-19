@@ -60,6 +60,13 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
     if (open) setModuleType(initialModuleType);
   }, [open, initialModuleType]);
 
+  // Auto-populate logoAssetId from business profile when drawer opens
+  useEffect(() => {
+    if (open && businessProfile?.logoAssetId && !brand.logoAssetId) {
+      setBrand(prev => ({ ...prev, logoAssetId: businessProfile.logoAssetId }));
+    }
+  }, [open, businessProfile?.logoAssetId]);
+
   useEffect(() => {
     if (!open) return;
     supabase.from('plans').select('*').order('credits', { ascending: true })

@@ -145,6 +145,14 @@ export function buildImagePrompt(opts: {
     if (bp.pricingModel) ctxParts.push(`Pricing model: ${bp.pricingModel}`);
     if (bp.salesApproach) ctxParts.push(`Sales approach: ${bp.salesApproach}`);
     if (bp.businessDescription) ctxParts.push(`About: ${bp.businessDescription}`);
+    if (bp.services?.length) {
+      ctxParts.push(`Services: ${bp.services.map(s => `${s.name}${s.description ? ' — ' + s.description : ''}`).join('; ')}`);
+    }
+    if (bp.pricingTiers?.length) {
+      ctxParts.push(`Pricing tiers: ${bp.pricingTiers.map(t => `${t.name}${t.price ? ' at ' + t.price : ''}${t.features?.length ? ' (' + t.features.slice(0, 3).join(', ') + ')' : ''}`).join('; ')}`);
+    }
+    if (bp.competitiveAdvantage) ctxParts.push(`Competitive advantage: ${bp.competitiveAdvantage}`);
+    if (bp.uniqueSellingPoints?.length) ctxParts.push(`USPs: ${bp.uniqueSellingPoints.join(', ')}`);
     if (ctxParts.length > 0) {
       parts.push(`Create an image for a business: ${ctxParts.join('. ')}.`);
     }

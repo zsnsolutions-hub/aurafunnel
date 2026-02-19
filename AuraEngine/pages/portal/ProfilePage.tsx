@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
-import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile, BusinessAnalysisResult, BusinessAnalysisField } from '../../types';
+import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile, BusinessAnalysisResult, BusinessAnalysisField, BusinessService, BusinessPricingTier } from '../../types';
 import {
   ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon,
   TrendUpIcon, TrendDownIcon, KeyboardIcon, ActivityIcon, BrainIcon, LayersIcon, UsersIcon,
   ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon, BriefcaseIcon,
   GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, BoltIcon, RefreshIcon, ChevronDownIcon,
-  PhoneIcon, MailIcon, MapPinIcon
+  PhoneIcon, MailIcon, MapPinIcon, UploadIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
@@ -98,6 +98,71 @@ const ProfilePage: React.FC = () => {
   const [businessDescription, setBusinessDescription] = useState(user?.businessProfile?.businessDescription || '');
   const stageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Logo upload
+  const [logoUrl, setLogoUrl] = useState<string | null>(user?.businessProfile?.logoUrl || null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // Structured services & pricing
+  const [servicesList, setServicesList] = useState<BusinessService[]>(user?.businessProfile?.services || []);
+  const [pricingTiers, setPricingTiers] = useState<BusinessPricingTier[]>(user?.businessProfile?.pricingTiers || []);
+
+  // Deep insights collapsible
+  const [showDeepInsights, setShowDeepInsights] = useState(false);
+
+  // ─── Logo Upload Handlers ───
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Logo file must be under 5MB');
+      return;
+    }
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!['png','jpg','jpeg','svg','webp'].includes(ext || '')) {
+      setError('Accepted formats: PNG, JPG, SVG, WebP');
+      return;
+    }
+    setUploadingLogo(true);
+    setError('');
+    try {
+      const path = `logos/${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage.from('image-gen-assets').upload(path, file, { upsert: true });
+      if (uploadErr) throw new Error(uploadErr.message || 'Upload failed. Make sure the image-gen-assets bucket exists.');
+      const { data: urlData } = supabase.storage.from('image-gen-assets').getPublicUrl(path);
+      const publicUrl = urlData?.publicUrl || '';
+      setLogoUrl(publicUrl);
+      setBusinessProfile(p => ({ ...p, logoUrl: publicUrl, logoAssetId: path }));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Logo upload failed');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleLogoRemove = () => {
+    setLogoUrl(null);
+    setBusinessProfile(p => {
+      const next = { ...p };
+      delete next.logoUrl;
+      delete next.logoAssetId;
+      return next;
+    });
+  };
+
+  // ─── Structured Services Sync ───
+  const updateServicesList = (updated: BusinessService[]) => {
+    setServicesList(updated);
+    const summary = updated.map(s => s.name).filter(Boolean).join(', ');
+    setBusinessProfile(p => ({ ...p, productsServices: summary || p.productsServices, services: updated }));
+  };
+
+  // ─── Structured Pricing Tiers Sync ───
+  const updatePricingTiers = (updated: BusinessPricingTier[]) => {
+    setPricingTiers(updated);
+    const summary = updated.map(t => `${t.name}${t.price ? ' ' + t.price : ''}`).filter(s => s.trim()).join(', ');
+    setBusinessProfile(p => ({ ...p, pricingModel: summary || p.pricingModel, pricingTiers: updated }));
+  };
+
   const tabs = [
     { id: 'profile' as SettingsTab, label: 'Profile', icon: <CogIcon className="w-4 h-4" /> },
     { id: 'business_profile' as SettingsTab, label: 'Business Profile', icon: <BriefcaseIcon className="w-4 h-4" /> },
@@ -141,11 +206,13 @@ const ProfilePage: React.FC = () => {
     try {
       const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(businessProfile)) {
-        if (k === 'socialLinks' && v && typeof v === 'object') {
+        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
           const filteredSocials = Object.fromEntries(
             Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
           );
           if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
+        } else if (Array.isArray(v)) {
+          if (v.length > 0) cleaned[k] = v;
         } else if (typeof v === 'string' && v.trim()) {
           cleaned[k] = v.trim();
         }
@@ -233,6 +300,27 @@ const ProfilePage: React.FC = () => {
         populated.companyWebsite = fullUrl;
         if (businessDescription.trim()) populated.businessDescription = businessDescription.trim();
 
+        // Structured services
+        if (result.analysis.services?.value?.length) {
+          populated.services = result.analysis.services.value;
+          setServicesList(result.analysis.services.value);
+        }
+        // Structured pricing tiers
+        if (result.analysis.pricingTiers?.value?.length) {
+          populated.pricingTiers = result.analysis.pricingTiers.value;
+          setPricingTiers(result.analysis.pricingTiers.value);
+        }
+        // Deep analysis string fields
+        for (const f of ['companyStory','foundedYear','teamSize','teamHighlights',
+          'testimonialsThemes','competitiveAdvantage','contentTone','keyClients'] as const) {
+          const deepField = (result.analysis as any)[f];
+          if (deepField?.value) (populated as any)[f] = deepField.value;
+        }
+        // USPs array
+        if (result.analysis.uniqueSellingPoints?.value?.length) {
+          populated.uniqueSellingPoints = result.analysis.uniqueSellingPoints.value;
+        }
+
         // Apply contact info from analysis
         if (result.analysis.phone?.value && result.analysis.phone.confidence > 0) {
           populated.phone = result.analysis.phone.value;
@@ -305,11 +393,13 @@ const ProfilePage: React.FC = () => {
 
       const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(mergedProfile)) {
-        if (k === 'socialLinks' && v && typeof v === 'object') {
+        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
           const filteredSocials = Object.fromEntries(
             Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
           );
           if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
+        } else if (Array.isArray(v)) {
+          if (v.length > 0) cleaned[k] = v;
         } else if (typeof v === 'string' && v.trim()) {
           cleaned[k] = v.trim();
         }
@@ -1165,6 +1255,163 @@ const ProfilePage: React.FC = () => {
                 })}
               </div>
 
+              {/* Logo Upload — Results Phase */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Company Logo</span>
+                {logoUrl ? (
+                  <div className="flex items-center space-x-4">
+                    <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{logoUrl.split('/').pop()}</p>
+                    </div>
+                    <button type="button" onClick={() => logoInputRef.current?.click()} className="px-3 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">Change</button>
+                    <button type="button" onClick={handleLogoRemove} className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">Remove</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => logoInputRef.current?.click()} className="relative w-full border-2 border-dashed border-slate-300 rounded-xl py-6 flex flex-col items-center space-y-2 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all cursor-pointer">
+                    {uploadingLogo && <div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center z-10"><div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" /></div>}
+                    <UploadIcon className="w-6 h-6 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-500">Upload your company logo</span>
+                    <span className="text-[10px] text-slate-400">PNG, JPG, SVG, or WebP (max 5MB)</span>
+                  </button>
+                )}
+                <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ''; }} />
+              </div>
+
+              {/* Structured Services — Results Phase */}
+              {servicesList.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Services Detected</span>
+                    {analysisResult?.services && (
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${(analysisResult.services.confidence || 0) >= 80 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                        {(analysisResult.services.confidence || 0) >= 80 ? 'High confidence' : 'Medium'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {servicesList.map((svc, idx) => (
+                      <div key={svc.id} className="flex items-start space-x-3 bg-slate-50 rounded-xl p-3">
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <input type="text" value={svc.name} onChange={e => { const u = [...servicesList]; u[idx] = { ...u[idx], name: e.target.value }; updateServicesList(u); }}
+                            className="w-full text-sm font-bold text-slate-800 bg-transparent border-none outline-none" placeholder="Service name" />
+                          <input type="text" value={svc.description || ''} onChange={e => { const u = [...servicesList]; u[idx] = { ...u[idx], description: e.target.value }; updateServicesList(u); }}
+                            className="w-full text-xs text-slate-500 bg-transparent border-none outline-none" placeholder="Description (optional)" />
+                        </div>
+                        <button type="button" onClick={() => updateServicesList(servicesList.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-rose-500 transition-colors"><XIcon className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => updateServicesList([...servicesList, { id: crypto.randomUUID(), name: '' }])}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">+ Add Service</button>
+                </div>
+              )}
+
+              {/* Structured Pricing Tiers — Results Phase */}
+              {pricingTiers.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pricing Tiers Detected</span>
+                    {analysisResult?.pricingTiers && (
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${(analysisResult.pricingTiers.confidence || 0) >= 80 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                        {(analysisResult.pricingTiers.confidence || 0) >= 80 ? 'High confidence' : 'Medium'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {pricingTiers.map((tier, idx) => (
+                      <div key={tier.id} className="bg-slate-50 rounded-xl p-4 space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <input type="text" value={tier.name} onChange={e => { const u = [...pricingTiers]; u[idx] = { ...u[idx], name: e.target.value }; updatePricingTiers(u); }}
+                            className="flex-1 text-sm font-bold text-slate-800 bg-white rounded-lg px-3 py-2 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Tier name" />
+                          <input type="text" value={tier.price || ''} onChange={e => { const u = [...pricingTiers]; u[idx] = { ...u[idx], price: e.target.value }; updatePricingTiers(u); }}
+                            className="w-32 text-sm font-bold text-slate-800 bg-white rounded-lg px-3 py-2 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100" placeholder="$XX/mo" />
+                          <button type="button" onClick={() => updatePricingTiers(pricingTiers.filter((_, i) => i !== idx))} className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"><XIcon className="w-3.5 h-3.5" /></button>
+                        </div>
+                        <input type="text" value={tier.description || ''} onChange={e => { const u = [...pricingTiers]; u[idx] = { ...u[idx], description: e.target.value }; updatePricingTiers(u); }}
+                          className="w-full text-xs text-slate-600 bg-white rounded-lg px-3 py-2 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Description (optional)" />
+                        {tier.features && tier.features.length > 0 && (
+                          <div className="space-y-1 pl-1">
+                            {tier.features.map((feat, fi) => (
+                              <div key={fi} className="flex items-center space-x-2">
+                                <span className="text-[10px] text-slate-400">-</span>
+                                <input type="text" value={feat} onChange={e => { const u = [...pricingTiers]; const feats = [...(u[idx].features || [])]; feats[fi] = e.target.value; u[idx] = { ...u[idx], features: feats }; updatePricingTiers(u); }}
+                                  className="flex-1 text-xs text-slate-600 bg-transparent border-none outline-none" />
+                                <button type="button" onClick={() => { const u = [...pricingTiers]; const feats = [...(u[idx].features || [])]; feats.splice(fi, 1); u[idx] = { ...u[idx], features: feats }; updatePricingTiers(u); }}
+                                  className="text-slate-300 hover:text-rose-500 transition-colors"><XIcon className="w-3 h-3" /></button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button type="button" onClick={() => { const u = [...pricingTiers]; u[idx] = { ...u[idx], features: [...(u[idx].features || []), ''] }; updatePricingTiers(u); }}
+                          className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 transition-colors">+ Add Feature</button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => updatePricingTiers([...pricingTiers, { id: crypto.randomUUID(), name: '', price: '' }])}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">+ Add Pricing Tier</button>
+                </div>
+              )}
+
+              {/* Deep Insights — Results Phase */}
+              {(() => {
+                const deepFields = [
+                  { key: 'companyStory', label: 'Company Story' },
+                  { key: 'foundedYear', label: 'Founded Year' },
+                  { key: 'teamSize', label: 'Team Size' },
+                  { key: 'teamHighlights', label: 'Team Highlights' },
+                  { key: 'keyClients', label: 'Key Clients' },
+                  { key: 'competitiveAdvantage', label: 'Competitive Advantage' },
+                  { key: 'contentTone', label: 'Brand Tone' },
+                  { key: 'testimonialsThemes', label: 'Testimonial Themes' },
+                ];
+                const hasDeep = deepFields.some(f => (businessProfile as any)[f.key]) || (businessProfile.uniqueSellingPoints?.length ?? 0) > 0;
+                if (!hasDeep) return null;
+                return (
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <button type="button" onClick={() => setShowDeepInsights(!showDeepInsights)}
+                      className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center space-x-2">
+                        <BrainIcon className="w-4 h-4 text-violet-500" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Deep Insights</span>
+                      </div>
+                      <ChevronDownIcon className={`w-4 h-4 text-slate-400 transition-transform ${showDeepInsights ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showDeepInsights && (
+                      <div className="px-5 pb-5 space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {deepFields.map(f => {
+                            const val = (businessProfile as any)[f.key];
+                            if (!val) return null;
+                            const conf = (analysisResult as any)?.[f.key]?.confidence || 0;
+                            const cColor = conf >= 80 ? 'emerald' : conf >= 50 ? 'amber' : 'rose';
+                            return (
+                              <div key={f.key} className="bg-slate-50 rounded-xl p-3 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{f.label}</span>
+                                  {conf > 0 && <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full bg-${cColor}-50 text-${cColor}-600`}>{conf}%</span>}
+                                </div>
+                                <p className="text-xs text-slate-700 leading-relaxed">{val}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {(businessProfile.uniqueSellingPoints?.length ?? 0) > 0 && (
+                          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unique Selling Points</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {businessProfile.uniqueSellingPoints!.map((usp, i) => (
+                                <span key={i} className="px-2.5 py-1 bg-violet-100 text-violet-700 rounded-full text-[10px] font-bold">{usp}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Results Actions */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -1317,6 +1564,32 @@ const ProfilePage: React.FC = () => {
               </div>
 
               <form onSubmit={handleBusinessProfileUpdate} className="space-y-6">
+                {/* Logo Upload — Manual Phase */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-heading">Company Logo</h3>
+                    <p className="text-sm text-slate-500 mt-1">Upload your logo for branding in generated images.</p>
+                  </div>
+                  {logoUrl ? (
+                    <div className="flex items-center space-x-4">
+                      <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-700 truncate">{logoUrl.split('/').pop()}</p>
+                      </div>
+                      <button type="button" onClick={() => logoInputRef.current?.click()} className="px-3 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">Change</button>
+                      <button type="button" onClick={handleLogoRemove} className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">Remove</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => logoInputRef.current?.click()} className="relative w-full border-2 border-dashed border-slate-300 rounded-xl py-6 flex flex-col items-center space-y-2 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all cursor-pointer">
+                      {uploadingLogo && <div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center z-10"><div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" /></div>}
+                      <UploadIcon className="w-6 h-6 text-slate-400" />
+                      <span className="text-xs font-bold text-slate-500">Upload your company logo</span>
+                      <span className="text-[10px] text-slate-400">PNG, JPG, SVG, or WebP (max 5MB)</span>
+                    </button>
+                  )}
+                  <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ''; }} />
+                </div>
+
                 {/* Company Info */}
                 <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6">
                   <div>
@@ -1403,11 +1676,31 @@ const ProfilePage: React.FC = () => {
                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">What You Sell</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">What You Sell (Summary)</label>
                       <textarea value={businessProfile.productsServices || ''} onChange={e => setBusinessProfile(p => ({ ...p, productsServices: e.target.value }))}
                         placeholder="Describe your main products or services..."
                         rows={3}
                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none" />
+                    </div>
+                    {/* Expandable Services List */}
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Individual Services</label>
+                      {servicesList.map((svc, idx) => (
+                        <div key={svc.id} className="bg-slate-50 rounded-xl p-4 space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <input type="text" value={svc.name} onChange={e => { const u = [...servicesList]; u[idx] = { ...u[idx], name: e.target.value }; updateServicesList(u); }}
+                              placeholder="Service name"
+                              className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 text-sm" />
+                            <button type="button" onClick={() => updateServicesList(servicesList.filter((_, i) => i !== idx))} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><XIcon className="w-4 h-4" /></button>
+                          </div>
+                          <textarea value={svc.description || ''} onChange={e => { const u = [...servicesList]; u[idx] = { ...u[idx], description: e.target.value }; updateServicesList(u); }}
+                            placeholder="Description (optional)"
+                            rows={2}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all text-slate-700 text-sm resize-none" />
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => updateServicesList([...servicesList, { id: crypto.randomUUID(), name: '' }])}
+                        className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">+ Add Service</button>
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Value Proposition</label>
@@ -1442,7 +1735,7 @@ const ProfilePage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pricing Model</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pricing Model (Summary)</label>
                       <input type="text" value={businessProfile.pricingModel || ''} onChange={e => setBusinessProfile(p => ({ ...p, pricingModel: e.target.value }))}
                         placeholder="e.g. Subscription, Per-seat, Usage-based"
                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
@@ -1453,6 +1746,40 @@ const ProfilePage: React.FC = () => {
                         placeholder="e.g. Product-led, Enterprise sales, Freemium"
                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800" />
                     </div>
+                  </div>
+                  {/* Expandable Pricing Tiers */}
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pricing Tiers</label>
+                    {pricingTiers.map((tier, idx) => (
+                      <div key={tier.id} className="bg-slate-50 rounded-xl p-4 space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <input type="text" value={tier.name} onChange={e => { const u = [...pricingTiers]; u[idx] = { ...u[idx], name: e.target.value }; updatePricingTiers(u); }}
+                            placeholder="Tier name (e.g. Starter)"
+                            className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 text-sm" />
+                          <input type="text" value={tier.price || ''} onChange={e => { const u = [...pricingTiers]; u[idx] = { ...u[idx], price: e.target.value }; updatePricingTiers(u); }}
+                            placeholder="$XX/mo"
+                            className="w-32 px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 text-sm" />
+                          <button type="button" onClick={() => updatePricingTiers(pricingTiers.filter((_, i) => i !== idx))} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><XIcon className="w-4 h-4" /></button>
+                        </div>
+                        <textarea value={tier.description || ''} onChange={e => { const u = [...pricingTiers]; u[idx] = { ...u[idx], description: e.target.value }; updatePricingTiers(u); }}
+                          placeholder="Description (optional)" rows={2}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all text-slate-700 text-sm resize-none" />
+                        {(tier.features || []).map((feat, fi) => (
+                          <div key={fi} className="flex items-center space-x-2 pl-2">
+                            <span className="text-slate-400 text-xs">-</span>
+                            <input type="text" value={feat} onChange={e => { const u = [...pricingTiers]; const feats = [...(u[idx].features || [])]; feats[fi] = e.target.value; u[idx] = { ...u[idx], features: feats }; updatePricingTiers(u); }}
+                              placeholder="Feature"
+                              className="flex-1 px-3 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-100 outline-none text-sm text-slate-700" />
+                            <button type="button" onClick={() => { const u = [...pricingTiers]; const feats = [...(u[idx].features || [])]; feats.splice(fi, 1); u[idx] = { ...u[idx], features: feats }; updatePricingTiers(u); }}
+                              className="text-slate-300 hover:text-rose-500 transition-colors"><XIcon className="w-3.5 h-3.5" /></button>
+                          </div>
+                        ))}
+                        <button type="button" onClick={() => { const u = [...pricingTiers]; u[idx] = { ...u[idx], features: [...(u[idx].features || []), ''] }; updatePricingTiers(u); }}
+                          className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 transition-colors pl-2">+ Add Feature</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => updatePricingTiers([...pricingTiers, { id: crypto.randomUUID(), name: '', price: '' }])}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">+ Add Pricing Tier</button>
                   </div>
                 </div>
 

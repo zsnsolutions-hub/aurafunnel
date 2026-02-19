@@ -28,6 +28,20 @@ export interface User {
   businessProfile?: BusinessProfile;
 }
 
+export interface BusinessService {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface BusinessPricingTier {
+  id: string;
+  name: string;
+  price?: string;
+  description?: string;
+  features?: string[];
+}
+
 export interface BusinessProfile {
   companyName?: string;
   industry?: string;
@@ -47,6 +61,25 @@ export interface BusinessProfile {
     instagram?: string;
     facebook?: string;
   };
+
+  // Structured data
+  services?: BusinessService[];
+  pricingTiers?: BusinessPricingTier[];
+
+  // Deep analysis fields
+  companyStory?: string;
+  foundedYear?: string;
+  teamSize?: string;
+  teamHighlights?: string;
+  testimonialsThemes?: string;
+  uniqueSellingPoints?: string[];
+  competitiveAdvantage?: string;
+  contentTone?: string;
+  keyClients?: string;
+
+  // Logo
+  logoUrl?: string;
+  logoAssetId?: string;
 }
 
 export interface BusinessAnalysisField {
@@ -72,6 +105,19 @@ export interface BusinessAnalysisResult {
     facebook?: string;
   };
   followUpQuestions: string[];
+
+  // Deep analysis fields
+  services?: { value: BusinessService[]; confidence: number };
+  pricingTiers?: { value: BusinessPricingTier[]; confidence: number };
+  companyStory?: BusinessAnalysisField;
+  foundedYear?: BusinessAnalysisField;
+  teamSize?: BusinessAnalysisField;
+  teamHighlights?: BusinessAnalysisField;
+  testimonialsThemes?: BusinessAnalysisField;
+  uniqueSellingPoints?: { value: string[]; confidence: number };
+  competitiveAdvantage?: BusinessAnalysisField;
+  contentTone?: BusinessAnalysisField;
+  keyClients?: BusinessAnalysisField;
 }
 
 export interface KnowledgeBase {

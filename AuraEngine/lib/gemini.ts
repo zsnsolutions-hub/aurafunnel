@@ -22,6 +22,15 @@ const buildBusinessContext = (profile?: BusinessProfile): string => {
     const socials = Object.entries(profile.socialLinks).filter(([_, v]) => v).map(([k, v]) => `${k}: ${v}`);
     if (socials.length) parts.push(`Social Media: ${socials.join(', ')}`);
   }
+  if (profile.services?.length) {
+    parts.push(`Services: ${profile.services.map(s => `${s.name}${s.description ? ' - ' + s.description : ''}`).join('; ')}`);
+  }
+  if (profile.pricingTiers?.length) {
+    parts.push(`Pricing: ${profile.pricingTiers.map(t => `${t.name} ${t.price || ''}${t.features?.length ? ' (' + t.features.slice(0, 3).join(', ') + ')' : ''}`).join('; ')}`);
+  }
+  if (profile.competitiveAdvantage) parts.push(`Competitive Advantage: ${profile.competitiveAdvantage}`);
+  if (profile.contentTone) parts.push(`Brand Tone: ${profile.contentTone}`);
+  if (profile.uniqueSellingPoints?.length) parts.push(`USPs: ${profile.uniqueSellingPoints.join(', ')}`);
   if (parts.length === 0) return '';
   return `\n\nYOUR BUSINESS CONTEXT:\n${parts.join('\n')}`;
 };
@@ -735,32 +744,50 @@ export const analyzeBusinessFromWeb = async (
 
   const resolved = await resolvePrompt('business_analysis', userId, {
     systemInstruction: 'You are a business intelligence analyst. Extract structured company data from websites and online presence. Always respond with valid JSON only.',
-    promptTemplate: `Research the following company and extract structured business intelligence.
+    promptTemplate: `Research the following company thoroughly and extract structured business intelligence.
 
 COMPANY WEBSITE: {{website_url}}
 {{social_context}}
 
-Analyze the company's website and any available online information. Look specifically for:
+Navigate and analyze EVERY page of the website you can find: Home, About, Products/Services, Pricing, Testimonials, Team, Contact, Blog, and Footer sections. Look specifically for:
 - Contact pages, footer sections, and "About Us" pages
 - Social media links in the website header, footer, or contact page
 - Company information, products, target market, and business model
-- **Pricing page**: Look for the pricing/plans page and extract ALL actual plan names, prices, and what each plan includes. Do NOT just say "subscription model" — list every real tier with its price.
+- **Pricing page**: Look for the pricing/plans page and extract ALL actual plan names, prices, and what each plan includes
+- **About page**: Company story, founding year, team size, team bios
+- **Testimonials/Reviews**: Common themes in customer feedback
+- **Services/Products pages**: Each distinct service or product offered
+- Brand voice and tone used across the site
 
-Return a JSON object with the following structure. Each field must have a "value" (string) and "confidence" (number 0-100).
+Return a JSON object with the following structure.
+
+For string fields, use { "value": "...", "confidence": 0-100 }.
+For array fields (services, pricingTiers, uniqueSellingPoints), use { "value": [...], "confidence": 0-100 }.
 
 {
   "companyName": { "value": "...", "confidence": 0-100 },
   "industry": { "value": "...", "confidence": 0-100 },
-  "productsServices": { "value": "...", "confidence": 0-100 },
+  "productsServices": { "value": "summary of all products/services", "confidence": 0-100 },
   "targetAudience": { "value": "...", "confidence": 0-100 },
   "valueProp": { "value": "...", "confidence": 0-100 },
-  "pricingModel": { "value": "List each plan: e.g. Starter $X/mo (features), Pro $Y/mo (features), Enterprise $Z/mo (features)", "confidence": 0-100 },
+  "pricingModel": { "value": "e.g. Starter $X/mo, Pro $Y/mo, Enterprise $Z/mo", "confidence": 0-100 },
   "salesApproach": { "value": "...", "confidence": 0-100 },
   "phone": { "value": "...", "confidence": 0-100 },
   "businessEmail": { "value": "...", "confidence": 0-100 },
   "address": { "value": "...", "confidence": 0-100 },
-  "socialLinks": { ... },
-  "followUpQuestions": ["..."]
+  "socialLinks": { "linkedin": "...", "twitter": "...", "instagram": "...", "facebook": "..." },
+  "followUpQuestions": ["..."],
+  "services": { "value": [{ "id": "svc-1", "name": "Service Name", "description": "What this service does" }], "confidence": 0-100 },
+  "pricingTiers": { "value": [{ "id": "tier-1", "name": "Plan Name", "price": "$29/mo", "description": "Plan summary", "features": ["feature1", "feature2"] }], "confidence": 0-100 },
+  "companyStory": { "value": "Company founding story and mission", "confidence": 0-100 },
+  "foundedYear": { "value": "2020", "confidence": 0-100 },
+  "teamSize": { "value": "50-100 employees", "confidence": 0-100 },
+  "teamHighlights": { "value": "Key team members or leadership info", "confidence": 0-100 },
+  "testimonialsThemes": { "value": "Common themes from customer reviews", "confidence": 0-100 },
+  "uniqueSellingPoints": { "value": ["USP 1", "USP 2", "USP 3"], "confidence": 0-100 },
+  "competitiveAdvantage": { "value": "What sets them apart from competitors", "confidence": 0-100 },
+  "contentTone": { "value": "e.g. Professional yet friendly, Technical, Casual", "confidence": 0-100 },
+  "keyClients": { "value": "Notable clients or logos found on site", "confidence": 0-100 }
 }
 
 Guidelines:
@@ -769,7 +796,10 @@ Guidelines:
 - For uncertain fields, set confidence below 50
 - For phone, businessEmail, address: only include if found. Set confidence to 0 and value to "" if not found
 - For socialLinks: only include platforms found on the website
-- For pricingModel: ALWAYS include the actual plan names, exact prices, and key features for each tier. Visit the /pricing page if needed. Example: "Starter $29/mo (5 leads, Email support); Professional $79/mo (Unlimited leads, Priority support); Enterprise $199/mo (Custom integrations, Dedicated manager)"
+- For pricingModel: ALWAYS include the actual plan names, exact prices, and key features for each tier. Visit the /pricing page if needed
+- For services: list every distinct service/product as a separate entry with id, name, description
+- For pricingTiers: list every pricing tier with id, name, price, description, and features array
+- For uniqueSellingPoints: extract 3-5 specific USPs from the website
 - Generate 2-4 follow-up questions for fields with confidence below 70
 - Return ONLY valid JSON`,
     temperature: 0.3,
@@ -787,7 +817,7 @@ Guidelines:
   while (attempt < MAX_RETRIES) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       let response;
       try {
