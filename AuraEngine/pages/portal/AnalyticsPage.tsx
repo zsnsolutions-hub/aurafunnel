@@ -1036,36 +1036,6 @@ const AnalyticsPage: React.FC = () => {
             </div>
           )}
 
-          {/* WORKFLOW PERFORMANCE CHART (NEW — real data) */}
-          {analyticsData.workflowAnalytics.workflowBreakdown.length > 0 ? (
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-bold text-slate-800 font-heading">Workflow Performance</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {analyticsData.workflowAnalytics.totalExecutions} executions &middot; {analyticsData.workflowAnalytics.successRate}% success &middot; {analyticsData.workflowAnalytics.totalLeadsProcessed} leads processed
-                  </p>
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={analyticsData.workflowAnalytics.workflowBreakdown}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94a3b8" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
-                  <Bar dataKey="successCount" name="Success" fill="#10b981" radius={[4, 4, 0, 0]} stackId="a" />
-                  <Bar dataKey="failedCount" name="Failed" fill="#ef4444" radius={[4, 4, 0, 0]} stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl p-8 border border-slate-100 shadow-sm text-center">
-              <BoltIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-              <p className="text-sm font-bold text-slate-500">No workflow data yet</p>
-              <p className="text-xs text-slate-400 mt-1">Create and run workflows to see execution metrics</p>
-            </div>
-          )}
-
           {/* SCORE DISTRIBUTION + LEAD SOURCE CHARTS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Lead Score Distribution */}
