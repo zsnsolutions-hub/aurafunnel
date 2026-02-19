@@ -744,6 +744,7 @@ Analyze the company's website and any available online information. Look specifi
 - Contact pages, footer sections, and "About Us" pages
 - Social media links in the website header, footer, or contact page
 - Company information, products, target market, and business model
+- **Pricing page**: Look for the pricing/plans page and extract ALL actual plan names, prices, and what each plan includes. Do NOT just say "subscription model" — list every real tier with its price.
 
 Return a JSON object with the following structure. Each field must have a "value" (string) and "confidence" (number 0-100).
 
@@ -753,7 +754,7 @@ Return a JSON object with the following structure. Each field must have a "value
   "productsServices": { "value": "...", "confidence": 0-100 },
   "targetAudience": { "value": "...", "confidence": 0-100 },
   "valueProp": { "value": "...", "confidence": 0-100 },
-  "pricingModel": { "value": "...", "confidence": 0-100 },
+  "pricingModel": { "value": "List each plan: e.g. Starter $X/mo (features), Pro $Y/mo (features), Enterprise $Z/mo (features)", "confidence": 0-100 },
   "salesApproach": { "value": "...", "confidence": 0-100 },
   "phone": { "value": "...", "confidence": 0-100 },
   "businessEmail": { "value": "...", "confidence": 0-100 },
@@ -768,6 +769,7 @@ Guidelines:
 - For uncertain fields, set confidence below 50
 - For phone, businessEmail, address: only include if found. Set confidence to 0 and value to "" if not found
 - For socialLinks: only include platforms found on the website
+- For pricingModel: ALWAYS include the actual plan names, exact prices, and key features for each tier. Visit the /pricing page if needed. Example: "Starter $29/mo (5 leads, Email support); Professional $79/mo (Unlimited leads, Priority support); Enterprise $199/mo (Custom integrations, Dedicated manager)"
 - Generate 2-4 follow-up questions for fields with confidence below 70
 - Return ONLY valid JSON`,
     temperature: 0.3,
