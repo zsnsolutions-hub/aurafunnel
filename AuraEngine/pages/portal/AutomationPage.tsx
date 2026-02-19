@@ -17,12 +17,18 @@ import {
 } from '../../lib/automationEngine';
 import { generateWorkflowOptimization } from '../../lib/gemini';
 import {
+  fetchCampaignHistory,
+  fetchCampaignRecipients,
+  type CampaignSummary,
+  type CampaignRecipient,
+} from '../../lib/emailTracking';
+import {
   BoltIcon, PlusIcon, XIcon, CheckIcon, SparklesIcon, ClockIcon,
   PlayIcon, PauseIcon, GitBranchIcon, ZapIcon, TargetIcon, TagIcon,
   MailIcon, RefreshIcon, EditIcon, FlameIcon, TrendUpIcon, CogIcon, TrendDownIcon,
   ArrowRightIcon, ArrowLeftIcon, BellIcon, CalendarIcon, UsersIcon, AlertTriangleIcon,
   EyeIcon, BrainIcon, ShieldIcon, ActivityIcon, KeyboardIcon, FilterIcon, LayersIcon,
-  StarIcon, PieChartIcon
+  StarIcon, PieChartIcon, SendIcon
 } from '../../components/Icons';
 
 interface LayoutContext {
@@ -38,7 +44,7 @@ const WIZARD_STEPS: { step: WizardStep; label: string; description: string }[] =
   { step: 1, label: 'Start', description: 'Name & Trigger' },
   { step: 2, label: 'Build', description: 'Visual Builder' },
   { step: 3, label: 'Configure', description: 'Step Settings' },
-  { step: 4, label: 'Activate', description: 'Test & Launch' },
+  { step: 4, label: 'Activate', description: 'Send & Launch' },
 ];
 
 // ─── Workflow Node Types ───
@@ -224,6 +230,14 @@ const AutomationPage: React.FC = () => {
   const [showTriggerAnalytics, setShowTriggerAnalytics] = useState(false);
   const [showTemplateEffectiveness, setShowTemplateEffectiveness] = useState(false);
 
+  // ─── Campaigns Panel State ───
+  const [showCampaignsPanel, setShowCampaignsPanel] = useState(false);
+  const [campaignHistory, setCampaignHistory] = useState<CampaignSummary[]>([]);
+  const [campaignHistoryLoading, setCampaignHistoryLoading] = useState(false);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [campaignRecipients, setCampaignRecipients] = useState<CampaignRecipient[]>([]);
+  const [campaignRecipientsLoading, setCampaignRecipientsLoading] = useState(false);
+
   // ─── Real execution data ───
   const [executionLog, setExecutionLog] = useState<ExecutionLogEntry[]>([]);
   const [realNodePerformance, setRealNodePerformance] = useState<NodePerformanceMetric[]>([]);
@@ -288,6 +302,28 @@ const AutomationPage: React.FC = () => {
     };
     if (dbLoaded) fetchAnalytics();
   }, [workflow?.id, dbLoaded]);
+
+  // ─── Load campaign history when panel opens ───
+  useEffect(() => {
+    if (!showCampaignsPanel) return;
+    let cancelled = false;
+    setCampaignHistoryLoading(true);
+    fetchCampaignHistory().then(data => {
+      if (!cancelled) { setCampaignHistory(data); setCampaignHistoryLoading(false); }
+    }).catch(() => { if (!cancelled) setCampaignHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [showCampaignsPanel]);
+
+  // ─── Load recipients when a campaign is selected ───
+  useEffect(() => {
+    if (!selectedCampaignId) { setCampaignRecipients([]); return; }
+    let cancelled = false;
+    setCampaignRecipientsLoading(true);
+    fetchCampaignRecipients(selectedCampaignId).then(data => {
+      if (!cancelled) { setCampaignRecipients(data); setCampaignRecipientsLoading(false); }
+    }).catch(() => { if (!cancelled) setCampaignRecipientsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedCampaignId]);
 
   const selectedNode = useMemo(() => {
     return workflow.nodes.find(n => n.id === selectedNodeId) || null;
@@ -647,6 +683,10 @@ const AutomationPage: React.FC = () => {
 
       // Refresh execution log after run
       refreshExecutionLog();
+      // Refresh campaigns panel if open
+      if (showCampaignsPanel) {
+        fetchCampaignHistory().then(setCampaignHistory).catch(() => {});
+      }
     } catch (err) {
       setTestResults({
         passed: false,
@@ -659,7 +699,7 @@ const AutomationPage: React.FC = () => {
     }
 
     setTestRunning(false);
-  }, [leads, workflow, testLeadIds, refreshExecutionLog]);
+  }, [leads, workflow, testLeadIds, refreshExecutionLog, showCampaignsPanel]);
 
   const runValidation = useCallback(() => {
     setValidating(true);
@@ -831,6 +871,7 @@ const AutomationPage: React.FC = () => {
       if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setShowROICalculator(s => !s); return; }
       if (e.key === 'i' || e.key === 'I') { e.preventDefault(); setShowTriggerAnalytics(s => !s); return; }
       if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setShowTemplateEffectiveness(s => !s); return; }
+      if (e.key === 'c' || e.key === 'C') { e.preventDefault(); setShowCampaignsPanel(s => !s); return; }
       if (e.key === 't' || e.key === 'T') { e.preventDefault(); handleTest(); return; }
       if (e.key === 'o' || e.key === 'O') { e.preventDefault(); handleAiOptimize(); return; }
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSave(); return; }
@@ -842,6 +883,7 @@ const AutomationPage: React.FC = () => {
         setShowROICalculator(false);
         setShowTriggerAnalytics(false);
         setShowTemplateEffectiveness(false);
+        setShowCampaignsPanel(false);
         setShowWorkflowList(false);
         return;
       }
@@ -926,6 +968,13 @@ const AutomationPage: React.FC = () => {
           >
             <MailIcon className="w-3.5 h-3.5" />
             <span>Templates</span>
+          </button>
+          <button
+            onClick={() => setShowCampaignsPanel(s => !s)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCampaignsPanel ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+          >
+            <SendIcon className="w-3.5 h-3.5" />
+            <span>Campaigns</span>
           </button>
           <button
             onClick={() => setShowShortcuts(true)}
@@ -1169,8 +1218,8 @@ const AutomationPage: React.FC = () => {
                   <span>Save</span>
                 </button>
                 <button onClick={handleTest} disabled={testRunning} className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50">
-                  {testRunning ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <PlayIcon className="w-3.5 h-3.5" />}
-                  <span>{testRunning ? 'Running...' : 'Test'}</span>
+                  {testRunning ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <SendIcon className="w-3.5 h-3.5" />}
+                  <span>{testRunning ? 'Sending...' : 'Send Campaign'}</span>
                 </button>
               </div>
             </div>
@@ -1743,7 +1792,7 @@ const AutomationPage: React.FC = () => {
               {selectedLeadCount > 0 && (
                 <div className="mt-3 flex items-center justify-between px-1">
                   <p className="text-xs text-slate-500">
-                    <strong className="text-slate-700">{selectedLeadCount}</strong> lead{selectedLeadCount !== 1 ? 's' : ''} will be processed when you click <strong>Test</strong> or <strong>Run Simulation</strong>
+                    <strong className="text-slate-700">{selectedLeadCount}</strong> lead{selectedLeadCount !== 1 ? 's' : ''} will be processed when you click <strong>Send Campaign</strong>
                   </p>
                   <button
                     onClick={deselectAllLeads}
@@ -1773,7 +1822,7 @@ const AutomationPage: React.FC = () => {
                 <ArrowLeftIcon className="w-3.5 h-3.5" /><span>Back</span>
               </button>
               <button onClick={() => setWizardStep(4)} className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">
-                <span>Next: Test &amp; Activate</span><ArrowRightIcon className="w-3.5 h-3.5" />
+                <span>Next: Send &amp; Activate</span><ArrowRightIcon className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -1887,14 +1936,14 @@ const AutomationPage: React.FC = () => {
             {/* ─── Test Panel ─── */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
               <div className="px-6 py-5 border-b border-slate-100">
-                <h3 className="font-black text-slate-900 font-heading">Test Workflow</h3>
-                <p className="text-xs text-slate-400 mt-1">Run a simulation before going live.</p>
+                <h3 className="font-black text-slate-900 font-heading">Send Campaign</h3>
+                <p className="text-xs text-slate-400 mt-1">Select leads and send your campaign.</p>
               </div>
               <div className="px-6 py-5 space-y-4">
                 {/* Select Test Leads */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Select Test Leads</p>
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Select Recipients</p>
                     {leads.length > 0 && (
                       <button
                         onClick={allFilteredSelected ? deselectAllLeads : selectAllFilteredLeads}
@@ -1924,8 +1973,8 @@ const AutomationPage: React.FC = () => {
                 {/* Test Actions */}
                 <div className="flex items-center space-x-2">
                   <button onClick={handleTest} disabled={testRunning} className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50">
-                    {testRunning ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <PlayIcon className="w-4 h-4" />}
-                    <span>{testRunning ? 'Running Simulation...' : 'Run Simulation'}</span>
+                    {testRunning ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <SendIcon className="w-4 h-4" />}
+                    <span>{testRunning ? 'Sending...' : 'Send Campaign'}</span>
                   </button>
                   <button onClick={runValidation} disabled={validating} className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all disabled:opacity-50">
                     {validating ? <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div> : <ShieldIcon className="w-4 h-4" />}
@@ -2075,7 +2124,7 @@ const AutomationPage: React.FC = () => {
                   </button>
                   <button onClick={handleTest} disabled={testRunning} className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all flex-1 disabled:opacity-50">
                     <RefreshIcon className="w-4 h-4" />
-                    <span>Test Again</span>
+                    <span>Send Again</span>
                   </button>
                   <button onClick={handleActivate} className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex-1">
                     <PlayIcon className="w-4 h-4" />
@@ -2802,6 +2851,186 @@ const AutomationPage: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* CAMPAIGNS SIDEBAR                                              */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {showCampaignsPanel && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => { setShowCampaignsPanel(false); setSelectedCampaignId(null); }} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                {selectedCampaignId ? (
+                  <>
+                    <button onClick={() => { setSelectedCampaignId(null); setCampaignRecipients([]); }} className="flex items-center space-x-1 text-xs text-violet-600 font-bold hover:text-violet-700 mb-1">
+                      <ArrowLeftIcon className="w-3 h-3" /><span>Back to Campaigns</span>
+                    </button>
+                    <h3 className="font-black text-slate-900 font-heading">Campaign Detail</h3>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="font-black text-slate-900 font-heading">Campaigns</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Campaign delivery history &amp; status</p>
+                  </>
+                )}
+              </div>
+              <button onClick={() => { setShowCampaignsPanel(false); setSelectedCampaignId(null); }} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              {/* ─── Campaign List View ─── */}
+              {!selectedCampaignId && (
+                <>
+                  {campaignHistoryLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin"></div>
+                    </div>
+                  ) : campaignHistory.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <SendIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                      <p className="text-sm font-bold text-slate-500">No campaigns yet</p>
+                      <p className="text-xs text-slate-400 mt-1">Send your first campaign to see it here.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Summary Stats Row */}
+                      <div className="grid grid-cols-3 gap-2 mb-2">
+                        <div className="p-2.5 bg-violet-50 rounded-xl text-center">
+                          <p className="text-lg font-black text-violet-700">{campaignHistory.length}</p>
+                          <p className="text-[9px] font-bold text-violet-500 uppercase">Campaigns</p>
+                        </div>
+                        <div className="p-2.5 bg-emerald-50 rounded-xl text-center">
+                          <p className="text-lg font-black text-emerald-700">{campaignHistory.reduce((s, c) => s + c.sent_count, 0)}</p>
+                          <p className="text-[9px] font-bold text-emerald-500 uppercase">Sent</p>
+                        </div>
+                        <div className="p-2.5 bg-amber-50 rounded-xl text-center">
+                          <p className="text-lg font-black text-amber-700">{campaignHistory.reduce((s, c) => s + c.pending_count, 0)}</p>
+                          <p className="text-[9px] font-bold text-amber-500 uppercase">Pending</p>
+                        </div>
+                      </div>
+
+                      {/* Campaign Cards */}
+                      {campaignHistory.map(campaign => {
+                        const total = campaign.sent_count + campaign.pending_count + campaign.failed_count;
+                        const date = new Date(campaign.created_at);
+                        const ago = Math.round((Date.now() - date.getTime()) / 60000);
+                        const agoText = ago < 60 ? `${ago}m ago` : ago < 1440 ? `${Math.round(ago / 60)}h ago` : `${Math.round(ago / 1440)}d ago`;
+                        return (
+                          <button
+                            key={campaign.sequence_id}
+                            onClick={() => setSelectedCampaignId(campaign.sequence_id)}
+                            className="w-full text-left p-4 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white hover:border-violet-200 transition-all"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-sm font-bold text-slate-800 truncate flex-1 mr-2">{campaign.subject}</p>
+                              <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{agoText}</span>
+                            </div>
+                            <div className="flex items-center space-x-3 text-[10px]">
+                              <span className="font-bold text-slate-500"><UsersIcon className="w-3 h-3 inline mr-0.5" />{campaign.recipient_count} recipients</span>
+                              <span className="font-bold text-slate-500">{campaign.block_count} block{campaign.block_count !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 mt-2">
+                              {campaign.sent_count > 0 && (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700">{campaign.sent_count} sent</span>
+                              )}
+                              {campaign.pending_count > 0 && (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700">{campaign.pending_count} pending</span>
+                              )}
+                              {campaign.failed_count > 0 && (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">{campaign.failed_count} failed</span>
+                              )}
+                              {total === 0 && (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-100 text-slate-500">no emails</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* ─── Campaign Detail View (drill-in) ─── */}
+              {selectedCampaignId && (() => {
+                const campaign = campaignHistory.find(c => c.sequence_id === selectedCampaignId);
+                return (
+                  <>
+                    {/* Campaign Header Stats */}
+                    {campaign && (
+                      <div className="p-4 bg-gradient-to-r from-violet-50 to-indigo-50 rounded-xl border border-violet-100 mb-2">
+                        <p className="text-sm font-black text-slate-900 mb-2">{campaign.subject}</p>
+                        <div className="grid grid-cols-4 gap-2">
+                          <div className="text-center">
+                            <p className="text-lg font-black text-violet-700">{campaign.recipient_count}</p>
+                            <p className="text-[9px] font-bold text-violet-500 uppercase">Recipients</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-black text-emerald-700">{campaign.sent_count}</p>
+                            <p className="text-[9px] font-bold text-emerald-500 uppercase">Sent</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-black text-amber-700">{campaign.pending_count}</p>
+                            <p className="text-[9px] font-bold text-amber-500 uppercase">Pending</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-black text-rose-700">{campaign.failed_count}</p>
+                            <p className="text-[9px] font-bold text-rose-500 uppercase">Failed</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recipient Cards */}
+                    {campaignRecipientsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin"></div>
+                      </div>
+                    ) : campaignRecipients.length === 0 ? (
+                      <div className="py-8 text-center">
+                        <UsersIcon className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                        <p className="text-sm font-bold text-slate-500">No recipients found</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recipients ({campaignRecipients.length})</p>
+                        {campaignRecipients.map(recipient => (
+                          <div key={recipient.lead_id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white transition-all">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate">{recipient.lead_name}</p>
+                                <p className="text-[10px] text-slate-400 truncate">{recipient.lead_email}{recipient.lead_company ? ` · ${recipient.lead_company}` : ''}</p>
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-400 ml-2">Score {recipient.lead_score}</span>
+                            </div>
+                            <div className="flex items-center space-x-1.5 mt-2">
+                              {recipient.blocks.map((block, bi) => (
+                                <div
+                                  key={bi}
+                                  title={`Block ${block.block_index + 1}: ${block.status}${block.sent_at ? ` (${new Date(block.sent_at).toLocaleString()})` : ''}`}
+                                  className={`w-3 h-3 rounded-full ${
+                                    block.status === 'sent' ? 'bg-emerald-500' :
+                                    block.status === 'pending' ? 'bg-amber-400' :
+                                    block.status === 'failed' ? 'bg-rose-500' : 'bg-slate-300'
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-[9px] text-slate-400 ml-1">{recipient.blocks.length} block{recipient.blocks.length !== 1 ? 's' : ''}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEYBOARD SHORTCUTS MODAL                                      */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {showShortcuts && (
@@ -2822,7 +3051,7 @@ const AutomationPage: React.FC = () => {
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Actions</p>
                 {[
                   { key: 'N', label: 'New workflow' },
-                  { key: 'T', label: 'Test simulation' },
+                  { key: 'T', label: 'Send campaign' },
                   { key: 'O', label: 'AI optimize' },
                   { key: 'Ctrl+S', label: 'Save workflow' },
                 ].map((shortcut, i) => (
@@ -2841,6 +3070,7 @@ const AutomationPage: React.FC = () => {
                   { key: 'R', label: 'ROI calculator' },
                   { key: 'I', label: 'Trigger analytics' },
                   { key: 'M', label: 'Template perf.' },
+                  { key: 'C', label: 'Campaigns' },
                 ].map((shortcut, i) => (
                   <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors">
                     <span className="text-xs text-slate-600">{shortcut.label}</span>
