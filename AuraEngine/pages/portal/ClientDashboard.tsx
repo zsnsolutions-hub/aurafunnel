@@ -12,6 +12,7 @@ import { fetchBatchEmailSummary, type BatchEmailSummary } from '../../lib/emailT
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -463,10 +464,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     setGenError('');
 
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('consume_credits', { amount: 1 });
-      if (rpcError) throw new Error(rpcError.message);
-      if (!rpcData.success) {
-        setGenError(rpcData.message || 'Insufficient credits.');
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['content_generation']);
+      if (!creditResult.success) {
+        setGenError(creditResult.message || 'Insufficient credits.');
         setIsGenerating(false);
         return;
       }
@@ -524,7 +524,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
   const AI_RESEARCH_HEADER = '--- AI Research Brief ---';
 
-  const onLeadCreated = (createdLead: Lead, kb: Record<string, string> | undefined) => {
+  const onLeadCreated = async (createdLead: Lead, kb: Record<string, string> | undefined) => {
     const updated = [createdLead, ...leads];
     setLeads(updated);
     setFilteredLeads(updated);
@@ -546,6 +546,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     if (kb.youtube) socialUrls.youtube = kb.youtube;
 
     if (Object.keys(socialUrls).length === 0) return;
+
+    const researchCredit = await consumeCredits(supabase, CREDIT_COSTS['lead_research']);
+    if (!researchCredit.success) return;
 
     setResearchingLeadIds(prev => new Set(prev).add(createdLead.id));
 

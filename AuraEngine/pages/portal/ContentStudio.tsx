@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom';
 import { User, Lead, ToneType, ContentCategory, EmailSequenceConfig, EmailProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { fetchOwnerEmailPerformance, sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { ConnectedEmailProvider } from '../../lib/emailTracking';
 import { generateProposalPdf, generateEmailSequencePdf } from '../../lib/pdfExport';
@@ -265,7 +266,7 @@ Either way, wishing you and the {{company}} team all the best.
 ];
 
 const ContentStudio: React.FC = () => {
-  const { user } = useOutletContext<LayoutContext>();
+  const { user, refreshProfile } = useOutletContext<LayoutContext>();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const { integrations: integrationStatuses } = useIntegrations();
@@ -862,6 +863,12 @@ const ContentStudio: React.FC = () => {
 
     setSuggestionsRefreshing(true);
     try {
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['content_suggestions']);
+      if (!creditResult.success) {
+        setAiError(creditResult.message || 'Insufficient credits.');
+        setSuggestionsRefreshing(false);
+        return;
+      }
       const response = await generateContentSuggestions(content, contentMode, user.businessProfile);
       if (response.text.startsWith('SUGGESTIONS FAILED')) {
         setAiError('Failed to refresh suggestions. Please try again.');
@@ -928,6 +935,13 @@ const ContentStudio: React.FC = () => {
     setAiError(null);
 
     try {
+      const creditType = contentMode === 'email' ? 'email_sequence' : 'content_generation';
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS[creditType]);
+      if (!creditResult.success) {
+        setAiError(creditResult.message || 'Insufficient credits.');
+        setAiGenerating(false);
+        return;
+      }
       if (contentMode === 'email') {
         const config: EmailSequenceConfig = {
           audienceLeadIds: leads.map(l => l.id),
@@ -981,6 +995,7 @@ const ContentStudio: React.FC = () => {
           setAiError('Proposal generation failed. Please try again.');
         }
       }
+      if (refreshProfile) await refreshProfile();
     } catch (err: unknown) {
       setAiError(err instanceof Error ? err.message : 'AI generation failed. Please try again.');
     } finally {
@@ -1148,6 +1163,11 @@ const ContentStudio: React.FC = () => {
       if (item.status === 'done') continue;
       setBatchItems(prev => prev.map((b, i) => i === idx ? { ...b, status: 'generating' as const } : b));
       try {
+        const batchCredit = await consumeCredits(supabase, CREDIT_COSTS['batch_generation']);
+        if (!batchCredit.success) {
+          setBatchItems(prev => prev.map((b, i) => i === idx ? { ...b, status: 'done' as const } : b));
+          break;
+        }
         if (item.type === 'email') {
           await generateEmailSequence(leads, {
             audienceLeadIds: leads.map(l => l.id), goal: 'book_meeting',
@@ -1435,6 +1455,7 @@ const ContentStudio: React.FC = () => {
               <SparklesIcon className="w-4 h-4" />
             )}
             <span>{aiGenerating ? 'Generating...' : 'Generate with AI'}</span>
+            {!aiGenerating && <span className="ml-1 px-1.5 py-0.5 text-[9px] font-black bg-white/20 rounded-md">{CREDIT_COSTS[contentMode === 'email' ? 'email_sequence' : 'content_generation']} cr</span>}
           </button>
           {contentMode === 'email' && (
             <button

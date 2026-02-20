@@ -10,6 +10,7 @@ import {
   SendIcon, EyeIcon, CursorClickIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 import { fetchLeadEmailEngagement, sendTrackedEmail } from '../../lib/emailTracking';
@@ -158,7 +159,7 @@ interface TaskItem {
 }
 
 const LeadProfile: React.FC = () => {
-  const { user } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
 
@@ -399,6 +400,9 @@ const LeadProfile: React.FC = () => {
 
     if (Object.keys(socialUrls).length === 0) return;
 
+    const creditResult = await consumeCredits(supabase, CREDIT_COSTS['lead_research']);
+    if (!creditResult.success) return;
+
     setKbResearching(true);
     generateLeadResearch(lead, socialUrls, user.businessProfile).then(async (res) => {
       if (!res.text) {
@@ -449,6 +453,7 @@ const LeadProfile: React.FC = () => {
       } : prev);
       setKbResearching(false);
       showFeedback(researchError ? 'Research done but save failed' : 'AI research complete');
+      if (refreshProfile) await refreshProfile();
     }).catch(() => {
       setKbResearching(false);
     });

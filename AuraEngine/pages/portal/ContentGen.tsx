@@ -13,6 +13,7 @@ import {
 import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
 import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance, fetchCampaignHistory, fetchCampaignRecipients, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { EmailPerformanceEntry, CampaignSummary, CampaignRecipient, ConnectedEmailProvider } from '../../lib/emailTracking';
 import { generateEmailSequencePdf } from '../../lib/pdfExport';
@@ -775,8 +776,14 @@ const ContentGen: React.FC = () => {
     if (competitorContext) contextParts.push(`Competitors: ${competitorContext}`);
 
     try {
-      const { error: rpcError } = await supabase.rpc('consume_credits', { amount: 1 });
-      if (rpcError) console.error('Credit error:', rpcError);
+      const creditType = contentType === ContentCategory.EMAIL_SEQUENCE ? 'email_sequence' : 'content_generation';
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS[creditType]);
+      if (!creditResult.success) {
+        setError(creditResult.message || 'Insufficient credits.');
+        setIsGenerating(false);
+        setWizardStep(2);
+        return;
+      }
 
       if (contentType === ContentCategory.EMAIL_SEQUENCE) {
         const config: EmailSequenceConfig = {
@@ -2589,6 +2596,7 @@ const ContentGen: React.FC = () => {
                     >
                       <SparklesIcon className="w-4 h-4" />
                       <span>Generate with AI</span>
+                      <span className="px-1.5 py-0.5 text-[9px] font-black bg-white/20 rounded-md">{CREDIT_COSTS[contentType === ContentCategory.EMAIL_SEQUENCE ? 'email_sequence' : 'content_generation']} cr</span>
                       <ArrowRightIcon className="w-3.5 h-3.5" />
                     </button>
                   </div>

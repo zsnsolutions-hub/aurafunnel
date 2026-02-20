@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Lead, EmailSequenceConfig, EmailStep, ToneType } from '../../types';
 import { generateEmailSequence, parseEmailSequenceResponse, AIResponse } from '../../lib/gemini';
+import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { MailIcon, ArrowRightIcon, ArrowLeftIcon, SparklesIcon, CheckIcon, EditIcon, CopyIcon, XIcon } from '../Icons';
 
 interface EmailSequenceBuilderProps {
@@ -71,6 +73,12 @@ const EmailSequenceBuilder: React.FC<EmailSequenceBuilderProps> = ({
     const finalConfig = { ...config, audienceLeadIds: selectedLeadIds };
 
     try {
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['email_sequence']);
+      if (!creditResult.success) {
+        setError(creditResult.message || 'Insufficient credits.');
+        setIsGenerating(false);
+        return;
+      }
       const selectedLeads = leads.filter(l => selectedLeadIds.includes(l.id));
       const response = await generateEmailSequence(selectedLeads, finalConfig);
       setRawResponse(response);
@@ -351,6 +359,7 @@ const EmailSequenceBuilder: React.FC<EmailSequenceBuilderProps> = ({
             >
               <SparklesIcon className="w-4 h-4" />
               <span>Generate Sequence</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-black bg-white/20 rounded-md">{CREDIT_COSTS['email_sequence']} cr</span>
             </button>
           </div>
         </div>

@@ -13,6 +13,7 @@ import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useIntegrations } from '../../lib/integrations';
+import { TIER_LIMITS } from '../../lib/credits';
 
 interface ClientLayoutProps {
   user: User;
@@ -52,7 +53,8 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     { label: 'Account Architecture', path: '/portal/settings', icon: <Settings size={20} /> },
   ];
 
-  const creditsTotal = user.credits_total || 500;
+  const currentPlan = user.subscription?.plan_name || user.plan || 'Starter';
+  const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
   const creditsUsed = user.credits_used || 0;
   const usagePercentage = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
 

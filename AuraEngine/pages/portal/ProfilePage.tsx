@@ -9,6 +9,7 @@ import {
   PhoneIcon, MailIcon, MapPinIcon, UploadIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
 import { useGuide } from '../../components/guide/useGuide';
 
@@ -280,6 +281,12 @@ const ProfilePage: React.FC = () => {
     });
 
     try {
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['business_analysis']);
+      if (!creditResult.success) {
+        setAnalysisError(creditResult.message || 'Insufficient credits.');
+        setTimeout(() => setWizardPhase('manual'), 1500);
+        return;
+      }
       const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
       const result = await analyzeBusinessFromWeb(fullUrl, socialUrls);
 
@@ -358,14 +365,18 @@ const ProfilePage: React.FC = () => {
         const lowConfidenceFields = fields.filter(f => (result.analysis![f]?.confidence || 0) < 70);
         if (lowConfidenceFields.length > 0) {
           try {
-            const fqResult = await generateFollowUpQuestions(populated);
-            setFollowUpQuestions(fqResult.questions);
+            const fqCredit = await consumeCredits(supabase, CREDIT_COSTS['follow_up_questions']);
+            if (fqCredit.success) {
+              const fqResult = await generateFollowUpQuestions(populated);
+              setFollowUpQuestions(fqResult.questions);
+            }
           } catch {
             // Follow-up question generation is optional
             setFollowUpQuestions([]);
           }
         }
 
+        if (refreshProfile) await refreshProfile();
         setTimeout(() => setWizardPhase('results'), 500);
       } else {
         setAnalysisError('Could not analyze the website. Please try again or use manual entry.');

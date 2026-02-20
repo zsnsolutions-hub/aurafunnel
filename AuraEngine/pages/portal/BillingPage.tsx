@@ -8,6 +8,7 @@ import {
 } from '../../components/Icons';
 import { User, Plan, UsageMetrics } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { TIER_LIMITS, CREDIT_COSTS } from '../../lib/credits';
 import StripeCheckoutModal from '../../components/portal/StripeCheckoutModal';
 
 const COLOR_CLASSES: Record<string, { bg50: string; text600: string; bg500: string }> = {
@@ -53,11 +54,12 @@ const BillingPage: React.FC = () => {
     }
   };
 
+  const tierLimitsForPlan = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Starter;
   const [usage, setUsage] = useState<UsageMetrics>({
-    aiTokensUsed: 0, aiTokensLimit: 100000,
-    leadsProcessed: 0, leadsLimit: 1000,
-    storageUsedMb: 0, storageLimitMb: 5000,
-    emailCreditsUsed: 0, emailCreditsLimit: 500
+    aiTokensUsed: 0, aiTokensLimit: tierLimitsForPlan.tokens,
+    leadsProcessed: 0, leadsLimit: tierLimitsForPlan.leads,
+    storageUsedMb: 0, storageLimitMb: tierLimitsForPlan.storage,
+    emailCreditsUsed: 0, emailCreditsLimit: tierLimitsForPlan.emails
   });
 
   useEffect(() => {
@@ -74,9 +76,8 @@ const BillingPage: React.FC = () => {
       ]);
 
       const totalTokens = tokensRes.data?.reduce((acc: number, r: any) => acc + (r.tokens_used || 0), 0) || 0;
-      const tierLimits = currentPlanName === 'Professional' ? { leads: 5000, tokens: 500000, email: 2500 } :
-                          currentPlanName === 'Enterprise' ? { leads: 999999, tokens: 999999, email: 99999 } :
-                          { leads: 1000, tokens: 100000, email: 500 };
+      const limits = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Starter;
+      const tierLimits = { leads: limits.leads, tokens: limits.tokens, email: limits.emails };
 
       setUsage({
         aiTokensUsed: totalTokens,
@@ -209,6 +210,23 @@ const BillingPage: React.FC = () => {
     return { dailyBurnRate, spentSoFar, projectedOverage, monthlyProjections, annualCost, annualSavings, budgetAlerts, monthlyPrice };
   }, [currentPlanName, creditsUsed, creditsTotal, usage]);
 
+  // ─── Per-Feature Credit Costs ───
+  const perFeatureCosts = useMemo(() => {
+    const labels: Record<string, string> = {
+      email_sequence: 'Email Sequence', content_generation: 'Content Generation',
+      content_suggestions: 'AI Suggestions', lead_research: 'Lead Research',
+      lead_scoring: 'Lead Scoring', command_center: 'Command Center',
+      dashboard_insights: 'Dashboard Insights', pipeline_strategy: 'Pipeline Strategy',
+      blog_content: 'Blog Content', social_caption: 'Social Caption',
+      business_analysis: 'Business Analysis', workflow_optimization: 'Workflow Optimization',
+      image_generation: 'Image Generation', follow_up_questions: 'Follow-up Questions',
+      batch_generation: 'Batch Generation',
+    };
+    return Object.entries(CREDIT_COSTS).map(([key, cost]) => ({
+      key, label: labels[key] || key, cost,
+    }));
+  }, []);
+
   // ─── Credit Consumption Analytics ───
   const creditAnalytics = useMemo(() => {
     const featureBreakdown = [
@@ -245,15 +263,15 @@ const BillingPage: React.FC = () => {
   const planComparison = useMemo(() => {
     const tiers = [
       {
-        name: 'Starter', price: 49, credits: 10000, leads: 1000, tokens: 100000, emails: 500, storage: 5000,
+        name: 'Starter', price: 49, ...TIER_LIMITS.Starter,
         features: ['Basic AI scoring', 'Email templates', '5 integrations', 'Standard support'],
       },
       {
-        name: 'Professional', price: 149, credits: 50000, leads: 5000, tokens: 500000, emails: 2500, storage: 25000,
+        name: 'Professional', price: 149, ...TIER_LIMITS.Professional,
         features: ['Advanced AI models', 'Custom templates', '15 integrations', 'Priority support', 'Analytics dashboard', 'Team collaboration'],
       },
       {
-        name: 'Enterprise', price: 499, credits: 999999, leads: 999999, tokens: 999999, emails: 99999, storage: 999999,
+        name: 'Enterprise', price: 499, ...TIER_LIMITS.Enterprise,
         features: ['Custom AI training', 'White-label', 'Unlimited integrations', 'Dedicated CSM', 'SLA guarantee', 'API access', 'Custom workflows'],
       },
     ];
@@ -1186,6 +1204,19 @@ const BillingPage: React.FC = () => {
                     <div className="w-2 h-2 rounded-full bg-rose-400" />
                     <span className="text-[9px] text-slate-500">Wasted</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Per-Feature Credit Costs */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Credit Cost per Feature</p>
+                <div className="space-y-1.5">
+                  {perFeatureCosts.map(f => (
+                    <div key={f.key} className="flex items-center justify-between py-1 border-b border-slate-50 last:border-0">
+                      <span className="text-xs text-slate-600">{f.label}</span>
+                      <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">{f.cost} cr</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 

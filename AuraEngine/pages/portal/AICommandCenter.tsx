@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { generateProgrammaticInsights, generateLeadInsights } from '../../lib/insights';
 import { generateDashboardInsights, generateCommandCenterResponse } from '../../lib/gemini';
 import {
@@ -152,7 +153,7 @@ const MODE_WELCOME: Record<AIMode, string> = {
 };
 
 const AICommandCenter: React.FC = () => {
-  const { user } = useOutletContext<LayoutContext>();
+  const { user, refreshProfile } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -590,7 +591,21 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       }]);
 
       try {
+        const creditResult = await consumeCredits(supabase, CREDIT_COSTS['dashboard_insights']);
+        if (!creditResult.success) {
+          setMessages(prev => [...prev, {
+            id: `credit-err-${Date.now()}`,
+            role: 'ai',
+            content: creditResult.message || 'Insufficient credits for deep analysis.',
+            timestamp: new Date(),
+            confidence: 0,
+            type: 'text',
+          }]);
+          setThinking(false);
+          return;
+        }
         const result = await generateDashboardInsights(leads, user.businessProfile);
+        if (refreshProfile) await refreshProfile();
         setMessages(prev => [...prev, {
           id: `ai-deep-${Date.now()}`,
           role: 'ai',
@@ -618,6 +633,20 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
 
     // ─── All other prompts: Gemini first, template fallback ───
     try {
+      const cmdCredit = await consumeCredits(supabase, CREDIT_COSTS['command_center']);
+      if (!cmdCredit.success) {
+        setMessages(prev => [...prev, {
+          id: `credit-err-${Date.now()}`,
+          role: 'ai',
+          content: cmdCredit.message || 'Insufficient credits.',
+          timestamp: new Date(),
+          confidence: 0,
+          type: 'text',
+        }]);
+        setThinking(false);
+        setResponseCount(prev => prev + 1);
+        return;
+      }
       const history = getConversationHistory();
       const aiResult = await generateCommandCenterResponse(
         prompt,
@@ -628,6 +657,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       );
 
       if (aiResult.text) {
+        if (refreshProfile) await refreshProfile();
         // Gemini succeeded — use AI response
         setMessages(prev => [...prev, {
           id: `ai-${Date.now()}`,

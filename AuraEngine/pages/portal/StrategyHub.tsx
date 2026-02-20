@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User, Lead, Team, TeamInvite } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { generatePipelineStrategy, parsePipelineStrategyResponse, PipelineStrategyResponse } from '../../lib/gemini';
 import {
   BoltIcon, SparklesIcon, CheckIcon, ShieldIcon, UsersIcon, MailIcon,
@@ -200,7 +201,7 @@ function formatAction(action: string): { label: string; type: ActivityType } {
 
 // ─── Component ───
 const StrategyHub: React.FC = () => {
-  const { user } = useOutletContext<LayoutContext>();
+  const { user, refreshProfile } = useOutletContext<LayoutContext>();
   const [activeTab, setActiveTab] = useState<TabView>('dashboard');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<StrategyTask[]>([]);
@@ -826,6 +827,11 @@ const StrategyHub: React.FC = () => {
     setIsGeneratingStrategy(true);
 
     try {
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['pipeline_strategy']);
+      if (!creditResult.success) {
+        setIsGeneratingStrategy(false);
+        return;
+      }
       const statusBreakdown: Record<string, number> = {};
       leads.forEach(l => { statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1; });
       const avgScore = leads.length > 0 ? Math.round(leads.reduce((s, l) => s + l.score, 0) / leads.length) : 0;
@@ -882,13 +888,14 @@ const StrategyHub: React.FC = () => {
             ...(isTeamMode ? { team_id: team!.id } : {}),
           });
         } catch { /* ignore logging failures */ }
+        if (refreshProfile) await refreshProfile();
       }
     } catch (err) {
       console.error('Strategy generation failed:', err);
     } finally {
       setIsGeneratingStrategy(false);
     }
-  }, [isGeneratingStrategy, leads, activityLog, emailsSent, user.id, user.businessProfile, isTeamMode, team]);
+  }, [isGeneratingStrategy, leads, activityLog, emailsSent, user.id, user.businessProfile, isTeamMode, team, refreshProfile]);
 
   // ─── Routine helpers ───
   const currentHour = new Date().getHours();
@@ -1252,6 +1259,7 @@ const StrategyHub: React.FC = () => {
                     >
                       <SparklesIcon className={`w-3.5 h-3.5 ${isGeneratingStrategy ? 'animate-spin' : ''}`} />
                       <span>{isGeneratingStrategy ? 'Generating...' : 'Generate Strategy'}</span>
+                      {!isGeneratingStrategy && <span className="px-1.5 py-0.5 text-[9px] font-black bg-indigo-200/50 rounded-md">{CREDIT_COSTS['pipeline_strategy']} cr</span>}
                     </button>
                   </div>
                 </div>

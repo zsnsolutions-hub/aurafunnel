@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { useOutletContext, Link } from 'react-router-dom';
 import { User } from '../../types';
 import ReactMarkdown from 'react-markdown';
@@ -51,7 +52,7 @@ const AI_MODES: { id: BlogContentMode; label: string; desc: string }[] = [
 ];
 
 const BlogDrafts: React.FC = () => {
-  const { user } = useOutletContext<{ user: User }>();
+  const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
   const [drafts, setDrafts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -348,6 +349,12 @@ const BlogDrafts: React.FC = () => {
     setAiGenerating(true);
     setAiResult('');
     try {
+      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['blog_content']);
+      if (!creditResult.success) {
+        setAiResult(creditResult.message || 'Insufficient credits.');
+        setAiGenerating(false);
+        return;
+      }
       const result = await generateBlogContent({
         mode: aiMode,
         topic: aiTopic,
@@ -357,6 +364,7 @@ const BlogDrafts: React.FC = () => {
         existingContent: (aiMode === 'improve' || aiMode === 'expand') ? newPost.content : undefined,
       });
       setAiResult(result.text);
+      if (refreshProfile) await refreshProfile();
     } catch {
       setAiResult('Generation failed. Please try again.');
     } finally {
@@ -435,6 +443,12 @@ const BlogDrafts: React.FC = () => {
     setCaptionGenerating(true);
     setCaptionText('');
     setCaptionCopied(false);
+    const creditResult = await consumeCredits(supabase, CREDIT_COSTS['social_caption']);
+    if (!creditResult.success) {
+      setCaptionText(creditResult.message || 'Insufficient credits.');
+      setCaptionGenerating(false);
+      return;
+    }
     const result = await generateSocialCaption({
       platform: captionPlatform,
       postTitle: captionPost.title,
@@ -443,6 +457,7 @@ const BlogDrafts: React.FC = () => {
     });
     setCaptionText(result.text);
     setCaptionGenerating(false);
+    if (refreshProfile) await refreshProfile();
   };
 
   const copyCaptionText = () => {
@@ -576,6 +591,7 @@ const BlogDrafts: React.FC = () => {
               >
                 {aiGenerating ? <RefreshIcon className="w-4 h-4 animate-spin" /> : <SparklesIcon className="w-4 h-4" />}
                 <span>{aiGenerating ? 'Generating...' : 'Generate'}</span>
+                {!aiGenerating && <span className="px-1.5 py-0.5 text-[9px] font-black bg-white/20 rounded-md">{CREDIT_COSTS['blog_content']} cr</span>}
               </button>
             </div>
 
@@ -1129,6 +1145,7 @@ const BlogDrafts: React.FC = () => {
               >
                 {captionGenerating ? <RefreshIcon className="w-4 h-4 animate-spin" /> : <SparklesIcon className="w-4 h-4" />}
                 <span>{captionGenerating ? 'Generating...' : 'Generate Caption'}</span>
+                {!captionGenerating && <span className="px-1.5 py-0.5 text-[9px] font-black bg-white/20 rounded-md">{CREDIT_COSTS['social_caption']} cr</span>}
               </button>
 
               {captionText && (
