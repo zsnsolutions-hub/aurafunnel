@@ -260,6 +260,7 @@ export function buildInvoiceEmailHtml(params: {
   dueDate: string | null;
   hostedUrl: string;
   businessName?: string;
+  logoUrl?: string;
   lineItems?: { description: string; quantity: number; unit_price_cents: number; amount_cents: number }[];
   currency?: string;
   notes?: string;
@@ -284,8 +285,10 @@ export function buildInvoiceEmailHtml(params: {
     '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background:#f8fafc;">',
     '<tr><td align="center" style="padding:32px 16px;">',
     '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="max-width:560px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">',
+    // Logo
+    params.logoUrl ? `<tr><td style="padding:24px 32px 0 32px;text-align:center;"><img src="${params.logoUrl}" alt="${from}" style="max-height:48px;max-width:200px;height:auto;width:auto;" /></td></tr>` : '',
     // Header
-    '<tr><td style="padding:32px 32px 16px 32px;">',
+    '<tr><td style="padding:' + (params.logoUrl ? '16px' : '32px') + ' 32px 16px 32px;">',
     `<p style="margin:0 0 8px;font-size:16px;color:#1e293b;">Hi ${firstName},</p>`,
     `<p style="margin:0;font-size:15px;color:#475569;">Here's your invoice from ${from}.</p>`,
     '</td></tr>',
@@ -387,6 +390,7 @@ export async function sendInvoiceEmail(invoiceId: string, user: User): Promise<S
     dueDate: invoiceData.due_date,
     hostedUrl: invoiceData.hosted_url,
     businessName,
+    logoUrl: user.businessProfile?.logoUrl || undefined,
     lineItems: lineItems || [],
     currency: invoiceData.currency,
     notes: invoiceRow?.notes || undefined,
