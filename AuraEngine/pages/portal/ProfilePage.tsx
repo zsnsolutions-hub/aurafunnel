@@ -6,9 +6,10 @@ import {
   TrendUpIcon, TrendDownIcon, KeyboardIcon, ActivityIcon, BrainIcon, LayersIcon, UsersIcon,
   ClockIcon, AlertTriangleIcon, DownloadIcon, SparklesIcon, DocumentIcon, TargetIcon, BriefcaseIcon,
   GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, BoltIcon, RefreshIcon, ChevronDownIcon,
-  PhoneIcon, MailIcon, MapPinIcon, UploadIcon
+  PhoneIcon, MailIcon, MapPinIcon, UploadIcon, TagIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import StageColorSettings from '../../components/leads/StageColorSettings';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
 import { useGuide } from '../../components/guide/useGuide';
@@ -17,7 +18,7 @@ const PREFS_STORAGE_KEY = 'aurafunnel_dashboard_prefs';
 const NOTIF_STORAGE_KEY = 'aurafunnel_notification_prefs';
 const APIKEYS_STORAGE_KEY = 'aurafunnel_api_keys';
 
-type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferences' | 'api_keys' | 'security';
+type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferences' | 'api_keys' | 'security' | 'pipeline_colors';
 
 const ProfilePage: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
@@ -25,7 +26,7 @@ const ProfilePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['profile','business_profile','notifications','preferences','api_keys','security'].includes(tab)) {
+    if (tab && ['profile','business_profile','notifications','preferences','api_keys','security','pipeline_colors'].includes(tab)) {
       return tab as SettingsTab;
     }
     return 'profile';
@@ -173,6 +174,7 @@ const ProfilePage: React.FC = () => {
     { id: 'preferences' as SettingsTab, label: 'Preferences', icon: <LayoutIcon className="w-4 h-4" /> },
     { id: 'api_keys' as SettingsTab, label: 'API Keys', icon: <KeyIcon className="w-4 h-4" /> },
     { id: 'security' as SettingsTab, label: 'Security', icon: <LockIcon className="w-4 h-4" /> },
+    { id: 'pipeline_colors' as SettingsTab, label: 'Pipeline Colors', icon: <TagIcon className="w-4 h-4" /> },
   ];
 
   // Profile handlers
@@ -1909,6 +1911,8 @@ const ProfilePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {activeTab === 'pipeline_colors' && <StageColorSettings user={user} />}
 
       {/* Delete Modal */}
       {isDeleteModalOpen && (

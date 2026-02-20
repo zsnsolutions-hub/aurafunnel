@@ -9,6 +9,9 @@ import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow 
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import CSVImportModal from '../../components/dashboard/CSVImportModal';
+import LeadColorDot from '../../components/leads/LeadColorDot';
+import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, resolveLeadColor, getColorClasses, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
+import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
 const formatRelativeTime = (dateStr: string): string => {
@@ -213,6 +216,22 @@ const LeadManagement: React.FC = () => {
   const [showEngagementMetrics, setShowEngagementMetrics] = useState(false);
   const [showScoreIntelligence, setShowScoreIntelligence] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // ── Lead Color State ──
+  const [stageColors, setStageColors] = useState<StageColorMap>({ ...DEFAULT_STAGE_COLORS });
+  const [colorOverrides, setColorOverrides] = useState<ColorOverrideMap>({});
+  useEffect(() => {
+    fetchStageColors().then(setStageColors);
+    fetchColorOverrides().then(setColorOverrides);
+  }, []);
+  const handleColorOverride = useCallback(async (leadId: string, token: ColorToken | null) => {
+    await setLeadColorOverride(leadId, token);
+    if (token === null) {
+      setColorOverrides(prev => { const next = { ...prev }; delete next[leadId]; return next; });
+    } else {
+      setColorOverrides(prev => ({ ...prev, [leadId]: token }));
+    }
+  }, []);
 
   // ── Seed email filter from query params ──
   useEffect(() => {
@@ -1698,7 +1717,7 @@ const LeadManagement: React.FC = () => {
                         return (
                           <div
                             key={lead.id}
-                            className="w-full text-left bg-white rounded-xl border border-slate-100 p-3.5 hover:shadow-md hover:border-indigo-200 transition-all group"
+                            className={`w-full text-left bg-white rounded-xl border border-slate-100 p-3.5 hover:shadow-md hover:border-indigo-200 transition-all group border-l-2 ${getColorClasses(resolveLeadColor(lead, stageColors, colorOverrides)).border}`}
                           >
                             <button
                               onClick={() => navigate(`/portal/leads/${lead.id}`)}
@@ -1769,6 +1788,7 @@ const LeadManagement: React.FC = () => {
                         className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                       />
                     </th>
+                    <th className="w-10 px-2"></th>
                     <th className="px-4 py-4 cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => handleSort('name')}>
                       <div className="flex items-center space-x-1">
                         <span>Name</span>
@@ -1801,14 +1821,14 @@ const LeadManagement: React.FC = () => {
                   {loading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>
-                        <td colSpan={7} className="px-4 py-4">
+                        <td colSpan={8} className="px-4 py-4">
                           <div className="h-10 bg-slate-50 animate-pulse rounded-xl"></div>
                         </td>
                       </tr>
                     ))
                   ) : paginatedLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-20 text-center text-slate-400 italic">
+                      <td colSpan={8} className="px-6 py-20 text-center text-slate-400 italic">
                         {allLeads.length === 0 ? 'No leads yet. Add your first lead to get started.' : 'No leads match your current filters.'}
                       </td>
                     </tr>
@@ -1824,6 +1844,9 @@ const LeadManagement: React.FC = () => {
                             onChange={() => toggleSelect(lead.id)}
                             className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                           />
+                        </td>
+                        <td className="px-2 py-3.5">
+                          <LeadColorDot size="sm" lead={lead} stageColors={stageColors} overrides={colorOverrides} onOverrideChange={handleColorOverride} />
                         </td>
                         <td className="px-4 py-3.5">
                           <button

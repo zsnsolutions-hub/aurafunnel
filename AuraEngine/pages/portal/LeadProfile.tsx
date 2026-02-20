@@ -17,6 +17,11 @@ import { fetchLeadEmailEngagement, sendTrackedEmail } from '../../lib/emailTrack
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import type { EmailEngagement } from '../../types';
 import EmailEngagementCard from '../../components/dashboard/EmailEngagementCard';
+import LeadInvoicesTab from '../../components/invoices/LeadInvoicesTab';
+import CreateInvoiceDrawer from '../../components/invoices/CreateInvoiceDrawer';
+import LeadColorDot from '../../components/leads/LeadColorDot';
+import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
+import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
 const scoreToStars = (score: number): number => {
@@ -141,7 +146,7 @@ const eventTypeIcon = (type: string) => {
   }
 };
 
-type TabKey = 'ai-insights' | 'activity' | 'notes' | 'campaigns' | 'tasks' | 'files';
+type TabKey = 'ai-insights' | 'activity' | 'notes' | 'campaigns' | 'tasks' | 'files' | 'invoices';
 
 // ── Notes State ──
 interface NoteItem {
@@ -166,6 +171,7 @@ const LeadProfile: React.FC = () => {
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('ai-insights');
+  const [showCreateInvoice, setShowCreateInvoice] = useState(false);
 
   // Notes
   const [notes, setNotes] = useState<NoteItem[]>([]);
@@ -193,6 +199,22 @@ const LeadProfile: React.FC = () => {
   const [showConversionIntel, setShowConversionIntel] = useState(false);
   const [showEngagementMap, setShowEngagementMap] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // ── Lead Colors ──
+  const [stageColors, setStageColors] = useState<StageColorMap>({ ...DEFAULT_STAGE_COLORS });
+  const [colorOverrides, setColorOverrides] = useState<ColorOverrideMap>({});
+  useEffect(() => {
+    fetchStageColors().then(setStageColors);
+    fetchColorOverrides().then(setColorOverrides);
+  }, []);
+  const handleColorOverride = useCallback(async (leadId: string, token: ColorToken | null) => {
+    await setLeadColorOverride(leadId, token);
+    if (token === null) {
+      setColorOverrides(prev => { const next = { ...prev }; delete next[leadId]; return next; });
+    } else {
+      setColorOverrides(prev => ({ ...prev, [leadId]: token }));
+    }
+  }, []);
 
   // ── Knowledge Base ──
   const [kbDrawerOpen, setKbDrawerOpen] = useState(false);
@@ -676,6 +698,7 @@ const LeadProfile: React.FC = () => {
     { key: 'campaigns', label: 'Campaigns' },
     { key: 'tasks', label: 'Tasks' },
     { key: 'files', label: 'Files' },
+    { key: 'invoices', label: 'Invoices' },
   ];
 
   return (
@@ -695,9 +718,12 @@ const LeadProfile: React.FC = () => {
               <span>/</span>
               <span className="text-slate-600 font-medium">{lead.name}</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 font-heading">
-              {lead.name} <span className="text-slate-400 font-normal">—</span> <span className="text-slate-600">{lead.company}</span>
-            </h1>
+            <div className="flex items-center space-x-2">
+              <LeadColorDot size="md" lead={lead} stageColors={stageColors} overrides={colorOverrides} onOverrideChange={handleColorOverride} />
+              <h1 className="text-2xl font-bold text-slate-900 font-heading">
+                {lead.name} <span className="text-slate-400 font-normal">—</span> <span className="text-slate-600">{lead.company}</span>
+              </h1>
+            </div>
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -1226,6 +1252,15 @@ const LeadProfile: React.FC = () => {
                     <p className="text-xs text-slate-400">Proposals, contracts, and documents related to this lead.</p>
                   </div>
                 </div>
+              )}
+
+              {/* ── INVOICES TAB ── */}
+              {activeTab === 'invoices' && (
+                <LeadInvoicesTab
+                  leadId={lead.id}
+                  leadName={lead.name}
+                  onCreateInvoice={() => setShowCreateInvoice(true)}
+                />
               )}
             </div>
           </div>
@@ -2304,6 +2339,16 @@ const LeadProfile: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Create Invoice Drawer */}
+      {lead && (
+        <CreateInvoiceDrawer
+          open={showCreateInvoice}
+          onClose={() => setShowCreateInvoice(false)}
+          onSuccess={() => setShowCreateInvoice(false)}
+          preselectedLeadId={lead.id}
+        />
       )}
     </div>
   );
