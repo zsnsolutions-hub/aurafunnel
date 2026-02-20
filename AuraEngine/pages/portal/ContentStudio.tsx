@@ -531,11 +531,11 @@ const ContentStudio: React.FC = () => {
   const buildHtmlBody = (bodyText: string, footer: string) => {
     // Legacy: prepend images from emailImages array (LinkedIn mode / backward compat)
     const legacyImagesHtml = emailImages.length > 0
-      ? emailImages.map(url => `<div style="margin-bottom:16px;"><img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`).join('')
+      ? emailImages.map(url => `<div style="margin-bottom:16px;text-align:center;"><img src="${url}" alt="" style="display:block;margin:0 auto;max-width:100%;height:auto;border-radius:8px;" /></div>`).join('')
       : '';
     // Replace [image:URL] placeholders with inline <img> tags
     const htmlBody = bodyText
-      .replace(IMAGE_PLACEHOLDER_REGEX, (_match, url) => `<div style="margin:16px 0;"><img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`)
+      .replace(IMAGE_PLACEHOLDER_REGEX, (_match, url) => `<div style="margin:16px 0;text-align:center;"><img src="${url}" alt="" style="display:block;margin:0 auto;max-width:100%;height:auto;border-radius:8px;" /></div>`)
       .replace(/\n/g, '<br />');
     return `<div>${legacyImagesHtml}${htmlBody}</div>${footer}`;
   };

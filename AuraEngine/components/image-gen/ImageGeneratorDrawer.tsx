@@ -308,6 +308,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
           onInsert={onInsertImage ? handleInsertImage : undefined}
           insertLabel={insertLabel}
           insertingIds={insertingIds}
+          aspectRatio={aspectRatio}
         />
       </div>
     </Drawer>

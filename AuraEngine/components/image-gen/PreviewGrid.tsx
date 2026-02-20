@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ImageGenGeneratedImage } from '../../types';
+import type { ImageGenGeneratedImage, ImageAspectRatio } from '../../types';
 import { CheckIcon, DownloadIcon, EyeIcon, XIcon, PlusIcon } from '../Icons';
 
 interface PreviewGridProps {
@@ -10,17 +10,27 @@ interface PreviewGridProps {
   savedIds?: Set<string>;
   insertLabel?: string;
   insertingIds?: Set<string>;
+  aspectRatio?: ImageAspectRatio;
 }
 
-const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onInsert, savedIds, insertLabel = 'Use in Email', insertingIds }) => {
+const ASPECT_CLASSES: Record<string, string> = {
+  '1:1': 'aspect-square',
+  '4:5': 'aspect-[4/5]',
+  '16:9': 'aspect-video',
+};
+
+const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onInsert, savedIds, insertLabel = 'Use in Email', insertingIds, aspectRatio = '1:1' }) => {
   const [insertedIds, setInsertedIds] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  const aspectClass = ASPECT_CLASSES[aspectRatio] || 'aspect-square';
+  const isWide = aspectRatio === '16:9';
+
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid ${isWide ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="aspect-square bg-slate-100 rounded-xl animate-pulse flex items-center justify-center">
+          <div key={i} className={`${aspectClass} bg-slate-100 rounded-xl animate-pulse flex items-center justify-center`}>
             <div className="w-8 h-8 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
           </div>
         ))}
@@ -31,10 +41,11 @@ const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onIn
   if (images.length === 0) return null;
 
   const getDisplayUrl = (img: ImageGenGeneratedImage) => img.final_image_url || img.base_image_url;
+  const useSingleCol = images.length === 1 || isWide;
 
   return (
     <>
-      <div className={`grid ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+      <div className={`grid ${useSingleCol ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
         {images.map(img => {
           const url = getDisplayUrl(img);
           const isSaved = savedIds?.has(img.id);
@@ -43,7 +54,7 @@ const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onIn
               <img
                 src={url}
                 alt="Generated"
-                className="w-full aspect-square object-cover"
+                className={`w-full ${aspectClass} object-cover`}
                 loading="lazy"
               />
               {/* Hover overlay */}

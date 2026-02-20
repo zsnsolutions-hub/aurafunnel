@@ -24,24 +24,24 @@ export interface ImagePreset {
 
 export const MODULE_PRESETS: Record<ImageModuleType, ImagePreset[]> = {
   newsletter: [
-    { id: 'newsletter-hero', label: 'Hero Banner', prompt: 'Professional newsletter hero banner, clean layout, modern typography, inviting color palette, editorial style' },
-    { id: 'newsletter-feature', label: 'Feature Highlight', prompt: 'Clean feature highlight image, minimal design, single product focus, soft shadows, white background' },
-    { id: 'newsletter-cta', label: 'Call to Action', prompt: 'Engaging call-to-action banner, bold headline area, contrasting button region, urgent yet professional' },
+    { id: 'newsletter-hero', label: 'Hero Banner', prompt: 'Professional newsletter hero banner, clean layout with generous margins, modern typography centered in safe area, inviting color palette, editorial style, all text well within image boundaries' },
+    { id: 'newsletter-feature', label: 'Feature Highlight', prompt: 'Clean feature highlight image, minimal design, single product focus, soft shadows, white background, text labels contained in neat rounded boxes' },
+    { id: 'newsletter-cta', label: 'Call to Action', prompt: 'Engaging call-to-action banner with text centered in a padded container, bold headline area with clear margins, contrasting button region well inside the frame, urgent yet professional' },
   ],
   pricing: [
-    { id: 'pricing-comparison', label: 'Plan Comparison', prompt: 'Clean pricing comparison visual, tiered columns, highlighted recommended plan, professional SaaS style' },
-    { id: 'pricing-value', label: 'Value Proposition', prompt: 'Value proposition illustration, abstract growth metaphor, upward trend, confident and aspirational' },
-    { id: 'pricing-badge', label: 'Pricing Badge', prompt: 'Premium pricing badge design, gold or silver accent, trust seal, professional emblem style' },
+    { id: 'pricing-comparison', label: 'Plan Comparison', prompt: 'Clean pricing comparison visual with distinct bordered card columns, each plan name and price centered inside its card with padding, highlighted recommended plan, professional SaaS style, all text contained within card boundaries' },
+    { id: 'pricing-value', label: 'Value Proposition', prompt: 'Value proposition illustration, abstract growth metaphor, upward trend, text overlay on a semi-transparent panel with generous padding, confident and aspirational' },
+    { id: 'pricing-badge', label: 'Pricing Badge', prompt: 'Premium pricing badge design, gold or silver accent, trust seal, professional emblem style, all text centered within the badge boundary' },
   ],
   products: [
-    { id: 'product-showcase', label: 'Product Showcase', prompt: 'Product showcase on clean background, studio lighting, professional product photography style, soft shadows' },
-    { id: 'product-feature', label: 'Feature Grid', prompt: 'Product features grid layout, icon-driven, minimal text placeholders, organized and scannable' },
-    { id: 'product-lifestyle', label: 'Lifestyle Shot', prompt: 'Product in lifestyle context, natural environment, warm lighting, aspirational and relatable' },
+    { id: 'product-showcase', label: 'Product Showcase', prompt: 'Product showcase on clean background, studio lighting, professional product photography style, soft shadows, product labels in contained caption areas below each item' },
+    { id: 'product-feature', label: 'Feature Grid', prompt: 'Product features grid layout, icon-driven, text inside neat rounded containers, organized and scannable, generous spacing between grid items' },
+    { id: 'product-lifestyle', label: 'Lifestyle Shot', prompt: 'Product in lifestyle context, natural environment, warm lighting, aspirational and relatable, any text overlays on semi-transparent panels with padding' },
   ],
   services: [
-    { id: 'service-overview', label: 'Service Overview', prompt: 'Professional service overview graphic, abstract representation of teamwork and expertise, corporate style' },
-    { id: 'service-process', label: 'Process Flow', prompt: 'Service process flow diagram style, numbered steps, clean arrows, infographic aesthetic' },
-    { id: 'service-benefit', label: 'Benefits Highlight', prompt: 'Service benefits illustration, positive outcomes imagery, growth and success metaphors, bright palette' },
+    { id: 'service-overview', label: 'Service Overview', prompt: 'Professional service overview graphic, service names inside clearly defined card sections with padding, abstract representation of teamwork and expertise, corporate style' },
+    { id: 'service-process', label: 'Process Flow', prompt: 'Service process flow diagram style, numbered steps inside circular badges, clean arrows between steps, infographic aesthetic, all labels contained within their step containers' },
+    { id: 'service-benefit', label: 'Benefits Highlight', prompt: 'Service benefits illustration, benefit text inside neat card panels with padding, positive outcomes imagery, growth and success metaphors, bright palette' },
   ],
 };
 
@@ -171,9 +171,9 @@ export function buildImagePrompt(opts: {
       case 'newsletter': {
         const f = mf.fields;
         const nlParts: string[] = [];
-        if (f.headline) nlParts.push(`headline reads: "${f.headline}"`);
-        if (f.subheadline) nlParts.push(`subheadline: "${f.subheadline}"`);
-        if (f.ctaText) nlParts.push(`CTA says "${f.ctaText}"`);
+        if (f.headline) nlParts.push(`headline reads: "${f.headline}" (render as large bold text centered horizontally with padding from edges)`);
+        if (f.subheadline) nlParts.push(`subheadline: "${f.subheadline}" (render as smaller text below the headline, also centered with margins)`);
+        if (f.ctaText) nlParts.push(`CTA button says "${f.ctaText}" (render inside a rounded button shape, centered)`);
         if (f.targetAudience) nlParts.push(`targeting: ${f.targetAudience}`);
         if (nlParts.length) parts.push(`The newsletter ${nlParts.join(', ')}.`);
         break;
@@ -273,12 +273,15 @@ export function buildImagePrompt(opts: {
     parts.push(`Reserve space for a ${opacity} logo at the ${placement} of the image.`);
   }
 
-  // 8) Module flavour note
+  // 8) Text layout and containment rules
+  parts.push('CRITICAL LAYOUT RULES: All text must stay fully inside the image boundaries with generous padding (at least 40px from every edge). Never let text touch or bleed past the edges. Text must be fully readable, properly sized, and contained within clearly defined sections or cards. Use high contrast between text and backgrounds for legibility. If the design has cards, boxes, or containers, all content must fit inside them with visible inner padding. Avoid placing long text strings on a single line — break into multiple lines if needed. Headlines should be large and bold, body text should be smaller and well-spaced. Never overlap text on busy areas — use solid or semi-transparent background panels behind text.');
+
+  // 9) Module flavour note
   const flavour: Record<ImageModuleType, string> = {
     newsletter: 'Suitable for an email newsletter header or inline graphic.',
-    pricing: 'Suitable for a SaaS pricing page or promotional material.',
-    products: 'Suitable for an e-commerce product listing or catalog.',
-    services: 'Suitable for a professional services landing page or brochure.',
+    pricing: 'Suitable for a SaaS pricing page or promotional material. Each pricing tier must be in its own clearly bounded card/column with all text (plan name, price, features) fully contained inside.',
+    products: 'Suitable for an e-commerce product listing or catalog. Product names and descriptions must be inside clearly defined label areas.',
+    services: 'Suitable for a professional services landing page or brochure. Service names and descriptions must be inside clearly defined sections.',
   };
   parts.push(flavour[opts.moduleType]);
 

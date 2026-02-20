@@ -535,7 +535,7 @@ const ContentGen: React.FC = () => {
 
   const buildHtmlBody = (bodyText: string, footer: string) => {
     const imagesHtml = emailImages.length > 0
-      ? emailImages.map(url => `<div style="margin-bottom:16px;"><img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`).join('')
+      ? emailImages.map(url => `<div style="margin-bottom:16px;text-align:center;"><img src="${url}" alt="" style="display:block;margin:0 auto;max-width:100%;height:auto;border-radius:8px;" /></div>`).join('')
       : '';
     return `<div>${imagesHtml}${bodyText.replace(/\n/g, '<br />')}</div>${footer}`;
   };
