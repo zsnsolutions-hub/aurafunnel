@@ -318,7 +318,7 @@ export function buildInvoiceEmailHtml(params: {
     // Line items
     lineItemsHtml,
     // Notes
-    params.notes ? `<tr><td style="padding:16px 32px 0 32px;"><div style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:12px 16px;"><p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Package Details</p><p style="margin:0;font-size:13px;color:#1e293b;white-space:pre-wrap;">${params.notes}</p></div></td></tr>` : '',
+    params.notes ? `<tr><td style="padding:16px 32px 0 32px;"><div style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:12px 16px;"><p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Package Details</p><p style="margin:0;font-size:13px;color:#1e293b;line-height:1.6;">${params.notes.replace(/\n/g, '<br>')}</p></div></td></tr>` : '',
     // CTA button
     '<tr><td style="padding:8px 32px 0 32px;">',
     ctaHtml,
