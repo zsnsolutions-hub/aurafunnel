@@ -262,6 +262,7 @@ export function buildInvoiceEmailHtml(params: {
   businessName?: string;
   lineItems?: { description: string; quantity: number; unit_price_cents: number; amount_cents: number }[];
   currency?: string;
+  notes?: string;
 }): string {
   const firstName = params.leadName.split(' ')[0] || params.leadName;
   const from = params.businessName || 'us';
@@ -316,6 +317,8 @@ export function buildInvoiceEmailHtml(params: {
     '</td></tr>',
     // Line items
     lineItemsHtml,
+    // Notes
+    params.notes ? `<tr><td style="padding:16px 32px 0 32px;"><div style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:12px 16px;"><p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Package Details</p><p style="margin:0;font-size:13px;color:#1e293b;white-space:pre-wrap;">${params.notes}</p></div></td></tr>` : '',
     // CTA button
     '<tr><td style="padding:8px 32px 0 32px;">',
     ctaHtml,
@@ -377,12 +380,18 @@ export async function sendInvoiceEmail(invoiceId: string, user: User): Promise<S
     return { success: false, error: 'No email provider connected. Configure one in Settings.' };
   }
 
-  // Fetch line items for the email
+  // Fetch line items and notes for the email
   const { data: lineItems } = await supabase
     .from('invoice_line_items')
     .select('description, quantity, unit_price_cents, amount_cents')
     .eq('invoice_id', invoiceId)
     .order('created_at', { ascending: true });
+
+  const { data: invoiceRow } = await supabase
+    .from('invoices')
+    .select('notes')
+    .eq('id', invoiceId)
+    .single();
 
   const totalFormatted = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -400,6 +409,7 @@ export async function sendInvoiceEmail(invoiceId: string, user: User): Promise<S
     businessName,
     lineItems: lineItems || [],
     currency: invoiceData.currency,
+    notes: invoiceRow?.notes || undefined,
   });
 
   const subject = `Invoice #${invoiceData.invoice_number} from ${businessName}`;

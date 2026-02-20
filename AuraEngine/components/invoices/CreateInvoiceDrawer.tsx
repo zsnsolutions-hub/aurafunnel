@@ -135,6 +135,9 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
         unit_price_cents: item.unit_price_cents,
       }))
     );
+    if (pkg.description) {
+      setNotes(pkg.description);
+    }
   };
 
   const subtotalCents = lineItems.reduce(
