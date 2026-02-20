@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-
 import { UserRole, User } from './types';
 import { supabase } from './lib/supabase';
 import ErrorBoundary from './components/ErrorBoundary';
+import { GuideProvider } from './components/guide/GuideProvider';
 
 // Layouts — kept eager since they wrap all child routes
 import MarketingLayout from './components/layout/MarketingLayout';
@@ -162,6 +163,7 @@ const App: React.FC = () => {
   }
 
   return (
+    <GuideProvider>
     <ErrorBoundary>
       {/* Logout Confirmation Modal */}
       {showLogoutModal && (
@@ -264,6 +266,7 @@ const App: React.FC = () => {
         </Routes>
       </Suspense>
     </ErrorBoundary>
+    </GuideProvider>
   );
 };
 

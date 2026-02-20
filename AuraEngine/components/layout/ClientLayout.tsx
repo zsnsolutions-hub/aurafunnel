@@ -8,6 +8,7 @@ import {
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
 import DailyBriefing from '../dashboard/DailyBriefing';
+import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -231,13 +232,16 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
               </button>
             }
             actions={
-              <button
-                onClick={() => setBriefingOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 rounded-xl text-xs font-medium hover:bg-gray-100 hover:border-gray-300 transition-all duration-150 ease-out"
-              >
-                <Bell size={16} />
-                <span>Briefing</span>
-              </button>
+              <>
+                <GuideMenuButton />
+                <button
+                  onClick={() => setBriefingOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 rounded-xl text-xs font-medium hover:bg-gray-100 hover:border-gray-300 transition-all duration-150 ease-out"
+                >
+                  <Bell size={16} />
+                  <span>Briefing</span>
+                </button>
+              </>
             }
           />
         }

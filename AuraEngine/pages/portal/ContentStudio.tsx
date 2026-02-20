@@ -1409,7 +1409,7 @@ const ContentStudio: React.FC = () => {
             <LayersIcon className="w-3.5 h-3.5" />
             <span>Batch</span>
           </button>
-          <button onClick={() => setShowImageGen(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm" title="Generate Image">
+          <button data-guide="content-image-gen" onClick={() => setShowImageGen(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm" title="Generate Image">
             <CameraIcon className="w-3.5 h-3.5" />
             <span>Generate Image</span>
           </button>
@@ -1777,7 +1777,7 @@ const ContentStudio: React.FC = () => {
               <FilterIcon className="w-3.5 h-3.5" />
               <span>Find &amp; Replace</span>
             </button>
-            <div className="flex rounded-lg overflow-hidden border border-slate-200">
+            <div data-guide="content-preview" className="flex rounded-lg overflow-hidden border border-slate-200">
               {(['editor', 'preview', 'analytics', 'templates'] as ViewTab[]).map(tab => (
                 <button
                   key={tab}
@@ -2013,7 +2013,7 @@ const ContentStudio: React.FC = () => {
         <div className="flex flex-col lg:flex-row gap-5">
 
           {/* ─── Editor / Preview Area (65%) ─── */}
-          <div className="lg:w-[65%] space-y-5">
+          <div className="lg:w-[65%] space-y-5" data-guide="content-editor">
 
             {/* ═══ EMAIL EDITOR ═══ */}
             {viewTab === 'editor' && contentMode === 'email' && activeVariant && (
@@ -2049,6 +2049,7 @@ const ContentStudio: React.FC = () => {
                         <span>AI Generate</span>
                       </button>
                       <button
+                        data-guide="content-cta"
                         onClick={() => setShowCtaBuilder(true)}
                         className="flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-all"
                       >

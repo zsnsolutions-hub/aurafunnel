@@ -941,6 +941,7 @@ const LeadManagement: React.FC = () => {
             <span>Export</span>
           </button>
           <button
+            data-guide="leads-add"
             onClick={() => { setIsAddLeadOpen(true); setAddLeadError(''); }}
             className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
           >
@@ -1199,7 +1200,7 @@ const LeadManagement: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6">
 
         {/* ── FILTER PANEL (25%) ── */}
-        <div className="w-full lg:w-[25%] space-y-5">
+        <div className="w-full lg:w-[25%] space-y-5" data-guide="leads-filters">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center space-x-2">
@@ -1307,7 +1308,7 @@ const LeadManagement: React.FC = () => {
             </div>
 
             {/* Email Engagement */}
-            <div className="mb-5">
+            <div className="mb-5" data-guide="leads-email-filter">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Email Engagement</label>
               <div className="flex flex-wrap gap-2">
                 {(['sent', 'opened', 'clicked'] as const).map(key => {
@@ -1465,7 +1466,7 @@ const LeadManagement: React.FC = () => {
 
           {/* Enhanced Bulk Actions Bar */}
           {selectedIds.size > 0 && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 animate-in fade-in duration-300">
+            <div data-guide="leads-bulk-actions" className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 animate-in fade-in duration-300">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-bold text-indigo-700">
                   {selectedIds.size} lead{selectedIds.size !== 1 ? 's' : ''} selected
@@ -1755,7 +1756,7 @@ const LeadManagement: React.FC = () => {
 
           {/* Lead Table */}
           {viewMode === 'table' && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div data-guide="leads-table" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-50/70 text-slate-500 text-[10px] font-bold uppercase tracking-widest border-b border-slate-100">

@@ -231,7 +231,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         </div>
 
         {/* Node Palette */}
-        <div className="mt-6 pt-5 border-t border-dashed border-slate-200">
+        <div data-guide="automation-palette" className="mt-6 pt-5 border-t border-dashed border-slate-200">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3 text-center">Add to Workflow</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button onClick={() => onAddNode('action')} className="flex flex-col items-center p-3 bg-emerald-50 rounded-xl text-emerald-700 hover:bg-emerald-100 transition-all border border-emerald-200">

@@ -779,7 +779,7 @@ const AnalyticsPage: React.FC = () => {
           <p className="text-slate-400 text-xs mt-0.5">Real-time intelligence across your entire pipeline</p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div data-guide="analytics-reports" className="flex items-center space-x-2">
           {/* Data Freshness */}
           <div className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl shadow-sm">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -861,6 +861,7 @@ const AnalyticsPage: React.FC = () => {
 
           {/* Generate Report Button */}
           <button
+            data-guide="analytics-export"
             onClick={openReportBuilder}
             className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
           >
@@ -912,7 +913,7 @@ const AnalyticsPage: React.FC = () => {
         <div className="lg:w-[75%] space-y-6">
 
           {/* CHART AREA */}
-          <div className="space-y-6">
+          <div data-guide="analytics-charts" className="space-y-6">
             {/* Lead Generation Trend */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between mb-4">

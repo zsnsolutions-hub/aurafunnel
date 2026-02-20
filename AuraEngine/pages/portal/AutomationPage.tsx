@@ -255,7 +255,7 @@ export default function AutomationPage() {
 
           {/* Canvas + Config */}
           <div className="flex flex-col lg:flex-row gap-5">
-            <div className="lg:w-[70%]">
+            <div className="lg:w-[70%]" data-guide="automation-canvas">
               <WorkflowCanvas
                 workflow={h.workflow}
                 selectedNodeId={h.selectedNodeId}
@@ -271,7 +271,7 @@ export default function AutomationPage() {
                 availableWebhooks={h.availableWebhooks}
               />
             </div>
-            <div className="lg:w-[30%]">
+            <div className="lg:w-[30%]" data-guide="automation-config">
               <NodeConfigPanel
                 selectedNode={h.selectedNode}
                 onUpdateConfig={h.updateNodeConfig}
@@ -353,10 +353,12 @@ export default function AutomationPage() {
 
       {/* ═══ WORKFLOW ANALYTICS BAR ═══ */}
       {(!h.wizardActive || h.wizardStep === 2) && (
-        <WorkflowAnalyticsBar
-          workflow={h.workflow}
-          executionLog={h.executionLog}
-        />
+        <div data-guide="automation-analytics">
+          <WorkflowAnalyticsBar
+            workflow={h.workflow}
+            executionLog={h.executionLog}
+          />
+        </div>
       )}
 
       {/* ═══ DRAWERS & MODAL ═══ */}

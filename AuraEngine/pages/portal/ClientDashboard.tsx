@@ -747,7 +747,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  HERO BANNER                                                  */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 md:p-10 text-white relative overflow-hidden">
+      <div data-guide="dashboard-hero" className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 md:p-10 text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
         <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-500/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/4"></div>
 
@@ -810,7 +810,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  DASHBOARD ACTION BAR                                         */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
+      <div data-guide="dashboard-actions" className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <button onClick={() => setShowPipelineHealth(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
             <ShieldIcon className="w-3.5 h-3.5" />
@@ -846,7 +846,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  QUICK ACTIONS ROW                                            */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
+      <div data-guide="dashboard-quick-actions" className="flex items-center justify-between">
         <QuickActionsBar
           onImportCSV={() => setIsCSVOpen(true)}
           onGenerateContent={() => { if (leads.length > 0) openGenModal(); }}
@@ -862,14 +862,17 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  QUICK STATS ROW + EMAIL PERFORMANCE (inline grid)             */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <QuickStatsRow stats={quickStats} loading={statsLoading}>
-        <EmailPerformanceCard />
-      </QuickStatsRow>
+      <div data-guide="dashboard-stats">
+        <QuickStatsRow stats={quickStats} loading={statsLoading}>
+          <EmailPerformanceCard />
+        </QuickStatsRow>
+      </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  FOLLOW-UP ALERT CARD                                         */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {followUpLeads.length > 0 && (
+        <div data-guide="dashboard-followup">
         <button
           onClick={() => navigate('/portal/leads?followUp=true')}
           className="w-full bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200 rounded-2xl p-5 flex items-center justify-between hover:shadow-md hover:border-amber-300 transition-all group text-left"
@@ -890,6 +893,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             <ArrowRightIcon className="w-3.5 h-3.5" />
           </span>
         </button>
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
@@ -1131,7 +1135,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Segmentation Sidebar */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1" data-guide="dashboard-segments">
           <LeadSegmentation
             leads={leads}
             activeSegmentId={activeSegmentId}
