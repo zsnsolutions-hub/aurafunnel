@@ -147,7 +147,7 @@ serve(async (req) => {
         customer: stripeCustomerId,
         description: item.description,
         quantity: String(item.quantity || 1),
-        unit_amount: String(item.unit_price_cents),
+        unit_amount_decimal: String(item.unit_price_cents),
         currency,
       });
     }
