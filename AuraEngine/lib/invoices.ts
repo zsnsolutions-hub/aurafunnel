@@ -117,17 +117,30 @@ export async function fetchLeadInvoices(leadId: string): Promise<Invoice[]> {
 export async function createAndSendInvoice(
   params: CreateInvoiceParams
 ): Promise<{ invoice_id: string; hosted_url: string | null }> {
-  const { data, error } = await supabase.functions.invoke('billing-create-invoice', {
-    body: params,
-  });
+  let data: any;
+  let error: any;
+  try {
+    const result = await supabase.functions.invoke('billing-create-invoice', {
+      body: params,
+    });
+    data = result.data;
+    error = result.error;
+  } catch (networkErr) {
+    throw new Error(`Failed to send a request to the Edge Function: ${(networkErr as Error).message}`);
+  }
 
   if (error) {
-    const msg = (error as any)?.context?.body
-      ? await (error as any).context.json().catch(() => null)
-      : null;
-    throw new Error(msg?.error || error.message || 'Failed to create invoice');
+    let msg: string | null = null;
+    try {
+      if ((error as any)?.context?.body) {
+        const parsed = await (error as any).context.json();
+        msg = parsed?.error;
+      }
+    } catch { /* ignore parse errors */ }
+    throw new Error(msg || error.message || 'Failed to create invoice');
   }
   if (data?.error) throw new Error(data.error);
+  if (!data?.invoice_id) throw new Error('No invoice ID returned from server');
   return { invoice_id: data.invoice_id, hosted_url: data.hosted_url ?? null };
 }
 
