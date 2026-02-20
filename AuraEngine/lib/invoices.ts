@@ -260,12 +260,16 @@ export function buildInvoiceEmailHtml(params: {
   dueDate: string | null;
   hostedUrl: string;
   businessName?: string;
+  lineItems?: { description: string; quantity: number; unit_price_cents: number; amount_cents: number }[];
+  currency?: string;
 }): string {
   const firstName = params.leadName.split(' ')[0] || params.leadName;
   const from = params.businessName || 'us';
   const dueDateDisplay = params.dueDate
     ? new Date(params.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : 'Upon receipt';
+  const cur = (params.currency || 'usd').toUpperCase();
+  const fmtCents = (c: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(c / 100);
 
   const ctaHtml = buildEmailCtaButtonHTML({
     text: 'View & Pay Invoice',
@@ -273,6 +277,23 @@ export function buildInvoiceEmailHtml(params: {
     variant: 'primary',
     align: 'center',
   });
+
+  // Build line items rows
+  let lineItemsHtml = '';
+  if (params.lineItems && params.lineItems.length > 0) {
+    const rows = params.lineItems.map((item) =>
+      `<tr><td style="padding:8px 16px;font-size:13px;color:#1e293b;border-bottom:1px solid #e2e8f0;">${item.description}</td><td style="padding:8px 16px;font-size:13px;color:#64748b;text-align:center;border-bottom:1px solid #e2e8f0;">${item.quantity}</td><td style="padding:8px 16px;font-size:13px;font-weight:600;color:#1e293b;text-align:right;border-bottom:1px solid #e2e8f0;">${fmtCents(item.amount_cents)}</td></tr>`
+    ).join('');
+
+    lineItemsHtml = [
+      '<tr><td style="padding:16px 32px 0 32px;">',
+      '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">',
+      '<tr><td style="padding:8px 16px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #e2e8f0;">Description</td><td style="padding:8px 16px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;text-align:center;border-bottom:1px solid #e2e8f0;">Qty</td><td style="padding:8px 16px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;text-align:right;border-bottom:1px solid #e2e8f0;">Amount</td></tr>',
+      rows,
+      '</table>',
+      '</td></tr>',
+    ].join('');
+  }
 
   return [
     '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>',
@@ -293,6 +314,8 @@ export function buildInvoiceEmailHtml(params: {
     `<tr><td style="padding:12px 16px;font-size:13px;color:#64748b;">Due Date</td><td style="padding:12px 16px;font-size:13px;font-weight:700;color:#1e293b;text-align:right;">${dueDateDisplay}</td></tr>`,
     '</table>',
     '</td></tr>',
+    // Line items
+    lineItemsHtml,
     // CTA button
     '<tr><td style="padding:8px 32px 0 32px;">',
     ctaHtml,
@@ -354,6 +377,13 @@ export async function sendInvoiceEmail(invoiceId: string, user: User): Promise<S
     return { success: false, error: 'No email provider connected. Configure one in Settings.' };
   }
 
+  // Fetch line items for the email
+  const { data: lineItems } = await supabase
+    .from('invoice_line_items')
+    .select('description, quantity, unit_price_cents, amount_cents')
+    .eq('invoice_id', invoiceId)
+    .order('created_at', { ascending: true });
+
   const totalFormatted = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: (invoiceData.currency || 'usd').toUpperCase(),
@@ -368,6 +398,8 @@ export async function sendInvoiceEmail(invoiceId: string, user: User): Promise<S
     dueDate: invoiceData.due_date,
     hostedUrl: invoiceData.hosted_url,
     businessName,
+    lineItems: lineItems || [],
+    currency: invoiceData.currency,
   });
 
   const subject = `Invoice #${invoiceData.invoice_number} from ${businessName}`;

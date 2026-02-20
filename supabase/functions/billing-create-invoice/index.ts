@@ -163,11 +163,9 @@ serve(async (req) => {
       await stripePost("/v1/invoiceitems", {
         customer: stripeCustomerId,
         invoice: stripeInvoice.id,
-        description: item.description,
-        quantity: String(item.quantity || 1),
-        "price_data[currency]": currency,
-        "price_data[unit_amount]": String(item.unit_price_cents),
-        "price_data[product_data][name]": item.description,
+        description: `${item.description}${(item.quantity || 1) > 1 ? ` (x${item.quantity})` : ""}`,
+        amount: String(amountCents),
+        currency,
       });
     }
 
