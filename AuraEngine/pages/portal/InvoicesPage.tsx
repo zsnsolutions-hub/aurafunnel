@@ -3,9 +3,10 @@ import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
 import { fetchInvoices, resendInvoice, voidInvoice, sendInvoiceEmail, copyInvoiceLink, fetchPackages, deletePackage, type Invoice, type InvoicePackage } from '../../lib/invoices';
 import InvoiceStatusBadge from '../../components/invoices/InvoiceStatusBadge';
+import InvoicePreviewPanel from '../../components/invoices/InvoicePreviewPanel';
 import CreateInvoiceDrawer from '../../components/invoices/CreateInvoiceDrawer';
 import PackageManagerDrawer from '../../components/invoices/PackageManagerDrawer';
-import { PlusIcon, EditIcon, XIcon } from '../../components/Icons';
+import { PlusIcon, EditIcon, XIcon, ChevronDownIcon } from '../../components/Icons';
 
 const formatCents = (cents: number, currency = 'usd'): string =>
   new Intl.NumberFormat('en-US', {
@@ -25,6 +26,7 @@ const InvoicesPage: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -292,88 +294,118 @@ const InvoicesPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filtered.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-3.5 text-sm font-bold text-slate-800">
-                        {inv.invoice_number || `INV-${inv.id.slice(0, 8)}`}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <p className="text-sm font-semibold text-slate-700">{inv.lead_name}</p>
-                        <p className="text-xs text-slate-400">{inv.lead_email}</p>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm font-bold text-slate-800">
-                        {formatCents(inv.total_cents, inv.currency)}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <InvoiceStatusBadge status={inv.status} />
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-500">
-                        {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '—'}
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="relative inline-block" ref={openMenuId === inv.id ? menuRef : undefined}>
-                          <button
-                            onClick={() => setOpenMenuId(openMenuId === inv.id ? null : inv.id)}
-                            disabled={actionLoading === inv.id}
-                            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
-                          >
-                            {actionLoading === inv.id ? (
-                              <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-                            ) : (
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                              </svg>
+                    <React.Fragment key={inv.id}>
+                      <tr
+                        className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                        onClick={() => setExpandedRowId(expandedRowId === inv.id ? null : inv.id)}
+                      >
+                        <td className="px-5 py-3.5 text-sm font-bold text-slate-800">
+                          <div className="flex items-center space-x-2">
+                            <ChevronDownIcon className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expandedRowId === inv.id ? 'rotate-180' : ''}`} />
+                            <span>{inv.invoice_number || `INV-${inv.id.slice(0, 8)}`}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <p className="text-sm font-semibold text-slate-700">{inv.lead_name}</p>
+                          <p className="text-xs text-slate-400">{inv.lead_email}</p>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm font-bold text-slate-800">
+                          {formatCents(inv.total_cents, inv.currency)}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <InvoiceStatusBadge status={inv.status} />
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-slate-500">
+                          {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative inline-block" ref={openMenuId === inv.id ? menuRef : undefined}>
+                            <button
+                              onClick={() => setOpenMenuId(openMenuId === inv.id ? null : inv.id)}
+                              disabled={actionLoading === inv.id}
+                              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
+                            >
+                              {actionLoading === inv.id ? (
+                                <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                              ) : (
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                              )}
+                            </button>
+                            {openMenuId === inv.id && (
+                              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                                {inv.status === 'open' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleSendCrm(inv)}
+                                      className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                    >
+                                      Send (CRM)
+                                    </button>
+                                    <button
+                                      onClick={() => { setOpenMenuId(null); handleResend(inv); }}
+                                      className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                    >
+                                      Send via Stripe
+                                    </button>
+                                  </>
+                                )}
+                                {inv.stripe_hosted_url && (
+                                  <>
+                                    <button
+                                      onClick={() => handleCopyLink(inv)}
+                                      className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                    >
+                                      Copy Link
+                                    </button>
+                                    <a
+                                      href={inv.stripe_hosted_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                      onClick={() => setOpenMenuId(null)}
+                                    >
+                                      View
+                                    </a>
+                                  </>
+                                )}
+                                {inv.status === 'open' && (
+                                  <button
+                                    onClick={() => { setOpenMenuId(null); handleVoid(inv); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    Void
+                                  </button>
+                                )}
+                              </div>
                             )}
-                          </button>
-                          {openMenuId === inv.id && (
-                            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
-                              {inv.status === 'open' && (
-                                <>
-                                  <button
-                                    onClick={() => handleSendCrm(inv)}
-                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                                  >
-                                    Send (CRM)
-                                  </button>
-                                  <button
-                                    onClick={() => { setOpenMenuId(null); handleResend(inv); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                                  >
-                                    Send via Stripe
-                                  </button>
-                                </>
-                              )}
-                              {inv.stripe_hosted_url && (
-                                <>
-                                  <button
-                                    onClick={() => handleCopyLink(inv)}
-                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                                  >
-                                    Copy Link
-                                  </button>
-                                  <a
-                                    href={inv.stripe_hosted_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                                    onClick={() => setOpenMenuId(null)}
-                                  >
-                                    View
-                                  </a>
-                                </>
-                              )}
-                              {inv.status === 'open' && (
-                                <button
-                                  onClick={() => { setOpenMenuId(null); handleVoid(inv); }}
-                                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                >
-                                  Void
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedRowId === inv.id && (
+                        <tr>
+                          <td colSpan={6} className="px-5 py-4 bg-slate-50/50">
+                            <InvoicePreviewPanel
+                              compact
+                              recipientName={inv.lead_name || ''}
+                              recipientEmail={inv.lead_email || ''}
+                              invoiceNumber={inv.invoice_number}
+                              lineItems={inv.line_items || []}
+                              subtotalCents={inv.total_cents}
+                              currency={inv.currency}
+                              dueDate={inv.due_date}
+                              notes={inv.notes}
+                              status={inv.status}
+                              paidAt={inv.paid_at}
+                              stripeHostedUrl={inv.stripe_hosted_url}
+                              stripePdfUrl={inv.stripe_pdf_url}
+                              createdAt={inv.created_at}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>

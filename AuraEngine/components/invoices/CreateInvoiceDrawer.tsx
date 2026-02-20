@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Drawer } from '../ui/Drawer';
 import { supabase } from '../../lib/supabase';
 import { createAndSendInvoice, sendInvoiceEmail, resendInvoice, copyInvoiceLink, fetchPackages, type CreateInvoiceLineItem, type InvoicePackage } from '../../lib/invoices';
-import { PlusIcon, XIcon, ChevronDownIcon } from '../Icons';
+import InvoicePreviewPanel from './InvoicePreviewPanel';
+import { PlusIcon, XIcon, ChevronDownIcon, EyeIcon, ArrowLeftIcon } from '../Icons';
 import type { User } from '../../types';
 
 interface CreateInvoiceDrawerProps {
@@ -44,6 +45,9 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
   const [packages, setPackages] = useState<InvoicePackage[]>([]);
   const [selectedPackageId, setSelectedPackageId] = useState('');
 
+  // Phase: form → preview → sent
+  const [phase, setPhase] = useState<'form' | 'preview' | 'sent'>('form');
+
   // Post-creation state
   const [createdInvoice, setCreatedInvoice] = useState<{ id: string; hosted_url: string | null } | null>(null);
   const [sendingCrm, setSendingCrm] = useState(false);
@@ -77,6 +81,7 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
       setSelectedPackageId('');
       setCreatedInvoice(null);
       setSendFeedback(null);
+      setPhase('form');
     }
   }, [open, preselectedLeadId]);
 
@@ -140,7 +145,7 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
   const formatDollars = (cents: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 
-  const handleSubmit = async () => {
+  const handlePreview = () => {
     setError('');
 
     if (!selectedLeadId) {
@@ -156,6 +161,16 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
       return;
     }
 
+    setPhase('preview');
+  };
+
+  const handleSubmit = async () => {
+    setError('');
+
+    const validItems = lineItems.filter(
+      (item) => item.description.trim() && item.unit_price_cents > 0
+    );
+
     try {
       setSending(true);
       const result = await createAndSendInvoice({
@@ -169,6 +184,7 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
         notes: notes || undefined,
       });
       setCreatedInvoice({ id: result.invoice_id, hosted_url: result.hosted_url });
+      setPhase('sent');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -228,7 +244,7 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
   return (
     <Drawer open={open} onClose={onClose} title="Create Invoice" width="w-[640px]">
       <div className="space-y-6">
-        {createdInvoice ? (
+        {phase === 'sent' && createdInvoice ? (
           /* ── Post-creation: send options ── */
           <div className="space-y-5">
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
@@ -298,6 +314,58 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
             >
               Done
             </button>
+          </div>
+        ) : phase === 'preview' ? (
+          /* ── Preview phase ── */
+          <div className="space-y-5">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center space-x-2">
+              <EyeIcon className="w-4 h-4 text-amber-600 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-amber-800">Invoice Preview</p>
+                <p className="text-xs text-amber-600">Review before sending. This is how your invoice will look.</p>
+              </div>
+            </div>
+
+            <InvoicePreviewPanel
+              recipientName={selectedLead?.name || ''}
+              recipientEmail={selectedLead?.email || ''}
+              invoiceNumber={null}
+              lineItems={lineItems.filter((item) => item.description.trim() && item.unit_price_cents > 0)}
+              subtotalCents={subtotalCents}
+              dueDate={dueDate || null}
+              notes={notes || null}
+            />
+
+            {/* Error */}
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-medium">
+                {error}
+              </div>
+            )}
+
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => { setPhase('form'); setError(''); }}
+                className="flex-1 py-3 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-center space-x-2"
+              >
+                <ArrowLeftIcon className="w-4 h-4" />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={sending}
+                className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {sending ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Creating Invoice...</span>
+                  </>
+                ) : (
+                  <span>Create & Send</span>
+                )}
+              </button>
+            </div>
           </div>
         ) : (
           /* ── Invoice creation form ── */
@@ -474,20 +542,13 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
               </div>
             )}
 
-            {/* Submit */}
+            {/* Preview Button */}
             <button
-              onClick={handleSubmit}
-              disabled={sending}
-              className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              onClick={handlePreview}
+              className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center space-x-2"
             >
-              {sending ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Creating Invoice...</span>
-                </>
-              ) : (
-                <span>Create Invoice</span>
-              )}
+              <EyeIcon className="w-4 h-4" />
+              <span>Preview Invoice</span>
             </button>
           </>
         )}
