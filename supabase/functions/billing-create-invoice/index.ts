@@ -135,24 +135,10 @@ serve(async (req) => {
       stripeCustomerId = customer.id;
     }
 
-    // 3. Create invoice items on Stripe
+    // 3. Create the Stripe invoice (draft) first
     const currency = "usd";
     let subtotalCents = 0;
 
-    for (const item of line_items) {
-      const amountCents = (item.quantity || 1) * item.unit_price_cents;
-      subtotalCents += amountCents;
-
-      await stripePost("/v1/invoiceitems", {
-        customer: stripeCustomerId,
-        description: item.description,
-        quantity: String(item.quantity || 1),
-        unit_amount_decimal: String(item.unit_price_cents),
-        currency,
-      });
-    }
-
-    // 4. Create the Stripe invoice
     const daysUntilDue = due_date
       ? Math.max(1, Math.ceil((new Date(due_date).getTime() - Date.now()) / 86400000))
       : 30;
@@ -161,12 +147,29 @@ serve(async (req) => {
       customer: stripeCustomerId,
       collection_method: "send_invoice",
       days_until_due: String(daysUntilDue),
+      pending_invoice_items_behavior: "exclude",
       "metadata[lead_id]": lead_id,
       "metadata[owner_id]": userId,
     };
     if (notes) invoiceParams.description = notes;
 
     const stripeInvoice = await stripePost("/v1/invoices", invoiceParams);
+
+    // 4. Add line items to the invoice
+    for (const item of line_items) {
+      const amountCents = (item.quantity || 1) * item.unit_price_cents;
+      subtotalCents += amountCents;
+
+      await stripePost("/v1/invoiceitems", {
+        customer: stripeCustomerId,
+        invoice: stripeInvoice.id,
+        description: item.description,
+        quantity: String(item.quantity || 1),
+        "price_data[currency]": currency,
+        "price_data[unit_amount]": String(item.unit_price_cents),
+        "price_data[product_data][name]": item.description,
+      });
+    }
 
     // 5. Finalize the invoice
     const finalizedInvoice = await stripePost(`/v1/invoices/${stripeInvoice.id}/finalize`, {});
