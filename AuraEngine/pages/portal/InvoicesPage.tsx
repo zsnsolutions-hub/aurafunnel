@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
-import { fetchInvoices, resendInvoice, voidInvoice, fetchPackages, deletePackage, type Invoice, type InvoicePackage } from '../../lib/invoices';
+import { fetchInvoices, resendInvoice, voidInvoice, sendInvoiceEmail, copyInvoiceLink, fetchPackages, deletePackage, type Invoice, type InvoicePackage } from '../../lib/invoices';
 import InvoiceStatusBadge from '../../components/invoices/InvoiceStatusBadge';
 import CreateInvoiceDrawer from '../../components/invoices/CreateInvoiceDrawer';
 import PackageManagerDrawer from '../../components/invoices/PackageManagerDrawer';
@@ -24,6 +24,9 @@ const InvoicesPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Packages state
   const [packages, setPackages] = useState<InvoicePackage[]>([]);
@@ -56,6 +59,21 @@ const InvoicesPage: React.FC = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); }
+  }, [toast]);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openMenuId]);
 
   useEffect(() => {
     if (pageTab === 'packages' && packages.length === 0 && !packagesLoading) {
@@ -101,6 +119,35 @@ const InvoicesPage: React.FC = () => {
       alert((err as Error).message);
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleSendCrm = async (inv: Invoice) => {
+    setOpenMenuId(null);
+    try {
+      setActionLoading(inv.id);
+      const result = await sendInvoiceEmail(inv.id, user);
+      if (result.success) {
+        setToast({ type: 'success', message: `Invoice ${inv.invoice_number || ''} sent via CRM email` });
+        await load();
+      } else {
+        setToast({ type: 'error', message: result.error || 'Failed to send' });
+      }
+    } catch (err) {
+      setToast({ type: 'error', message: (err as Error).message });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCopyLink = async (inv: Invoice) => {
+    setOpenMenuId(null);
+    if (!inv.stripe_hosted_url) return;
+    try {
+      await copyInvoiceLink(inv.stripe_hosted_url);
+      setToast({ type: 'success', message: 'Payment link copied!' });
+    } catch {
+      setToast({ type: 'error', message: 'Failed to copy link' });
     }
   };
 
@@ -263,34 +310,66 @@ const InvoicesPage: React.FC = () => {
                         {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end space-x-3">
-                          {inv.stripe_hosted_url && (
-                            <a
-                              href={inv.stripe_hosted_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
-                            >
-                              View
-                            </a>
-                          )}
-                          {inv.status === 'open' && (
-                            <>
-                              <button
-                                onClick={() => handleResend(inv)}
-                                disabled={actionLoading === inv.id}
-                                className="text-xs text-slate-500 hover:text-indigo-600 font-semibold disabled:opacity-50"
-                              >
-                                Resend
-                              </button>
-                              <button
-                                onClick={() => handleVoid(inv)}
-                                disabled={actionLoading === inv.id}
-                                className="text-xs text-slate-500 hover:text-red-600 font-semibold disabled:opacity-50"
-                              >
-                                Void
-                              </button>
-                            </>
+                        <div className="relative inline-block" ref={openMenuId === inv.id ? menuRef : undefined}>
+                          <button
+                            onClick={() => setOpenMenuId(openMenuId === inv.id ? null : inv.id)}
+                            disabled={actionLoading === inv.id}
+                            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
+                          >
+                            {actionLoading === inv.id ? (
+                              <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                              </svg>
+                            )}
+                          </button>
+                          {openMenuId === inv.id && (
+                            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                              {inv.status === 'open' && (
+                                <>
+                                  <button
+                                    onClick={() => handleSendCrm(inv)}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                  >
+                                    Send (CRM)
+                                  </button>
+                                  <button
+                                    onClick={() => { setOpenMenuId(null); handleResend(inv); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                  >
+                                    Send via Stripe
+                                  </button>
+                                </>
+                              )}
+                              {inv.stripe_hosted_url && (
+                                <>
+                                  <button
+                                    onClick={() => handleCopyLink(inv)}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                  >
+                                    Copy Link
+                                  </button>
+                                  <a
+                                    href={inv.stripe_hosted_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                    onClick={() => setOpenMenuId(null)}
+                                  >
+                                    View
+                                  </a>
+                                </>
+                              )}
+                              {inv.status === 'open' && (
+                                <button
+                                  onClick={() => { setOpenMenuId(null); handleVoid(inv); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  Void
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -369,11 +448,23 @@ const InvoicesPage: React.FC = () => {
         </>
       )}
 
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-semibold ${
+          toast.type === 'success'
+            ? 'bg-emerald-600 text-white'
+            : 'bg-red-600 text-white'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
       {/* Create Invoice Drawer */}
       <CreateInvoiceDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onSuccess={load}
+        user={user}
       />
 
       {/* Package Manager Drawer */}

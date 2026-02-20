@@ -1259,6 +1259,7 @@ const LeadProfile: React.FC = () => {
                 <LeadInvoicesTab
                   leadId={lead.id}
                   leadName={lead.name}
+                  user={user}
                   onCreateInvoice={() => setShowCreateInvoice(true)}
                 />
               )}
@@ -2348,6 +2349,7 @@ const LeadProfile: React.FC = () => {
           onClose={() => setShowCreateInvoice(false)}
           onSuccess={() => setShowCreateInvoice(false)}
           preselectedLeadId={lead.id}
+          user={user}
         />
       )}
     </div>

@@ -1,4 +1,8 @@
 import { supabase } from './supabase';
+import { buildEmailCtaButtonHTML } from './emailCtaButton';
+import { fetchConnectedEmailProvider, sendTrackedEmail } from './emailTracking';
+import type { SendEmailResult } from './emailTracking';
+import type { User } from '../types';
 
 // ── Types ──
 
@@ -245,4 +249,140 @@ export async function deletePackage(packageId: string): Promise<void> {
     .delete()
     .eq('id', packageId);
   if (error) throw new Error(error.message);
+}
+
+// ── CRM Invoice Email ──
+
+export function buildInvoiceEmailHtml(params: {
+  leadName: string;
+  invoiceNumber: string;
+  totalFormatted: string;
+  dueDate: string | null;
+  hostedUrl: string;
+  businessName?: string;
+}): string {
+  const firstName = params.leadName.split(' ')[0] || params.leadName;
+  const from = params.businessName || 'us';
+  const dueDateDisplay = params.dueDate
+    ? new Date(params.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : 'Upon receipt';
+
+  const ctaHtml = buildEmailCtaButtonHTML({
+    text: 'View & Pay Invoice',
+    url: params.hostedUrl,
+    variant: 'primary',
+    align: 'center',
+  });
+
+  return [
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>',
+    '<body style="margin:0;padding:0;background:#f8fafc;font-family:sans-serif;">',
+    '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background:#f8fafc;">',
+    '<tr><td align="center" style="padding:32px 16px;">',
+    '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="max-width:560px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">',
+    // Header
+    '<tr><td style="padding:32px 32px 16px 32px;">',
+    `<p style="margin:0 0 8px;font-size:16px;color:#1e293b;">Hi ${firstName},</p>`,
+    `<p style="margin:0;font-size:15px;color:#475569;">Here's your invoice from ${from}.</p>`,
+    '</td></tr>',
+    // Summary table
+    '<tr><td style="padding:0 32px;">',
+    '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">',
+    `<tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-bottom:1px solid #e2e8f0;">Invoice #</td><td style="padding:12px 16px;font-size:13px;font-weight:700;color:#1e293b;text-align:right;border-bottom:1px solid #e2e8f0;">${params.invoiceNumber}</td></tr>`,
+    `<tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-bottom:1px solid #e2e8f0;">Amount</td><td style="padding:12px 16px;font-size:13px;font-weight:700;color:#1e293b;text-align:right;border-bottom:1px solid #e2e8f0;">${params.totalFormatted}</td></tr>`,
+    `<tr><td style="padding:12px 16px;font-size:13px;color:#64748b;">Due Date</td><td style="padding:12px 16px;font-size:13px;font-weight:700;color:#1e293b;text-align:right;">${dueDateDisplay}</td></tr>`,
+    '</table>',
+    '</td></tr>',
+    // CTA button
+    '<tr><td style="padding:8px 32px 0 32px;">',
+    ctaHtml,
+    '</td></tr>',
+    // Fallback link
+    '<tr><td style="padding:0 32px 32px 32px;">',
+    `<p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">Or copy this link: <a href="${params.hostedUrl}" style="color:#4F46E5;word-break:break-all;">${params.hostedUrl}</a></p>`,
+    '</td></tr>',
+    '</table>',
+    '</td></tr></table>',
+    '</body></html>',
+  ].join('');
+}
+
+export interface PrepareInvoiceSendResult {
+  invoice_number: string;
+  total_cents: number;
+  currency: string;
+  due_date: string | null;
+  lead_email: string;
+  lead_name: string;
+  hosted_url: string | null;
+  lead_id: string;
+}
+
+export async function prepareInvoiceSend(invoiceId: string): Promise<PrepareInvoiceSendResult> {
+  const { data, error } = await supabase.functions.invoke('billing-actions', {
+    body: { action: 'send_email', invoice_id: invoiceId },
+  });
+
+  if (error) {
+    const msg = (error as any)?.context?.body
+      ? await (error as any).context.json().catch(() => null)
+      : null;
+    throw new Error(msg?.error || error.message || 'Failed to prepare invoice send');
+  }
+  if (data?.error) throw new Error(data.error);
+  return {
+    invoice_number: data.invoice_number,
+    total_cents: data.total_cents,
+    currency: data.currency,
+    due_date: data.due_date,
+    lead_email: data.lead_email,
+    lead_name: data.lead_name,
+    hosted_url: data.hosted_url,
+    lead_id: data.lead_id,
+  };
+}
+
+export async function sendInvoiceEmail(invoiceId: string, user: User): Promise<SendEmailResult> {
+  const invoiceData = await prepareInvoiceSend(invoiceId);
+
+  if (!invoiceData.hosted_url) {
+    return { success: false, error: 'Invoice has no payment link available' };
+  }
+
+  const provider = await fetchConnectedEmailProvider();
+  if (!provider) {
+    return { success: false, error: 'No email provider connected. Configure one in Settings.' };
+  }
+
+  const totalFormatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: (invoiceData.currency || 'usd').toUpperCase(),
+  }).format(invoiceData.total_cents / 100);
+
+  const businessName = user.businessProfile?.companyName || user.name;
+
+  const htmlBody = buildInvoiceEmailHtml({
+    leadName: invoiceData.lead_name,
+    invoiceNumber: invoiceData.invoice_number,
+    totalFormatted,
+    dueDate: invoiceData.due_date,
+    hostedUrl: invoiceData.hosted_url,
+    businessName,
+  });
+
+  const subject = `Invoice #${invoiceData.invoice_number} from ${businessName}`;
+
+  return sendTrackedEmail({
+    leadId: invoiceData.lead_id,
+    toEmail: invoiceData.lead_email,
+    subject,
+    htmlBody,
+    provider: provider.provider as any,
+    trackOpens: true,
+    trackClicks: true,
+  });
+}
+
+export async function copyInvoiceLink(url: string): Promise<void> {
+  await navigator.clipboard.writeText(url);
 }
