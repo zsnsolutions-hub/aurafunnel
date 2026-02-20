@@ -35,6 +35,7 @@ const InvoicesPage: React.FC = () => {
   const [packagesLoading, setPackagesLoading] = useState(false);
   const [packageDrawerOpen, setPackageDrawerOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState<InvoicePackage | undefined>();
+  const [expandedPackageId, setExpandedPackageId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -439,40 +440,78 @@ const InvoicesPage: React.FC = () => {
               {packages.map((pkg) => (
                 <div
                   key={pkg.id}
-                  className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
+                  className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-bold text-slate-800 truncate">{pkg.name}</h3>
-                      {pkg.description && (
-                        <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{pkg.description}</p>
-                      )}
+                  <div
+                    className="p-5 cursor-pointer"
+                    onClick={() => setExpandedPackageId(expandedPackageId === pkg.id ? null : pkg.id)}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="min-w-0 flex-1 flex items-start space-x-2">
+                        <ChevronDownIcon className={`w-4 h-4 text-slate-400 mt-0.5 shrink-0 transition-transform duration-200 ${expandedPackageId === pkg.id ? 'rotate-180' : ''}`} />
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-bold text-slate-800 truncate">{pkg.name}</h3>
+                          {pkg.description && (
+                            <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{pkg.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1 ml-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleEditPackage(pkg)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                          title="Edit"
+                        >
+                          <EditIcon className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePackage(pkg)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <XIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-1 ml-2 shrink-0">
-                      <button
-                        onClick={() => handleEditPackage(pkg)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-                        title="Edit"
-                      >
-                        <EditIcon className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeletePackage(pkg)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                        title="Delete"
-                      >
-                        <XIcon className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                      <span className="text-xs text-slate-400 font-medium">
+                        {pkg.items.length} item{pkg.items.length !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-sm font-bold text-slate-800">
+                        {formatCents(getPackageTotal(pkg))}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                    <span className="text-xs text-slate-400 font-medium">
-                      {pkg.items.length} item{pkg.items.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="text-sm font-bold text-slate-800">
-                      {formatCents(getPackageTotal(pkg))}
-                    </span>
-                  </div>
+                  {expandedPackageId === pkg.id && (
+                    <div className="px-5 pb-5">
+                      <div className="border border-slate-100 rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50">
+                              <th className="text-left px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Description</th>
+                              <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12">Qty</th>
+                              <th className="text-right px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-20">Price</th>
+                              <th className="text-right px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-20">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {pkg.items.map((item) => (
+                              <tr key={item.id}>
+                                <td className="px-3 py-2 text-slate-700">{item.description}</td>
+                                <td className="px-3 py-2 text-center text-slate-500">{item.quantity}</td>
+                                <td className="px-3 py-2 text-right text-slate-500">{formatCents(item.unit_price_cents)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-700">{formatCents(item.quantity * item.unit_price_cents)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="border-t-2 border-slate-200 px-3 py-2.5 flex items-center justify-between bg-slate-50">
+                          <span className="text-xs font-bold text-slate-600">Total</span>
+                          <span className="text-sm font-bold text-slate-800">{formatCents(getPackageTotal(pkg))}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

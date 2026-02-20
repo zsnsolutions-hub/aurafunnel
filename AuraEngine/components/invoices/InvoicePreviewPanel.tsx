@@ -53,7 +53,7 @@ const InvoicePreviewPanel: React.FC<InvoicePreviewPanelProps> = ({
   const padding = compact ? 'p-4' : 'p-6';
 
   return (
-    <div className={`${padding} bg-white border border-slate-200 rounded-2xl space-y-5`}>
+    <div className={`${padding} bg-slate-50 border-2 border-slate-200 rounded-2xl space-y-5 shadow-inner`}>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -86,7 +86,7 @@ const InvoicePreviewPanel: React.FC<InvoicePreviewPanelProps> = ({
       </div>
 
       {/* Bill To */}
-      <div className="bg-slate-50 rounded-xl p-3">
+      <div className="bg-white rounded-xl p-3 border border-slate-100">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Bill To</p>
         <p className="text-sm font-bold text-slate-800">{recipientName}</p>
         <p className="text-xs text-slate-500">{recipientEmail}</p>
@@ -94,10 +94,10 @@ const InvoicePreviewPanel: React.FC<InvoicePreviewPanelProps> = ({
 
       {/* Line Items Table */}
       {lineItems.length > 0 ? (
-        <div className="border border-slate-100 rounded-xl overflow-hidden">
+        <div className="border border-slate-100 rounded-xl overflow-hidden bg-white">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50">
+              <tr className="bg-slate-100">
                 <th className="text-left px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Description</th>
                 <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-16">Qty</th>
                 <th className="text-right px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24">Price</th>
@@ -115,20 +115,20 @@ const InvoicePreviewPanel: React.FC<InvoicePreviewPanelProps> = ({
               ))}
             </tbody>
           </table>
-          <div className="border-t-2 border-slate-200 px-3 py-2.5 flex items-center justify-between bg-slate-50">
+          <div className="border-t-2 border-slate-200 px-3 py-2.5 flex items-center justify-between bg-slate-100">
             <span className="text-sm font-bold text-slate-600">Total</span>
             <span className="text-sm font-bold text-slate-800">{formatCents(subtotalCents, currency)}</span>
           </div>
         </div>
       ) : (
-        <div className="p-4 bg-slate-50 rounded-xl text-center">
+        <div className="p-4 bg-white rounded-xl border border-slate-100 text-center">
           <p className="text-xs text-slate-400">No line items</p>
         </div>
       )}
 
       {/* Notes */}
       {notes && (
-        <div className="bg-slate-50 rounded-lg p-3">
+        <div className="bg-white rounded-lg p-3 border border-slate-100">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Notes</p>
           <p className="text-xs text-slate-600 whitespace-pre-wrap">{notes}</p>
         </div>
