@@ -44,6 +44,7 @@ const MobileDashboard = lazy(() => import('./pages/portal/MobileDashboard'));
 const ModelTraining = lazy(() => import('./pages/portal/ModelTraining'));
 const IntegrationHub = lazy(() => import('./pages/portal/IntegrationHub'));
 const ApolloSearchPage = lazy(() => import('./pages/portal/ApolloSearchPage'));
+const InvoicesPage = lazy(() => import('./pages/portal/InvoicesPage'));
 
 // Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -240,6 +241,7 @@ const App: React.FC = () => {
             <Route path="mobile" element={<ErrorBoundary><MobileDashboard /></ErrorBoundary>} />
             <Route path="model-training" element={<ErrorBoundary><ModelTraining /></ErrorBoundary>} />
             <Route path="integrations" element={<ErrorBoundary><IntegrationHub /></ErrorBoundary>} />
+            <Route path="invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
           </Route>
 
           <Route
