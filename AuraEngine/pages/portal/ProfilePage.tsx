@@ -135,7 +135,24 @@ const ProfilePage: React.FC = () => {
       const { data: urlData } = supabase.storage.from('image-gen-assets').getPublicUrl(path);
       const publicUrl = urlData?.publicUrl || '';
       setLogoUrl(publicUrl);
-      setBusinessProfile(p => ({ ...p, logoUrl: publicUrl, logoAssetId: path }));
+      // Update local state and auto-save to DB
+      const updatedProfile = { ...businessProfile, logoUrl: publicUrl, logoAssetId: path };
+      setBusinessProfile(updatedProfile);
+      const cleaned: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(updatedProfile)) {
+        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
+          const filteredSocials = Object.fromEntries(
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+          );
+          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
+        } else if (Array.isArray(v)) {
+          if (v.length > 0) cleaned[k] = v;
+        } else if (typeof v === 'string' && v.trim()) {
+          cleaned[k] = v.trim();
+        }
+      }
+      await supabase.from('profiles').update({ businessProfile: cleaned }).eq('id', user.id);
+      if (refreshProfile) await refreshProfile();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Logo upload failed');
     } finally {
@@ -143,14 +160,30 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleLogoRemove = () => {
+  const handleLogoRemove = async () => {
     setLogoUrl(null);
-    setBusinessProfile(p => {
-      const next = { ...p };
-      delete next.logoUrl;
-      delete next.logoAssetId;
-      return next;
-    });
+    const next = { ...businessProfile };
+    delete next.logoUrl;
+    delete next.logoAssetId;
+    setBusinessProfile(next);
+    // Auto-save to DB
+    try {
+      const cleaned: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(next)) {
+        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
+          const filteredSocials = Object.fromEntries(
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+          );
+          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
+        } else if (Array.isArray(v)) {
+          if (v.length > 0) cleaned[k] = v;
+        } else if (typeof v === 'string' && v.trim()) {
+          cleaned[k] = v.trim();
+        }
+      }
+      await supabase.from('profiles').update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null }).eq('id', user.id);
+      if (refreshProfile) await refreshProfile();
+    } catch { /* silent */ }
   };
 
   // ─── Structured Services Sync ───
