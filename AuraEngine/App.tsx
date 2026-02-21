@@ -46,6 +46,7 @@ const IntegrationHub = lazy(() => import('./pages/portal/IntegrationHub'));
 const ApolloSearchPage = lazy(() => import('./pages/portal/ApolloSearchPage'));
 const InvoicesPage = lazy(() => import('./pages/portal/InvoicesPage'));
 const SocialScheduler = lazy(() => import('./pages/portal/SocialScheduler'));
+const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
 
 // Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -244,6 +245,7 @@ const App: React.FC = () => {
             <Route path="integrations" element={<ErrorBoundary><IntegrationHub /></ErrorBoundary>} />
             <Route path="invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
             <Route path="social-scheduler" element={<ErrorBoundary><SocialScheduler /></ErrorBoundary>} />
+            <Route path="team-hub" element={<ErrorBoundary><TeamHubBoards /></ErrorBoundary>} />
           </Route>
 
           <Route
