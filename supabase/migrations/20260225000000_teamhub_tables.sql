@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS teamhub_cards (
   position INT NOT NULL DEFAULT 0,
   due_date DATE,
   priority TEXT CHECK (priority IN ('low', 'medium', 'high')),
+  labels JSONB DEFAULT '[]',
   is_archived BOOLEAN NOT NULL DEFAULT false,
   created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -1,33 +1,26 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Clock, AlignLeft, MessageSquare } from 'lucide-react';
+import { Clock, MessageSquare, Paperclip, GripVertical } from 'lucide-react';
 import type { Item, ItemTag } from '../teamHubApi';
 
-// ─── Tag color palette ───
-
-const TAG_STYLES: Record<string, { bg: string; text: string }> = {
-  green:  { bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  yellow: { bg: 'bg-amber-100',   text: 'text-amber-700' },
-  orange: { bg: 'bg-orange-100',  text: 'text-orange-700' },
-  red:    { bg: 'bg-rose-100',    text: 'text-rose-700' },
-  purple: { bg: 'bg-violet-100',  text: 'text-violet-700' },
-  blue:   { bg: 'bg-blue-100',    text: 'text-blue-700' },
-  sky:    { bg: 'bg-sky-100',     text: 'text-sky-700' },
-  pink:   { bg: 'bg-pink-100',    text: 'text-pink-700' },
-  teal:   { bg: 'bg-teal-100',    text: 'text-teal-700' },
-  lime:   { bg: 'bg-lime-100',    text: 'text-lime-700' },
+// ─── Priority badge config (matches TaskHub screenshot) ───
+const PRIORITY_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+  high:   { bg: 'bg-red-500',    text: 'text-white',      label: 'HIGH PRIORITY' },
+  medium: { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'MEDIUM' },
+  low:    { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'LOW' },
 };
 
-const DEFAULT_TAG_STYLE = { bg: 'bg-slate-100', text: 'text-slate-600' };
-
-// ─── Priority left-border color ───
-
-const PRIORITY_BORDER: Record<string, string> = {
-  high:   'border-l-rose-500',
-  medium: 'border-l-amber-400',
-  low:    'border-l-blue-400',
-};
+// Avatar colors
+const AVATAR_COLORS = [
+  'bg-blue-600', 'bg-emerald-600', 'bg-amber-500', 'bg-rose-500',
+  'bg-violet-500', 'bg-cyan-600', 'bg-pink-500', 'bg-teal-600',
+];
+function avatarColor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
 
 interface FlowItemProps {
   item: Item;
@@ -57,8 +50,13 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick }) => {
   const hasDescription = !!item.description;
   const commentCount = item.comment_count ?? 0;
   const tags = item.labels || [];
+  const priority = item.priority ? PRIORITY_BADGE[item.priority] : null;
 
-  const borderColor = item.priority ? (PRIORITY_BORDER[item.priority] || 'border-l-slate-200') : 'border-l-slate-200';
+  // Simulated completeness for progress bar (based on filled fields)
+  const fields = [!!item.title, !!item.description, !!item.priority, !!item.due_date, tags.length > 0, commentCount > 0];
+  const filledCount = fields.filter(Boolean).length;
+  const progressPct = Math.round((filledCount / fields.length) * 100);
+  const showProgress = hasDescription && item.priority;
 
   return (
     <div
@@ -67,65 +65,96 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick }) => {
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className={`bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md cursor-pointer transition-shadow duration-150 group border-l-[3px] ${borderColor}`}
+      className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 group"
     >
-      {/* ─── Title + Tags row ─── */}
-      <div className="flex items-start justify-between gap-2 px-2.5 pt-2 pb-1">
-        <p className="text-[13px] font-medium text-slate-800 leading-snug flex-1">
+      <div className="p-4">
+        {/* Row 1: Priority badge + drag handle */}
+        <div className="flex items-start justify-between mb-2.5">
+          {priority ? (
+            <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${priority.bg} ${priority.text}`}>
+              {priority.label}
+            </span>
+          ) : (
+            <span />
+          )}
+          <button
+            className="p-0.5 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab"
+            onPointerDown={e => e.stopPropagation()}
+          >
+            <GripVertical size={14} />
+          </button>
+        </div>
+
+        {/* Row 2: Title */}
+        <h4 className="text-[14px] font-semibold text-gray-900 leading-snug mb-2.5">
           {item.title}
-        </p>
-        {/* Tags as compact pills aligned right */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 justify-end shrink-0 max-w-[50%]">
-            {tags.map((tag: ItemTag, i: number) => {
-              const s = TAG_STYLES[tag.color] || DEFAULT_TAG_STYLE;
-              return (
-                <span
-                  key={i}
-                  className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-tight ${s.bg} ${s.text}`}
-                >
-                  {tag.text}
-                </span>
-              );
-            })}
+        </h4>
+
+        {/* Row 3: Tag pills (time + category) */}
+        {(tags.length > 0 || item.due_date) && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            {item.due_date && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+                isOverdue
+                  ? 'bg-red-50 text-red-600 border-red-200'
+                  : 'bg-gray-50 text-gray-600 border-gray-200'
+              }`}>
+                <Clock size={11} />
+                {new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            )}
+            {tags.map((tag: ItemTag, i: number) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200"
+              >
+                <span className="text-gray-400">#</span>
+                {tag.text}
+              </span>
+            ))}
           </div>
         )}
-      </div>
 
-      {/* ─── Bottom badges row ─── */}
-      {(item.due_date || hasDescription || commentCount > 0) && (
-        <div className="flex items-center gap-2.5 px-2.5 pb-2 flex-wrap">
-          {item.due_date && (
-            <span
-              className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                isOverdue
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-slate-100 text-slate-500'
-              }`}
-            >
-              <Clock size={10} />
-              {new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          )}
+        {/* Row 4: Progress bar (shown when card has description + priority) */}
+        {showProgress && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-gray-500">Progress</span>
+              <span className="text-[11px] font-semibold text-gray-700">{progressPct}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+        )}
 
-          {hasDescription && (
-            <span className="text-slate-400">
-              <AlignLeft size={13} />
-            </span>
-          )}
+        {/* Row 5: Bottom metadata — comments, attachments, assignee */}
+        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+          <div className="flex items-center gap-3">
+            {commentCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[12px] text-gray-400">
+                <MessageSquare size={13} />
+                {commentCount}
+              </span>
+            )}
+            {hasDescription && (
+              <span className="inline-flex items-center gap-1 text-[12px] text-gray-400">
+                <Paperclip size={13} />
+              </span>
+            )}
+          </div>
 
-          {commentCount > 0 && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-              <MessageSquare size={11} />
-              {commentCount}
-            </span>
-          )}
+          {/* Assignee avatar */}
+          <div
+            className={`w-7 h-7 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
+          >
+            {(item.created_by || '?').charAt(0).toUpperCase()}
+          </div>
         </div>
-      )}
-
-      {!item.due_date && !hasDescription && commentCount === 0 && tags.length === 0 && (
-        <div className="pb-1.5" />
-      )}
+      </div>
     </div>
   );
 };

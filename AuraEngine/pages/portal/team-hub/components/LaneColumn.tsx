@@ -3,12 +3,23 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2, Plus } from 'lucide-react';
 import type { Lane, Item } from '../teamHubApi';
+import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import FlowItem from './FlowItem';
 import AddItemInline from './AddItemInline';
 
-const LANE_PALETTE = ['#6366f1','#06b6d4','#f59e0b','#10b981','#ec4899','#8b5cf6','#f97316','#14b8a6'];
+// Lane accent colors — first lane is neutral, others get colored left borders
+const LANE_ACCENTS = [
+  { border: 'border-l-transparent', headerText: 'text-gray-800', countBg: 'bg-gray-200 text-gray-700' },
+  { border: 'border-l-blue-500',    headerText: 'text-blue-700',  countBg: 'bg-blue-100 text-blue-700' },
+  { border: 'border-l-emerald-500', headerText: 'text-emerald-700', countBg: 'bg-emerald-100 text-emerald-700' },
+  { border: 'border-l-amber-500',   headerText: 'text-amber-700', countBg: 'bg-amber-100 text-amber-700' },
+  { border: 'border-l-violet-500',  headerText: 'text-violet-700', countBg: 'bg-violet-100 text-violet-700' },
+  { border: 'border-l-rose-500',    headerText: 'text-rose-700',  countBg: 'bg-rose-100 text-rose-700' },
+  { border: 'border-l-cyan-500',    headerText: 'text-cyan-700',  countBg: 'bg-cyan-100 text-cyan-700' },
+  { border: 'border-l-orange-500',  headerText: 'text-orange-700', countBg: 'bg-orange-100 text-orange-700' },
+];
 
 interface LaneColumnProps {
   lane: Lane & { cards: Item[] };
@@ -17,6 +28,7 @@ interface LaneColumnProps {
   onItemClick: (item: Item) => void;
   onRenameLane: (laneId: string, name: string) => void;
   onDeleteLane: (laneId: string) => void;
+  permissions: FlowPermissions;
 }
 
 const LaneColumn: React.FC<LaneColumnProps> = ({
@@ -26,12 +38,14 @@ const LaneColumn: React.FC<LaneColumnProps> = ({
   onItemClick,
   onRenameLane,
   onDeleteLane,
+  permissions,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(lane.name);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const addItemRef = useRef<HTMLButtonElement>(null);
 
   const {
     attributes,
@@ -58,19 +72,14 @@ const LaneColumn: React.FC<LaneColumnProps> = ({
 
   useEffect(() => {
     if (editing) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }, 50);
+      setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 50);
     }
   }, [editing]);
 
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -78,36 +87,30 @@ const LaneColumn: React.FC<LaneColumnProps> = ({
 
   const handleRenameSubmit = () => {
     const trimmed = editName.trim();
-    if (trimmed && trimmed !== lane.name) {
-      onRenameLane(lane.id, trimmed);
-    }
+    if (trimmed && trimmed !== lane.name) onRenameLane(lane.id, trimmed);
     setEditing(false);
   };
 
-  const itemIds = lane.cards.map(c => c.id);
-  const stripColor = LANE_PALETTE[laneIndex % LANE_PALETTE.length];
+  const handleQuickAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    addItemRef.current?.click();
+  };
 
-  // Count items due within 3 days
-  const now = new Date();
-  const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-  const dueSoonCount = lane.cards.filter(c =>
-    c.due_date && new Date(c.due_date) <= threeDaysFromNow && new Date(c.due_date) >= now
-  ).length;
+  const itemIds = lane.cards.map(c => c.id);
+  const accent = LANE_ACCENTS[laneIndex % LANE_ACCENTS.length];
+  const hasAccent = laneIndex > 0;
 
   return (
     <div
       ref={setSortableRef}
       style={style}
-      className="shrink-0 w-[272px] flex flex-col bg-white border border-slate-200 shadow-sm rounded-xl max-h-full overflow-hidden"
+      className={`shrink-0 w-[320px] flex flex-col max-h-full ${hasAccent ? `border-l-[3px] ${accent.border}` : ''}`}
     >
-      {/* Colored top strip */}
-      <div className="h-1 shrink-0" style={{ backgroundColor: stripColor }} />
-
-      {/* Header */}
+      {/* ─── Header ─── */}
       <div
         {...attributes}
         {...listeners}
-        className="flex items-center justify-between px-3 pt-2.5 pb-1 cursor-grab active:cursor-grabbing"
+        className="flex items-center gap-2.5 px-1 pb-3 cursor-grab active:cursor-grabbing"
       >
         {editing ? (
           <input
@@ -119,65 +122,88 @@ const LaneColumn: React.FC<LaneColumnProps> = ({
               if (e.key === 'Enter') handleRenameSubmit();
               if (e.key === 'Escape') { setEditing(false); setEditName(lane.name); }
             }}
-            className="flex-1 px-2 py-1 text-sm font-bold bg-white border border-indigo-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+            className="flex-1 px-2 py-1 text-sm font-bold bg-white border border-blue-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-200"
             onClick={e => e.stopPropagation()}
             onPointerDown={e => e.stopPropagation()}
           />
         ) : (
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-bold text-slate-800 px-0.5 truncate">
+          <>
+            <h3 className={`text-[13px] font-bold uppercase tracking-wider ${hasAccent ? accent.headerText : 'text-gray-800'}`}>
               {lane.name}
             </h3>
-            <p className="text-[10px] text-slate-400 font-medium px-0.5 mt-0.5">
-              {lane.cards.length} item{lane.cards.length !== 1 ? 's' : ''}
-              {dueSoonCount > 0 && ` · ${dueSoonCount} due soon`}
-            </p>
-          </div>
+            <span className={`inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-[11px] font-bold ${accent.countBg}`}>
+              {lane.cards.length}
+            </span>
+          </>
         )}
 
-        <div className="relative" ref={menuRef}>
+        <div className="flex-1" />
+
+        {/* Quick add + */}
+        {permissions.canEditItems && !editing && (
           <button
-            onClick={e => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+            onClick={handleQuickAdd}
             onPointerDown={e => e.stopPropagation()}
-            className="p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors"
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
           >
-            <MoreHorizontal size={16} />
+            <Plus size={16} />
           </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-8 w-44 bg-white rounded-xl border border-slate-200 shadow-xl z-20 py-1 animate-in fade-in zoom-in-95 duration-150">
-              <p className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lane Actions</p>
-              <button
-                onClick={() => { setEditing(true); setEditName(lane.name); setMenuOpen(false); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <Pencil size={12} /> Rename Lane
-              </button>
-              <hr className="my-1 border-slate-100" />
-              <button
-                onClick={() => { onDeleteLane(lane.id); setMenuOpen(false); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors"
-              >
-                <Trash2 size={12} /> Delete Lane
-              </button>
-            </div>
-          )}
-        </div>
+        )}
+
+        {/* 3-dot menu */}
+        {permissions.canManageLanes && (
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={e => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+              onPointerDown={e => e.stopPropagation()}
+              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+            >
+              <MoreHorizontal size={16} />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-8 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-20 py-1">
+                <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Lane Actions</p>
+                <button
+                  onClick={() => { setEditing(true); setEditName(lane.name); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Pencil size={12} /> Rename Lane
+                </button>
+                <hr className="my-1 border-gray-100" />
+                <button
+                  onClick={() => { onDeleteLane(lane.id); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 size={12} /> Delete Lane
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Items area */}
+      {/* ─── Items area ─── */}
       <div
         ref={setDroppableRef}
-        className="flex-1 overflow-y-auto px-1.5 pb-1 space-y-1.5 min-h-[8px]"
+        className="flex-1 overflow-y-auto space-y-2.5 min-h-[8px] pb-2 px-0.5"
       >
         <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
           {lane.cards.map(item => (
             <FlowItem key={item.id} item={item} onClick={() => onItemClick(item)} />
           ))}
         </SortableContext>
+
+        {lane.cards.length === 0 && (
+          <div className="py-8 text-center">
+            <p className="text-xs text-gray-400">No items</p>
+          </div>
+        )}
       </div>
 
       {/* Footer: add item */}
-      <AddItemInline onAdd={(title) => onAddItem(lane.id, title)} />
+      {permissions.canEditItems && (
+        <AddItemInline ref={addItemRef} onAdd={(title) => onAddItem(lane.id, title)} />
+      )}
     </div>
   );
 };

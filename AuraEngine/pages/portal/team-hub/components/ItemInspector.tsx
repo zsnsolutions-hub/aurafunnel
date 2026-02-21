@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Calendar, Flag, XCircle, Loader2, Tag, Plus } from 'lucide-react';
 import type { Item, Comment, Activity, ItemPriority, ItemTag } from '../teamHubApi';
+import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import * as api from '../teamHubApi';
 import Comments from './Comments';
 import ActivityFeed from './ActivityFeed';
@@ -13,6 +14,7 @@ interface ItemInspectorProps {
   onClose: () => void;
   onItemUpdated: () => void;
   onItemClosed: (itemId: string) => void;
+  permissions: FlowPermissions;
 }
 
 const PRIORITIES: { value: ItemPriority | ''; label: string }[] = [
@@ -44,6 +46,7 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
   onClose,
   onItemUpdated,
   onItemClosed,
+  permissions,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -198,7 +201,8 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
             ref={titleRef}
             value={title}
             onChange={e => handleTitleChange(e.target.value)}
-            className="w-full text-lg font-bold text-slate-800 bg-transparent outline-none border-b-2 border-transparent hover:border-slate-200 focus:border-indigo-500 transition-colors pb-1"
+            readOnly={!permissions.canEditItems}
+            className={`w-full text-lg font-bold text-slate-800 bg-transparent outline-none border-b-2 border-transparent transition-colors pb-1 ${permissions.canEditItems ? 'hover:border-slate-200 focus:border-indigo-500' : ''}`}
             placeholder="Item title"
           />
 
@@ -215,24 +219,28 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold text-white ${TAG_BG[tag.color] || 'bg-slate-400'}`}
                 >
                   {tag.text}
-                  <button
-                    onClick={() => handleRemoveTag(i)}
-                    className="ml-0.5 hover:opacity-70 transition-opacity"
-                  >
-                    <X size={10} />
-                  </button>
+                  {permissions.canEditItems && (
+                    <button
+                      onClick={() => handleRemoveTag(i)}
+                      className="ml-0.5 hover:opacity-70 transition-opacity"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
                 </span>
               ))}
-              <button
-                onClick={() => setShowTagEditor(!showTagEditor)}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
-              >
-                <Plus size={10} />
-                Add
-              </button>
+              {permissions.canEditItems && (
+                <button
+                  onClick={() => setShowTagEditor(!showTagEditor)}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
+                >
+                  <Plus size={10} />
+                  Add
+                </button>
+              )}
             </div>
 
-            {showTagEditor && (
+            {showTagEditor && permissions.canEditItems && (
               <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2">
                 <input
                   autoFocus
@@ -269,27 +277,35 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
                 <Calendar size={10} />
                 Due Date
               </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={e => handleDueDateChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
-              />
+              {permissions.canEditItems ? (
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={e => handleDueDateChange(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                />
+              ) : (
+                <p className="px-3 py-2 text-sm text-slate-600">{dueDate || 'None'}</p>
+              )}
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <Flag size={10} />
                 Priority
               </label>
-              <select
-                value={priority}
-                onChange={e => handlePriorityChange(e.target.value as ItemPriority | '')}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
-              >
-                {PRIORITIES.map(p => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
+              {permissions.canEditItems ? (
+                <select
+                  value={priority}
+                  onChange={e => handlePriorityChange(e.target.value as ItemPriority | '')}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                >
+                  {PRIORITIES.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="px-3 py-2 text-sm text-slate-600 capitalize">{priority || 'None'}</p>
+              )}
             </div>
           </div>
 
@@ -301,9 +317,10 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
             <textarea
               value={description}
               onChange={e => handleDescChange(e.target.value)}
+              readOnly={!permissions.canEditItems}
               rows={4}
-              placeholder="Add a more detailed description..."
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg resize-none outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all placeholder-slate-400"
+              placeholder={permissions.canEditItems ? 'Add a more detailed description...' : 'No description'}
+              className={`w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg resize-none outline-none transition-all placeholder-slate-400 ${permissions.canEditItems ? 'focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400' : ''}`}
             />
           </div>
 
@@ -316,7 +333,7 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
             </div>
           ) : (
             <>
-              <Comments comments={comments} onAdd={handleAddComment} userName={userName} />
+              <Comments comments={comments} onAdd={handleAddComment} userName={userName} readOnly={!permissions.canComment} />
               <hr className="border-slate-200" />
               <ActivityFeed activity={activity} />
             </>
@@ -324,15 +341,17 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-200 bg-white">
-          <button
-            onClick={handleCloseItem}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-          >
-            <XCircle size={14} />
-            Close Item
-          </button>
-        </div>
+        {permissions.canEditItems && (
+          <div className="px-6 py-3 border-t border-slate-200 bg-white">
+            <button
+              onClick={handleCloseItem}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+            >
+              <XCircle size={14} />
+              Close Item
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

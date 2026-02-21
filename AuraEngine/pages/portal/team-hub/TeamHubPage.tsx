@@ -4,13 +4,14 @@ import {
   LayoutGrid, Plus, Loader2, Trash2, Search, ListChecks,
   Layers, AlertTriangle, Clock, CheckCircle2, MoreHorizontal,
   Pencil, ArrowRight, Flag, Activity, RefreshCw,
-  SortAsc, SortDesc, Filter,
+  SortAsc, SortDesc, Filter, Users,
 } from 'lucide-react';
 import type { User } from '../../../types';
 import type { FlowWithData, FlowSummary, DashboardStats, Activity as ActivityType } from './teamHubApi';
 import * as api from './teamHubApi';
-import FlowHeader from './components/FlowHeader';
+import { useFlowPermissions } from './hooks/useFlowPermissions';
 import FlowView from './components/FlowView';
+import FlowMembersPanel from './components/FlowMembersPanel';
 
 interface OutletCtx {
   user: User;
@@ -59,6 +60,10 @@ const TeamHubPage: React.FC = () => {
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [flowData, setFlowData] = useState<FlowWithData | null>(null);
   const [flowLoading, setFlowLoading] = useState(false);
+  const [showMembersPanel, setShowMembersPanel] = useState(false);
+
+  // RBAC
+  const permissions = useFlowPermissions(selectedFlowId, user.id);
 
   // ─── Data loading ───
 
@@ -194,13 +199,6 @@ const TeamHubPage: React.FC = () => {
   if (selectedFlowId && flowData) {
     return (
       <div className="flex flex-col h-full min-h-0 bg-slate-100">
-        <FlowHeader
-          flow={flowData}
-          onBack={() => { setSelectedFlowId(null); loadDashboard(); }}
-          onRename={(name) => handleRenameFlow(selectedFlowId, name)}
-          onDelete={() => setDeleteConfirm(selectedFlowId)}
-        />
-
         {flowLoading ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 size={24} className="text-slate-400 animate-spin" />
@@ -211,11 +209,24 @@ const TeamHubPage: React.FC = () => {
             userId={user.id}
             userName={user.name || 'User'}
             onRefresh={handleRefresh}
+            onBack={() => { setSelectedFlowId(null); setShowMembersPanel(false); loadDashboard(); }}
+            onRename={(name) => handleRenameFlow(selectedFlowId, name)}
+            onDelete={() => setDeleteConfirm(selectedFlowId)}
+            onManageTeam={() => setShowMembersPanel(true)}
+            permissions={permissions}
           />
         )}
 
         {deleteConfirm && (
           <DeleteModal onCancel={() => setDeleteConfirm(null)} onConfirm={handleDeleteFlow} />
+        )}
+
+        {showMembersPanel && (
+          <FlowMembersPanel
+            flowId={selectedFlowId}
+            permissions={permissions}
+            onClose={() => setShowMembersPanel(false)}
+          />
         )}
       </div>
     );
@@ -376,9 +387,17 @@ const TeamHubPage: React.FC = () => {
                               className="flex-1 text-sm font-bold text-slate-800 bg-slate-50 border border-indigo-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-indigo-200"
                             />
                           ) : (
-                            <h3 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate pr-2">
-                              {flow.name}
-                            </h3>
+                            <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                              <h3 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
+                                {flow.name}
+                              </h3>
+                              {flow.created_by !== user.id && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-500 shrink-0">
+                                  <Users size={8} />
+                                  Shared
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
 
@@ -416,22 +435,24 @@ const TeamHubPage: React.FC = () => {
                         </div>
                       </button>
 
-                      {/* Menu button */}
-                      <div className="absolute top-4 right-3">
-                        <button
-                          onClick={e => { e.stopPropagation(); setFlowMenuOpen(flowMenuOpen === flow.id ? null : flow.id); }}
-                          className="p-1.5 text-slate-300 hover:text-slate-500 hover:bg-slate-100 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                        >
-                          <MoreHorizontal size={14} />
-                        </button>
-                        {flowMenuOpen === flow.id && (
-                          <FlowContextMenu
-                            onRename={() => { setRenamingFlow(flow.id); setRenameValue(flow.name); setFlowMenuOpen(null); }}
-                            onDelete={() => { setDeleteConfirm(flow.id); setFlowMenuOpen(null); }}
-                            onClose={() => setFlowMenuOpen(null)}
-                          />
-                        )}
-                      </div>
+                      {/* Menu button (only for owned flows) */}
+                      {flow.created_by === user.id && (
+                        <div className="absolute top-4 right-3">
+                          <button
+                            onClick={e => { e.stopPropagation(); setFlowMenuOpen(flowMenuOpen === flow.id ? null : flow.id); }}
+                            className="p-1.5 text-slate-300 hover:text-slate-500 hover:bg-slate-100 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                          {flowMenuOpen === flow.id && (
+                            <FlowContextMenu
+                              onRename={() => { setRenamingFlow(flow.id); setRenameValue(flow.name); setFlowMenuOpen(null); }}
+                              onDelete={() => { setDeleteConfirm(flow.id); setFlowMenuOpen(null); }}
+                              onClose={() => setFlowMenuOpen(null)}
+                            />
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

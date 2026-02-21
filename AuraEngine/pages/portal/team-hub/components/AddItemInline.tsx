@@ -1,14 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Plus, X } from 'lucide-react';
 
 interface AddItemInlineProps {
   onAdd: (title: string) => void;
 }
 
-const AddItemInline: React.FC<AddItemInlineProps> = ({ onAdd }) => {
+const AddItemInline = forwardRef<HTMLButtonElement, AddItemInlineProps>(({ onAdd }, ref) => {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useImperativeHandle(ref, () => triggerRef.current!);
 
   useEffect(() => {
     if (open) {
@@ -37,6 +40,7 @@ const AddItemInline: React.FC<AddItemInlineProps> = ({ onAdd }) => {
   if (!open) {
     return (
       <button
+        ref={triggerRef}
         onClick={() => setOpen(true)}
         className="w-full flex items-center gap-1 px-3 py-1.5 text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-b-xl transition-colors"
       >
@@ -73,6 +77,8 @@ const AddItemInline: React.FC<AddItemInlineProps> = ({ onAdd }) => {
       </div>
     </div>
   );
-};
+});
+
+AddItemInline.displayName = 'AddItemInline';
 
 export default AddItemInline;

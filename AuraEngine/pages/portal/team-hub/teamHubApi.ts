@@ -68,6 +68,31 @@ export interface FlowWithData extends Flow {
   lists: (Lane & { cards: Item[] })[];
 }
 
+// ─── RBAC Types ───
+
+export type FlowRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+export interface FlowMember {
+  id: string;
+  flow_id: string;
+  user_id: string;
+  role: FlowRole;
+  created_at: string;
+  updated_at: string;
+  user_name: string;
+  user_email: string;
+}
+
+export interface FlowInvite {
+  id: string;
+  flow_id: string;
+  email: string;
+  role: FlowRole;
+  invited_by: string;
+  status: 'pending' | 'accepted';
+  created_at: string;
+}
+
 // ─── Dashboard stats ───
 
 export interface FlowSummary extends Flow {
@@ -87,12 +112,26 @@ export interface DashboardStats {
 }
 
 export async function fetchFlowsWithStats(userId: string): Promise<{ flows: FlowSummary[]; stats: DashboardStats }> {
+  // Get flow IDs the user is a member of
+  const { data: memberships } = await supabase
+    .from('teamhub_flow_members')
+    .select('flow_id')
+    .eq('user_id', userId);
+  const flowIds = (memberships || []).map(m => m.flow_id);
+
+  if (flowIds.length === 0) {
+    return {
+      flows: [],
+      stats: { totalFlows: 0, totalLanes: 0, totalItems: 0, overdueItems: 0, highPriorityItems: 0, completedToday: 0 },
+    };
+  }
+
   const [flowsRes, lanesRes, itemsRes, activityRes] = await Promise.all([
-    supabase.from('teamhub_boards').select('*').eq('created_by', userId).order('updated_at', { ascending: false }),
-    supabase.from('teamhub_lists').select('id, board_id'),
-    supabase.from('teamhub_cards').select('id, board_id, list_id, priority, due_date, is_archived, created_at').eq('is_archived', false),
+    supabase.from('teamhub_boards').select('*').in('id', flowIds).order('updated_at', { ascending: false }),
+    supabase.from('teamhub_lists').select('id, board_id').in('board_id', flowIds),
+    supabase.from('teamhub_cards').select('id, board_id, list_id, priority, due_date, is_archived, created_at').in('board_id', flowIds).eq('is_archived', false),
     supabase.from('teamhub_activity').select('id, board_id, action_type, meta_json, actor_id, created_at, card_id')
-      .eq('actor_id', userId)
+      .in('board_id', flowIds)
       .order('created_at', { ascending: false })
       .limit(20),
   ]);
@@ -132,11 +171,11 @@ export async function fetchFlowsWithStats(userId: string): Promise<{ flows: Flow
 }
 
 export async function fetchRecentActivity(userId: string, limit = 15): Promise<Activity[]> {
-  const { data: userFlows } = await supabase
-    .from('teamhub_boards')
-    .select('id')
-    .eq('created_by', userId);
-  const flowIds = (userFlows || []).map(f => f.id);
+  const { data: memberships } = await supabase
+    .from('teamhub_flow_members')
+    .select('flow_id')
+    .eq('user_id', userId);
+  const flowIds = (memberships || []).map(m => m.flow_id);
   if (flowIds.length === 0) return [];
 
   const { data, error } = await supabase
@@ -152,10 +191,17 @@ export async function fetchRecentActivity(userId: string, limit = 15): Promise<A
 // ─── Flows ───
 
 export async function fetchFlows(userId: string): Promise<Flow[]> {
+  const { data: memberships } = await supabase
+    .from('teamhub_flow_members')
+    .select('flow_id')
+    .eq('user_id', userId);
+  const flowIds = (memberships || []).map(m => m.flow_id);
+  if (flowIds.length === 0) return [];
+
   const { data, error } = await supabase
     .from('teamhub_boards')
     .select('*')
-    .eq('created_by', userId)
+    .in('id', flowIds)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -168,6 +214,14 @@ export async function createFlow(userId: string, name: string): Promise<Flow> {
     .select()
     .single();
   if (error) throw error;
+
+  // Auto-create owner membership
+  await supabase.from('teamhub_flow_members').insert({
+    flow_id: data.id,
+    user_id: userId,
+    role: 'owner',
+  });
+
   return data;
 }
 
@@ -414,4 +468,108 @@ export async function fetchFlowActivity(flowId: string, limit = 30): Promise<Act
     .limit(limit);
   if (error) throw error;
   return data || [];
+}
+
+// ─── RBAC: Flow Members & Invites ───
+
+export async function fetchFlowMembers(flowId: string): Promise<FlowMember[]> {
+  const { data, error } = await supabase
+    .from('teamhub_flow_members')
+    .select('*, profiles:user_id(name, email)')
+    .eq('flow_id', flowId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map((m: any) => ({
+    id: m.id,
+    flow_id: m.flow_id,
+    user_id: m.user_id,
+    role: m.role,
+    created_at: m.created_at,
+    updated_at: m.updated_at,
+    user_name: m.profiles?.name || '',
+    user_email: m.profiles?.email || '',
+  }));
+}
+
+export async function fetchUserFlowRole(flowId: string, userId: string): Promise<FlowRole | null> {
+  const { data, error } = await supabase
+    .from('teamhub_flow_members')
+    .select('role')
+    .eq('flow_id', flowId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.role ?? null;
+}
+
+export async function addFlowMember(flowId: string, userId: string, role: FlowRole): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_flow_members')
+    .insert({ flow_id: flowId, user_id: userId, role });
+  if (error) throw error;
+  await logActivity(flowId, null, 'member_added', { user_id: userId, role });
+}
+
+export async function updateFlowMemberRole(flowId: string, memberId: string, role: FlowRole): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_flow_members')
+    .update({ role, updated_at: new Date().toISOString() })
+    .eq('id', memberId);
+  if (error) throw error;
+  await logActivity(flowId, null, 'member_role_changed', { member_id: memberId, role });
+}
+
+export async function removeFlowMember(flowId: string, memberId: string): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_flow_members')
+    .delete()
+    .eq('id', memberId);
+  if (error) throw error;
+  await logActivity(flowId, null, 'member_removed', { member_id: memberId });
+}
+
+export async function inviteToFlow(flowId: string, email: string, role: FlowRole, invitedBy: string): Promise<FlowInvite> {
+  const { data, error } = await supabase
+    .from('teamhub_invites')
+    .insert({ flow_id: flowId, email, role, invited_by: invitedBy })
+    .select()
+    .single();
+  if (error) throw error;
+  await logActivity(flowId, null, 'invite_sent', { email, role });
+  return data;
+}
+
+export async function fetchFlowInvites(flowId: string): Promise<FlowInvite[]> {
+  const { data, error } = await supabase
+    .from('teamhub_invites')
+    .select('*')
+    .eq('flow_id', flowId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function revokeInvite(inviteId: string): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_invites')
+    .delete()
+    .eq('id', inviteId);
+  if (error) throw error;
+}
+
+export async function acceptInvite(inviteId: string, userId: string): Promise<void> {
+  const { data: invite, error } = await supabase
+    .from('teamhub_invites')
+    .select('*')
+    .eq('id', inviteId)
+    .single();
+  if (error) throw error;
+
+  await addFlowMember(invite.flow_id, userId, invite.role);
+
+  await supabase
+    .from('teamhub_invites')
+    .update({ status: 'accepted' })
+    .eq('id', inviteId);
 }
