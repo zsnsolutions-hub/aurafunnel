@@ -7,17 +7,17 @@ import {
   SortAsc, SortDesc, Filter,
 } from 'lucide-react';
 import type { User } from '../../../types';
-import type { BoardWithData, BoardSummary, DashboardStats, Activity as ActivityType } from './teamHubApi';
+import type { FlowWithData, FlowSummary, DashboardStats, Activity as ActivityType } from './teamHubApi';
 import * as api from './teamHubApi';
-import BoardHeader from './components/BoardHeader';
-import BoardView from './components/BoardView';
+import FlowHeader from './components/FlowHeader';
+import FlowView from './components/FlowView';
 
 interface OutletCtx {
   user: User;
   refreshProfile: () => Promise<void>;
 }
 
-const BOARD_COLORS = [
+const FLOW_COLORS = [
   'from-indigo-500 to-blue-500',
   'from-violet-500 to-purple-500',
   'from-emerald-500 to-teal-500',
@@ -27,49 +27,49 @@ const BOARD_COLORS = [
 ];
 
 const ACTION_LABELS: Record<string, string> = {
-  card_created: 'created a card',
-  card_moved: 'moved a card',
-  card_archived: 'archived a card',
-  comment_added: 'commented on a card',
-  list_created: 'created a list',
+  card_created: 'created an item',
+  card_moved: 'moved an item',
+  card_archived: 'closed an item',
+  comment_added: 'commented on an item',
+  list_created: 'created a lane',
 };
 
-type SortMode = 'recent' | 'name' | 'cards';
+type SortMode = 'recent' | 'name' | 'items';
 
 const TeamHubPage: React.FC = () => {
   const { user } = useOutletContext<OutletCtx>();
 
-  // Board list state
-  const [boards, setBoards] = useState<BoardSummary[]>([]);
+  // Flow list state
+  const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityType[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
-  const [showNewBoardInput, setShowNewBoardInput] = useState(false);
-  const [newBoardName, setNewBoardName] = useState('');
+  const [showNewFlowInput, setShowNewFlowInput] = useState(false);
+  const [newFlowName, setNewFlowName] = useState('');
   const [creating, setCreating] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [boardMenuOpen, setBoardMenuOpen] = useState<string | null>(null);
-  const [renamingBoard, setRenamingBoard] = useState<string | null>(null);
+  const [flowMenuOpen, setFlowMenuOpen] = useState<string | null>(null);
+  const [renamingFlow, setRenamingFlow] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Board detail state
-  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
-  const [boardData, setBoardData] = useState<BoardWithData | null>(null);
-  const [boardLoading, setBoardLoading] = useState(false);
+  // Flow detail state
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [flowData, setFlowData] = useState<FlowWithData | null>(null);
+  const [flowLoading, setFlowLoading] = useState(false);
 
   // ─── Data loading ───
 
   const loadDashboard = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
     try {
-      const [{ boards: b, stats: s }, activity] = await Promise.all([
-        api.fetchBoardsWithStats(user.id),
+      const [{ flows: f, stats: s }, activity] = await Promise.all([
+        api.fetchFlowsWithStats(user.id),
         api.fetchRecentActivity(user.id),
       ]);
-      setBoards(b);
+      setFlows(f);
       setStats(s);
       setRecentActivity(activity);
     } catch (err) {
@@ -84,71 +84,71 @@ const TeamHubPage: React.FC = () => {
     loadDashboard();
   }, [loadDashboard]);
 
-  // Load board detail
-  const loadBoardData = useCallback(async (boardId: string) => {
-    setBoardLoading(true);
+  // Load flow detail
+  const loadFlowData = useCallback(async (flowId: string) => {
+    setFlowLoading(true);
     try {
-      const data = await api.fetchBoardWithData(boardId);
-      setBoardData(data);
+      const data = await api.fetchFlowWithData(flowId);
+      setFlowData(data);
     } catch (err) {
-      console.error('Failed to load board:', err);
+      console.error('Failed to load flow:', err);
     } finally {
-      setBoardLoading(false);
+      setFlowLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (selectedBoardId) {
-      loadBoardData(selectedBoardId);
+    if (selectedFlowId) {
+      loadFlowData(selectedFlowId);
     } else {
-      setBoardData(null);
+      setFlowData(null);
     }
-  }, [selectedBoardId, loadBoardData]);
+  }, [selectedFlowId, loadFlowData]);
 
   const handleRefresh = useCallback(() => {
-    if (selectedBoardId) loadBoardData(selectedBoardId);
-  }, [selectedBoardId, loadBoardData]);
+    if (selectedFlowId) loadFlowData(selectedFlowId);
+  }, [selectedFlowId, loadFlowData]);
 
-  // ─── Board CRUD ───
+  // ─── Flow CRUD ───
 
-  const handleCreateBoard = async () => {
-    const name = newBoardName.trim() || 'Untitled Board';
+  const handleCreateFlow = async () => {
+    const name = newFlowName.trim() || 'Untitled Flow';
     setCreating(true);
     try {
-      const newBoard = await api.createBoard(user.id, name);
-      setShowNewBoardInput(false);
-      setNewBoardName('');
-      setSelectedBoardId(newBoard.id);
+      const newFlow = await api.createFlow(user.id, name);
+      setShowNewFlowInput(false);
+      setNewFlowName('');
+      setSelectedFlowId(newFlow.id);
       loadDashboard();
     } catch (err) {
-      console.error('Failed to create board:', err);
+      console.error('Failed to create flow:', err);
     } finally {
       setCreating(false);
     }
   };
 
-  const handleRenameBoard = async (boardId: string, name: string) => {
-    setBoards(prev => prev.map(b => b.id === boardId ? { ...b, name } : b));
-    setBoardData(prev => prev && prev.id === boardId ? { ...prev, name } : prev);
+  const handleRenameFlow = async (flowId: string, name: string) => {
+    setFlows(prev => prev.map(f => f.id === flowId ? { ...f, name } : f));
+    setFlowData(prev => prev && prev.id === flowId ? { ...prev, name } : prev);
     try {
-      await api.updateBoard(boardId, name);
+      await api.updateFlow(flowId, name);
     } catch {
       loadDashboard();
     }
-    setRenamingBoard(null);
+    setRenamingFlow(null);
   };
 
-  const handleDeleteBoard = async () => {
+  const handleDeleteFlow = async () => {
     if (!deleteConfirm) return;
     try {
-      await api.deleteBoard(deleteConfirm);
-      if (selectedBoardId === deleteConfirm) {
-        setSelectedBoardId(null);
-        setBoardData(null);
+      await api.deleteFlow(deleteConfirm);
+      if (selectedFlowId === deleteConfirm) {
+        setSelectedFlowId(null);
+        setFlowData(null);
       }
       loadDashboard();
     } catch (err) {
-      console.error('Failed to delete board:', err);
+      console.error('Failed to delete flow:', err);
     } finally {
       setDeleteConfirm(null);
     }
@@ -156,17 +156,17 @@ const TeamHubPage: React.FC = () => {
 
   // ─── Filtering & Sorting ───
 
-  const filteredBoards = useMemo(() => {
-    let result = [...boards];
+  const filteredFlows = useMemo(() => {
+    let result = [...flows];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(b => b.name.toLowerCase().includes(q));
+      result = result.filter(f => f.name.toLowerCase().includes(q));
     }
     switch (sortMode) {
       case 'name':
         result.sort((a, b) => a.name.localeCompare(b.name));
         break;
-      case 'cards':
+      case 'items':
         result.sort((a, b) => b.card_count - a.card_count);
         break;
       case 'recent':
@@ -175,9 +175,9 @@ const TeamHubPage: React.FC = () => {
         break;
     }
     return result;
-  }, [boards, searchQuery, sortMode]);
+  }, [flows, searchQuery, sortMode]);
 
-  const getBoardColor = (index: number) => BOARD_COLORS[index % BOARD_COLORS.length];
+  const getFlowColor = (index: number) => FLOW_COLORS[index % FLOW_COLORS.length];
 
   const timeAgo = (dateStr: string): string => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -190,24 +190,24 @@ const TeamHubPage: React.FC = () => {
     return `${days}d ago`;
   };
 
-  // ─── Board Detail View ───
-  if (selectedBoardId && boardData) {
+  // ─── Flow Detail View ───
+  if (selectedFlowId && flowData) {
     return (
-      <div className="flex flex-col h-full min-h-0">
-        <BoardHeader
-          board={boardData}
-          onBack={() => { setSelectedBoardId(null); loadDashboard(); }}
-          onRename={(name) => handleRenameBoard(selectedBoardId, name)}
-          onDelete={() => setDeleteConfirm(selectedBoardId)}
+      <div className="flex flex-col h-full min-h-0 bg-slate-100">
+        <FlowHeader
+          flow={flowData}
+          onBack={() => { setSelectedFlowId(null); loadDashboard(); }}
+          onRename={(name) => handleRenameFlow(selectedFlowId, name)}
+          onDelete={() => setDeleteConfirm(selectedFlowId)}
         />
 
-        {boardLoading ? (
+        {flowLoading ? (
           <div className="flex-1 flex items-center justify-center">
-            <Loader2 size={24} className="text-indigo-400 animate-spin" />
+            <Loader2 size={24} className="text-slate-400 animate-spin" />
           </div>
         ) : (
-          <BoardView
-            board={boardData}
+          <FlowView
+            flow={flowData}
             userId={user.id}
             userName={user.name || 'User'}
             onRefresh={handleRefresh}
@@ -215,7 +215,7 @@ const TeamHubPage: React.FC = () => {
         )}
 
         {deleteConfirm && (
-          <DeleteModal onCancel={() => setDeleteConfirm(null)} onConfirm={handleDeleteBoard} />
+          <DeleteModal onCancel={() => setDeleteConfirm(null)} onConfirm={handleDeleteFlow} />
         )}
       </div>
     );
@@ -227,7 +227,7 @@ const TeamHubPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Team Boards</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Team Flows</h1>
           <p className="text-sm text-slate-500 mt-0.5">Organize work across your projects</p>
         </div>
         <div className="flex items-center gap-2">
@@ -240,11 +240,11 @@ const TeamHubPage: React.FC = () => {
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
           </button>
           <button
-            onClick={() => setShowNewBoardInput(true)}
+            onClick={() => setShowNewFlowInput(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
           >
             <Plus size={16} />
-            New Board
+            New Flow
           </button>
         </div>
       </div>
@@ -253,63 +253,63 @@ const TeamHubPage: React.FC = () => {
         <div className="flex items-center justify-center py-20">
           <Loader2 size={24} className="text-indigo-400 animate-spin" />
         </div>
-      ) : boards.length === 0 && !showNewBoardInput ? (
+      ) : flows.length === 0 && !showNewFlowInput ? (
         /* Empty state */
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mb-4">
             <LayoutGrid size={36} className="text-indigo-400" />
           </div>
-          <h3 className="text-xl font-bold text-slate-800 mb-2">Create your first board</h3>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">Create your first flow</h3>
           <p className="text-sm text-slate-500 mb-6 text-center max-w-md">
-            Organize your team's work with kanban boards. Create lists, add cards, and drag them to track progress.
+            Organize your team's work with kanban flows. Create lanes, add items, and drag them to track progress.
           </p>
           <button
-            onClick={() => setShowNewBoardInput(true)}
+            onClick={() => setShowNewFlowInput(true)}
             className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
           >
             <Plus size={16} />
-            Create Board
+            Create Flow
           </button>
         </div>
       ) : (
         <>
           {/* ─── Stat Cards ─── */}
-          {stats && stats.totalBoards > 0 && (
+          {stats && stats.totalFlows > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-              <StatCard icon={<LayoutGrid size={16} />} label="Boards" value={stats.totalBoards} color="indigo" />
-              <StatCard icon={<Layers size={16} />} label="Lists" value={stats.totalLists} color="violet" />
-              <StatCard icon={<ListChecks size={16} />} label="Cards" value={stats.totalCards} color="emerald" />
-              <StatCard icon={<Flag size={16} />} label="High Priority" value={stats.highPriorityCards} color="rose" />
-              <StatCard icon={<Clock size={16} />} label="Overdue" value={stats.overdueCards} color="amber" />
+              <StatCard icon={<LayoutGrid size={16} />} label="Flows" value={stats.totalFlows} color="indigo" />
+              <StatCard icon={<Layers size={16} />} label="Lanes" value={stats.totalLanes} color="violet" />
+              <StatCard icon={<ListChecks size={16} />} label="Items" value={stats.totalItems} color="emerald" />
+              <StatCard icon={<Flag size={16} />} label="High Priority" value={stats.highPriorityItems} color="rose" />
+              <StatCard icon={<Clock size={16} />} label="Overdue" value={stats.overdueItems} color="amber" />
               <StatCard icon={<CheckCircle2 size={16} />} label="Done Today" value={stats.completedToday} color="teal" />
             </div>
           )}
 
-          {/* New board input */}
-          {showNewBoardInput && (
+          {/* New flow input */}
+          {showNewFlowInput && (
             <div className="mb-6 bg-white rounded-2xl border border-indigo-200 p-5 shadow-sm">
-              <p className="text-xs font-black text-indigo-500 uppercase tracking-wider mb-3">Create New Board</p>
+              <p className="text-xs font-black text-indigo-500 uppercase tracking-wider mb-3">Create New Flow</p>
               <input
                 autoFocus
-                value={newBoardName}
-                onChange={e => setNewBoardName(e.target.value)}
+                value={newFlowName}
+                onChange={e => setNewFlowName(e.target.value)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') handleCreateBoard();
-                  if (e.key === 'Escape') { setShowNewBoardInput(false); setNewBoardName(''); }
+                  if (e.key === 'Enter') handleCreateFlow();
+                  if (e.key === 'Escape') { setShowNewFlowInput(false); setNewFlowName(''); }
                 }}
                 placeholder="e.g. Q1 Marketing Campaign, Product Roadmap..."
                 className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 mb-3 placeholder-slate-400"
               />
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleCreateBoard}
+                  onClick={handleCreateFlow}
                   disabled={creating}
                   className="px-4 py-2 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                 >
-                  {creating ? 'Creating...' : 'Create Board'}
+                  {creating ? 'Creating...' : 'Create Flow'}
                 </button>
                 <button
-                  onClick={() => { setShowNewBoardInput(false); setNewBoardName(''); }}
+                  onClick={() => { setShowNewFlowInput(false); setNewFlowName(''); }}
                   className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
                 >
                   Cancel
@@ -318,9 +318,9 @@ const TeamHubPage: React.FC = () => {
             </div>
           )}
 
-          {/* ─── Main content: Boards + Activity ─── */}
+          {/* ─── Main content: Flows + Activity ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Boards column (2/3) */}
+            {/* Flows column (2/3) */}
             <div className="lg:col-span-2">
               {/* Search & Sort bar */}
               <div className="flex items-center gap-3 mb-4">
@@ -329,86 +329,86 @@ const TeamHubPage: React.FC = () => {
                   <input
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search boards..."
+                    placeholder="Search flows..."
                     className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all placeholder-slate-400"
                   />
                 </div>
                 <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden">
                   <SortButton active={sortMode === 'recent'} onClick={() => setSortMode('recent')} icon={<Clock size={13} />} label="Recent" />
                   <SortButton active={sortMode === 'name'} onClick={() => setSortMode('name')} icon={<SortAsc size={13} />} label="A-Z" />
-                  <SortButton active={sortMode === 'cards'} onClick={() => setSortMode('cards')} icon={<SortDesc size={13} />} label="Cards" />
+                  <SortButton active={sortMode === 'items'} onClick={() => setSortMode('items')} icon={<SortDesc size={13} />} label="Items" />
                 </div>
               </div>
 
-              {/* Board cards */}
-              {filteredBoards.length === 0 ? (
+              {/* Flow cards */}
+              {filteredFlows.length === 0 ? (
                 <div className="text-center py-12">
                   <Filter size={20} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-400">No boards match your search</p>
+                  <p className="text-sm font-semibold text-slate-400">No flows match your search</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {filteredBoards.map((board, idx) => (
+                  {filteredFlows.map((flow, idx) => (
                     <div
-                      key={board.id}
+                      key={flow.id}
                       className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all group relative"
                     >
                       {/* Color banner */}
-                      <div className={`h-2 bg-gradient-to-r ${getBoardColor(idx)}`} />
+                      <div className={`h-2 bg-gradient-to-r ${getFlowColor(idx)}`} />
 
                       {/* Content */}
                       <button
-                        onClick={() => setSelectedBoardId(board.id)}
+                        onClick={() => setSelectedFlowId(flow.id)}
                         className="w-full text-left p-4 pb-3"
                       >
                         <div className="flex items-start justify-between mb-2">
-                          {renamingBoard === board.id ? (
+                          {renamingFlow === flow.id ? (
                             <input
                               autoFocus
                               value={renameValue}
                               onChange={e => setRenameValue(e.target.value)}
-                              onBlur={() => { handleRenameBoard(board.id, renameValue); }}
+                              onBlur={() => { handleRenameFlow(flow.id, renameValue); }}
                               onKeyDown={e => {
-                                if (e.key === 'Enter') handleRenameBoard(board.id, renameValue);
-                                if (e.key === 'Escape') setRenamingBoard(null);
+                                if (e.key === 'Enter') handleRenameFlow(flow.id, renameValue);
+                                if (e.key === 'Escape') setRenamingFlow(null);
                               }}
                               onClick={e => e.stopPropagation()}
                               className="flex-1 text-sm font-bold text-slate-800 bg-slate-50 border border-indigo-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-indigo-200"
                             />
                           ) : (
                             <h3 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate pr-2">
-                              {board.name}
+                              {flow.name}
                             </h3>
                           )}
                         </div>
 
                         {/* Mini stats row */}
                         <div className="flex items-center gap-3 mb-3">
-                          <MiniStat icon={<Layers size={10} />} value={board.list_count} label="lists" />
-                          <MiniStat icon={<ListChecks size={10} />} value={board.card_count} label="cards" />
-                          {board.high_priority_count > 0 && (
-                            <MiniStat icon={<Flag size={10} />} value={board.high_priority_count} label="high" color="rose" />
+                          <MiniStat icon={<Layers size={10} />} value={flow.list_count} label="lanes" />
+                          <MiniStat icon={<ListChecks size={10} />} value={flow.card_count} label="items" />
+                          {flow.high_priority_count > 0 && (
+                            <MiniStat icon={<Flag size={10} />} value={flow.high_priority_count} label="high" color="rose" />
                           )}
-                          {board.overdue_count > 0 && (
-                            <MiniStat icon={<AlertTriangle size={10} />} value={board.overdue_count} label="overdue" color="amber" />
+                          {flow.overdue_count > 0 && (
+                            <MiniStat icon={<AlertTriangle size={10} />} value={flow.overdue_count} label="overdue" color="amber" />
                           )}
                         </div>
 
-                        {/* Mini list preview */}
-                        {board.list_count > 0 && (
+                        {/* Mini lane preview */}
+                        {flow.list_count > 0 && (
                           <div className="flex gap-1 mb-3">
-                            {Array.from({ length: Math.min(board.list_count, 5) }).map((_, i) => (
+                            {Array.from({ length: Math.min(flow.list_count, 5) }).map((_, i) => (
                               <div key={i} className="flex-1 h-1.5 rounded-full bg-slate-100 group-hover:bg-indigo-100 transition-colors" />
                             ))}
-                            {board.list_count > 5 && (
-                              <span className="text-[8px] font-bold text-slate-400 ml-0.5">+{board.list_count - 5}</span>
+                            {flow.list_count > 5 && (
+                              <span className="text-[8px] font-bold text-slate-400 ml-0.5">+{flow.list_count - 5}</span>
                             )}
                           </div>
                         )}
 
                         <div className="flex items-center justify-between">
                           <p className="text-[10px] font-semibold text-slate-400">
-                            Updated {timeAgo(board.updated_at)}
+                            Updated {timeAgo(flow.updated_at)}
                           </p>
                           <span className="text-[10px] font-bold text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
                             Open <ArrowRight size={10} />
@@ -419,16 +419,16 @@ const TeamHubPage: React.FC = () => {
                       {/* Menu button */}
                       <div className="absolute top-4 right-3">
                         <button
-                          onClick={e => { e.stopPropagation(); setBoardMenuOpen(boardMenuOpen === board.id ? null : board.id); }}
+                          onClick={e => { e.stopPropagation(); setFlowMenuOpen(flowMenuOpen === flow.id ? null : flow.id); }}
                           className="p-1.5 text-slate-300 hover:text-slate-500 hover:bg-slate-100 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                         >
                           <MoreHorizontal size={14} />
                         </button>
-                        {boardMenuOpen === board.id && (
-                          <BoardContextMenu
-                            onRename={() => { setRenamingBoard(board.id); setRenameValue(board.name); setBoardMenuOpen(null); }}
-                            onDelete={() => { setDeleteConfirm(board.id); setBoardMenuOpen(null); }}
-                            onClose={() => setBoardMenuOpen(null)}
+                        {flowMenuOpen === flow.id && (
+                          <FlowContextMenu
+                            onRename={() => { setRenamingFlow(flow.id); setRenameValue(flow.name); setFlowMenuOpen(null); }}
+                            onDelete={() => { setDeleteConfirm(flow.id); setFlowMenuOpen(null); }}
+                            onClose={() => setFlowMenuOpen(null)}
                           />
                         )}
                       </div>
@@ -454,7 +454,7 @@ const TeamHubPage: React.FC = () => {
                     <div className="px-4 py-10 text-center">
                       <Activity size={20} className="text-slate-200 mx-auto mb-2" />
                       <p className="text-xs text-slate-400 font-semibold">No activity yet</p>
-                      <p className="text-[10px] text-slate-300 mt-0.5">Activity will appear here as you use your boards</p>
+                      <p className="text-[10px] text-slate-300 mt-0.5">Activity will appear here as you use your flows</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-50">
@@ -498,7 +498,7 @@ const TeamHubPage: React.FC = () => {
 
       {/* Delete modal */}
       {deleteConfirm && (
-        <DeleteModal onCancel={() => setDeleteConfirm(null)} onConfirm={handleDeleteBoard} />
+        <DeleteModal onCancel={() => setDeleteConfirm(null)} onConfirm={handleDeleteFlow} />
       )}
     </div>
   );
@@ -574,7 +574,7 @@ const SortButton: React.FC<{
   </button>
 );
 
-const BoardContextMenu: React.FC<{
+const FlowContextMenu: React.FC<{
   onRename: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -618,9 +618,9 @@ const DeleteModal: React.FC<{
         <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center">
           <Trash2 size={24} className="text-rose-500" />
         </div>
-        <h3 className="text-lg font-bold text-slate-900">Delete Board?</h3>
+        <h3 className="text-lg font-bold text-slate-900">Delete Flow?</h3>
         <p className="text-sm text-slate-500">
-          This will permanently delete this board and all its lists, cards, and comments.
+          This will permanently delete this flow and all its lanes, items, and comments.
         </p>
         <div className="flex items-center gap-3 w-full pt-2">
           <button

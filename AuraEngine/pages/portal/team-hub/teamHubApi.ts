@@ -2,7 +2,7 @@ import { supabase } from '../../../lib/supabase';
 
 // ─── Types ───
 
-export interface Board {
+export interface Flow {
   id: string;
   workspace_id: string | null;
   name: string;
@@ -11,7 +11,7 @@ export interface Board {
   updated_at: string;
 }
 
-export interface List {
+export interface Lane {
   id: string;
   board_id: string;
   name: string;
@@ -20,9 +20,14 @@ export interface List {
   updated_at: string;
 }
 
-export type CardPriority = 'low' | 'medium' | 'high';
+export type ItemPriority = 'low' | 'medium' | 'high';
 
-export interface Card {
+export interface ItemTag {
+  text: string;
+  color: string; // tailwind color key: green, yellow, orange, red, purple, blue, sky, pink, teal
+}
+
+export interface Item {
   id: string;
   board_id: string;
   list_id: string;
@@ -30,7 +35,8 @@ export interface Card {
   description: string | null;
   position: number;
   due_date: string | null;
-  priority: CardPriority | null;
+  priority: ItemPriority | null;
+  labels: ItemTag[];
   is_archived: boolean;
   created_by: string;
   created_at: string;
@@ -58,13 +64,13 @@ export interface Activity {
   actor_name?: string;
 }
 
-export interface BoardWithData extends Board {
-  lists: (List & { cards: Card[] })[];
+export interface FlowWithData extends Flow {
+  lists: (Lane & { cards: Item[] })[];
 }
 
 // ─── Dashboard stats ───
 
-export interface BoardSummary extends Board {
+export interface FlowSummary extends Flow {
   list_count: number;
   card_count: number;
   high_priority_count: number;
@@ -72,16 +78,16 @@ export interface BoardSummary extends Board {
 }
 
 export interface DashboardStats {
-  totalBoards: number;
-  totalCards: number;
-  totalLists: number;
-  overdueCards: number;
-  highPriorityCards: number;
+  totalFlows: number;
+  totalItems: number;
+  totalLanes: number;
+  overdueItems: number;
+  highPriorityItems: number;
   completedToday: number;
 }
 
-export async function fetchBoardsWithStats(userId: string): Promise<{ boards: BoardSummary[]; stats: DashboardStats }> {
-  const [boardsRes, listsRes, cardsRes, activityRes] = await Promise.all([
+export async function fetchFlowsWithStats(userId: string): Promise<{ flows: FlowSummary[]; stats: DashboardStats }> {
+  const [flowsRes, lanesRes, itemsRes, activityRes] = await Promise.all([
     supabase.from('teamhub_boards').select('*').eq('created_by', userId).order('updated_at', { ascending: false }),
     supabase.from('teamhub_lists').select('id, board_id'),
     supabase.from('teamhub_cards').select('id, board_id, list_id, priority, due_date, is_archived, created_at').eq('is_archived', false),
@@ -91,62 +97,61 @@ export async function fetchBoardsWithStats(userId: string): Promise<{ boards: Bo
       .limit(20),
   ]);
 
-  const boardsData = boardsRes.data || [];
-  const listsData = listsRes.data || [];
-  const cardsData = cardsRes.data || [];
+  const flowsData = flowsRes.data || [];
+  const lanesData = lanesRes.data || [];
+  const itemsData = itemsRes.data || [];
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Build per-board stats
-  const boards: BoardSummary[] = boardsData.map(b => {
-    const boardLists = listsData.filter(l => l.board_id === b.id);
-    const boardCards = cardsData.filter(c => c.board_id === b.id);
+  // Build per-flow stats
+  const flows: FlowSummary[] = flowsData.map(f => {
+    const flowLanes = lanesData.filter(l => l.board_id === f.id);
+    const flowItems = itemsData.filter(c => c.board_id === f.id);
     return {
-      ...b,
-      list_count: boardLists.length,
-      card_count: boardCards.length,
-      high_priority_count: boardCards.filter(c => c.priority === 'high').length,
-      overdue_count: boardCards.filter(c => c.due_date && c.due_date < today).length,
+      ...f,
+      list_count: flowLanes.length,
+      card_count: flowItems.length,
+      high_priority_count: flowItems.filter(c => c.priority === 'high').length,
+      overdue_count: flowItems.filter(c => c.due_date && c.due_date < today).length,
     };
   });
 
   // Global stats
   const stats: DashboardStats = {
-    totalBoards: boardsData.length,
-    totalLists: listsData.length,
-    totalCards: cardsData.length,
-    overdueCards: cardsData.filter(c => c.due_date && c.due_date < today).length,
-    highPriorityCards: cardsData.filter(c => c.priority === 'high').length,
+    totalFlows: flowsData.length,
+    totalLanes: lanesData.length,
+    totalItems: itemsData.length,
+    overdueItems: itemsData.filter(c => c.due_date && c.due_date < today).length,
+    highPriorityItems: itemsData.filter(c => c.priority === 'high').length,
     completedToday: (activityRes.data || []).filter(a =>
       a.action_type === 'card_archived' && a.created_at?.startsWith(today)
     ).length,
   };
 
-  return { boards, stats };
+  return { flows, stats };
 }
 
 export async function fetchRecentActivity(userId: string, limit = 15): Promise<Activity[]> {
-  // Get all boards for this user first
-  const { data: userBoards } = await supabase
+  const { data: userFlows } = await supabase
     .from('teamhub_boards')
     .select('id')
     .eq('created_by', userId);
-  const boardIds = (userBoards || []).map(b => b.id);
-  if (boardIds.length === 0) return [];
+  const flowIds = (userFlows || []).map(f => f.id);
+  if (flowIds.length === 0) return [];
 
   const { data, error } = await supabase
     .from('teamhub_activity')
     .select('*')
-    .in('board_id', boardIds)
+    .in('board_id', flowIds)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
   return data || [];
 }
 
-// ─── Boards ───
+// ─── Flows ───
 
-export async function fetchBoards(userId: string): Promise<Board[]> {
+export async function fetchFlows(userId: string): Promise<Flow[]> {
   const { data, error } = await supabase
     .from('teamhub_boards')
     .select('*')
@@ -156,7 +161,7 @@ export async function fetchBoards(userId: string): Promise<Board[]> {
   return data || [];
 }
 
-export async function createBoard(userId: string, name: string): Promise<Board> {
+export async function createFlow(userId: string, name: string): Promise<Flow> {
   const { data, error } = await supabase
     .from('teamhub_boards')
     .insert({ name, created_by: userId })
@@ -166,43 +171,43 @@ export async function createBoard(userId: string, name: string): Promise<Board> 
   return data;
 }
 
-export async function updateBoard(boardId: string, name: string): Promise<void> {
+export async function updateFlow(flowId: string, name: string): Promise<void> {
   const { error } = await supabase
     .from('teamhub_boards')
     .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', boardId);
+    .eq('id', flowId);
   if (error) throw error;
 }
 
-export async function deleteBoard(boardId: string): Promise<void> {
+export async function deleteFlow(flowId: string): Promise<void> {
   const { error } = await supabase
     .from('teamhub_boards')
     .delete()
-    .eq('id', boardId);
+    .eq('id', flowId);
   if (error) throw error;
 }
 
-// ─── Board with lists + cards ───
+// ─── Flow with lanes + items ───
 
-export async function fetchBoardWithData(boardId: string): Promise<BoardWithData> {
-  const [boardRes, listsRes, cardsRes] = await Promise.all([
-    supabase.from('teamhub_boards').select('*').eq('id', boardId).single(),
-    supabase.from('teamhub_lists').select('*').eq('board_id', boardId).order('position'),
-    supabase.from('teamhub_cards').select('*').eq('board_id', boardId).eq('is_archived', false).order('position'),
+export async function fetchFlowWithData(flowId: string): Promise<FlowWithData> {
+  const [flowRes, lanesRes, itemsRes] = await Promise.all([
+    supabase.from('teamhub_boards').select('*').eq('id', flowId).single(),
+    supabase.from('teamhub_lists').select('*').eq('board_id', flowId).order('position'),
+    supabase.from('teamhub_cards').select('*').eq('board_id', flowId).eq('is_archived', false).order('position'),
   ]);
 
-  if (boardRes.error) throw boardRes.error;
-  if (listsRes.error) throw listsRes.error;
-  if (cardsRes.error) throw cardsRes.error;
+  if (flowRes.error) throw flowRes.error;
+  if (lanesRes.error) throw lanesRes.error;
+  if (itemsRes.error) throw itemsRes.error;
 
   // Get comment counts
-  const cardIds = (cardsRes.data || []).map(c => c.id);
+  const itemIds = (itemsRes.data || []).map(c => c.id);
   let commentCounts: Record<string, number> = {};
-  if (cardIds.length > 0) {
+  if (itemIds.length > 0) {
     const { data: comments } = await supabase
       .from('teamhub_comments')
       .select('card_id')
-      .in('card_id', cardIds);
+      .in('card_id', itemIds);
     if (comments) {
       for (const c of comments) {
         commentCounts[c.card_id] = (commentCounts[c.card_id] || 0) + 1;
@@ -210,54 +215,55 @@ export async function fetchBoardWithData(boardId: string): Promise<BoardWithData
     }
   }
 
-  const cardsWithCounts = (cardsRes.data || []).map(c => ({
+  const itemsWithCounts = (itemsRes.data || []).map(c => ({
     ...c,
+    labels: c.labels || [],
     comment_count: commentCounts[c.id] || 0,
   }));
 
-  const lists = (listsRes.data || []).map(list => ({
-    ...list,
-    cards: cardsWithCounts
-      .filter(c => c.list_id === list.id)
+  const lists = (lanesRes.data || []).map(lane => ({
+    ...lane,
+    cards: itemsWithCounts
+      .filter(c => c.list_id === lane.id)
       .sort((a, b) => a.position - b.position),
   }));
 
-  return { ...boardRes.data, lists };
+  return { ...flowRes.data, lists };
 }
 
-// ─── Lists ───
+// ─── Lanes ───
 
-export async function createList(boardId: string, name: string, position: number): Promise<List> {
+export async function createLane(flowId: string, name: string, position: number): Promise<Lane> {
   const { data, error } = await supabase
     .from('teamhub_lists')
-    .insert({ board_id: boardId, name, position })
+    .insert({ board_id: flowId, name, position })
     .select()
     .single();
   if (error) throw error;
-  await logActivity(boardId, null, 'list_created', { list_name: name });
+  await logActivity(flowId, null, 'list_created', { list_name: name });
   return data;
 }
 
-export async function updateList(listId: string, name: string): Promise<void> {
+export async function updateLane(laneId: string, name: string): Promise<void> {
   const { error } = await supabase
     .from('teamhub_lists')
     .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', listId);
+    .eq('id', laneId);
   if (error) throw error;
 }
 
-export async function deleteList(listId: string): Promise<void> {
+export async function deleteLane(laneId: string): Promise<void> {
   const { error } = await supabase
     .from('teamhub_lists')
     .delete()
-    .eq('id', listId);
+    .eq('id', laneId);
   if (error) throw error;
 }
 
-export async function reorderLists(boardId: string, orderedListIds: string[]): Promise<void> {
-  const updates = orderedListIds.map((id, index) => ({
+export async function reorderLanes(flowId: string, orderedLaneIds: string[]): Promise<void> {
+  const updates = orderedLaneIds.map((id, index) => ({
     id,
-    board_id: boardId,
+    board_id: flowId,
     position: index,
     updated_at: new Date().toISOString(),
   }));
@@ -265,62 +271,60 @@ export async function reorderLists(boardId: string, orderedListIds: string[]): P
   if (error) throw error;
 }
 
-// ─── Cards ───
+// ─── Items ───
 
-export async function createCard(
-  boardId: string,
-  listId: string,
+export async function createItem(
+  flowId: string,
+  laneId: string,
   title: string,
   userId: string,
   position: number
-): Promise<Card> {
+): Promise<Item> {
   const { data, error } = await supabase
     .from('teamhub_cards')
-    .insert({ board_id: boardId, list_id: listId, title, created_by: userId, position })
+    .insert({ board_id: flowId, list_id: laneId, title, created_by: userId, position })
     .select()
     .single();
   if (error) throw error;
-  await logActivity(boardId, data.id, 'card_created', { title });
-  return { ...data, comment_count: 0 };
+  await logActivity(flowId, data.id, 'card_created', { title });
+  return { ...data, labels: data.labels || [], comment_count: 0 };
 }
 
-export async function updateCard(
-  cardId: string,
-  updates: Partial<Pick<Card, 'title' | 'description' | 'due_date' | 'priority'>>
+export async function updateItem(
+  itemId: string,
+  updates: Partial<Pick<Item, 'title' | 'description' | 'due_date' | 'priority' | 'labels'>>
 ): Promise<void> {
   const { error } = await supabase
     .from('teamhub_cards')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', cardId);
+    .eq('id', itemId);
   if (error) throw error;
 }
 
-export async function archiveCard(cardId: string, boardId: string): Promise<void> {
+export async function archiveItem(itemId: string, flowId: string): Promise<void> {
   const { error } = await supabase
     .from('teamhub_cards')
     .update({ is_archived: true, updated_at: new Date().toISOString() })
-    .eq('id', cardId);
+    .eq('id', itemId);
   if (error) throw error;
-  await logActivity(boardId, cardId, 'card_archived', {});
+  await logActivity(flowId, itemId, 'card_archived', {});
 }
 
-export async function moveCard(
-  cardId: string,
-  toListId: string,
-  orderedCardIds: string[],
-  boardId: string,
-  fromListName: string,
-  toListName: string
+export async function moveItem(
+  itemId: string,
+  toLaneId: string,
+  orderedItemIds: string[],
+  flowId: string,
+  fromLaneName: string,
+  toLaneName: string
 ): Promise<void> {
-  // Update card's list_id
   const { error: moveError } = await supabase
     .from('teamhub_cards')
-    .update({ list_id: toListId, updated_at: new Date().toISOString() })
-    .eq('id', cardId);
+    .update({ list_id: toLaneId, updated_at: new Date().toISOString() })
+    .eq('id', itemId);
   if (moveError) throw moveError;
 
-  // Rewrite positions for the target list
-  const updates = orderedCardIds.map((id, index) => ({
+  const updates = orderedItemIds.map((id, index) => ({
     id,
     position: index,
     updated_at: new Date().toISOString(),
@@ -330,13 +334,13 @@ export async function moveCard(
     if (error) throw error;
   }
 
-  if (fromListName !== toListName) {
-    await logActivity(boardId, cardId, 'card_moved', { from: fromListName, to: toListName });
+  if (fromLaneName !== toLaneName) {
+    await logActivity(flowId, itemId, 'card_moved', { from: fromLaneName, to: toLaneName });
   }
 }
 
-export async function reorderCards(listId: string, orderedCardIds: string[]): Promise<void> {
-  const updates = orderedCardIds.map((id, index) => ({
+export async function reorderItems(laneId: string, orderedItemIds: string[]): Promise<void> {
+  const updates = orderedItemIds.map((id, index) => ({
     id,
     position: index,
     updated_at: new Date().toISOString(),
@@ -347,23 +351,23 @@ export async function reorderCards(listId: string, orderedCardIds: string[]): Pr
   }
 }
 
-// ─── Card detail (with comments + activity) ───
+// ─── Item detail (with comments + activity) ───
 
-export async function fetchCardDetail(cardId: string): Promise<{
-  card: Card;
+export async function fetchItemDetail(itemId: string): Promise<{
+  card: Item;
   comments: Comment[];
   activity: Activity[];
 }> {
-  const [cardRes, commentsRes, activityRes] = await Promise.all([
-    supabase.from('teamhub_cards').select('*').eq('id', cardId).single(),
-    supabase.from('teamhub_comments').select('*').eq('card_id', cardId).order('created_at', { ascending: true }),
-    supabase.from('teamhub_activity').select('*').eq('card_id', cardId).order('created_at', { ascending: false }).limit(50),
+  const [itemRes, commentsRes, activityRes] = await Promise.all([
+    supabase.from('teamhub_cards').select('*').eq('id', itemId).single(),
+    supabase.from('teamhub_comments').select('*').eq('card_id', itemId).order('created_at', { ascending: true }),
+    supabase.from('teamhub_activity').select('*').eq('card_id', itemId).order('created_at', { ascending: false }).limit(50),
   ]);
 
-  if (cardRes.error) throw cardRes.error;
+  if (itemRes.error) throw itemRes.error;
 
   return {
-    card: cardRes.data,
+    card: itemRes.data,
     comments: commentsRes.data || [],
     activity: activityRes.data || [],
   };
@@ -371,21 +375,21 @@ export async function fetchCardDetail(cardId: string): Promise<{
 
 // ─── Comments ───
 
-export async function addComment(cardId: string, userId: string, body: string, boardId: string): Promise<Comment> {
+export async function addComment(cardId: string, userId: string, body: string, flowId: string): Promise<Comment> {
   const { data, error } = await supabase
     .from('teamhub_comments')
     .insert({ card_id: cardId, user_id: userId, body })
     .select()
     .single();
   if (error) throw error;
-  await logActivity(boardId, cardId, 'comment_added', { body: body.slice(0, 100) });
+  await logActivity(flowId, cardId, 'comment_added', { body: body.slice(0, 100) });
   return data;
 }
 
 // ─── Activity ───
 
 async function logActivity(
-  boardId: string,
+  flowId: string,
   cardId: string | null,
   actionType: string,
   meta: Record<string, unknown>
@@ -393,7 +397,7 @@ async function logActivity(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
   await supabase.from('teamhub_activity').insert({
-    board_id: boardId,
+    board_id: flowId,
     card_id: cardId,
     actor_id: user.id,
     action_type: actionType,
@@ -401,11 +405,11 @@ async function logActivity(
   });
 }
 
-export async function fetchBoardActivity(boardId: string, limit = 30): Promise<Activity[]> {
+export async function fetchFlowActivity(flowId: string, limit = 30): Promise<Activity[]> {
   const { data, error } = await supabase
     .from('teamhub_activity')
     .select('*')
-    .eq('board_id', boardId)
+    .eq('board_id', flowId)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
