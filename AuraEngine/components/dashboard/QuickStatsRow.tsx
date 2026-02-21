@@ -14,13 +14,13 @@ export const StatCard = ({ title, value, icon, trend, loading }: {
   trend?: { value: number; label: string } | null;
   loading: boolean;
 }) => (
-  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-    <div className="flex items-center justify-between mb-3">
-      <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+  <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group min-w-0">
+    <div className="flex items-center justify-between mb-2">
+      <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
         {icon}
       </div>
       {!loading && trend && (
-        <span className={`inline-flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+        <span className={`inline-flex items-center space-x-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
           trend.value >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
         }`}>
           {trend.value >= 0 ? <TrendUpIcon className="w-3 h-3" /> : <TrendDownIcon className="w-3 h-3" />}
@@ -28,11 +28,11 @@ export const StatCard = ({ title, value, icon, trend, loading }: {
         </span>
       )}
     </div>
-    <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">{title}</h3>
+    <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest truncate">{title}</h3>
     {loading ? (
-      <div className="h-8 w-20 bg-slate-100 animate-pulse rounded-lg mt-1"></div>
+      <div className="h-7 w-16 bg-slate-100 animate-pulse rounded-lg mt-1"></div>
     ) : (
-      <p className="text-2xl font-bold text-slate-900 mt-1 font-heading tracking-tight">{value}</p>
+      <p className="text-xl font-bold text-slate-900 mt-1 font-heading tracking-tight truncate">{value}</p>
     )}
   </div>
 );
@@ -47,7 +47,7 @@ const QuickStatsRow: React.FC<QuickStatsRowProps & { children?: React.ReactNode 
     : null;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_2fr] gap-3">
       <StatCard title="Leads Today" value={stats.leadsToday.toString()} icon={<TargetIcon className="w-5 h-5" />} trend={leadsTrend} loading={loading} />
       <StatCard title="Hot Leads" value={`${stats.hotLeads} Active`} icon={<FlameIcon className="w-5 h-5" />} trend={hotTrend} loading={loading} />
       <StatCard title="Content Created" value={stats.contentCreated.toString()} icon={<SparklesIcon className="w-5 h-5" />} trend={null} loading={loading} />

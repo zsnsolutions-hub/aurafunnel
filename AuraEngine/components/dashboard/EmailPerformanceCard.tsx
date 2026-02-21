@@ -46,20 +46,12 @@ const EmailPerformanceCard: React.FC = () => {
   // Loading skeleton — matches StatCard height
   if (loading) {
     return (
-      <div className="col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <div className="p-2.5 bg-slate-100 rounded-xl animate-pulse w-10 h-10" />
-          <div className="h-3 w-14 bg-slate-50 rounded animate-pulse" />
+      <div className="col-span-1 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm min-w-0">
+        <div className="flex items-center mb-2">
+          <div className="p-2 bg-slate-100 rounded-xl animate-pulse w-9 h-9" />
         </div>
-        <div className="h-3 w-24 bg-slate-100 rounded animate-pulse mb-2" />
-        <div className="flex items-center space-x-4 mt-1">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center space-x-1.5">
-              <div className="h-6 w-8 bg-slate-100 rounded animate-pulse" />
-              <div className="h-3 w-10 bg-slate-50 rounded animate-pulse" />
-            </div>
-          ))}
-        </div>
+        <div className="h-3 w-16 bg-slate-100 rounded animate-pulse mb-2" />
+        <div className="h-7 w-20 bg-slate-100 rounded animate-pulse mt-1" />
       </div>
     );
   }
@@ -67,8 +59,8 @@ const EmailPerformanceCard: React.FC = () => {
   // Error state
   if (error) {
     return (
-      <div className="col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center">
-        <p className="text-xs text-red-500 mr-2">Failed to load</p>
+      <div className="col-span-1 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center min-w-0">
+        <p className="text-xs text-red-500">Failed</p>
         <button onClick={load} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700">Retry</button>
       </div>
     );
@@ -77,14 +69,14 @@ const EmailPerformanceCard: React.FC = () => {
   // Empty state
   if (stats && stats.sent === 0 && stats.opened === 0 && stats.clicks === 0) {
     return (
-      <div className="col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm group">
-        <div className="flex items-center justify-between mb-3">
-          <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+      <div className="col-span-1 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm group min-w-0">
+        <div className="flex items-center mb-2">
+          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
             <MailIcon className="w-5 h-5" />
           </div>
         </div>
         <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Email Performance</h3>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-xs text-slate-400 mt-1">
           No activity yet &middot;{' '}
           <button onClick={() => navigateWithFilter()} className="text-indigo-600 font-bold hover:text-indigo-700">View leads</button>
         </p>
@@ -99,23 +91,22 @@ const EmailPerformanceCard: React.FC = () => {
   ];
 
   return (
-    <div className="col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-      <div className="flex items-center justify-between mb-3">
-        <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+    <div className="col-span-1 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group min-w-0">
+      <div className="flex items-center justify-between mb-2">
+        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
           <MailIcon className="w-5 h-5" />
         </div>
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">30 days</span>
       </div>
       <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Email Performance</h3>
-      <div className="flex items-baseline space-x-5 mt-1">
+      <div className="flex items-baseline gap-4 mt-1">
         {kpis.map(kpi => (
           <button
             key={kpi.label}
             onClick={() => navigateWithFilter(kpi.filter)}
-            className="flex items-baseline space-x-1.5 hover:opacity-70 transition-opacity"
+            className="flex items-baseline gap-1.5 hover:opacity-70 transition-opacity"
           >
-            <span className="text-2xl font-bold text-slate-900 font-heading tracking-tight">{kpi.value}</span>
-            <span className={`flex items-center space-x-0.5 text-[10px] font-bold uppercase tracking-widest ${kpi.color}`}>
+            <span className="text-xl font-bold text-slate-900 font-heading tracking-tight">{kpi.value}</span>
+            <span className={`flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-widest ${kpi.color}`}>
               {kpi.icon}
               <span>{kpi.label}</span>
             </span>
