@@ -62,6 +62,88 @@ export interface BoardWithData extends Board {
   lists: (List & { cards: Card[] })[];
 }
 
+// ─── Dashboard stats ───
+
+export interface BoardSummary extends Board {
+  list_count: number;
+  card_count: number;
+  high_priority_count: number;
+  overdue_count: number;
+}
+
+export interface DashboardStats {
+  totalBoards: number;
+  totalCards: number;
+  totalLists: number;
+  overdueCards: number;
+  highPriorityCards: number;
+  completedToday: number;
+}
+
+export async function fetchBoardsWithStats(userId: string): Promise<{ boards: BoardSummary[]; stats: DashboardStats }> {
+  const [boardsRes, listsRes, cardsRes, activityRes] = await Promise.all([
+    supabase.from('teamhub_boards').select('*').eq('created_by', userId).order('updated_at', { ascending: false }),
+    supabase.from('teamhub_lists').select('id, board_id'),
+    supabase.from('teamhub_cards').select('id, board_id, list_id, priority, due_date, is_archived, created_at').eq('is_archived', false),
+    supabase.from('teamhub_activity').select('id, board_id, action_type, meta_json, actor_id, created_at, card_id')
+      .eq('actor_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(20),
+  ]);
+
+  const boardsData = boardsRes.data || [];
+  const listsData = listsRes.data || [];
+  const cardsData = cardsRes.data || [];
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Build per-board stats
+  const boards: BoardSummary[] = boardsData.map(b => {
+    const boardLists = listsData.filter(l => l.board_id === b.id);
+    const boardCards = cardsData.filter(c => c.board_id === b.id);
+    return {
+      ...b,
+      list_count: boardLists.length,
+      card_count: boardCards.length,
+      high_priority_count: boardCards.filter(c => c.priority === 'high').length,
+      overdue_count: boardCards.filter(c => c.due_date && c.due_date < today).length,
+    };
+  });
+
+  // Global stats
+  const stats: DashboardStats = {
+    totalBoards: boardsData.length,
+    totalLists: listsData.length,
+    totalCards: cardsData.length,
+    overdueCards: cardsData.filter(c => c.due_date && c.due_date < today).length,
+    highPriorityCards: cardsData.filter(c => c.priority === 'high').length,
+    completedToday: (activityRes.data || []).filter(a =>
+      a.action_type === 'card_archived' && a.created_at?.startsWith(today)
+    ).length,
+  };
+
+  return { boards, stats };
+}
+
+export async function fetchRecentActivity(userId: string, limit = 15): Promise<Activity[]> {
+  // Get all boards for this user first
+  const { data: userBoards } = await supabase
+    .from('teamhub_boards')
+    .select('id')
+    .eq('created_by', userId);
+  const boardIds = (userBoards || []).map(b => b.id);
+  if (boardIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('teamhub_activity')
+    .select('*')
+    .in('board_id', boardIds)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
 // ─── Boards ───
 
 export async function fetchBoards(userId: string): Promise<Board[]> {
