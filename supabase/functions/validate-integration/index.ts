@@ -61,6 +61,9 @@ serve(async (req) => {
       case "ga":
         result = await validateGoogleAnalytics(credentials);
         break;
+      case "stripe":
+        result = await validateStripe(credentials);
+        break;
       default:
         result = { success: false, error: `Unknown provider: ${provider}` };
     }
@@ -159,6 +162,44 @@ async function validateSalesforce(
     };
   } catch (err) {
     return { success: false, error: `Salesforce connection failed: ${(err as Error).message}` };
+  }
+}
+
+// ── Stripe: GET /v1/balance to validate secret key ──
+async function validateStripe(
+  credentials: Record<string, string>
+): Promise<{ success: boolean; error?: string; details?: string }> {
+  const { secret_key } = credentials;
+  if (!secret_key) {
+    return { success: false, error: "Missing secret_key" };
+  }
+
+  if (!secret_key.startsWith("sk_test_") && !secret_key.startsWith("sk_live_")) {
+    return { success: false, error: "Invalid key format. Must start with sk_test_ or sk_live_." };
+  }
+
+  try {
+    const res = await fetch("https://api.stripe.com/v1/balance", {
+      headers: { Authorization: `Bearer ${secret_key}` },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const mode = secret_key.startsWith("sk_live_") ? "live" : "test";
+      const available = data.available?.[0];
+      const detail = available
+        ? `Stripe account connected (${mode} mode, ${available.currency.toUpperCase()} balance available)`
+        : `Stripe account connected (${mode} mode)`;
+      return { success: true, details: detail };
+    }
+
+    const body = await res.json().catch(() => ({}));
+    return {
+      success: false,
+      error: `Stripe returned ${res.status}: ${(body as any).error?.message || "Invalid API key"}`,
+    };
+  } catch (err) {
+    return { success: false, error: `Stripe connection failed: ${(err as Error).message}` };
   }
 }
 

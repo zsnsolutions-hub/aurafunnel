@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useOutletContext, useLocation, useNavigate } from 'react-router-dom';
 import { User } from '../../types';
 import { useSocialAccounts, PublishTarget } from '../../hooks/useSocialAccounts';
-import { usePublishNow, useSchedulePost } from '../../hooks/useCreatePost';
+import { usePublishNow, useSchedulePost, useOAuthStart } from '../../hooks/useCreatePost';
 import AccountsConnectPanel from '../../components/social/AccountsConnectPanel';
 import Composer from '../../components/social/Composer';
 import TargetPicker from '../../components/social/TargetPicker';
@@ -14,6 +14,7 @@ import PublishStatusTable from '../../components/social/PublishStatusTable';
 import {
   SendIcon, CalendarIcon, CheckIcon, AlertTriangleIcon, RefreshIcon,
   EditIcon, ActivityIcon, PlugIcon, KeyboardIcon, XIcon,
+  FacebookIcon, LinkedInIcon, InstagramIcon,
 } from '../../components/Icons';
 
 const DRAFT_KEY = 'aurafunnel_social_draft';
@@ -22,6 +23,10 @@ const SocialScheduler: React.FC = () => {
   const { user } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // ─── OAuth helpers ───
+  const { startMetaOAuth, startLinkedInOAuth } = useOAuthStart();
+  const [connecting, setConnecting] = useState<string | null>(null);
 
   // ─── Tab navigation ───
   const [activeView, setActiveView] = useState<'compose' | 'history' | 'accounts'>('compose');
@@ -60,6 +65,37 @@ const SocialScheduler: React.FC = () => {
 
   // ─── Success / feedback state ───
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  // ─── Handle OAuth callback query params ───
+  const oauthHandled = useRef(false);
+  useEffect(() => {
+    if (oauthHandled.current) return;
+    const params = new URLSearchParams(location.search);
+    const metaConnected = params.get('meta') === 'connected';
+    const linkedinConnected = params.get('linkedin') === 'connected';
+    const oauthError = params.get('error');
+
+    if (!metaConnected && !linkedinConnected && !oauthError) return;
+    oauthHandled.current = true;
+
+    if (metaConnected) {
+      const pages = params.get('pages');
+      setSuccessMsg(`Meta connected successfully${pages ? ` — ${pages} page${pages !== '1' ? 's' : ''} linked` : ''}!`);
+      setActiveView('accounts');
+      refetchAccounts();
+    } else if (linkedinConnected) {
+      setSuccessMsg('LinkedIn connected successfully!');
+      setActiveView('accounts');
+      refetchAccounts();
+    } else if (oauthError) {
+      setOauthError(`Connection failed: ${oauthError.replace(/_/g, ' ')}`);
+      setActiveView('accounts');
+    }
+
+    // Clean the URL so refresh doesn't re-trigger
+    navigate(location.pathname, { replace: true });
+  }, [location.search, navigate, location.pathname, refetchAccounts]);
 
   // ─── Restore draft on mount (router state takes priority) ───
   const draftRestored = useRef(false);
@@ -229,6 +265,17 @@ const SocialScheduler: React.FC = () => {
         </div>
       )}
 
+      {/* ─── OAuth error banner ─── */}
+      {oauthError && (
+        <div className="flex items-center space-x-2 p-4 bg-rose-50 border border-rose-200 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <AlertTriangleIcon className="w-5 h-5 text-rose-500 shrink-0" />
+          <p className="text-sm font-bold text-rose-600">{oauthError}</p>
+          <button onClick={() => setOauthError(null)} className="ml-auto text-rose-400 hover:text-rose-600">
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* ─── Tab Navigation ─── */}
       <div className="flex items-center space-x-1 bg-slate-50 rounded-xl p-1">
         {tabs.map(tab => (
@@ -250,6 +297,48 @@ const SocialScheduler: React.FC = () => {
       {/* ─── VIEW: Compose ─── */}
       {activeView === 'compose' && (
         <>
+          {/* Inline connect prompt when no accounts linked */}
+          {!accountsLoading && !hasMetaConnected && !hasLinkedInConnected && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-start space-x-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+                  <PlugIcon className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-slate-900">Connect your social accounts to get started</p>
+                  <p className="text-xs text-slate-500 mt-1">Link your Facebook Pages, Instagram, or LinkedIn to publish and schedule posts directly.</p>
+                  <div className="flex items-center space-x-3 mt-4">
+                    <button
+                      onClick={async () => {
+                        setConnecting('meta');
+                        try { await startMetaOAuth(); }
+                        catch (err) { setConnecting(null); setOauthError(err instanceof Error ? err.message : 'Failed to start Meta connection.'); }
+                      }}
+                      disabled={connecting === 'meta'}
+                      className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all disabled:opacity-40"
+                    >
+                      {connecting === 'meta' ? <RefreshIcon className="w-3.5 h-3.5 animate-spin" /> : <FacebookIcon className="w-3.5 h-3.5" />}
+                      <span>Connect Meta</span>
+                      <span className="text-blue-200 text-[10px]">(FB + IG)</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setConnecting('linkedin');
+                        try { await startLinkedInOAuth(); }
+                        catch (err) { setConnecting(null); setOauthError(err instanceof Error ? err.message : 'Failed to start LinkedIn connection.'); }
+                      }}
+                      disabled={connecting === 'linkedin'}
+                      className="flex items-center space-x-2 px-4 py-2.5 bg-sky-700 text-white rounded-xl text-xs font-bold hover:bg-sky-800 transition-all disabled:opacity-40"
+                    >
+                      {connecting === 'linkedin' ? <RefreshIcon className="w-3.5 h-3.5 animate-spin" /> : <LinkedInIcon className="w-3.5 h-3.5" />}
+                      <span>Connect LinkedIn</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Main compose grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left column: Compose + Targets + Media */}

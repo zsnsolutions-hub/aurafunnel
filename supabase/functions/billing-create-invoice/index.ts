@@ -11,12 +11,34 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper: look up per-user Stripe key from integrations table, fall back to global env var
+async function getStripeKeyForUser(supabaseAdmin: any, userId: string): Promise<string> {
+  const { data } = await supabaseAdmin
+    .from("integrations")
+    .select("credentials")
+    .eq("provider", "stripe")
+    .eq("owner_id", userId)
+    .eq("status", "connected")
+    .limit(1)
+    .single();
+
+  if (data?.credentials?.secret_key) {
+    return data.credentials.secret_key;
+  }
+
+  if (STRIPE_SECRET_KEY) {
+    return STRIPE_SECRET_KEY;
+  }
+
+  throw new Error("No Stripe key configured. Connect Stripe in Integration Hub or set STRIPE_SECRET_KEY.");
+}
+
 // Helper: call Stripe API with form-encoded body
-async function stripePost(path: string, params: Record<string, string>): Promise<any> {
+async function stripePost(path: string, params: Record<string, string>, apiKey: string): Promise<any> {
   const res = await fetch(`https://api.stripe.com${path}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams(params).toString(),
@@ -67,9 +89,13 @@ serve(async (req) => {
 
     const userId = user.id;
 
-    if (!STRIPE_SECRET_KEY) {
+    // Look up per-user Stripe key, fall back to global
+    let stripeApiKey: string;
+    try {
+      stripeApiKey = await getStripeKeyForUser(supabaseAdmin, userId);
+    } catch (keyErr) {
       return new Response(
-        JSON.stringify({ error: "Stripe is not configured. Please set STRIPE_SECRET_KEY." }),
+        JSON.stringify({ error: (keyErr as Error).message }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -131,7 +157,7 @@ serve(async (req) => {
         email: lead.email,
         "metadata[lead_id]": lead_id,
         "metadata[owner_id]": userId,
-      });
+      }, stripeApiKey);
       stripeCustomerId = customer.id;
     }
 
@@ -153,7 +179,7 @@ serve(async (req) => {
     };
     if (notes) invoiceParams.description = notes;
 
-    const stripeInvoice = await stripePost("/v1/invoices", invoiceParams);
+    const stripeInvoice = await stripePost("/v1/invoices", invoiceParams, stripeApiKey);
 
     // 4. Add line items to the invoice
     for (const item of line_items) {
@@ -166,14 +192,14 @@ serve(async (req) => {
         description: `${item.description}${(item.quantity || 1) > 1 ? ` (x${item.quantity})` : ""}`,
         amount: String(amountCents),
         currency,
-      });
+      }, stripeApiKey);
     }
 
     // 5. Finalize the invoice
-    const finalizedInvoice = await stripePost(`/v1/invoices/${stripeInvoice.id}/finalize`, {});
+    const finalizedInvoice = await stripePost(`/v1/invoices/${stripeInvoice.id}/finalize`, {}, stripeApiKey);
 
     // 6. Send the invoice
-    await stripePost(`/v1/invoices/${stripeInvoice.id}/send`, {});
+    await stripePost(`/v1/invoices/${stripeInvoice.id}/send`, {}, stripeApiKey);
 
     // 7. Insert into local DB
     const { data: localInvoice, error: insertError } = await supabaseAdmin

@@ -11,11 +11,33 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-async function stripeRequest(method: string, path: string, params: Record<string, string> = {}): Promise<any> {
+// Helper: look up per-user Stripe key from integrations table, fall back to global env var
+async function getStripeKeyForUser(supabaseAdmin: any, userId: string): Promise<string> {
+  const { data } = await supabaseAdmin
+    .from("integrations")
+    .select("credentials")
+    .eq("provider", "stripe")
+    .eq("owner_id", userId)
+    .eq("status", "connected")
+    .limit(1)
+    .single();
+
+  if (data?.credentials?.secret_key) {
+    return data.credentials.secret_key;
+  }
+
+  if (STRIPE_SECRET_KEY) {
+    return STRIPE_SECRET_KEY;
+  }
+
+  throw new Error("No Stripe key configured. Connect Stripe in Integration Hub or set STRIPE_SECRET_KEY.");
+}
+
+async function stripeRequest(method: string, path: string, apiKey: string, params: Record<string, string> = {}): Promise<any> {
   const options: RequestInit = {
     method,
     headers: {
-      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
   };
@@ -30,8 +52,8 @@ async function stripeRequest(method: string, path: string, params: Record<string
   return data;
 }
 
-async function stripePost(path: string, params: Record<string, string> = {}): Promise<any> {
-  return stripeRequest("POST", path, params);
+async function stripePost(path: string, params: Record<string, string> = {}, apiKey: string = ""): Promise<any> {
+  return stripeRequest("POST", path, apiKey, params);
 }
 
 serve(async (req) => {
@@ -73,9 +95,13 @@ serve(async (req) => {
 
     const userId = user.id;
 
-    if (!STRIPE_SECRET_KEY) {
+    // Look up per-user Stripe key, fall back to global
+    let stripeApiKey: string;
+    try {
+      stripeApiKey = await getStripeKeyForUser(supabaseAdmin, userId);
+    } catch (keyErr) {
       return new Response(
-        JSON.stringify({ error: "Stripe is not configured. Please set STRIPE_SECRET_KEY." }),
+        JSON.stringify({ error: (keyErr as Error).message }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -142,7 +168,7 @@ serve(async (req) => {
       // If stripe_hosted_url is missing, fetch from Stripe
       let hostedUrl = invoice.stripe_hosted_url;
       if (!hostedUrl && invoice.stripe_invoice_id) {
-        const stripeInv = await stripeRequest("GET", `/v1/invoices/${invoice.stripe_invoice_id}`);
+        const stripeInv = await stripeRequest("GET", `/v1/invoices/${invoice.stripe_invoice_id}`, stripeApiKey);
         hostedUrl = stripeInv.hosted_invoice_url || null;
         if (hostedUrl) {
           await supabaseAdmin
@@ -173,14 +199,14 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else if (action === "resend") {
-      await stripePost(`/v1/invoices/${invoice.stripe_invoice_id}/send`);
+      await stripePost(`/v1/invoices/${invoice.stripe_invoice_id}/send`, {}, stripeApiKey);
 
       await supabaseAdmin
         .from("invoices")
         .update({ sent_at: new Date().toISOString(), sent_via: "stripe", updated_at: new Date().toISOString() })
         .eq("id", invoice_id);
     } else if (action === "void") {
-      await stripePost(`/v1/invoices/${invoice.stripe_invoice_id}/void`);
+      await stripePost(`/v1/invoices/${invoice.stripe_invoice_id}/void`, {}, stripeApiKey);
 
       await supabaseAdmin
         .from("invoices")

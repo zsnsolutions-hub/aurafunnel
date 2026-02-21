@@ -132,7 +132,7 @@ const MODE_CHIPS: Record<AIMode, SuggestionChip[]> = {
     { label: 'Follow-up Tips', prompt: 'What are the best practices for following up with leads?', icon: <MailIcon className="w-3.5 h-3.5" />, color: 'indigo', category: 'strategy' },
     { label: 'Scoring Guide', prompt: 'Explain how lead scoring works and how I should interpret scores', icon: <ChartIcon className="w-3.5 h-3.5" />, color: 'violet', category: 'report' },
     { label: 'Qualification Help', prompt: 'How do I decide when a lead is ready to be qualified?', icon: <CheckIcon className="w-3.5 h-3.5" />, color: 'emerald', category: 'strategy' },
-    { label: 'Common Mistakes', prompt: 'What are common B2B sales pipeline mistakes I should avoid?', icon: <XIcon className="w-3.5 h-3.5" />, color: 'rose', category: 'analyze' },
+    { label: 'Call Coaching', prompt: 'Coach me on how to initiate a phone call with a lead', icon: <PhoneIcon className="w-3.5 h-3.5" />, color: 'teal', category: 'strategy' },
     { label: 'Improve Conversion', prompt: 'Give me tips to improve my lead conversion rate', icon: <TrendUpIcon className="w-3.5 h-3.5" />, color: 'amber', category: 'strategy' },
   ],
   creative: [
@@ -555,6 +555,34 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
         return `**🚫 Top B2B Pipeline Mistakes to Avoid**\n\n**1. Slow Response Time**\nLeads contacted within 5 minutes are 21x more likely to convert. Every hour you wait, odds drop sharply.\n\n**2. No Follow-up System**\n80% of sales require 5+ touchpoints. Most reps stop after 2. Build a consistent follow-up sequence.\n\n**3. Treating All Leads the Same**\nA hot lead (80+) needs a different approach than a cold one (25). Segment and personalize.\n\n**4. Ignoring Lead Scoring**\nYour AI scores are there for a reason. Trust the data and prioritize accordingly.\n\n**5. Not Qualifying Early**\nSpending time on leads that will never convert wastes your best resource — time. Qualify or disqualify fast.\n\n**6. Skipping Discovery**\nDon't pitch before understanding their pain. Ask questions first, present solutions second.\n\n**7. No Pipeline Hygiene**\nClean your pipeline monthly. Archive cold leads, update statuses, and keep your data fresh.`;
       }
 
+      // ─── Call Prep: Lead-specific call preparation sheet ───
+      if ((lowerPrompt.includes('call prep') || (lowerPrompt.includes('prep') && lowerPrompt.includes('call')) || (lowerPrompt.includes('prepare') && lowerPrompt.includes('call')) || lowerPrompt.includes('call script')) && leads.length > 0) {
+        // Try to find a specific lead mentioned in the prompt
+        const matchedLead = leads.find(l => lowerPrompt.includes(l.name.toLowerCase()));
+        if (matchedLead) {
+          const kb = (matchedLead as any).knowledgeBase || {};
+          const firstName = matchedLead.name.split(' ')[0];
+          const talkingPoints = kb.talkingPoints ? `\n${(Array.isArray(kb.talkingPoints) ? kb.talkingPoints : [kb.talkingPoints]).map((tp: string) => `- ${tp}`).join('\n')}` : '\n- Ask about their current priorities and challenges\n- Discuss how your solution addresses their pain points\n- Share a relevant success story from a similar company';
+          const outreachAngle = kb.outreachAngle || `Value-first approach — lead with how you help companies like ${matchedLead.company}`;
+          const riskFactors = kb.riskFactors ? `\n${(Array.isArray(kb.riskFactors) ? kb.riskFactors : [kb.riskFactors]).map((rf: string) => `⚠️ ${rf}`).join('\n')}` : '\n⚠️ No specific risk factors identified — proceed with standard discovery';
+          const scoreLabel = matchedLead.score > 80 ? 'Hot — high intent, move fast' : matchedLead.score > 55 ? 'Warm — interested but needs nurturing' : 'Cool — requires more discovery';
+          const industry = kb.industry || 'their industry';
+          const title = kb.title || '';
+
+          return `**📞 Call Prep Sheet: ${matchedLead.name}**\n\n**Lead Summary**\n| Field | Details |\n|-------|--------|\n| Name | ${matchedLead.name} |\n| Company | ${matchedLead.company} |\n${title ? `| Title | ${title} |\n` : ''}| Industry | ${industry} |\n| AI Score | ${matchedLead.score}/100 (${scoreLabel}) |\n| Status | ${matchedLead.status} |\n\n**Suggested Opener**\n"Hi ${firstName}, this is [Your Name] — I've been looking into what ${matchedLead.company} is doing in ${industry} and was really impressed. I had a quick thought on how we might help you [specific value]. Do you have a couple of minutes?"\n\n**Talking Points**${talkingPoints}\n\n**Outreach Angle**\n${outreachAngle}\n\n**Risk Factors to Watch**${riskFactors}\n\n**Discovery Questions**\n1. "What's your biggest priority at ${matchedLead.company} this quarter?"\n2. "How are you currently handling [relevant challenge for ${industry}]?"\n3. "What would an ideal solution look like for your team?"\n4. "Who else would be involved in evaluating a solution like this?"\n\n**Objection Prep**\n${matchedLead.score > 70 ? '• "We\'re already evaluating options" → "That\'s great — what criteria are most important to you? I\'d love to make sure we fit what you\'re looking for."' : '• "I\'m not sure this is a priority right now" → "Totally understand. What would need to change for this to become a priority? Happy to check back at the right time."'}\n${matchedLead.status === 'New' ? '• "How did you get my info?" → "Your company came up in our research as a great fit because of [reason]. I wanted to reach out personally."' : '• "Can you send me an email instead?" → "Absolutely — I\'ll send a quick summary. Before I do, what specific info would be most useful for you?"'}\n\n**Close the Call**\n"Thanks for your time, ${firstName}. Based on what we discussed, I think [next step] would be valuable. Can I send you a calendar invite for [day/time]?"`;
+        }
+
+        // No specific lead found — suggest top leads
+        const hotLeads = leads.filter(l => l.score > 60).slice(0, 3);
+        return `**📞 Call Prep Assistant**\n\nI can prepare a personalized call script for any of your leads! Tell me which lead you'd like to prep for.\n\n**Your Top Leads Ready for a Call:**\n${hotLeads.length > 0 ? hotLeads.map((l, i) => `**${i + 1}. ${l.name}** (${l.company}) — Score: ${l.score}, Status: ${l.status}`).join('\n') : 'No high-scoring leads available right now.'}\n\n**Try saying:**\n• "Prepare a call script for ${hotLeads[0]?.name || '[lead name]'} at ${hotLeads[0]?.company || '[company]'}"\n• "Call prep for ${hotLeads[1]?.name || '[lead name]'}"\n• "Help me prep a call with ${hotLeads[2]?.name || '[lead name]'}"\n\nI'll generate a full call sheet with openers, talking points, objection handling, and closing strategy customized to that lead.`;
+      }
+
+      // ─── Call Coaching: General phone call best practices ───
+      if (aiMode === 'coach' && (lowerPrompt.includes('call') || lowerPrompt.includes('phone'))) {
+        const topLead = leads.length > 0 ? leads[0] : null;
+        return `**📞 Phone Call Coaching**\n\nHere's your complete guide to initiating and running effective sales calls:\n\n**Before the Call**\n- Research the lead's company, role, and recent news\n- Review their AI score and any notes in your pipeline\n- Prepare 2-3 talking points specific to their situation\n- Have your CRM open so you can take notes in real time\n- Set a clear objective: discovery, qualification, or demo scheduling\n\n**Opening the Call (First 30 Seconds)**\n"Hi [First Name], this is [Your Name] from [Company]. I've been researching [their company] and noticed [specific observation]. I had a quick idea that might be relevant — do you have two minutes?"\n\n**Key principles:**\n- Sound confident but not scripted\n- Give them a reason to stay on the line within 10 seconds\n- Always ask permission to continue — it builds trust\n\n**During the Call — Discovery Phase**\nAsk open-ended questions to understand their situation:\n1. "What's your biggest challenge with [topic] right now?"\n2. "How are you currently handling [process]?"\n3. "What would success look like for you this quarter?"\n4. "What's held you back from solving this so far?"\n\n**Active Listening Tips:**\n- Let them finish before responding\n- Mirror their language: "So what I'm hearing is..."\n- Take brief notes — don't type loudly\n- Pause 2 seconds after they stop talking (they'll often add more)\n\n**Handling Phone-Specific Objections**\n• "I'm busy right now" → "Totally understand — when would be a better time for a 10-minute chat?"\n• "Just send me an email" → "Happy to! Before I do, what's the #1 thing you'd want to see addressed?"\n• "How'd you get my number?" → "Your company came up in our research as a great fit for [reason]. I wanted to reach out personally."\n• "We're not interested" → "Appreciate the honesty. Out of curiosity, is it the timing or the topic? Happy to reconnect later if it makes sense."\n\n**Closing the Call**\n- Summarize what you discussed in 2-3 bullet points\n- Propose a specific next step: "Can I send a calendar invite for Thursday at 2pm?"\n- If they're not ready: "No problem — I'll follow up with a quick email. If anything changes, here's my direct line."\n- Always confirm the next action before hanging up\n\n**Pro Tips**\n- Best times to call: Tuesday–Thursday, 10am–12pm or 2pm–4pm\n- Leave a voicemail if they don't answer (keep it under 30 seconds)\n- Follow up with an email within 1 hour of calling\n- Track call outcomes in your pipeline immediately\n- Smile while you talk — it genuinely changes your tone${topLead ? `\n\n**Quick Action:** Want me to prepare a personalized call script for **${topLead.name}** (${topLead.company}, score ${topLead.score})? Just ask: "Prep a call for ${topLead.name}"` : ''}`;
+      }
+
       if (aiMode === 'strategist' && (lowerPrompt.includes('prioritize') || lowerPrompt.includes('focus'))) {
         const tiers = [
           { label: 'Tier 1 — Act Now', leads: leads.filter(l => l.score > 80 && l.status !== 'Qualified'), action: 'Call or send personalized demo invite today' },
@@ -971,22 +999,30 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Top Leads</h3>
             <div className="space-y-2">
               {leads.slice(0, 4).map(lead => (
-                <button
-                  key={lead.id}
-                  onClick={() => generateResponse(`Tell me about ${lead.name} at ${lead.company}`)}
-                  className="w-full flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-indigo-50 transition-colors text-left group"
-                >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                    lead.score > 80 ? 'bg-rose-100 text-rose-700' : lead.score > 60 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {lead.name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-slate-700 truncate">{lead.name}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
-                  </div>
-                  <span className="text-xs font-black text-indigo-600">{lead.score}</span>
-                </button>
+                <div key={lead.id} className="flex items-center space-x-1">
+                  <button
+                    onClick={() => generateResponse(`Tell me about ${lead.name} at ${lead.company}`)}
+                    className="flex-1 flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-indigo-50 transition-colors text-left group min-w-0"
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                      lead.score > 80 ? 'bg-rose-100 text-rose-700' : lead.score > 60 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {lead.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{lead.name}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
+                    </div>
+                    <span className="text-xs font-black text-indigo-600">{lead.score}</span>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); generateResponse(`Prepare a call script for ${lead.name} at ${lead.company}`); }}
+                    className="p-1.5 rounded-lg text-slate-300 hover:text-teal-600 hover:bg-teal-50 transition-all shrink-0"
+                    title={`Prep call for ${lead.name}`}
+                  >
+                    <PhoneIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>

@@ -20,14 +20,17 @@ const AccountsConnectPanel: React.FC<Props> = ({
 }) => {
   const { startMetaOAuth, startLinkedInOAuth } = useOAuthStart();
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   const handleConnect = async (provider: 'meta' | 'linkedin') => {
     setConnecting(provider);
+    setConnectError(null);
     try {
       if (provider === 'meta') await startMetaOAuth();
       else await startLinkedInOAuth();
-    } catch {
+    } catch (err) {
       setConnecting(null);
+      setConnectError(err instanceof Error ? err.message : `Failed to start ${provider === 'meta' ? 'Meta' : 'LinkedIn'} connection.`);
     }
   };
 
@@ -46,6 +49,13 @@ const AccountsConnectPanel: React.FC<Props> = ({
         </button>
       </div>
       <div className="p-6 space-y-4">
+        {connectError && (
+          <div className="flex items-center space-x-2 p-3 bg-rose-50 border border-rose-200 rounded-xl">
+            <XIcon className="w-4 h-4 text-rose-500 shrink-0" />
+            <p className="text-xs font-bold text-rose-600">{connectError}</p>
+            <button onClick={() => setConnectError(null)} className="ml-auto text-rose-400 hover:text-rose-600 text-sm">&times;</button>
+          </div>
+        )}
         {/* Meta (Facebook + Instagram) */}
         <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-blue-200 transition-all">
           <div className="flex items-center space-x-3">

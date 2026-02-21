@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { XIcon, CheckIcon, LinkIcon, CursorClickIcon } from '../Icons';
+import EmojiPickerPopover from '../EmojiPickerPopover';
+import { useInsertAtCursor } from '../../hooks/useInsertAtCursor';
 import {
   buildEmailCtaButtonHTML,
   getCtaPresets,
@@ -30,6 +32,7 @@ const ALIGN_OPTIONS: { value: CtaAlign; label: string }[] = [
 
 const CTAButtonBuilderModal: React.FC<CTAButtonBuilderModalProps> = ({ open, onClose, onInsert }) => {
   const [text, setText] = useState('Book a Call');
+  const { ref: textRef, insert: insertEmoji } = useInsertAtCursor<HTMLInputElement>(text, setText);
   const [url, setUrl] = useState('');
   const [variant, setVariant] = useState<CtaVariant>('primary');
   const [align, setAlign] = useState<CtaAlign>('center');
@@ -134,14 +137,18 @@ const CTAButtonBuilderModal: React.FC<CTAButtonBuilderModalProps> = ({ open, onC
           {/* Button Text */}
           <div>
             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Button Text</label>
-            <input
-              type="text"
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="Book a Call"
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-              autoFocus
-            />
+            <div className="flex items-center space-x-1">
+              <input
+                ref={textRef}
+                type="text"
+                value={text}
+                onChange={e => setText(e.target.value)}
+                placeholder="Book a Call"
+                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                autoFocus
+              />
+              <EmojiPickerPopover onSelect={insertEmoji} />
+            </div>
           </div>
 
           {/* URL */}

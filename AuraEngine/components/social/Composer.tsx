@@ -1,6 +1,8 @@
 // File: AuraEngine/components/social/Composer.tsx
 import React, { useState } from 'react';
 import { EditIcon, LinkIcon, SparklesIcon, RefreshIcon } from '../Icons';
+import EmojiPickerPopover from '../EmojiPickerPopover';
+import { useInsertAtCursor } from '../../hooks/useInsertAtCursor';
 import { BusinessProfile } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { generateSocialCaption, SocialPlatform } from '../../lib/gemini';
@@ -28,6 +30,7 @@ const Composer: React.FC<Props> = ({
   contentText, setContentText, linkUrl, setLinkUrl, trackClicks, setTrackClicks,
   userId, businessProfile,
 }) => {
+  const { ref: textareaRef, insert: insertAtCursor } = useInsertAtCursor<HTMLTextAreaElement>(contentText, setContentText);
   const charCount = contentText.length;
 
   // AI caption generation state
@@ -146,18 +149,22 @@ const Composer: React.FC<Props> = ({
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Post Content</label>
           <textarea
+            ref={textareaRef}
             value={contentText}
             onChange={e => setContentText(e.target.value)}
             rows={6}
             className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 text-sm leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none"
             placeholder="Write your post content here... This will be published to all selected platforms."
           />
-          <div className="flex items-center space-x-3 text-[10px] text-slate-400">
-            {Object.entries(MAX_CHARS).map(([platform, max]) => (
-              <span key={platform} className={charCount > max ? 'text-rose-500 font-bold' : ''}>
-                {platform.charAt(0).toUpperCase() + platform.slice(1)}: {charCount}/{max}
-              </span>
-            ))}
+          <div className="flex items-center justify-between">
+            <EmojiPickerPopover onSelect={insertAtCursor} />
+            <div className="flex items-center space-x-3 text-[10px] text-slate-400">
+              {Object.entries(MAX_CHARS).map(([platform, max]) => (
+                <span key={platform} className={charCount > max ? 'text-rose-500 font-bold' : ''}>
+                  {platform.charAt(0).toUpperCase() + platform.slice(1)}: {charCount}/{max}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 

@@ -31,7 +31,7 @@ interface LayoutContext {
   refreshProfile: () => Promise<void>;
 }
 
-type IntegrationCategory = 'all' | 'crm' | 'marketing' | 'comms' | 'analytics' | 'email';
+type IntegrationCategory = 'all' | 'crm' | 'marketing' | 'comms' | 'analytics' | 'email' | 'payment';
 type IntegrationStatus = 'connected' | 'partial' | 'disconnected';
 type SyncDirection = 'bidirectional' | 'outbound' | 'inbound';
 
@@ -159,6 +159,11 @@ const DEFAULT_INTEGRATIONS: Integration[] = [
     id: 'smtp', name: 'Custom SMTP', category: 'email', status: 'disconnected',
     lastSync: 'Never', syncDirection: 'outbound',
     objects: ['Email Sending'], icon: '📮', color: '#6B7280', dataVolume: 0,
+  },
+  {
+    id: 'stripe', name: 'Stripe', category: 'payment', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
+    objects: ['Invoices', 'Payments'], icon: '💳', color: '#635BFF', dataVolume: 0,
   },
 ];
 
@@ -509,6 +514,7 @@ const IntegrationHub: React.FC = () => {
         if (creds.accessToken) setGenericSetupAccessToken(creds.accessToken);
         if (creds.measurementId) setGenericSetupMeasurementId(creds.measurementId);
         if (creds.apiSecret) setGenericSetupApiSecret(creds.apiSecret);
+        if (creds.secret_key) setGenericSetupApiKey(creds.secret_key);
       }
     } catch {}
 
@@ -873,6 +879,8 @@ const IntegrationHub: React.FC = () => {
         return { instanceUrl: genericSetupInstanceUrl, accessToken: genericSetupAccessToken };
       case 'ga':
         return { measurementId: genericSetupMeasurementId, apiSecret: genericSetupApiSecret };
+      case 'stripe':
+        return { secret_key: genericSetupApiKey };
       default:
         return { apiKey: genericSetupApiKey };
     }
@@ -886,6 +894,7 @@ const IntegrationHub: React.FC = () => {
       case 'marketing': return 'marketing';
       case 'comms': return 'comms';
       case 'analytics': return 'analytics';
+      case 'payment': return 'payment';
       default: return integ.category;
     }
   }, [integrations]);
@@ -963,6 +972,7 @@ const IntegrationHub: React.FC = () => {
     { key: 'marketing', label: 'Marketing' },
     { key: 'comms', label: 'Comms' },
     { key: 'analytics', label: 'Analytics' },
+    { key: 'payment', label: 'Payment' },
   ];
 
   // ─── Keyboard Shortcuts ───
@@ -1094,6 +1104,7 @@ const IntegrationHub: React.FC = () => {
             ].map(a => (
               <button
                 key={a.name}
+                onClick={() => { if (a.name === 'Stripe') { setShowAddIntegration(false); openGenericSetup('stripe'); } }}
                 className="flex items-center space-x-3 p-3 rounded-xl border-2 border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all text-left"
               >
                 <span className="text-xl">{a.icon}</span>
@@ -2832,6 +2843,7 @@ const IntegrationHub: React.FC = () => {
           hubspot: 'Create a Private App in HubSpot Settings > Integrations > Private Apps and copy the access token.',
           slack: 'Create an Incoming Webhook at api.slack.com/apps > Incoming Webhooks and paste the URL.',
           ga: 'Find your Measurement ID (G-XXXXX) and create an API Secret in GA4 Admin > Data Streams > Measurement Protocol.',
+          stripe: 'Enter your Stripe Secret Key from Dashboard > Developers > API Keys. Use sk_test_ for testing or sk_live_ for production.',
         };
         const hasRequiredFields = (() => {
           switch (genericSetupId) {
@@ -2839,6 +2851,7 @@ const IntegrationHub: React.FC = () => {
             case 'hubspot': return genericSetupApiKey.trim().length > 0;
             case 'salesforce': return genericSetupInstanceUrl.trim().length > 0 && genericSetupAccessToken.trim().length > 0;
             case 'ga': return genericSetupMeasurementId.trim().length > 0 && genericSetupApiSecret.trim().length > 0;
+            case 'stripe': return genericSetupApiKey.trim().startsWith('sk_');
             default: return genericSetupApiKey.trim().length > 0;
           }
         })();
@@ -2961,8 +2974,28 @@ const IntegrationHub: React.FC = () => {
                   </>
                 )}
 
+                {genericSetupId === 'stripe' && (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                      Secret Key
+                    </label>
+                    <input
+                      type="password"
+                      value={genericSetupApiKey}
+                      onChange={e => setGenericSetupApiKey(e.target.value)}
+                      placeholder="sk_test_... or sk_live_..."
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">{instructions.stripe}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 flex items-center space-x-1">
+                      <LockIcon className="w-3 h-3" />
+                      <span>Your key is stored securely and only used for invoice processing.</span>
+                    </p>
+                  </div>
+                )}
+
                 {/* Fallback: generic API key for unknown providers */}
-                {!['slack', 'hubspot', 'salesforce', 'ga'].includes(genericSetupId) && (
+                {!['slack', 'hubspot', 'salesforce', 'ga', 'stripe'].includes(genericSetupId) && (
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
                       API Key
