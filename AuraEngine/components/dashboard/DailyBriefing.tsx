@@ -4,7 +4,7 @@ import { User } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
   FlameIcon, CalendarIcon, TargetIcon, SparklesIcon, BoltIcon,
-  CheckIcon, XIcon, ArrowRightIcon, ClockIcon, UsersIcon, ChartIcon
+  CheckIcon, XIcon, ArrowRightIcon, ClockIcon, UsersIcon, ChartIcon, SendIcon
 } from '../Icons';
 
 interface DailyBriefingProps {
@@ -20,6 +20,8 @@ interface BriefingData {
   contentCreated: number;
   conversionRate: number;
   pendingTasks: number;
+  socialScheduled: number;
+  socialPublished: number;
   recommendations: string[];
   loading: boolean;
 }
@@ -33,6 +35,8 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
     contentCreated: 0,
     conversionRate: 0,
     pendingTasks: 0,
+    socialScheduled: 0,
+    socialPublished: 0,
     recommendations: [],
     loading: true,
   });
@@ -48,7 +52,7 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
         todayStart.setHours(0, 0, 0, 0);
 
         // Parallel queries
-        const [leadsRes, hotLeadsRes, allLeadsRes] = await Promise.all([
+        const [leadsRes, hotLeadsRes, allLeadsRes, socialRes] = await Promise.all([
           supabase
             .from('leads')
             .select('*', { count: 'exact', head: true })
@@ -65,6 +69,11 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
             .from('leads')
             .select('score, status')
             .eq('client_id', user.id),
+          supabase
+            .from('social_posts')
+            .select('status')
+            .eq('user_id', user.id)
+            .in('status', ['scheduled', 'completed']),
         ]);
 
         const totalToday = leadsRes.count || 0;
@@ -79,6 +88,10 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
         const converted = allLeads.filter(l => l.status === 'converted').length;
         const convRate = allLeads.length > 0 ? +((converted / allLeads.length) * 100).toFixed(1) : 0;
 
+        const socialPosts = socialRes.data || [];
+        const socialScheduled = socialPosts.filter(p => p.status === 'scheduled').length;
+        const socialPublished = socialPosts.filter(p => p.status === 'completed').length;
+
         // Generate recommendations based on data
         const recs: string[] = [];
         if (totalHot > 0) recs.push(`You have ${totalHot} hot leads waiting for follow-up. Prioritize outreach today.`);
@@ -86,6 +99,7 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
         if (totalToday === 0) recs.push('No new leads today yet. Try running a LinkedIn or content campaign.');
         recs.push('AI suggests sending case studies to warm leads for a 2.3x engagement boost.');
         if (allLeads.length > 50) recs.push('Your pipeline is growing. Consider segmenting leads by industry for targeted outreach.');
+        if (socialScheduled === 0 && socialPublished === 0) recs.push('No social posts today. Share content on LinkedIn or Facebook for 3x visibility.');
 
         setBriefing({
           hotLeads,
@@ -94,7 +108,9 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
           contentCreated: Math.floor(Math.random() * 8) + 2, // Simulated
           conversionRate: convRate,
           pendingTasks: hotLeads.length > 0 ? hotLeads.length + 2 : 3,
-          recommendations: recs.slice(0, 3),
+          socialScheduled,
+          socialPublished,
+          recommendations: recs.slice(0, 4),
           loading: false,
         });
       } catch {
@@ -154,12 +170,14 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
             {/* Today's Metrics */}
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2.5">Today's Snapshot</p>
-              <div className="grid grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2.5">
                 {[
                   { label: 'Leads Today', value: briefing.totalLeadsToday, icon: <UsersIcon className="w-3.5 h-3.5" />, color: 'indigo' },
                   { label: 'Hot Leads', value: briefing.totalHotLeads, icon: <FlameIcon className="w-3.5 h-3.5" />, color: 'rose' },
                   { label: 'Conv. Rate', value: `${briefing.conversionRate}%`, icon: <ChartIcon className="w-3.5 h-3.5" />, color: 'emerald' },
                   { label: 'Tasks', value: briefing.pendingTasks, icon: <CheckIcon className="w-3.5 h-3.5" />, color: 'amber' },
+                  { label: 'Scheduled', value: briefing.socialScheduled, icon: <CalendarIcon className="w-3.5 h-3.5" />, color: 'amber' },
+                  { label: 'Published', value: briefing.socialPublished, icon: <SendIcon className="w-3.5 h-3.5" />, color: 'teal' },
                 ].map(m => (
                   <div key={m.label} className="bg-slate-50 rounded-xl p-3 text-center">
                     <div className={`mx-auto w-7 h-7 rounded-lg bg-${m.color}-100 flex items-center justify-center text-${m.color}-600 mb-1.5`}>

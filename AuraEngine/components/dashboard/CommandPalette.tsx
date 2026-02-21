@@ -5,7 +5,7 @@ import {
   TargetIcon, SparklesIcon, CreditCardIcon, CogIcon, BoltIcon, EditIcon,
   PieChartIcon, GitBranchIcon, HelpCircleIcon, BookOpenIcon, UsersIcon,
   BrainIcon, MessageIcon, SlidersIcon, PlugIcon, PlusIcon, ChartIcon,
-  MailIcon, DownloadIcon, RefreshIcon, KeyIcon, FilterIcon
+  MailIcon, DownloadIcon, RefreshIcon, KeyIcon, FilterIcon, SendIcon, CalendarIcon
 } from '../Icons';
 
 interface CommandPaletteProps {
@@ -45,6 +45,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
     { id: 'nav-automation', label: 'Automation Engine', description: 'Workflow automation', category: 'navigation', icon: <GitBranchIcon className="w-4 h-4" />, action: () => navigate('/portal/automation') },
     { id: 'nav-training', label: 'AI Prompt Studio', description: 'Customize AI prompts and templates', category: 'navigation', icon: <SlidersIcon className="w-4 h-4" />, action: () => navigate('/portal/model-training') },
     { id: 'nav-integrations', label: 'Integration Hub', description: 'Connected systems & APIs', category: 'navigation', icon: <PlugIcon className="w-4 h-4" />, action: () => navigate('/portal/integrations') },
+    { id: 'nav-social', label: 'Social Scheduler', description: 'Schedule & publish social posts', category: 'navigation', icon: <SendIcon className="w-4 h-4" />, action: () => navigate('/portal/social-scheduler') },
     { id: 'nav-billing', label: 'Billing & Tiers', description: 'Subscription management', category: 'navigation', icon: <CreditCardIcon className="w-4 h-4" />, action: () => navigate('/portal/billing') },
     { id: 'nav-help', label: 'Help Center', description: 'FAQs and support', category: 'navigation', icon: <HelpCircleIcon className="w-4 h-4" />, shortcut: '?', action: () => navigate('/portal/help') },
     { id: 'nav-manual', label: 'User Manual', description: 'Platform documentation', category: 'navigation', icon: <BookOpenIcon className="w-4 h-4" />, action: () => navigate('/portal/manual') },
@@ -54,6 +55,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
     { id: 'act-generate', label: 'Generate Content', description: 'Open AI content generator', category: 'action', icon: <SparklesIcon className="w-4 h-4" />, action: () => navigate('/portal/content') },
     { id: 'act-report', label: 'Run Analytics Report', description: 'Generate performance report', category: 'action', icon: <ChartIcon className="w-4 h-4" />, action: () => navigate('/portal/analytics') },
     { id: 'act-email', label: 'Compose Email Sequence', description: 'Open email sequence builder', category: 'action', icon: <MailIcon className="w-4 h-4" />, action: () => navigate('/portal/content-studio') },
+    { id: 'act-social-post', label: 'Schedule Social Post', description: 'Compose and schedule a social media post', category: 'action', icon: <CalendarIcon className="w-4 h-4" />, action: () => navigate('/portal/social-scheduler') },
     { id: 'act-import', label: 'Import Leads (CSV)', description: 'Bulk import leads from file', category: 'action', icon: <DownloadIcon className="w-4 h-4" />, action: () => navigate('/portal/leads') },
     { id: 'act-train', label: 'Open Prompt Studio', description: 'Customize AI prompts and templates', category: 'action', icon: <RefreshIcon className="w-4 h-4" />, action: () => navigate('/portal/model-training') },
   ], [navigate]);

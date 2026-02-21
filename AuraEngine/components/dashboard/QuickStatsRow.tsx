@@ -7,7 +7,7 @@ interface QuickStatsRowProps {
   loading: boolean;
 }
 
-const StatCard = ({ title, value, icon, trend, loading }: {
+export const StatCard = ({ title, value, icon, trend, loading }: {
   title: string;
   value: string;
   icon: React.ReactNode;

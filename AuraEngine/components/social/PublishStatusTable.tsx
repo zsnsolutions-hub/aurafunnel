@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
   FacebookIcon, InstagramIcon, LinkedInIcon, CheckIcon, XIcon,
-  ClockIcon, RefreshIcon, ActivityIcon, AlertTriangleIcon,
+  ClockIcon, RefreshIcon, ActivityIcon, AlertTriangleIcon, CursorClickIcon,
 } from '../Icons';
 
 interface PostWithTargets {
@@ -14,6 +14,7 @@ interface PostWithTargets {
   scheduled_at: string | null;
   timezone: string;
   created_at: string;
+  clickCount: number;
   targets: {
     id: string;
     channel: string;
@@ -75,9 +76,37 @@ const PublishStatusTable: React.FC<Props> = ({ userId, refreshKey }) => {
           .in('post_id', postIds)
           .order('created_at', { ascending: true });
 
+        // Fetch click analytics: tracking_links → tracking_events
+        let clickCounts: Record<string, number> = {};
+        const { data: linksData } = await supabase
+          .from('tracking_links')
+          .select('id, post_id')
+          .in('post_id', postIds);
+
+        if (linksData && linksData.length > 0) {
+          const linkIds = linksData.map(l => l.id);
+          const linkToPost: Record<string, string> = {};
+          linksData.forEach(l => { if (l.post_id) linkToPost[l.id] = l.post_id; });
+
+          const { data: eventsData } = await supabase
+            .from('tracking_events')
+            .select('link_id')
+            .in('link_id', linkIds);
+
+          if (eventsData) {
+            eventsData.forEach(ev => {
+              const postId = linkToPost[ev.link_id];
+              if (postId) {
+                clickCounts[postId] = (clickCounts[postId] || 0) + 1;
+              }
+            });
+          }
+        }
+
         const merged = postsData.map(p => ({
           ...p,
           targets: (targetsData || []).filter(t => t.post_id === p.id),
+          clickCount: clickCounts[p.id] || 0,
         }));
 
         setPosts(merged);
@@ -152,6 +181,12 @@ const PublishStatusTable: React.FC<Props> = ({ userId, refreshKey }) => {
                       </span>
                     ))}
                   </div>
+                  {post.clickCount > 0 && (
+                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-violet-100 text-violet-700">
+                      <CursorClickIcon className="w-3 h-3" />
+                      <span>{post.clickCount} click{post.clickCount !== 1 ? 's' : ''}</span>
+                    </span>
+                  )}
                   {getStatusBadge(post.status)}
                 </div>
               </button>

@@ -6,7 +6,7 @@ import {
   AlertTriangleIcon, ClockIcon, UsersIcon, LayersIcon, BrainIcon, PieChartIcon,
   StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
   PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon,
-  BellIcon
+  BellIcon, SendIcon
 } from '../../components/Icons';
 import { fetchBatchEmailSummary, type BatchEmailSummary } from '../../lib/emailTracking';
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
@@ -17,6 +17,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import QuickStatsRow from '../../components/dashboard/QuickStatsRow';
+import { StatCard } from '../../components/dashboard/QuickStatsRow';
 import QuickActionsBar from '../../components/dashboard/QuickActionsBar';
 import AIInsightsPanel from '../../components/dashboard/AIInsightsPanel';
 import LiveActivityFeed from '../../components/dashboard/LiveActivityFeed';
@@ -89,6 +90,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
+  // Social Stats
+  const [socialStats, setSocialStats] = useState({ scheduled: 0, published: 0 });
 
   // AI Insights
   const [insights, setInsights] = useState<AIInsight[]>([]);
@@ -360,6 +363,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   useEffect(() => {
     fetchLeads();
     fetchQuickStats();
+    fetchSocialStats();
   }, [user]);
 
   const fetchLeads = async () => {
@@ -442,6 +446,21 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     } finally {
       setStatsLoading(false);
     }
+  };
+
+  const fetchSocialStats = async () => {
+    try {
+      const { data } = await supabase
+        .from('social_posts')
+        .select('status')
+        .eq('user_id', user.id)
+        .in('status', ['scheduled', 'completed', 'published']);
+      const posts = data || [];
+      setSocialStats({
+        scheduled: posts.filter(p => p.status === 'scheduled').length,
+        published: posts.filter(p => p.status === 'completed' || p.status === 'published').length,
+      });
+    } catch { /* ignore */ }
   };
 
   const openGenModal = (lead?: Lead) => {
@@ -867,6 +886,13 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       <div data-guide="dashboard-stats">
         <QuickStatsRow stats={quickStats} loading={statsLoading}>
+          <StatCard
+            title="Social Posts"
+            value={`${socialStats.published} sent`}
+            icon={<SendIcon className="w-5 h-5" />}
+            trend={socialStats.scheduled > 0 ? { value: socialStats.scheduled, label: `${socialStats.scheduled} queued` } : null}
+            loading={statsLoading}
+          />
           <EmailPerformanceCard />
         </QuickStatsRow>
       </div>
