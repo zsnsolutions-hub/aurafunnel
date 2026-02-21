@@ -29,7 +29,7 @@ const ClientDashboard = lazy(() => import('./pages/portal/ClientDashboard'));
 const LeadManagement = lazy(() => import('./pages/portal/LeadManagement'));
 const LeadProfile = lazy(() => import('./pages/portal/LeadProfile'));
 const ContentGen = lazy(() => import('./pages/portal/ContentGen'));
-const StrategyHub = lazy(() => import('./pages/portal/StrategyHub'));
+const TeamHub = lazy(() => import('./pages/portal/TeamHub'));
 const BlogDrafts = lazy(() => import('./pages/portal/BlogDrafts'));
 const AnalyticsPage = lazy(() => import('./pages/portal/AnalyticsPage'));
 const AutomationPage = lazy(() => import('./pages/portal/AutomationPage'));
@@ -228,7 +228,7 @@ const App: React.FC = () => {
             <Route path="leads/apollo" element={<ErrorBoundary><ApolloSearchPage /></ErrorBoundary>} />
             <Route path="leads/:leadId" element={<ErrorBoundary><LeadProfile /></ErrorBoundary>} />
             <Route path="content" element={<ErrorBoundary><ContentGen /></ErrorBoundary>} />
-            <Route path="strategy" element={<ErrorBoundary><StrategyHub /></ErrorBoundary>} />
+            <Route path="strategy" element={<ErrorBoundary><TeamHub /></ErrorBoundary>} />
             <Route path="blog" element={<ErrorBoundary><BlogDrafts /></ErrorBoundary>} />
             <Route path="analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
             <Route path="automation" element={<ErrorBoundary><AutomationPage /></ErrorBoundary>} />

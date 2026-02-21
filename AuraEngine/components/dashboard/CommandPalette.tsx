@@ -39,7 +39,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
     { id: 'nav-ai', label: 'AI Command Center', description: 'Chat with AI assistant', category: 'navigation', icon: <MessageIcon className="w-4 h-4" />, shortcut: 'G A', action: () => navigate('/portal/ai') },
     { id: 'nav-neural', label: 'Neural Studio', description: 'AI content generation', category: 'navigation', icon: <SparklesIcon className="w-4 h-4" />, action: () => navigate('/portal/content') },
     { id: 'nav-content-studio', label: 'Content Studio', description: 'Multi-variant email editor', category: 'navigation', icon: <EditIcon className="w-4 h-4" />, shortcut: 'G C', action: () => navigate('/portal/content-studio') },
-    { id: 'nav-strategy', label: 'Strategy Hub', description: 'Campaign strategies', category: 'navigation', icon: <BoltIcon className="w-4 h-4" />, shortcut: 'G S', action: () => navigate('/portal/strategy') },
+    { id: 'nav-strategy', label: 'Team Hub', description: 'Team tasks and collaboration', category: 'navigation', icon: <BoltIcon className="w-4 h-4" />, shortcut: 'G S', action: () => navigate('/portal/strategy') },
     { id: 'nav-blog', label: 'Guest Posts', description: 'Blog drafts & publishing', category: 'navigation', icon: <EditIcon className="w-4 h-4" />, action: () => navigate('/portal/blog') },
     { id: 'nav-analytics', label: 'Analytics Hub', description: 'Performance analytics', category: 'navigation', icon: <PieChartIcon className="w-4 h-4" />, shortcut: 'G N', action: () => navigate('/portal/analytics') },
     { id: 'nav-automation', label: 'Automation Engine', description: 'Workflow automation', category: 'navigation', icon: <GitBranchIcon className="w-4 h-4" />, action: () => navigate('/portal/automation') },

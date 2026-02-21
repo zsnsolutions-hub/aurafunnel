@@ -46,7 +46,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       { label: 'Content Studio', path: '/portal/content-studio', icon: <PenSquare size={20} /> },
       { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranch size={20} /> },
     ]},
-    { label: 'Strategy Hub', path: '/portal/strategy', icon: <Zap size={20} /> },
+    { label: 'Team Hub', path: '/portal/strategy', icon: <Zap size={20} /> },
     { label: 'Guest Posts', path: '/portal/blog', icon: <PenSquare size={20} /> },
     { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChart size={20} /> },
     { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },

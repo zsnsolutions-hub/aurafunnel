@@ -598,7 +598,7 @@ Return exactly 5 suggestions.`,
     description: 'Generate strategic recommendations from pipeline data',
     placeholders: ['{{total_leads}}', '{{avg_score}}', '{{status_breakdown}}', '{{hot_leads}}', '{{emails_sent}}', '{{emails_opened}}', '{{conversion_rate}}', '{{recent_activity}}'],
     usedIn: [
-      { page: 'Strategy Hub', route: '/portal/strategy', feature: 'AI-generated pipeline strategy & sprint goals' },
+      { page: 'Team Hub', route: '/portal/strategy', feature: 'AI-generated pipeline strategy & sprint goals' },
     ],
     defaultSystemInstruction: 'You are a senior B2B sales strategist. Analyze pipeline data and produce actionable strategy recommendations. Always use the exact delimited format requested.',
     defaultPromptTemplate: `Analyze this B2B sales pipeline and generate strategic recommendations.

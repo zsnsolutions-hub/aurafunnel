@@ -151,7 +151,7 @@ const ONBOARDING_WEEKS: { week: OnboardingWeek; title: string; subtitle: string;
       { id: 'o3a', text: 'Create lead segments', detail: 'Segment leads by industry, score, or engagement in Lead Management' },
       { id: 'o3b', text: 'A/B test email sequences', detail: 'Run split tests on subject lines and CTAs in Content Studio' },
       { id: 'o3c', text: 'Train custom AI model', detail: 'Feed your lead data to the Model Training page for personalized scoring' },
-      { id: 'o3d', text: 'Set up team collaboration', detail: 'Add team members and assign leads in Strategy Hub' },
+      { id: 'o3d', text: 'Set up team collaboration', detail: 'Add team members and assign tasks in Team Hub' },
       { id: 'o3e', text: 'Publish a guest blog post', detail: 'Draft and publish content on the Guest Posts page to attract leads' },
     ],
   },
@@ -501,7 +501,7 @@ const MobileDashboard: React.FC = () => {
                 { label: 'Analytics', path: '/portal/analytics', icon: <PieChartIcon className="w-4 h-4" /> },
                 { label: 'Automation', path: '/portal/automation', icon: <GitBranchIcon className="w-4 h-4" /> },
                 { label: 'AI Command', path: '/portal/ai', icon: <BrainIcon className="w-4 h-4" /> },
-                { label: 'Strategy', path: '/portal/strategy', icon: <BoltIcon className="w-4 h-4" /> },
+                { label: 'Team Hub', path: '/portal/strategy', icon: <BoltIcon className="w-4 h-4" /> },
                 { label: 'Settings', path: '/portal/settings', icon: <CogIcon className="w-4 h-4" /> },
               ].map(item => (
                 <button
@@ -757,7 +757,7 @@ const MobileDashboard: React.FC = () => {
                 { label: 'Content', icon: <SparklesIcon className="w-5 h-5" />, path: '/portal/content', color: 'violet' },
                 { label: 'Analytics', icon: <PieChartIcon className="w-5 h-5" />, path: '/portal/analytics', color: 'emerald' },
                 { label: 'Automation', icon: <GitBranchIcon className="w-5 h-5" />, path: '/portal/automation', color: 'amber' },
-                { label: 'Strategy', icon: <BoltIcon className="w-5 h-5" />, path: '/portal/strategy', color: 'rose' },
+                { label: 'Team Hub', icon: <BoltIcon className="w-5 h-5" />, path: '/portal/strategy', color: 'rose' },
                 { label: 'Settings', icon: <CogIcon className="w-5 h-5" />, path: '/portal/settings', color: 'slate' },
               ].map((nav, i) => (
                 <button
