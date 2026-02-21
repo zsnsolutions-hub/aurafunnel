@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Target, Users, Brain, MessageSquare, Sparkles, PenSquare, Zap,
   PieChart, GitBranch, SlidersHorizontal, Plug, CreditCard,
-  HelpCircle, BookOpen, Settings, LogOut, Search, Bell, Compass, FileText
+  HelpCircle, BookOpen, Settings, LogOut, Search, Bell, Compass, FileText, Send
 } from 'lucide-react';
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
@@ -48,6 +48,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranch size={20} /> },
     { label: 'AI Prompt Studio', path: '/portal/model-training', icon: <SlidersHorizontal size={20} /> },
     { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },
+    { label: 'Social Scheduler', path: '/portal/social-scheduler', icon: <Send size={20} /> },
     { label: 'Invoices', path: '/portal/invoices', icon: <FileText size={20} /> },
     { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCard size={20} /> },
     { label: 'Settings', path: '/portal/settings', icon: <Settings size={20} />, children: [
