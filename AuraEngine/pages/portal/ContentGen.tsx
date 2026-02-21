@@ -2056,6 +2056,13 @@ const ContentGen: React.FC = () => {
                             className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                             {copied ? <CheckIcon className="w-4 h-4 text-emerald-500" /> : <CopyIcon className="w-4 h-4" />}
                           </button>
+                          <button
+                            onClick={() => navigate('/portal/social-scheduler', { state: { content: activeBlock.body } })}
+                            className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Post to Social Scheduler"
+                          >
+                            <SendIcon className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
 
@@ -2637,6 +2644,47 @@ const ContentGen: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
           {/* Delivery Options */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Social Post: direct route to Social Scheduler */}
+            {contentType === ContentCategory.SOCIAL_MEDIA && (
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-5">Post to Social Platforms</p>
+                <div className="p-5 bg-indigo-50 rounded-2xl border border-indigo-100 mb-6">
+                  <div className="flex items-start space-x-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
+                      <SendIcon className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-indigo-900">Schedule via Social Scheduler</p>
+                      <p className="text-xs text-indigo-600 mt-1">Publish or schedule your social post on Facebook, Instagram, LinkedIn, and other connected platforms.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => {
+                      const content = blocks.map(b => b.body).filter(Boolean).join('\n\n');
+                      navigate('/portal/social-scheduler', { state: { content } });
+                    }}
+                    className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95"
+                  >
+                    <SendIcon className="w-4 h-4" />
+                    <span>Open Social Scheduler</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const full = blocks.map(b => b.body).filter(Boolean).join('\n\n');
+                      copyToClipboard(full);
+                    }}
+                    className="flex items-center space-x-2 px-5 py-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:text-slate-800 hover:border-slate-300 transition-all"
+                  >
+                    <CopyIcon className="w-4 h-4" />
+                    <span>{copied ? 'Copied!' : 'Copy Content'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {contentType !== ContentCategory.SOCIAL_MEDIA && (<>
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-5">Delivery Method</p>
               <div className="grid grid-cols-3 gap-3 mb-6">
@@ -2723,7 +2771,7 @@ const ContentGen: React.FC = () => {
               </div>
             </div>
 
-            {/* Email Integration Warning */}
+            {/* Email Integration Warning (non-social only) */}
             {schedule.mode !== 'draft' && providerLoading && (
               <div className="flex items-center space-x-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                 <div className="w-4 h-4 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin"></div>
@@ -2793,6 +2841,7 @@ const ContentGen: React.FC = () => {
                 )}
               </button>
             </div>
+            </>)}
           </div>
 
           {/* Delivery Summary */}

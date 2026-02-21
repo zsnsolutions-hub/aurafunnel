@@ -1,6 +1,6 @@
 // File: AuraEngine/pages/portal/SocialScheduler.tsx
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useLocation, useNavigate } from 'react-router-dom';
 import { User } from '../../types';
 import { useSocialAccounts, PublishTarget } from '../../hooks/useSocialAccounts';
 import { usePublishNow, useSchedulePost } from '../../hooks/useCreatePost';
@@ -20,6 +20,8 @@ const DRAFT_KEY = 'aurafunnel_social_draft';
 
 const SocialScheduler: React.FC = () => {
   const { user } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // ─── Tab navigation ───
   const [activeView, setActiveView] = useState<'compose' | 'history' | 'accounts'>('compose');
@@ -59,11 +61,21 @@ const SocialScheduler: React.FC = () => {
   // ─── Success / feedback state ───
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // ─── Restore draft on mount ───
+  // ─── Restore draft on mount (router state takes priority) ───
   const draftRestored = useRef(false);
   useEffect(() => {
     if (draftRestored.current) return;
     draftRestored.current = true;
+
+    const routerState = location.state as { content?: string; linkUrl?: string } | null;
+    if (routerState?.content) {
+      setContentText(routerState.content);
+      if (routerState.linkUrl) setLinkUrl(routerState.linkUrl);
+      // Clear router state so refresh doesn't re-populate
+      navigate(location.pathname, { replace: true, state: null });
+      return;
+    }
+
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (saved) {

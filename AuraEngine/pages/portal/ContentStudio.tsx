@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead, ToneType, ContentCategory, EmailSequenceConfig, EmailProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
@@ -267,6 +267,7 @@ Either way, wishing you and the {{company}} team all the best.
 
 const ContentStudio: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<LayoutContext>();
+  const navigate = useNavigate();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const { integrations: integrationStatuses } = useIntegrations();
@@ -1476,6 +1477,27 @@ const ContentStudio: React.FC = () => {
               <span>Send Emails</span>
             </button>
           )}
+          <button
+            onClick={() => {
+              let content = '';
+              if (contentMode === 'email' && activeVariant) {
+                content = activeVariant.body;
+              } else if (contentMode === 'linkedin') {
+                content = resolvePersonalizationTags(
+                  linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
+                  leads[0] || {},
+                  user.businessProfile
+                );
+              } else if (contentMode === 'proposal') {
+                content = Object.values(proposalSections).filter(Boolean).join('\n\n');
+              }
+              if (content) navigate('/portal/social-scheduler', { state: { content } });
+            }}
+            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200"
+          >
+            <SendIcon className="w-4 h-4" />
+            <span>Post to Social</span>
+          </button>
           <button onClick={handleSave} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
             {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
             <span>{saved ? 'Saved!' : 'Save'}</span>
@@ -2344,6 +2366,20 @@ const ContentStudio: React.FC = () => {
                       <LinkedInIcon className="w-4 h-4" />
                       <span>Open LinkedIn</span>
                     </button>
+                    <button
+                      onClick={() => {
+                        const personalized = resolvePersonalizationTags(
+                          linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
+                          leads[0] || {},
+                          user.businessProfile
+                        );
+                        navigate('/portal/social-scheduler', { state: { content: personalized } });
+                      }}
+                      className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200"
+                    >
+                      <SendIcon className="w-4 h-4" />
+                      <span>Post to Social</span>
+                    </button>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-2">
                     {emailImages.length > 0
@@ -2515,6 +2551,20 @@ const ContentStudio: React.FC = () => {
                   >
                     <LinkedInIcon className="w-4 h-4" />
                     <span>Open LinkedIn</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const personalized = resolvePersonalizationTags(
+                        linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
+                        leads[0] || {},
+                        user.businessProfile
+                      );
+                      navigate('/portal/social-scheduler', { state: { content: personalized } });
+                    }}
+                    className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200"
+                  >
+                    <SendIcon className="w-4 h-4" />
+                    <span>Post to Social</span>
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-2">
