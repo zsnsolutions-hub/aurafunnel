@@ -963,10 +963,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <span className="text-xs text-slate-300">Content Generated</span>
                 <span className="text-sm font-bold text-amber-300">{quickStats.contentCreated}</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                <span className="text-xs text-slate-300">Predicted Conv.</span>
-                <span className="text-sm font-bold text-purple-300">{quickStats.predictedConversions}</span>
-              </div>
             </div>
           </div>
 
@@ -1818,10 +1814,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-400">Projected Leads</span>
                     <span className="text-xs font-bold text-white">{Math.round(leads.length * (30 / Math.max(new Date().getDate(), 1)))}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400">Projected Conversions</span>
-                    <span className="text-xs font-bold text-white">{Math.round(quickStats.predictedConversions * (30 / Math.max(new Date().getDate(), 1)))}</span>
                   </div>
                 </div>
               </div>

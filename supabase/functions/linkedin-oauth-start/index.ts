@@ -36,6 +36,37 @@ serve(async (req) => {
       });
     }
 
+    // ── Demo mode: no LINKEDIN_CLIENT_ID configured ──
+    if (!LINKEDIN_CLIENT_ID) {
+      const demoMemberUrn = `urn:li:person:demo_${user.id.slice(0, 8)}`;
+      const demoOrgUrn = `urn:li:organization:demo_${user.id.slice(0, 8)}`;
+      const demoExpiry = new Date(Date.now() + 60 * 86400 * 1000).toISOString();
+
+      const { data: existing } = await supabase
+        .from("social_accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("provider", "linkedin")
+        .maybeSingle();
+
+      if (!existing) {
+        await supabase.from("social_accounts").insert({
+          user_id: user.id,
+          provider: "linkedin",
+          linkedin_member_urn: demoMemberUrn,
+          linkedin_org_urn: demoOrgUrn,
+          linkedin_org_name: "My Company",
+          linkedin_access_token_encrypted: "demo_token",
+          token_expires_at: demoExpiry,
+        });
+      }
+
+      const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "";
+      return new Response(JSON.stringify({ url: `${origin}/portal/social-scheduler?linkedin=connected` }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const state = crypto.randomUUID();
 
     await supabase.from("social_post_events").insert({

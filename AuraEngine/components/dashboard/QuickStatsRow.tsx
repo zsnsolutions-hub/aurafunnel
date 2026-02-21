@@ -1,6 +1,6 @@
 import React from 'react';
 import { DashboardQuickStats } from '../../types';
-import { TargetIcon, FlameIcon, SparklesIcon, BoltIcon, TrendUpIcon, TrendDownIcon, ChartIcon, CheckIcon } from '../Icons';
+import { TargetIcon, FlameIcon, SparklesIcon, BoltIcon, TrendUpIcon, TrendDownIcon, CheckIcon } from '../Icons';
 
 interface QuickStatsRowProps {
   stats: DashboardQuickStats;
@@ -47,12 +47,11 @@ const QuickStatsRow: React.FC<QuickStatsRowProps & { children?: React.ReactNode 
     : null;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
       <StatCard title="Leads Today" value={stats.leadsToday.toString()} icon={<TargetIcon className="w-5 h-5" />} trend={leadsTrend} loading={loading} />
       <StatCard title="Hot Leads" value={`${stats.hotLeads} Active`} icon={<FlameIcon className="w-5 h-5" />} trend={hotTrend} loading={loading} />
       <StatCard title="Content Created" value={stats.contentCreated.toString()} icon={<SparklesIcon className="w-5 h-5" />} trend={null} loading={loading} />
       <StatCard title="Avg AI Score" value={`${stats.avgAiScore}%`} icon={<BoltIcon className="w-5 h-5" />} trend={null} loading={loading} />
-      <StatCard title="Predicted Conv." value={stats.predictedConversions.toString()} icon={<ChartIcon className="w-5 h-5" />} trend={null} loading={loading} />
       <StatCard title="Recommendations" value={stats.recommendations.toString()} icon={<CheckIcon className="w-5 h-5" />} trend={null} loading={loading} />
       {children}
     </div>

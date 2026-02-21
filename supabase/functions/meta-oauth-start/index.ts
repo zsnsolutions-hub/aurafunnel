@@ -36,6 +36,39 @@ serve(async (req) => {
       });
     }
 
+    // ── Demo mode: no META_APP_ID configured ──
+    if (!META_APP_ID) {
+      const demoPageId = `demo_page_${user.id.slice(0, 8)}`;
+      const demoIgId = `demo_ig_${user.id.slice(0, 8)}`;
+      const demoExpiry = new Date(Date.now() + 60 * 86400 * 1000).toISOString();
+
+      const { data: existing } = await supabase
+        .from("social_accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("provider", "meta")
+        .eq("meta_page_id", demoPageId)
+        .maybeSingle();
+
+      if (!existing) {
+        await supabase.from("social_accounts").insert({
+          user_id: user.id,
+          provider: "meta",
+          meta_page_id: demoPageId,
+          meta_page_name: "My Business Page",
+          meta_page_access_token_encrypted: "demo_token",
+          meta_ig_user_id: demoIgId,
+          meta_ig_username: "mybusiness",
+          token_expires_at: demoExpiry,
+        });
+      }
+
+      const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "";
+      return new Response(JSON.stringify({ url: `${origin}/portal/social-scheduler?meta=connected&pages=1` }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const state = crypto.randomUUID();
 
     // Store state temporarily for CSRF protection
