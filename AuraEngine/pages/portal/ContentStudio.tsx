@@ -15,7 +15,7 @@ import {
   DownloadIcon, FlameIcon, SlidersIcon, ArrowRightIcon, StarIcon,
   LinkedInIcon, RecycleIcon, LayersIcon, GridIcon, DocumentIcon,
   KeyboardIcon, HelpCircleIcon, BrainIcon, ActivityIcon, CalendarIcon,
-  TagIcon, MessageIcon, SendIcon, AlertTriangleIcon, CameraIcon, CursorClickIcon
+  TagIcon, MessageIcon, SendIcon, AlertTriangleIcon, CameraIcon, CursorClickIcon, ChevronDownIcon
 } from '../../components/Icons';
 import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
 import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal';
@@ -352,6 +352,7 @@ const ContentStudio: React.FC = () => {
   const [sendHistoryLoading, setSendHistoryLoading] = useState(false);
   const [linkedinCopied, setLinkedinCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showCtaBuilder, setShowCtaBuilder] = useState(false);
   const [emailImages, setEmailImages] = useState<string[]>([]);
@@ -1402,33 +1403,41 @@ const ContentStudio: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center space-x-1.5">
-          <button
-            onClick={() => setShowNotes(!showNotes)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
-              showNotes ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <MessageIcon className="w-3.5 h-3.5" />
-            <span>Notes</span>
-            {contentNotes.length > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black">{contentNotes.length}</span>}
-          </button>
-          <button
-            onClick={() => setShowSendHistory(!showSendHistory)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
-              showSendHistory ? 'bg-violet-50 border-violet-200 text-violet-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <ClockIcon className="w-3.5 h-3.5" />
-            <span>History</span>
-          </button>
-          <button onClick={() => setShowRecycleModal(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-            <RecycleIcon className="w-3.5 h-3.5" />
-            <span>Recycle</span>
-          </button>
-          <button onClick={() => setShowBatchModal(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-            <LayersIcon className="w-3.5 h-3.5" />
-            <span>Batch</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowMoreMenu(prev => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
+                showNotes || showSendHistory ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <span>More</span>
+              <ChevronDownIcon className="w-3.5 h-3.5" />
+            </button>
+            {showMoreMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)} />
+                <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-44 py-1">
+                  <button onClick={() => { setShowNotes(!showNotes); setShowMoreMenu(false); }} className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold transition-colors ${showNotes ? 'text-amber-600 bg-amber-50' : 'text-slate-700 hover:bg-slate-50'}`}>
+                    <MessageIcon className="w-3.5 h-3.5" />
+                    <span>Notes</span>
+                    {contentNotes.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black">{contentNotes.length}</span>}
+                  </button>
+                  <button onClick={() => { setShowSendHistory(!showSendHistory); setShowMoreMenu(false); }} className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold transition-colors ${showSendHistory ? 'text-violet-600 bg-violet-50' : 'text-slate-700 hover:bg-slate-50'}`}>
+                    <ClockIcon className="w-3.5 h-3.5" />
+                    <span>History</span>
+                  </button>
+                  <button onClick={() => { setShowRecycleModal(true); setShowMoreMenu(false); }} className="w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                    <RecycleIcon className="w-3.5 h-3.5" />
+                    <span>Recycle</span>
+                  </button>
+                  <button onClick={() => { setShowBatchModal(true); setShowMoreMenu(false); }} className="w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                    <LayersIcon className="w-3.5 h-3.5" />
+                    <span>Batch</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button data-guide="content-image-gen" onClick={() => setShowImageGen(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm" title="Generate Image">
             <CameraIcon className="w-3.5 h-3.5" />
             <span>Generate Image</span>

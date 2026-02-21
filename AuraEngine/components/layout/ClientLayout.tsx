@@ -35,9 +35,10 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
 
   const navItems = [
     { label: 'Main Dashboard', path: '/portal', icon: <Target size={20} /> },
-    { label: 'Lead Management', path: '/portal/leads', icon: <Users size={20} /> },
-    { label: 'People Search', path: '/portal/leads/apollo', icon: <Compass size={20} /> },
-    { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <Brain size={20} /> },
+    { label: 'Lead Management', path: '/portal/leads', icon: <Users size={20} />, children: [
+      { label: 'People Search', path: '/portal/leads/apollo', icon: <Compass size={20} /> },
+      { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <Brain size={20} /> },
+    ]},
     { label: 'AI Command Center', path: '/portal/ai', icon: <MessageSquare size={20} /> },
     { label: 'Neural Studio', path: '/portal/content', icon: <Sparkles size={20} /> },
     { label: 'Content Studio', path: '/portal/content-studio', icon: <PenSquare size={20} /> },
@@ -49,9 +50,10 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },
     { label: 'Invoices', path: '/portal/invoices', icon: <FileText size={20} /> },
     { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCard size={20} /> },
-    { label: 'Help Center', path: '/portal/help', icon: <HelpCircle size={20} /> },
-    { label: 'User Manual', path: '/portal/manual', icon: <BookOpen size={20} /> },
-    { label: 'Account Architecture', path: '/portal/settings', icon: <Settings size={20} /> },
+    { label: 'Settings', path: '/portal/settings', icon: <Settings size={20} />, children: [
+      { label: 'User Manual', path: '/portal/manual', icon: <BookOpen size={20} /> },
+      { label: 'Help Center', path: '/portal/help', icon: <HelpCircle size={20} /> },
+    ]},
   ];
 
   const currentPlan = user.subscription?.plan_name || user.plan || 'Starter';
