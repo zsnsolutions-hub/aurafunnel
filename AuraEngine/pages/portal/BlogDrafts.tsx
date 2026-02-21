@@ -12,8 +12,10 @@ import {
   KeyboardIcon, TrendUpIcon, TrendDownIcon, ClockIcon, EyeIcon, TargetIcon,
   XIcon, BrainIcon, TagIcon, FilterIcon, CalendarIcon, BoltIcon,
   UsersIcon, ActivityIcon, StarIcon, LayersIcon, SendIcon, MailIcon,
-  LinkedInIcon, TwitterIcon, FacebookIcon, LinkIcon, CopyIcon
+  LinkedInIcon, TwitterIcon, FacebookIcon, LinkIcon, CopyIcon, GlobeIcon
 } from '../../components/Icons';
+import OutreachPanel from '../../components/blog/OutreachPanel';
+import ContributorsPanel from '../../components/blog/ContributorsPanel';
 
 // ─── Types ───
 interface ContentTemplate {
@@ -75,7 +77,7 @@ const BlogDrafts: React.FC = () => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSeoPanel, setShowSeoPanel] = useState(false);
   const [showSeoForm, setShowSeoForm] = useState(false);
-  const [activeView, setActiveView] = useState<'compose' | 'posts'>('compose');
+  const [activeView, setActiveView] = useState<'compose' | 'posts' | 'outreach' | 'contributors'>('compose');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'pending_review' | 'published'>('all');
   const [showWritingMetrics, setShowWritingMetrics] = useState(true);
@@ -204,6 +206,8 @@ const BlogDrafts: React.FC = () => {
       const shortcuts: Record<string, () => void> = {
         '1': () => setActiveView('compose'),
         '2': () => setActiveView('posts'),
+        '3': () => setActiveView('outreach'),
+        '4': () => setActiveView('contributors'),
         't': () => setShowTemplates(prev => !prev),
         's': () => setShowSeoPanel(prev => !prev),
         'm': () => setShowWritingMetrics(prev => !prev),
@@ -631,6 +635,8 @@ const BlogDrafts: React.FC = () => {
         {([
           { id: 'compose' as const, label: editingPostId ? 'Edit Draft' : 'Compose', icon: <EditIcon className="w-4 h-4" /> },
           { id: 'posts' as const, label: 'My Posts', icon: <LayersIcon className="w-4 h-4" />, badge: drafts.length },
+          { id: 'outreach' as const, label: 'Outreach', icon: <GlobeIcon className="w-4 h-4" /> },
+          { id: 'contributors' as const, label: 'Contributors', icon: <UsersIcon className="w-4 h-4" /> },
         ]).map(tab => (
           <button
             key={tab.id}
@@ -1043,6 +1049,20 @@ const BlogDrafts: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
+      {/* VIEW: OUTREACH                                                 */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {activeView === 'outreach' && (
+        <OutreachPanel user={user} refreshProfile={refreshProfile} />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* VIEW: CONTRIBUTORS                                             */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {activeView === 'contributors' && (
+        <ContributorsPanel user={user} refreshProfile={refreshProfile} />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
       {/* SHARE WITH LEADS MODAL                                        */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {showShareModal && sharePost && (
@@ -1247,6 +1267,8 @@ const BlogDrafts: React.FC = () => {
                 { category: 'Navigation', shortcuts: [
                   { keys: '1', desc: 'Compose View' },
                   { keys: '2', desc: 'My Posts View' },
+                  { keys: '3', desc: 'Outreach View' },
+                  { keys: '4', desc: 'Contributors View' },
                 ]},
                 { category: 'Actions', shortcuts: [
                   { keys: 'T', desc: 'Toggle Templates' },

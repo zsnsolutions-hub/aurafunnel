@@ -14,6 +14,7 @@ export const CREDIT_COSTS: Record<string, number> = {
   social_caption:        1,
   business_analysis:     2,
   workflow_optimization: 2,
+  guest_post_pitch:      2,
   image_generation:      2,
   follow_up_questions:   1,
   batch_generation:      5,

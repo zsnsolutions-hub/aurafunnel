@@ -1837,3 +1837,118 @@ Return each suggestion on its own line, prefixed with "- ".`,
 
   return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'workflow_optimization', prompt_version: resolved.promptVersion };
 };
+
+// === Guest Post Pitch Generation ===
+
+export interface GuestPostPitchParams {
+  blogName: string;
+  blogUrl?: string;
+  contactName?: string;
+  tone: string;
+  proposedTopics?: string;
+  businessProfile?: BusinessProfile;
+}
+
+export const generateGuestPostPitch = async (
+  params: GuestPostPitchParams,
+  userId?: string
+): Promise<AIResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const resolved = await resolvePrompt('guest_post_pitch', userId, {
+    systemInstruction: 'You are an expert guest post outreach specialist. Write compelling, personalized pitch emails that blog editors actually want to respond to. Be concise and professional.',
+    promptTemplate: `Write a guest post pitch email for the following blog.
+
+TARGET BLOG:
+- Blog Name: {{blog_name}}
+{{blog_url}}
+{{contact_name}}
+
+TONE: {{tone}}
+{{proposed_topics}}
+
+REQUIREMENTS:
+1. Write a compelling subject line that stands out in an editor's inbox
+2. Open with a specific compliment about their blog (reference the blog name)
+3. Briefly introduce yourself and your expertise
+4. Propose 2-3 specific article ideas with working titles
+5. Explain the value each topic would bring to their readers
+6. Include a brief author bio paragraph
+7. Keep the email under 300 words
+8. End with a clear, low-pressure call to action
+
+Respond in EXACTLY this format:
+===FIELD===SUBJECT: [pitch email subject line]===END===
+===FIELD===BODY: [full email body in plain text]===END===`,
+    temperature: 0.85,
+    topP: 0.9,
+  });
+
+  const prompt = resolved.promptTemplate
+    .replace('{{blog_name}}', params.blogName)
+    .replace('{{blog_url}}', params.blogUrl ? `- Blog URL: ${params.blogUrl}` : '')
+    .replace('{{contact_name}}', params.contactName ? `- Editor/Contact: ${params.contactName}` : '')
+    .replace('{{tone}}', params.tone)
+    .replace('{{proposed_topics}}', params.proposedTopics ? `\nPROPOSED TOPICS:\n${params.proposedTopics}` : '')
+    + buildBusinessContext(params.businessProfile);
+
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction: resolved.systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
+          topK: 40,
+        }
+      });
+
+      clearTimeout(timeoutId);
+      const text = response.text;
+      if (!text) throw new Error('Empty pitch response.');
+
+      return {
+        text,
+        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: MODEL_NAME,
+        prompt_name: 'guest_post_pitch',
+        prompt_version: resolved.promptVersion,
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Guest post pitch attempt ${attempt} failed:`, errMsg);
+      if (attempt === MAX_RETRIES) {
+        return {
+          text: `PITCH GENERATION FAILED: ${errMsg}`,
+          tokens_used: 0,
+          model_name: MODEL_NAME,
+          prompt_name: 'guest_post_pitch',
+          prompt_version: resolved.promptVersion,
+        };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+
+  return { text: '', tokens_used: 0, model_name: MODEL_NAME, prompt_name: 'guest_post_pitch', prompt_version: resolved.promptVersion };
+};
+
+export const parseGuestPostPitchResponse = (text: string): { subject: string; body: string } => {
+  const extractField = (fieldName: string): string | undefined => {
+    const regex = new RegExp(`===FIELD===${fieldName}:\\s*([\\s\\S]*?)===END===`, 'i');
+    const match = text.match(regex);
+    return match?.[1]?.trim() || undefined;
+  };
+
+  return {
+    subject: extractField('SUBJECT') || '',
+    body: extractField('BODY') || text,
+  };
+};
