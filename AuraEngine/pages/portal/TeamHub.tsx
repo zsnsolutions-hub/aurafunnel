@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { User, Team, TeamInvite } from '../../types';
+import { User, Team } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
   CheckIcon, UsersIcon, MailIcon,
   ClockIcon, PlusIcon, XIcon, MessageIcon,
-  KeyboardIcon, DocumentIcon
+  KeyboardIcon, DocumentIcon, EditIcon
 } from '../../components/Icons';
 import { Filter, ArrowUpDown, BarChart3, X as LucideX } from 'lucide-react';
 import KanbanBoard from '../../components/teamhub/KanbanBoard';
@@ -85,18 +85,23 @@ const TeamHub: React.FC = () => {
   // Team state
   const [team, setTeam] = useState<Team | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMemberInfo[]>([]);
-  const [pendingInvite, setPendingInvite] = useState<TeamInvite | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [teamName, setTeamName] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
   const isTeamMode = team !== null;
 
   // Team invite tracking
-  const [sentInvites, setSentInvites] = useState<{ id: string; email: string; status: string; created_at: string }[]>([]);
+  const [sentInvites, setSentInvites] = useState<{ id: string; email: string; name?: string; role?: string; status: string; created_at: string }[]>([]);
   const [inviteFeedback, setInviteFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [teamCreating, setTeamCreating] = useState(false);
   const [teamCreateError, setTeamCreateError] = useState<string | null>(null);
+
+  // Team rename
+  const [editingTeamName, setEditingTeamName] = useState(false);
+  const [editTeamNameValue, setEditTeamNameValue] = useState('');
 
   // Board toolbar state
   const [boardFilter, setBoardFilter] = useState<TaskPriority | ''>('');
@@ -170,25 +175,7 @@ const TeamHub: React.FC = () => {
           setTeamMembers([]);
         }
 
-        // 2. Check for pending invites
-        const { data: inviteData } = await supabase
-          .from('team_invites')
-          .select('*, teams(name)')
-          .eq('email', user.email)
-          .eq('status', 'pending')
-          .limit(1)
-          .maybeSingle();
-
-        if (inviteData) {
-          setPendingInvite({
-            ...inviteData,
-            team_name: (inviteData as any).teams?.name || 'Unknown Team',
-          } as TeamInvite);
-        } else {
-          setPendingInvite(null);
-        }
-
-        // 3. Branched data queries
+        // 2. Branched data queries
         const isTeam = currentTeam !== null;
         const teamId = currentTeam?.id;
 
@@ -241,7 +228,7 @@ const TeamHub: React.FC = () => {
     };
     loadData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.id, user.email, dataVersion]);
+  }, [user.id, dataVersion]);
 
   // Fetch sent invites for the team
   useEffect(() => {
@@ -251,13 +238,15 @@ const TeamHub: React.FC = () => {
       try {
         const { data } = await supabase
           .from('team_invites')
-          .select('id, email, status, created_at')
+          .select('id, email, name, role, status, created_at')
           .eq('team_id', team.id)
           .order('created_at', { ascending: false });
         if (!cancelled && data) {
           setSentInvites(data.map((inv: any) => ({
             id: inv.id,
             email: inv.email,
+            name: inv.name || '',
+            role: inv.role || 'member',
             status: inv.status,
             created_at: inv.created_at,
           })));
@@ -455,6 +444,10 @@ const TeamHub: React.FC = () => {
 
   const handleCreateTeam = useCallback(async () => {
     if (!teamName.trim()) return;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teamName.trim())) {
+      setTeamCreateError('Please enter a team name, not an email address.');
+      return;
+    }
     setTeamCreating(true);
     setTeamCreateError(null);
     try {
@@ -488,7 +481,7 @@ const TeamHub: React.FC = () => {
   }, [teamName, user.id, reloadData]);
 
   const handleInviteMember = useCallback(async () => {
-    if (!inviteEmail.trim() || !team) return;
+    if (!inviteEmail.trim() || !inviteName.trim() || !team) return;
     const emailLower = inviteEmail.trim().toLowerCase();
     setInviteFeedback(null);
 
@@ -506,12 +499,28 @@ const TeamHub: React.FC = () => {
       const { error } = await supabase.from('team_invites').insert({
         team_id: team.id,
         email: emailLower,
+        name: inviteName.trim(),
         invited_by: user.id,
+        role: inviteRole,
       });
       if (error) throw error;
+
+      // Check if the invitee already has an account
+      let feedbackMsg = `Invite sent to ${inviteName.trim()} (${emailLower})`;
+      try {
+        const { data: exists } = await supabase.rpc('check_email_exists', { check_email: emailLower });
+        if (exists) {
+          feedbackMsg += " — They'll see the invite immediately.";
+        } else {
+          feedbackMsg += " — They'll see it when they create an account.";
+        }
+      } catch { /* fallback to generic message */ }
+
       setInviteEmail('');
-      setInviteFeedback({ type: 'success', message: `Invite sent to ${emailLower}` });
-      setSentInvites(prev => [{ id: `temp-${Date.now()}`, email: emailLower, status: 'pending', created_at: new Date().toISOString() }, ...prev]);
+      setInviteName('');
+      setInviteRole('member');
+      setInviteFeedback({ type: 'success', message: feedbackMsg });
+      setSentInvites(prev => [{ id: `temp-${Date.now()}`, email: emailLower, name: inviteName.trim(), role: inviteRole, status: 'pending', created_at: new Date().toISOString() }, ...prev]);
 
       // Auto-clear feedback after 4 seconds
       setTimeout(() => setInviteFeedback(null), 4000);
@@ -519,8 +528,8 @@ const TeamHub: React.FC = () => {
       try {
         await supabase.from('audit_logs').insert({
           user_id: user.id,
-          action: 'Invited team member',
-          details: emailLower,
+          action: `Invited ${inviteRole}`,
+          details: `${inviteName.trim()} (${emailLower})`,
           team_id: team.id,
         });
       } catch { /* ignore */ }
@@ -528,43 +537,16 @@ const TeamHub: React.FC = () => {
       console.error('Failed to invite member:', err);
       setInviteFeedback({ type: 'error', message: 'Failed to send invite. Please try again.' });
     }
-  }, [inviteEmail, team, user.id, teamMembers, sentInvites]);
-
-  const handleAcceptInvite = useCallback(async () => {
-    if (!pendingInvite) return;
-    try {
-      const { error: memberErr } = await supabase
-        .from('team_members')
-        .insert({ team_id: pendingInvite.team_id, user_id: user.id, role: 'member' });
-      if (memberErr) throw memberErr;
-
-      await supabase
-        .from('team_invites')
-        .update({ status: 'accepted' })
-        .eq('id', pendingInvite.id);
-
-      setPendingInvite(null);
-      reloadData();
-    } catch (err) {
-      console.error('Failed to accept invite:', err);
-    }
-  }, [pendingInvite, user.id, reloadData]);
-
-  const handleDeclineInvite = useCallback(async () => {
-    if (!pendingInvite) return;
-    try {
-      await supabase
-        .from('team_invites')
-        .update({ status: 'declined' })
-        .eq('id', pendingInvite.id);
-      setPendingInvite(null);
-    } catch (err) {
-      console.error('Failed to decline invite:', err);
-    }
-  }, [pendingInvite]);
+  }, [inviteEmail, inviteName, inviteRole, team, user.id, teamMembers, sentInvites]);
 
   const handleRemoveMember = useCallback(async (userId: string) => {
     if (!team) return;
+    const member = teamMembers.find(m => m.user_id === userId);
+    const confirmMsg = member
+      ? `Remove ${member.name} (${member.email}) from the team?`
+      : 'Remove this member from the team?';
+    if (!window.confirm(confirmMsg)) return;
+
     try {
       const { error } = await supabase
         .from('team_members')
@@ -573,10 +555,19 @@ const TeamHub: React.FC = () => {
         .eq('user_id', userId);
       if (error) throw error;
       setTeamMembers(prev => prev.filter(m => m.user_id !== userId));
+
+      try {
+        await supabase.from('audit_logs').insert({
+          user_id: user.id,
+          action: 'Removed team member',
+          details: member ? `${member.name} (${member.email})` : userId,
+          team_id: team.id,
+        });
+      } catch { /* ignore */ }
     } catch (err) {
       console.error('Failed to remove member:', err);
     }
-  }, [team]);
+  }, [team, user.id, teamMembers]);
 
   const handleCancelInvite = useCallback(async (inviteId: string) => {
     try {
@@ -629,6 +620,24 @@ const TeamHub: React.FC = () => {
       console.error('Failed to leave team:', err);
     }
   }, [team, user.id, reloadData]);
+
+  const handleRenameTeam = useCallback(async () => {
+    if (!team || !editTeamNameValue.trim()) return;
+    const newName = editTeamNameValue.trim();
+    if (newName === team.name) { setEditingTeamName(false); return; }
+
+    try {
+      const { error } = await supabase
+        .from('teams')
+        .update({ name: newName })
+        .eq('id', team.id);
+      if (error) throw error;
+      setTeam({ ...team, name: newName });
+      setEditingTeamName(false);
+    } catch (err) {
+      console.error('Failed to rename team:', err);
+    }
+  }, [team, editTeamNameValue]);
 
   // ─── Keyboard Shortcuts ───
   useEffect(() => {
@@ -702,7 +711,7 @@ const TeamHub: React.FC = () => {
   const tabs: { id: TabView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'board', label: 'Task Board', icon: <CheckIcon className="w-4 h-4" />, badge: pendingTaskCount },
     { id: 'notes', label: 'Notes', icon: <MessageIcon className="w-4 h-4" />, badge: notes.length },
-    { id: 'team', label: isTeamMode ? team!.name : 'Team', icon: <UsersIcon className="w-4 h-4" />, badge: isTeamMode ? teamMembers.length : undefined },
+    { id: 'team', label: 'Team', icon: <UsersIcon className="w-4 h-4" />, badge: isTeamMode ? teamMembers.length : undefined },
   ];
 
   const displayRole = (role: 'owner' | 'admin' | 'member') => {
@@ -765,35 +774,6 @@ const TeamHub: React.FC = () => {
               </button>
             </div>
           </div>
-
-          {/* INVITE BANNER */}
-          {pendingInvite && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
-                  <UsersIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-indigo-900">You've been invited to join '{pendingInvite.team_name}'</p>
-                  <p className="text-xs text-indigo-600">Collaborate on tasks and notes with your team</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleDeclineInvite}
-                  className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg bg-white transition-all"
-                >
-                  Decline
-                </button>
-                <button
-                  onClick={handleAcceptInvite}
-                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-lg shadow-indigo-200 transition-all"
-                >
-                  Accept Invite
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* TAB NAVIGATION */}
           <div className="flex items-center space-x-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1">
@@ -1161,10 +1141,36 @@ const TeamHub: React.FC = () => {
                       <div className="px-6 py-5 flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-200">
-                            {team!.name.charAt(0)}
+                            {team!.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <h3 className="font-black text-slate-900 font-heading text-lg">{team!.name}</h3>
+                            {editingTeamName ? (
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="text"
+                                  value={editTeamNameValue}
+                                  onChange={e => setEditTeamNameValue(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') handleRenameTeam(); if (e.key === 'Escape') setEditingTeamName(false); }}
+                                  className="px-3 py-1.5 border border-slate-200 rounded-lg text-lg font-black text-slate-900 font-heading focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                                  autoFocus
+                                />
+                                <button onClick={handleRenameTeam} className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Save</button>
+                                <button onClick={() => setEditingTeamName(false)} className="px-2.5 py-1.5 text-slate-500 border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all">Cancel</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-2">
+                                <h3 className="font-black text-slate-900 font-heading text-lg">{team!.name}</h3>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => { setEditTeamNameValue(team!.name); setEditingTeamName(true); }}
+                                    className="p-1 text-slate-300 hover:text-indigo-600 transition-colors"
+                                    title="Rename team"
+                                  >
+                                    <EditIcon className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
                             <p className="text-xs text-slate-400 mt-0.5">{teamMembers.length} member{teamMembers.length !== 1 ? 's' : ''} &middot; Created by {teamMembers.find(m => m.role === 'owner')?.name || 'Unknown'}</p>
                           </div>
                         </div>
@@ -1254,10 +1260,10 @@ const TeamHub: React.FC = () => {
                                 {(myTeamRole === 'owner' || myTeamRole === 'admin') && member.user_id !== user.id && member.role !== 'owner' && (
                                   <button
                                     onClick={() => handleRemoveMember(member.user_id)}
-                                    className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                                    title="Remove member"
+                                    className="flex items-center space-x-1 px-2.5 py-1.5 text-[10px] font-bold text-rose-500 border border-rose-200 rounded-lg hover:bg-rose-50 hover:text-rose-600 transition-all"
                                   >
-                                    <XIcon className="w-3.5 h-3.5" />
+                                    <XIcon className="w-3 h-3" />
+                                    <span>Remove</span>
                                   </button>
                                 )}
                               </div>
@@ -1281,17 +1287,56 @@ const TeamHub: React.FC = () => {
                           <p className="text-[10px] text-slate-400">Send an invite by email. They'll see a join banner when they log in.</p>
                         </div>
                         <div className="p-5 space-y-3">
-                          <input
-                            type="email"
-                            value={inviteEmail}
-                            onChange={e => setInviteEmail(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter' && inviteEmail.trim()) handleInviteMember(); }}
-                            placeholder="colleague@company.com"
-                            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none placeholder-slate-300"
-                          />
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Name</label>
+                            <input
+                              type="text"
+                              value={inviteName}
+                              onChange={e => setInviteName(e.target.value)}
+                              placeholder="John Doe"
+                              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none placeholder-slate-300"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Email</label>
+                            <input
+                              type="email"
+                              value={inviteEmail}
+                              onChange={e => setInviteEmail(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter' && inviteEmail.trim() && inviteName.trim()) handleInviteMember(); }}
+                              placeholder="colleague@company.com"
+                              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none placeholder-slate-300"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Role</label>
+                            <div className="flex items-center space-x-2">
+                              {(['admin', 'member'] as const).map(role => (
+                                <button
+                                  key={role}
+                                  type="button"
+                                  onClick={() => setInviteRole(role)}
+                                  className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                                    inviteRole === role
+                                      ? role === 'admin'
+                                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700 ring-2 ring-indigo-200'
+                                        : 'bg-slate-50 border-slate-300 text-slate-700 ring-2 ring-slate-200'
+                                      : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="text-center">
+                                    <span>{role === 'admin' ? 'Admin' : 'Member'}</span>
+                                    <p className={`text-[9px] font-medium mt-0.5 ${inviteRole === role ? 'text-current opacity-60' : 'text-slate-300'}`}>
+                                      {role === 'admin' ? 'Can manage team' : 'Can view & contribute'}
+                                    </p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <button
                             onClick={handleInviteMember}
-                            disabled={!inviteEmail.trim()}
+                            disabled={!inviteEmail.trim() || !inviteName.trim()}
                             className="w-full flex items-center justify-center space-x-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-40"
                           >
                             <MailIcon className="w-4 h-4" />
@@ -1332,10 +1377,18 @@ const TeamHub: React.FC = () => {
                           {sentInvites.map(inv => (
                             <div key={inv.id} className="px-5 py-3 flex items-center justify-between">
                               <div className="min-w-0 flex-1">
-                                <p className="text-xs font-semibold text-slate-700 truncate">{inv.email}</p>
-                                <p className="text-[10px] text-slate-400">
-                                  {new Date(inv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                </p>
+                                {inv.name && <p className="text-xs font-bold text-slate-800 truncate">{inv.name}</p>}
+                                <p className="text-[10px] font-medium text-slate-500 truncate">{inv.email}</p>
+                                <div className="flex items-center space-x-1.5 mt-0.5">
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                    inv.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-500'
+                                  }`}>
+                                    {inv.role === 'admin' ? 'Admin' : 'Member'}
+                                  </span>
+                                  <span className="text-[9px] text-slate-300">
+                                    {new Date(inv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </span>
+                                </div>
                               </div>
                               <div className="flex items-center space-x-2 shrink-0 ml-2">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
@@ -1348,10 +1401,10 @@ const TeamHub: React.FC = () => {
                                 {inv.status === 'pending' && (
                                   <button
                                     onClick={() => handleCancelInvite(inv.id)}
-                                    className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-all"
-                                    title="Cancel invite"
+                                    className="flex items-center space-x-1 px-2 py-1 text-[10px] font-bold text-rose-500 border border-rose-200 rounded-lg hover:bg-rose-50 hover:text-rose-600 transition-all"
                                   >
                                     <XIcon className="w-3 h-3" />
+                                    <span>Remove</span>
                                   </button>
                                 )}
                               </div>

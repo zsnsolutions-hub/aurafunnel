@@ -545,7 +545,9 @@ export interface TeamInvite {
   id: string;
   team_id: string;
   email: string;
+  name?: string;
   invited_by: string;
+  role: 'admin' | 'member';
   status: 'pending' | 'accepted' | 'declined';
   created_at: string;
   expires_at: string;

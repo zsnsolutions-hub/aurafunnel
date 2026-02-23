@@ -12,6 +12,7 @@ import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import GlobalInviteBanner from './GlobalInviteBanner';
 import { useIntegrations } from '../../lib/integrations';
 import { TIER_LIMITS } from '../../lib/credits';
 
@@ -255,6 +256,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
           />
         }
       >
+        <GlobalInviteBanner user={user} />
         <Outlet context={{ user, refreshProfile }} />
       </AppShell>
 
