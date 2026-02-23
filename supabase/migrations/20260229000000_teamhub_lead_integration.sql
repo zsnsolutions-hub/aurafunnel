@@ -4,7 +4,7 @@
 
 -- 1. Item-Lead linking table
 CREATE TABLE IF NOT EXISTS public.teamhub_item_leads (
-  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   item_id uuid NOT NULL REFERENCES public.teamhub_cards(id) ON DELETE CASCADE,
   lead_id uuid NOT NULL REFERENCES public.leads(id) ON DELETE CASCADE,
   is_active boolean NOT NULL DEFAULT true,
@@ -27,7 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_item_leads_lead ON public.teamhub_item_leads (lea
 
 -- 2. Flow templates table
 CREATE TABLE IF NOT EXISTS public.teamhub_flow_templates (
-  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text NOT NULL,
   type text NOT NULL DEFAULT 'system' CHECK (type IN ('system', 'user')),
   structure_json jsonb NOT NULL DEFAULT '{}',
