@@ -16,8 +16,8 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable';
-import { LayoutGrid, Eye, Flag, ArrowRight, Pencil, Plus, Trash2, Archive, Users } from 'lucide-react';
-import type { FlowWithData, Item, Lane, FlowMember } from '../teamHubApi';
+import { LayoutGrid, Eye, Flag, ArrowRight, Pencil, Plus, Trash2, Archive, Users, Link2, Unlink } from 'lucide-react';
+import type { FlowWithData, Item, Lane, FlowMember, ItemLeadLink } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import type { BoardFilter, BoardSort, ViewMode } from './FlowHeader';
 import * as api from '../teamHubApi';
@@ -28,6 +28,7 @@ import ItemInspector from './ItemInspector';
 import FlowHeader from './FlowHeader';
 import FlowListView from './FlowListView';
 import FlowCalendarView from './FlowCalendarView';
+import LeadLinkDialog from './LeadLinkDialog';
 import BoardActivitySidebar from './BoardActivitySidebar';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -61,6 +62,9 @@ const FlowView: React.FC<FlowViewProps> = ({
   const [showActivity, setShowActivity] = useState(false);
   const [members, setMembers] = useState<FlowMember[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: FlowContextTarget } | null>(null);
+  const [leadLinkItem, setLeadLinkItem] = useState<Item | null>(null);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
   const laneRefs = useRef<Map<string, React.RefObject<LaneColumnHandle | null>>>(new Map());
 
   React.useEffect(() => { setLanes(flow.lists); }, [flow.lists]);
@@ -299,6 +303,25 @@ const FlowView: React.FC<FlowViewProps> = ({
     } catch (err) { console.error('Failed to unassign member:', err); }
   }, [flow.id, onRefresh]);
 
+  const handleUnlinkLead = useCallback(async (itemId: string) => {
+    try {
+      await api.unlinkItemFromLead(itemId, flow.id);
+      setLanes(prev => prev.map(l => ({
+        ...l,
+        cards: l.cards.map(c => c.id === itemId ? { ...c, lead_link: null } : c),
+      })));
+    } catch (err) { console.error('Failed to unlink lead:', err); }
+  }, [flow.id]);
+
+  const handleLeadLinked = useCallback((link: ItemLeadLink) => {
+    setLanes(prev => prev.map(l => ({
+      ...l,
+      cards: l.cards.map(c => c.id === link.item_id ? { ...c, lead_link: link } : c),
+    })));
+    setLeadLinkItem(null);
+    onRefresh();
+  }, [onRefresh]);
+
   const getLaneRef = useCallback((laneId: string) => {
     if (!laneRefs.current.has(laneId)) {
       laneRefs.current.set(laneId, React.createRef<LaneColumnHandle>());
@@ -367,6 +390,25 @@ const FlowView: React.FC<FlowViewProps> = ({
           items[items.length - 1].dividerAfter = true;
         }
 
+        // Lead linking (admin/owner only)
+        if (permissions.isAdmin || permissions.isOwner) {
+          if (item.lead_link) {
+            items.push({
+              label: 'Unlink Lead',
+              icon: <Unlink size={14} />,
+              dividerAfter: true,
+              onClick: () => handleUnlinkLead(item.id),
+            });
+          } else {
+            items.push({
+              label: 'Link to Lead',
+              icon: <Link2 size={14} />,
+              dividerAfter: true,
+              onClick: () => setLeadLinkItem(item),
+            });
+          }
+        }
+
         // Archive / close
         items.push({
           label: 'Close Item',
@@ -411,7 +453,7 @@ const FlowView: React.FC<FlowViewProps> = ({
     }
 
     return [];
-  }, [contextMenu, permissions, lanes, members, handleChangeItemPriority, handleMoveItemToLane, handleArchiveItem, handleDeleteLane, handleAssignMember, handleUnassignMember]);
+  }, [contextMenu, permissions, lanes, members, handleChangeItemPriority, handleMoveItemToLane, handleArchiveItem, handleDeleteLane, handleAssignMember, handleUnassignMember, handleUnlinkLead]);
 
   // ─── Render ───
   const headerProps = {
@@ -430,6 +472,7 @@ const FlowView: React.FC<FlowViewProps> = ({
     onToggleActivity: () => setShowActivity(s => !s),
     viewMode,
     onViewModeChange: setViewMode,
+    onSaveAsTemplate: () => { setTemplateName(flow.name + ' Template'); setShowSaveTemplate(true); },
   };
 
   if (lanes.length === 0) {
@@ -557,6 +600,59 @@ const FlowView: React.FC<FlowViewProps> = ({
           header={contextMenu.target.type === 'item' ? 'Item Actions' : 'Lane Actions'}
           onClose={() => setContextMenu(null)}
         />
+      )}
+
+      {leadLinkItem && (
+        <LeadLinkDialog
+          itemId={leadLinkItem.id}
+          flowId={flow.id}
+          onLinked={handleLeadLinked}
+          onClose={() => setLeadLinkItem(null)}
+        />
+      )}
+
+      {showSaveTemplate && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={() => setShowSaveTemplate(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+              <h3 className="text-sm font-bold text-slate-800 mb-3">Save as Template</h3>
+              <input
+                autoFocus
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && templateName.trim()) {
+                    api.saveFlowAsTemplate(flow.id, userId, templateName.trim())
+                      .then(() => setShowSaveTemplate(false))
+                      .catch(console.error);
+                  }
+                }}
+                placeholder="Template name..."
+                className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 mb-3 placeholder-slate-400"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (!templateName.trim()) return;
+                    api.saveFlowAsTemplate(flow.id, userId, templateName.trim())
+                      .then(() => setShowSaveTemplate(false))
+                      .catch(console.error);
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setShowSaveTemplate(false)}
+                  className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </>
   );

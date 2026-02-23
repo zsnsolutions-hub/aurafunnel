@@ -43,6 +43,31 @@ export interface Item {
   updated_at: string;
   comment_count?: number;
   assigned_members?: CardMember[];
+  lead_link?: ItemLeadLink | null;
+}
+
+export interface ItemLeadLink {
+  id: string;
+  item_id: string;
+  lead_id: string;
+  lead_name: string;
+  lead_email: string;
+  lead_status: string;
+  is_active: boolean;
+}
+
+export interface FlowTemplate {
+  id: string;
+  name: string;
+  type: 'system' | 'user';
+  structure_json: {
+    lanes: { name: string; position: number }[];
+    lead_sync?: boolean;
+    lane_status_map?: Record<string, string>;
+    default_tags?: string[];
+  };
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface Comment {
@@ -279,11 +304,15 @@ export async function fetchFlowWithData(flowId: string): Promise<FlowWithData> {
   // Get card member assignments
   const allCardMembers = itemIds.length > 0 ? await fetchAllCardMembers(itemIds) : {};
 
+  // Get lead links for all items
+  const allLeadLinks = itemIds.length > 0 ? await fetchAllItemLeadLinks(itemIds) : {};
+
   const itemsWithCounts = (itemsRes.data || []).map(c => ({
     ...c,
     labels: c.labels || [],
     comment_count: commentCounts[c.id] || 0,
     assigned_members: allCardMembers[c.id] || [],
+    lead_link: allLeadLinks[c.id] || null,
   }));
 
   const lists = (lanesRes.data || []).map(lane => ({
@@ -401,6 +430,13 @@ export async function moveItem(
 
   if (fromLaneName !== toLaneName) {
     await logActivity(flowId, itemId, 'card_moved', { from: fromLaneName, to: toLaneName });
+
+    // Auto lane→lead pipeline sync for Basic Workflow templates
+    try {
+      await syncLeadStatusOnMove(itemId, flowId, toLaneName);
+    } catch (err) {
+      console.error('Lead sync on move failed:', err);
+    }
   }
 }
 
@@ -505,27 +541,30 @@ export async function fetchItemDetail(itemId: string): Promise<{
   comments: Comment[];
   activity: Activity[];
   cardMembers: CardMember[];
+  leadLink: ItemLeadLink | null;
 }> {
-  const [itemRes, commentsRes, activityRes, cardMembers] = await Promise.all([
+  const [itemRes, commentsRes, activityRes, cardMembers, leadLink] = await Promise.all([
     supabase.from('teamhub_cards').select('*').eq('id', itemId).single(),
     supabase.from('teamhub_comments').select('*').eq('card_id', itemId).order('created_at', { ascending: true }),
     supabase.from('teamhub_activity').select('*').eq('card_id', itemId).order('created_at', { ascending: false }).limit(50),
     fetchCardMembers(itemId),
+    fetchItemLeadLink(itemId),
   ]);
 
   if (itemRes.error) throw itemRes.error;
 
   return {
-    card: { ...itemRes.data, assigned_members: cardMembers },
+    card: { ...itemRes.data, assigned_members: cardMembers, lead_link: leadLink },
     comments: commentsRes.data || [],
     activity: activityRes.data || [],
     cardMembers,
+    leadLink,
   };
 }
 
 // ─── Comments ───
 
-export async function addComment(cardId: string, userId: string, body: string, flowId: string): Promise<Comment> {
+export async function addComment(cardId: string, userId: string, body: string, flowId: string, userName?: string): Promise<Comment> {
   const { data, error } = await supabase
     .from('teamhub_comments')
     .insert({ card_id: cardId, user_id: userId, body })
@@ -533,6 +572,14 @@ export async function addComment(cardId: string, userId: string, body: string, f
     .single();
   if (error) throw error;
   await logActivity(flowId, cardId, 'comment_added', { body: body.slice(0, 100) });
+
+  // Push comment to linked lead's notes
+  try {
+    await pushCommentToLeadNotes(cardId, body, userName || 'Team Member');
+  } catch (err) {
+    console.error('Lead note sync failed:', err);
+  }
+
   return data;
 }
 
@@ -684,4 +731,359 @@ export async function acceptInvite(inviteId: string, userId: string): Promise<vo
     .from('teamhub_invites')
     .update({ status: 'accepted' })
     .eq('id', inviteId);
+}
+
+// ─── Item-Lead Linking ───
+
+export async function fetchItemLeadLink(itemId: string): Promise<ItemLeadLink | null> {
+  const { data, error } = await supabase
+    .from('teamhub_item_leads')
+    .select('*')
+    .eq('item_id', itemId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  // Fetch lead details
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('id, name, email, status')
+    .eq('id', data.lead_id)
+    .single();
+
+  return {
+    id: data.id,
+    item_id: data.item_id,
+    lead_id: data.lead_id,
+    lead_name: lead?.name || '',
+    lead_email: lead?.email || '',
+    lead_status: lead?.status || '',
+    is_active: data.is_active,
+  };
+}
+
+export async function fetchAllItemLeadLinks(itemIds: string[]): Promise<Record<string, ItemLeadLink>> {
+  if (itemIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('teamhub_item_leads')
+    .select('*')
+    .in('item_id', itemIds)
+    .eq('is_active', true);
+  if (error) throw error;
+
+  const rows = data || [];
+  if (rows.length === 0) return {};
+
+  const leadIds = [...new Set(rows.map(r => r.lead_id))];
+  const { data: leads } = await supabase
+    .from('leads')
+    .select('id, name, email, status')
+    .in('id', leadIds);
+
+  const leadMap: Record<string, { name: string; email: string; status: string }> = {};
+  (leads || []).forEach((l: any) => {
+    leadMap[l.id] = { name: l.name || '', email: l.email || '', status: l.status || '' };
+  });
+
+  const result: Record<string, ItemLeadLink> = {};
+  for (const row of rows) {
+    result[row.item_id] = {
+      id: row.id,
+      item_id: row.item_id,
+      lead_id: row.lead_id,
+      lead_name: leadMap[row.lead_id]?.name || '',
+      lead_email: leadMap[row.lead_id]?.email || '',
+      lead_status: leadMap[row.lead_id]?.status || '',
+      is_active: row.is_active,
+    };
+  }
+  return result;
+}
+
+export async function linkItemToLead(
+  itemId: string,
+  leadId: string,
+  flowId: string
+): Promise<ItemLeadLink> {
+  // Validate: lead not already linked to another active item
+  const { data: existing } = await supabase
+    .from('teamhub_item_leads')
+    .select('id, item_id')
+    .eq('lead_id', leadId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (existing && existing.item_id !== itemId) {
+    throw new Error('This lead is already linked to an active item in another flow.');
+  }
+
+  // Validate: item not already linked to a different lead
+  const { data: itemExisting } = await supabase
+    .from('teamhub_item_leads')
+    .select('id')
+    .eq('item_id', itemId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (itemExisting) {
+    // Deactivate old link
+    await supabase
+      .from('teamhub_item_leads')
+      .update({ is_active: false })
+      .eq('id', itemExisting.id);
+  }
+
+  const { data, error } = await supabase
+    .from('teamhub_item_leads')
+    .insert({ item_id: itemId, lead_id: leadId, is_active: true })
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logActivity(flowId, itemId, 'lead_linked', { lead_id: leadId });
+
+  // Fetch lead for return value
+  const link = await fetchItemLeadLink(itemId);
+  return link!;
+}
+
+export async function unlinkItemFromLead(
+  itemId: string,
+  flowId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_item_leads')
+    .update({ is_active: false })
+    .eq('item_id', itemId)
+    .eq('is_active', true);
+  if (error) throw error;
+  await logActivity(flowId, itemId, 'lead_unlinked', {});
+}
+
+// ─── Lead Sync Helpers ───
+
+async function syncLeadStatusOnMove(
+  itemId: string,
+  flowId: string,
+  toLaneName: string
+): Promise<void> {
+  // Check if flow was created from a template with lead_sync
+  const { data: flow } = await supabase
+    .from('teamhub_boards')
+    .select('template_id')
+    .eq('id', flowId)
+    .single();
+
+  if (!flow?.template_id) return;
+
+  const { data: template } = await supabase
+    .from('teamhub_flow_templates')
+    .select('structure_json')
+    .eq('id', flow.template_id)
+    .single();
+
+  if (!template) return;
+  const structure = template.structure_json as any;
+  if (!structure.lead_sync || !structure.lane_status_map) return;
+
+  const newStatus = structure.lane_status_map[toLaneName];
+  if (!newStatus) return;
+
+  // Check if item has an active lead link
+  const { data: link } = await supabase
+    .from('teamhub_item_leads')
+    .select('lead_id')
+    .eq('item_id', itemId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!link) return;
+
+  // Update lead status
+  await supabase
+    .from('leads')
+    .update({
+      status: newStatus,
+      lastActivity: `Status changed to ${newStatus}`,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', link.lead_id);
+
+  // Append note to lead
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('notes')
+    .eq('id', link.lead_id)
+    .single();
+
+  const existingNotes = lead?.notes || '';
+  const newNote = `[Team Hub] Lead moved to ${toLaneName} in Team Hub`;
+  const updatedNotes = existingNotes ? `${existingNotes}\n${newNote}` : newNote;
+
+  await supabase
+    .from('leads')
+    .update({ notes: updatedNotes })
+    .eq('id', link.lead_id);
+}
+
+async function pushCommentToLeadNotes(
+  cardId: string,
+  commentBody: string,
+  userName: string
+): Promise<void> {
+  const { data: link } = await supabase
+    .from('teamhub_item_leads')
+    .select('lead_id')
+    .eq('item_id', cardId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!link) return;
+
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('notes')
+    .eq('id', link.lead_id)
+    .single();
+
+  const existingNotes = lead?.notes || '';
+  const newNote = `[Team Hub] ${userName}: ${commentBody}`;
+  const updatedNotes = existingNotes ? `${existingNotes}\n${newNote}` : newNote;
+
+  await supabase
+    .from('leads')
+    .update({ notes: updatedNotes })
+    .eq('id', link.lead_id);
+}
+
+// ─── Lead Search (for linking) ───
+
+export async function searchLeadsForLinking(query: string): Promise<{
+  id: string;
+  name: string;
+  email: string;
+  company: string;
+  status: string;
+  already_linked: boolean;
+}[]> {
+  const { data: leads, error } = await supabase
+    .from('leads')
+    .select('id, name, email, company, status')
+    .or(`name.ilike.%${query}%,email.ilike.%${query}%,company.ilike.%${query}%`)
+    .order('name')
+    .limit(20);
+  if (error) throw error;
+
+  if (!leads || leads.length === 0) return [];
+
+  // Check which are already linked
+  const leadIds = leads.map(l => l.id);
+  const { data: activeLinks } = await supabase
+    .from('teamhub_item_leads')
+    .select('lead_id')
+    .in('lead_id', leadIds)
+    .eq('is_active', true);
+
+  const linkedSet = new Set((activeLinks || []).map(l => l.lead_id));
+
+  return leads.map(l => ({
+    ...l,
+    already_linked: linkedSet.has(l.id),
+  }));
+}
+
+// ─── Flow Templates ───
+
+export async function fetchFlowTemplates(): Promise<FlowTemplate[]> {
+  const { data, error } = await supabase
+    .from('teamhub_flow_templates')
+    .select('*')
+    .order('type')
+    .order('name');
+  if (error) throw error;
+  return (data || []) as FlowTemplate[];
+}
+
+export async function createFlowFromTemplate(
+  userId: string,
+  name: string,
+  templateId: string
+): Promise<Flow> {
+  // Fetch template
+  const { data: template, error: tErr } = await supabase
+    .from('teamhub_flow_templates')
+    .select('*')
+    .eq('id', templateId)
+    .single();
+  if (tErr) throw tErr;
+
+  const structure = template.structure_json as any;
+
+  // Create flow with template_id
+  const { data: flow, error: fErr } = await supabase
+    .from('teamhub_boards')
+    .insert({ name, created_by: userId, template_id: templateId })
+    .select()
+    .single();
+  if (fErr) throw fErr;
+
+  // Auto-create owner membership
+  await supabase.from('teamhub_flow_members').insert({
+    flow_id: flow.id,
+    user_id: userId,
+    role: 'owner',
+  });
+
+  // Create lanes from template
+  if (structure.lanes && Array.isArray(structure.lanes)) {
+    for (const lane of structure.lanes) {
+      await supabase.from('teamhub_lists').insert({
+        board_id: flow.id,
+        name: lane.name,
+        position: lane.position,
+      });
+    }
+  }
+
+  return flow;
+}
+
+export async function saveFlowAsTemplate(
+  flowId: string,
+  userId: string,
+  templateName: string
+): Promise<FlowTemplate> {
+  // Fetch current lanes
+  const { data: lanes } = await supabase
+    .from('teamhub_lists')
+    .select('name, position')
+    .eq('board_id', flowId)
+    .order('position');
+
+  const structure = {
+    lanes: (lanes || []).map(l => ({ name: l.name, position: l.position })),
+  };
+
+  const { data, error } = await supabase
+    .from('teamhub_flow_templates')
+    .insert({
+      name: templateName,
+      type: 'user',
+      structure_json: structure,
+      created_by: userId,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FlowTemplate;
+}
+
+export async function deleteFlowTemplate(templateId: string): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_flow_templates')
+    .delete()
+    .eq('id', templateId);
+  if (error) throw error;
 }

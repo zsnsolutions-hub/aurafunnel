@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Calendar, Flag, XCircle, Loader2, Tag, Plus, Users } from 'lucide-react';
-import type { Item, Comment, Activity, ItemPriority, ItemTag, CardMember, FlowMember } from '../teamHubApi';
+import { X, Calendar, Flag, XCircle, Loader2, Tag, Plus, Users, Link2, Unlink } from 'lucide-react';
+import type { Item, Comment, Activity, ItemPriority, ItemTag, CardMember, FlowMember, ItemLeadLink } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import * as api from '../teamHubApi';
 import Comments from './Comments';
 import ActivityFeed from './ActivityFeed';
+import LeadLinkDialog from './LeadLinkDialog';
 
 // Avatar colors
 const AVATAR_COLORS = [
@@ -72,6 +73,8 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
   const [saving, setSaving] = useState(false);
   const [cardMembers, setCardMembers] = useState<CardMember[]>([]);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
+  const [leadLink, setLeadLink] = useState<ItemLeadLink | null>(null);
+  const [showLeadLinkDialog, setShowLeadLinkDialog] = useState(false);
   const [showTagEditor, setShowTagEditor] = useState(false);
   const [newTagText, setNewTagText] = useState('');
   const [newTagColor, setNewTagColor] = useState('green');
@@ -89,14 +92,17 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
     setPriority(item.priority || '');
     setTags(item.labels || []);
     setCardMembers(item.assigned_members || []);
+    setLeadLink(item.lead_link || null);
     setShowAssignDropdown(false);
+    setShowLeadLinkDialog(false);
 
     setLoading(true);
     api.fetchItemDetail(item.id)
-      .then(({ comments: c, activity: a, cardMembers: cm }) => {
+      .then(({ comments: c, activity: a, cardMembers: cm, leadLink: ll }) => {
         setComments(c);
         setActivity(a);
         setCardMembers(cm);
+        setLeadLink(ll);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -212,9 +218,26 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showAssignDropdown]);
 
+  const handleLeadLinked = (link: ItemLeadLink) => {
+    setLeadLink(link);
+    setShowLeadLinkDialog(false);
+    onItemUpdated();
+  };
+
+  const handleUnlinkLead = async () => {
+    if (!item) return;
+    try {
+      await api.unlinkItemFromLead(item.id, flowId);
+      setLeadLink(null);
+      onItemUpdated();
+    } catch (err) {
+      console.error('Failed to unlink lead:', err);
+    }
+  };
+
   const handleAddComment = async (body: string) => {
     if (!item) return;
-    const newComment = await api.addComment(item.id, userId, body, flowId);
+    const newComment = await api.addComment(item.id, userId, body, flowId, userName);
     setComments(prev => [...prev, { ...newComment, user_name: userName }]);
     const { activity: a } = await api.fetchItemDetail(item.id);
     setActivity(a);
@@ -432,6 +455,48 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
             </div>
           </div>
 
+          {/* ─── Lead Link ─── */}
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <Link2 size={10} />
+              Linked Lead
+            </label>
+            {leadLink ? (
+              <div className="flex items-center gap-2 p-2.5 bg-indigo-50 rounded-lg border border-indigo-100">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                  <Link2 size={14} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-indigo-700 truncate">{leadLink.lead_name || leadLink.lead_email}</p>
+                  <p className="text-[10px] text-indigo-500 truncate">
+                    {leadLink.lead_email}{leadLink.lead_status ? ` · ${leadLink.lead_status}` : ''}
+                  </p>
+                </div>
+                {(permissions.isAdmin || permissions.isOwner) && (
+                  <button
+                    onClick={handleUnlinkLead}
+                    className="p-1.5 text-indigo-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
+                    title="Unlink lead"
+                  >
+                    <Unlink size={13} />
+                  </button>
+                )}
+              </div>
+            ) : (
+              (permissions.isAdmin || permissions.isOwner) ? (
+                <button
+                  onClick={() => setShowLeadLinkDialog(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border border-slate-200 hover:border-indigo-200"
+                >
+                  <Link2 size={12} />
+                  Link to Lead
+                </button>
+              ) : (
+                <p className="text-xs text-slate-400">No linked lead</p>
+              )
+            )}
+          </div>
+
           {/* Description */}
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1 block">
@@ -476,6 +541,15 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
           </div>
         )}
       </div>
+
+      {showLeadLinkDialog && item && (
+        <LeadLinkDialog
+          itemId={item.id}
+          flowId={flowId}
+          onLinked={handleLeadLinked}
+          onClose={() => setShowLeadLinkDialog(false)}
+        />
+      )}
     </>
   );
 };

@@ -10,6 +10,8 @@ const ACTION_LABELS: Record<string, string> = {
   list_created: 'created a list',
   member_assigned: 'assigned a member',
   member_unassigned: 'unassigned a member',
+  lead_linked: 'linked a lead',
+  lead_unlinked: 'unlinked a lead',
 };
 
 interface ActivityFeedProps {

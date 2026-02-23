@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronLeft, Pencil, Trash2, Users, Filter, ArrowUpDown,
-  Activity, Share2, LayoutGrid, List, Calendar,
+  Activity, Share2, LayoutGrid, List, Calendar, Save,
 } from 'lucide-react';
 import type { Flow, FlowMember } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
@@ -26,6 +26,7 @@ interface FlowHeaderProps {
   onToggleActivity: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  onSaveAsTemplate?: () => void;
 }
 
 // Avatar colors
@@ -49,7 +50,7 @@ const SORT_LABELS: Record<BoardSort, string> = {
 const FlowHeader: React.FC<FlowHeaderProps> = ({
   flow, onBack, onRename, onDelete, permissions, onManageTeam,
   members, activeFilter, activeSort, onFilterChange, onSortChange,
-  showActivity, onToggleActivity, viewMode, onViewModeChange,
+  showActivity, onToggleActivity, viewMode, onViewModeChange, onSaveAsTemplate,
 }) => {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(flow.name);
@@ -258,6 +259,18 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
           <Activity size={14} />
           Activity
         </button>
+
+        {/* Save as template (owner/admin only) */}
+        {onSaveAsTemplate && permissions.canEditFlow && (
+          <button
+            onClick={onSaveAsTemplate}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+            title="Save as template"
+          >
+            <Save size={14} />
+            Save Template
+          </button>
+        )}
 
         {/* Team button (when no members yet) */}
         {members.length === 0 && (

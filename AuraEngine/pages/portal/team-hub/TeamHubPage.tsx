@@ -12,6 +12,7 @@ import * as api from './teamHubApi';
 import { useFlowPermissions } from './hooks/useFlowPermissions';
 import FlowView from './components/FlowView';
 import FlowMembersPanel from './components/FlowMembersPanel';
+import FlowTemplateSelector from './components/FlowTemplateSelector';
 
 interface OutletCtx {
   user: User;
@@ -49,6 +50,7 @@ const TeamHubPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [showNewFlowInput, setShowNewFlowInput] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [newFlowName, setNewFlowName] = useState('');
   const [creating, setCreating] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -129,6 +131,28 @@ const TeamHubPage: React.FC = () => {
       console.error('Failed to create flow:', err);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleCreateFlowFromTemplate = async (templateId: string, name: string) => {
+    try {
+      const newFlow = await api.createFlowFromTemplate(user.id, name, templateId);
+      setShowTemplateSelector(false);
+      setSelectedFlowId(newFlow.id);
+      loadDashboard();
+    } catch (err) {
+      console.error('Failed to create flow from template:', err);
+    }
+  };
+
+  const handleCreateBlankFlow = async (name: string) => {
+    try {
+      const newFlow = await api.createFlow(user.id, name);
+      setShowTemplateSelector(false);
+      setSelectedFlowId(newFlow.id);
+      loadDashboard();
+    } catch (err) {
+      console.error('Failed to create blank flow:', err);
     }
   };
 
@@ -251,7 +275,7 @@ const TeamHubPage: React.FC = () => {
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
           </button>
           <button
-            onClick={() => setShowNewFlowInput(true)}
+            onClick={() => setShowTemplateSelector(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
           >
             <Plus size={16} />
@@ -275,7 +299,7 @@ const TeamHubPage: React.FC = () => {
             Organize your team's work with kanban flows. Create lanes, add items, and drag them to track progress.
           </p>
           <button
-            onClick={() => setShowNewFlowInput(true)}
+            onClick={() => setShowTemplateSelector(true)}
             className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
           >
             <Plus size={16} />
@@ -520,6 +544,15 @@ const TeamHubPage: React.FC = () => {
       {/* Delete modal */}
       {deleteConfirm && (
         <DeleteModal onCancel={() => setDeleteConfirm(null)} onConfirm={handleDeleteFlow} />
+      )}
+
+      {/* Template selector */}
+      {showTemplateSelector && (
+        <FlowTemplateSelector
+          onSelect={handleCreateFlowFromTemplate}
+          onBlank={handleCreateBlankFlow}
+          onClose={() => setShowTemplateSelector(false)}
+        />
       )}
     </div>
   );

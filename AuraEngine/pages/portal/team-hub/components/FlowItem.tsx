@@ -1,14 +1,20 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Clock, MessageSquare, Paperclip, GripVertical } from 'lucide-react';
+import { Clock, MessageSquare, Paperclip, GripVertical, UserCircle } from 'lucide-react';
 import type { Item, ItemTag } from '../teamHubApi';
 
-// ─── Priority badge config (matches TaskHub screenshot) ───
+// ─── Priority accent bar colors ───
+const PRIORITY_ACCENT: Record<string, string> = {
+  high: 'bg-red-500',
+  medium: 'bg-blue-500',
+  low: 'bg-slate-300',
+};
+
 const PRIORITY_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  high:   { bg: 'bg-red-500',    text: 'text-white',      label: 'HIGH PRIORITY' },
-  medium: { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'MEDIUM' },
-  low:    { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'LOW' },
+  high:   { bg: 'bg-red-500',   text: 'text-white',    label: 'HIGH' },
+  medium: { bg: 'bg-blue-100',  text: 'text-blue-700', label: 'MED' },
+  low:    { bg: 'bg-slate-100', text: 'text-slate-600', label: 'LOW' },
 };
 
 // Avatar colors
@@ -52,12 +58,8 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
   const commentCount = item.comment_count ?? 0;
   const tags = item.labels || [];
   const priority = item.priority ? PRIORITY_BADGE[item.priority] : null;
-
-  // Simulated completeness for progress bar (based on filled fields)
-  const fields = [!!item.title, !!item.description, !!item.priority, !!item.due_date, tags.length > 0, commentCount > 0];
-  const filledCount = fields.filter(Boolean).length;
-  const progressPct = Math.round((filledCount / fields.length) * 100);
-  const showProgress = hasDescription && item.priority;
+  const accentColor = item.priority ? PRIORITY_ACCENT[item.priority] : null;
+  const leadLink = item.lead_link;
 
   return (
     <div
@@ -68,114 +70,129 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
       data-card="flow-item"
       onClick={onClick}
       onContextMenu={onContextMenu}
-      className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 group"
+      className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 group overflow-hidden"
     >
-      <div className="p-4">
-        {/* Row 1: Priority badge + drag handle */}
-        <div className="flex items-start justify-between mb-2.5">
-          {priority ? (
-            <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${priority.bg} ${priority.text}`}>
-              {priority.label}
-            </span>
-          ) : (
-            <span />
-          )}
-          <button
-            className="p-0.5 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab"
-            onPointerDown={e => e.stopPropagation()}
-          >
-            <GripVertical size={14} />
-          </button>
+      {/* ═══ SECTION A — Header ═══ */}
+      <div className="flex">
+        {/* Priority accent bar */}
+        {accentColor && (
+          <div className={`w-1 shrink-0 ${accentColor} rounded-l-xl`} />
+        )}
+        <div className="flex-1 px-4 pt-3 pb-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                {priority && (
+                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${priority.bg} ${priority.text}`}>
+                    {priority.label}
+                  </span>
+                )}
+                <button
+                  className="p-0.5 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab ml-auto shrink-0"
+                  onPointerDown={e => e.stopPropagation()}
+                >
+                  <GripVertical size={13} />
+                </button>
+              </div>
+              <h4 className="text-[13px] font-semibold text-gray-900 leading-snug">
+                {item.title}
+              </h4>
+            </div>
+            {/* Tags (right aligned) */}
+            {tags.length > 0 && (
+              <div className="flex flex-wrap justify-end gap-1 shrink-0 max-w-[120px]">
+                {tags.slice(0, 2).map((tag: ItemTag, i: number) => (
+                  <span
+                    key={i}
+                    className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-100 text-gray-500 truncate max-w-[56px]"
+                  >
+                    #{tag.text}
+                  </span>
+                ))}
+                {tags.length > 2 && (
+                  <span className="text-[9px] font-semibold text-gray-400">+{tags.length - 2}</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* Row 2: Title */}
-        <h4 className="text-[14px] font-semibold text-gray-900 leading-snug mb-2.5">
-          {item.title}
-        </h4>
+      {/* ═══ SECTION B — Content ═══ */}
+      {(hasDescription || leadLink || item.due_date) && (
+        <div className={`px-4 pb-2 space-y-1.5 ${accentColor ? 'ml-1' : ''}`}>
+          {/* Description preview */}
+          {hasDescription && (
+            <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-2">
+              {item.description}
+            </p>
+          )}
 
-        {/* Row 3: Tag pills (time + category) */}
-        {(tags.length > 0 || item.due_date) && (
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Lead badge */}
+            {leadLink && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                <UserCircle size={11} />
+                {leadLink.lead_name || leadLink.lead_email}
+              </span>
+            )}
+
+            {/* Due date chip */}
             {item.due_date && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
                 isOverdue
                   ? 'bg-red-50 text-red-600 border-red-200'
-                  : 'bg-gray-50 text-gray-600 border-gray-200'
+                  : 'bg-gray-50 text-gray-500 border-gray-200'
               }`}>
-                <Clock size={11} />
+                <Clock size={10} />
                 {new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
             )}
-            {tags.map((tag: ItemTag, i: number) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200"
-              >
-                <span className="text-gray-400">#</span>
-                {tag.text}
-              </span>
-            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Row 4: Progress bar (shown when card has description + priority) */}
-        {showProgress && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-medium text-gray-500">Progress</span>
-              <span className="text-[11px] font-semibold text-gray-700">{progressPct}%</span>
-            </div>
-            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Row 5: Bottom metadata — comments, attachments, assignee */}
-        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-          <div className="flex items-center gap-3">
-            {commentCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[12px] text-gray-400">
-                <MessageSquare size={13} />
-                {commentCount}
-              </span>
-            )}
-            {hasDescription && (
-              <span className="inline-flex items-center gap-1 text-[12px] text-gray-400">
-                <Paperclip size={13} />
-              </span>
-            )}
-          </div>
-
-          {/* Assignee avatar(s) */}
-          {item.assigned_members && item.assigned_members.length > 0 ? (
-            <div className="flex items-center -space-x-1.5">
-              {item.assigned_members.slice(0, 3).map(m => (
-                <div
-                  key={m.user_id}
-                  title={m.user_name || m.user_email}
-                  className={`w-7 h-7 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
-                >
-                  {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
-                </div>
-              ))}
-              {item.assigned_members.length > 3 && (
-                <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 ring-2 ring-white shadow-sm">
-                  +{item.assigned_members.length - 3}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div
-              className={`w-7 h-7 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
-            >
-              {(item.created_by || '?').charAt(0).toUpperCase()}
-            </div>
+      {/* ═══ SECTION C — Footer ═══ */}
+      <div className={`flex items-center justify-between px-4 py-2 border-t border-gray-100 ${accentColor ? 'ml-1' : ''}`}>
+        <div className="flex items-center gap-2.5">
+          {commentCount > 0 && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
+              <MessageSquare size={12} />
+              {commentCount}
+            </span>
+          )}
+          {hasDescription && (
+            <span className="inline-flex items-center text-[11px] text-gray-400">
+              <Paperclip size={12} />
+            </span>
           )}
         </div>
+
+        {/* Assignee avatars (right aligned, max 3 + overflow) */}
+        {item.assigned_members && item.assigned_members.length > 0 ? (
+          <div className="flex items-center -space-x-1.5">
+            {item.assigned_members.slice(0, 3).map(m => (
+              <div
+                key={m.user_id}
+                title={m.user_name || m.user_email}
+                className={`w-6 h-6 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-white shadow-sm`}
+              >
+                {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
+              </div>
+            ))}
+            {item.assigned_members.length > 3 && (
+              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-600 ring-2 ring-white shadow-sm">
+                +{item.assigned_members.length - 3}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            className={`w-6 h-6 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-white shadow-sm`}
+          >
+            {(item.created_by || '?').charAt(0).toUpperCase()}
+          </div>
+        )}
       </div>
     </div>
   );
