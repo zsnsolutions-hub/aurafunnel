@@ -500,16 +500,7 @@ const TeamHub: React.FC = () => {
       });
       if (error) throw error;
 
-      // Check if the invitee already has an account
-      let feedbackMsg = `Invite sent to ${inviteName.trim()} (${emailLower})`;
-      try {
-        const { data: exists } = await supabase.rpc('check_email_exists', { check_email: emailLower });
-        if (exists) {
-          feedbackMsg += " — They'll see the invite immediately.";
-        } else {
-          feedbackMsg += " — They'll see it when they create an account.";
-        }
-      } catch { /* fallback to generic message */ }
+      const feedbackMsg = `Invite sent to ${inviteName.trim()} (${emailLower})`;
 
       setInviteEmail('');
       setInviteName('');
