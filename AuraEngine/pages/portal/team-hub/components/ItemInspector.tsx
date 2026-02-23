@@ -1,10 +1,21 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Calendar, Flag, XCircle, Loader2, Tag, Plus } from 'lucide-react';
-import type { Item, Comment, Activity, ItemPriority, ItemTag } from '../teamHubApi';
+import { X, Calendar, Flag, XCircle, Loader2, Tag, Plus, Users } from 'lucide-react';
+import type { Item, Comment, Activity, ItemPriority, ItemTag, CardMember, FlowMember } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import * as api from '../teamHubApi';
 import Comments from './Comments';
 import ActivityFeed from './ActivityFeed';
+
+// Avatar colors
+const AVATAR_COLORS = [
+  'bg-blue-600', 'bg-emerald-600', 'bg-amber-500', 'bg-rose-500',
+  'bg-violet-500', 'bg-cyan-600', 'bg-pink-500', 'bg-teal-600',
+];
+function avatarColor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
 
 interface ItemInspectorProps {
   item: Item | null;
@@ -15,6 +26,7 @@ interface ItemInspectorProps {
   onItemUpdated: () => void;
   onItemClosed: (itemId: string) => void;
   permissions: FlowPermissions;
+  members: FlowMember[];
 }
 
 const PRIORITIES: { value: ItemPriority | ''; label: string }[] = [
@@ -47,6 +59,7 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
   onItemUpdated,
   onItemClosed,
   permissions,
+  members,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -57,10 +70,13 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
   const [activity, setActivity] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cardMembers, setCardMembers] = useState<CardMember[]>([]);
+  const [showAssignDropdown, setShowAssignDropdown] = useState(false);
   const [showTagEditor, setShowTagEditor] = useState(false);
   const [newTagText, setNewTagText] = useState('');
   const [newTagColor, setNewTagColor] = useState('green');
   const drawerRef = useRef<HTMLDivElement>(null);
+  const assignDropdownRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -72,12 +88,15 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
     setDueDate(item.due_date || '');
     setPriority(item.priority || '');
     setTags(item.labels || []);
+    setCardMembers(item.assigned_members || []);
+    setShowAssignDropdown(false);
 
     setLoading(true);
     api.fetchItemDetail(item.id)
-      .then(({ comments: c, activity: a }) => {
+      .then(({ comments: c, activity: a, cardMembers: cm }) => {
         setComments(c);
         setActivity(a);
+        setCardMembers(cm);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -151,6 +170,47 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
     onItemClosed(item.id);
     onClose();
   };
+
+  const handleAssignMember = async (userId: string) => {
+    if (!item) return;
+    const member = members.find(m => m.user_id === userId);
+    if (!member) return;
+    const newMember: CardMember = { user_id: userId, user_name: member.user_name, user_email: member.user_email };
+    const prev = cardMembers;
+    setCardMembers(old => [...old, newMember]);
+    try {
+      await api.addCardMember(item.id, userId, flowId);
+      onItemUpdated();
+    } catch (err) {
+      console.error('Failed to assign member:', err);
+      setCardMembers(prev);
+    }
+  };
+
+  const handleUnassignMember = async (userId: string) => {
+    if (!item) return;
+    const prev = cardMembers;
+    setCardMembers(old => old.filter(m => m.user_id !== userId));
+    try {
+      await api.removeCardMember(item.id, userId, flowId);
+      onItemUpdated();
+    } catch (err) {
+      console.error('Failed to unassign member:', err);
+      setCardMembers(prev);
+    }
+  };
+
+  // Close assign dropdown on outside click
+  useEffect(() => {
+    if (!showAssignDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (assignDropdownRef.current && !assignDropdownRef.current.contains(e.target as Node)) {
+        setShowAssignDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAssignDropdown]);
 
   const handleAddComment = async (body: string) => {
     if (!item) return;
@@ -305,6 +365,69 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({
                 </select>
               ) : (
                 <p className="px-3 py-2 text-sm text-slate-600 capitalize">{priority || 'None'}</p>
+              )}
+            </div>
+          </div>
+
+          {/* ─── Members ─── */}
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <Users size={10} />
+              Members
+            </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {cardMembers.map(m => (
+                <span
+                  key={m.user_id}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-slate-100 text-slate-700"
+                >
+                  <span className={`w-5 h-5 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[9px] font-bold text-white`}>
+                    {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
+                  </span>
+                  {m.user_name || m.user_email}
+                  {permissions.canEditItems && (
+                    <button
+                      onClick={() => handleUnassignMember(m.user_id)}
+                      className="ml-0.5 hover:opacity-70 transition-opacity"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </span>
+              ))}
+              {permissions.canEditItems && (
+                <div className="relative" ref={assignDropdownRef}>
+                  <button
+                    onClick={() => setShowAssignDropdown(s => !s)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
+                  >
+                    <Plus size={10} />
+                    Assign
+                  </button>
+                  {showAssignDropdown && (
+                    <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 max-h-48 overflow-y-auto">
+                      {members.map(m => {
+                        const isAssigned = cardMembers.some(cm => cm.user_id === m.user_id);
+                        return (
+                          <button
+                            key={m.user_id}
+                            onClick={() => isAssigned ? handleUnassignMember(m.user_id) : handleAssignMember(m.user_id)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 transition-colors"
+                          >
+                            <span className={`w-6 h-6 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[10px] font-bold text-white`}>
+                              {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
+                            </span>
+                            <span className="flex-1 truncate text-slate-700">{m.user_name || m.user_email}</span>
+                            {isAssigned && <span className="text-indigo-500 font-bold text-xs">●</span>}
+                          </button>
+                        );
+                      })}
+                      {members.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-slate-400">No team members</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

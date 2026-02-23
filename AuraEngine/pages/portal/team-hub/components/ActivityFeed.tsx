@@ -8,6 +8,8 @@ const ACTION_LABELS: Record<string, string> = {
   card_archived: 'archived this card',
   comment_added: 'added a comment',
   list_created: 'created a list',
+  member_assigned: 'assigned a member',
+  member_unassigned: 'unassigned a member',
 };
 
 interface ActivityFeedProps {

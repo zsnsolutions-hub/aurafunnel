@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
@@ -21,6 +21,11 @@ const LANE_ACCENTS = [
   { border: 'border-l-orange-500',  headerText: 'text-orange-700', countBg: 'bg-orange-100 text-orange-700' },
 ];
 
+export interface LaneColumnHandle {
+  triggerAddItem: () => void;
+  triggerRename: () => void;
+}
+
 interface LaneColumnProps {
   lane: Lane & { cards: Item[] };
   laneIndex: number;
@@ -29,9 +34,11 @@ interface LaneColumnProps {
   onRenameLane: (laneId: string, name: string) => void;
   onDeleteLane: (laneId: string) => void;
   permissions: FlowPermissions;
+  onItemContextMenu?: (e: React.MouseEvent, item: Item) => void;
+  onLaneContextMenu?: (e: React.MouseEvent, lane: Lane & { cards: Item[] }) => void;
 }
 
-const LaneColumn: React.FC<LaneColumnProps> = ({
+const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
   lane,
   laneIndex,
   onAddItem,
@@ -39,13 +46,20 @@ const LaneColumn: React.FC<LaneColumnProps> = ({
   onRenameLane,
   onDeleteLane,
   permissions,
-}) => {
+  onItemContextMenu,
+  onLaneContextMenu,
+}, ref) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(lane.name);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const addItemRef = useRef<HTMLButtonElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    triggerAddItem: () => addItemRef.current?.click(),
+    triggerRename: () => { setEditing(true); setEditName(lane.name); },
+  }));
 
   const {
     attributes,
@@ -186,10 +200,22 @@ const LaneColumn: React.FC<LaneColumnProps> = ({
       <div
         ref={setDroppableRef}
         className="flex-1 overflow-y-auto space-y-2.5 min-h-[8px] pb-2 px-0.5"
+        onContextMenu={(e) => {
+          if ((e.target as HTMLElement).closest('[data-card]')) return;
+          if (onLaneContextMenu) {
+            e.preventDefault();
+            onLaneContextMenu(e, lane);
+          }
+        }}
       >
         <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
           {lane.cards.map(item => (
-            <FlowItem key={item.id} item={item} onClick={() => onItemClick(item)} />
+            <FlowItem
+              key={item.id}
+              item={item}
+              onClick={() => onItemClick(item)}
+              onContextMenu={onItemContextMenu ? (e) => onItemContextMenu(e, item) : undefined}
+            />
           ))}
         </SortableContext>
 
@@ -206,6 +232,8 @@ const LaneColumn: React.FC<LaneColumnProps> = ({
       )}
     </div>
   );
-};
+});
+
+LaneColumn.displayName = 'LaneColumn';
 
 export default React.memo(LaneColumn);

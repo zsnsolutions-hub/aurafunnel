@@ -25,9 +25,10 @@ function avatarColor(id: string) {
 interface FlowItemProps {
   item: Item;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-const FlowItem: React.FC<FlowItemProps> = ({ item, onClick }) => {
+const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => {
   const {
     attributes,
     listeners,
@@ -64,7 +65,9 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick }) => {
       style={style}
       {...attributes}
       {...listeners}
+      data-card="flow-item"
       onClick={onClick}
+      onContextMenu={onContextMenu}
       className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 group"
     >
       <div className="p-4">
@@ -147,12 +150,31 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick }) => {
             )}
           </div>
 
-          {/* Assignee avatar */}
-          <div
-            className={`w-7 h-7 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
-          >
-            {(item.created_by || '?').charAt(0).toUpperCase()}
-          </div>
+          {/* Assignee avatar(s) */}
+          {item.assigned_members && item.assigned_members.length > 0 ? (
+            <div className="flex items-center -space-x-1.5">
+              {item.assigned_members.slice(0, 3).map(m => (
+                <div
+                  key={m.user_id}
+                  title={m.user_name || m.user_email}
+                  className={`w-7 h-7 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
+                >
+                  {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
+                </div>
+              ))}
+              {item.assigned_members.length > 3 && (
+                <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 ring-2 ring-white shadow-sm">
+                  +{item.assigned_members.length - 3}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              className={`w-7 h-7 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
+            >
+              {(item.created_by || '?').charAt(0).toUpperCase()}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -42,6 +42,7 @@ export interface Item {
   created_at: string;
   updated_at: string;
   comment_count?: number;
+  assigned_members?: CardMember[];
 }
 
 export interface Comment {
@@ -71,6 +72,12 @@ export interface FlowWithData extends Flow {
 // ─── RBAC Types ───
 
 export type FlowRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+export interface CardMember {
+  user_id: string;
+  user_name: string;
+  user_email: string;
+}
 
 export interface FlowMember {
   id: string;
@@ -269,10 +276,14 @@ export async function fetchFlowWithData(flowId: string): Promise<FlowWithData> {
     }
   }
 
+  // Get card member assignments
+  const allCardMembers = itemIds.length > 0 ? await fetchAllCardMembers(itemIds) : {};
+
   const itemsWithCounts = (itemsRes.data || []).map(c => ({
     ...c,
     labels: c.labels || [],
     comment_count: commentCounts[c.id] || 0,
+    assigned_members: allCardMembers[c.id] || [],
   }));
 
   const lists = (lanesRes.data || []).map(lane => ({
@@ -405,25 +416,110 @@ export async function reorderItems(laneId: string, orderedItemIds: string[]): Pr
   }
 }
 
+// ─── Card Members ───
+
+export async function fetchCardMembers(cardId: string): Promise<CardMember[]> {
+  const { data, error } = await supabase
+    .from('teamhub_card_members')
+    .select('user_id')
+    .eq('card_id', cardId);
+  if (error) throw error;
+
+  const userIds = (data || []).map(r => r.user_id);
+  if (userIds.length === 0) return [];
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, name, email')
+    .in('id', userIds);
+
+  const profileMap: Record<string, { name: string; email: string }> = {};
+  (profiles || []).forEach((p: any) => {
+    profileMap[p.id] = { name: p.name || '', email: p.email || '' };
+  });
+
+  return userIds.map(uid => ({
+    user_id: uid,
+    user_name: profileMap[uid]?.name || '',
+    user_email: profileMap[uid]?.email || '',
+  }));
+}
+
+export async function addCardMember(cardId: string, userId: string, flowId: string): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_card_members')
+    .insert({ card_id: cardId, user_id: userId });
+  if (error) throw error;
+  await logActivity(flowId, cardId, 'member_assigned', { user_id: userId });
+}
+
+export async function removeCardMember(cardId: string, userId: string, flowId: string): Promise<void> {
+  const { error } = await supabase
+    .from('teamhub_card_members')
+    .delete()
+    .eq('card_id', cardId)
+    .eq('user_id', userId);
+  if (error) throw error;
+  await logActivity(flowId, cardId, 'member_unassigned', { user_id: userId });
+}
+
+export async function fetchAllCardMembers(cardIds: string[]): Promise<Record<string, CardMember[]>> {
+  if (cardIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('teamhub_card_members')
+    .select('card_id, user_id')
+    .in('card_id', cardIds);
+  if (error) throw error;
+
+  const rows = data || [];
+  if (rows.length === 0) return {};
+
+  const uniqueUserIds = [...new Set(rows.map(r => r.user_id))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, name, email')
+    .in('id', uniqueUserIds);
+
+  const profileMap: Record<string, { name: string; email: string }> = {};
+  (profiles || []).forEach((p: any) => {
+    profileMap[p.id] = { name: p.name || '', email: p.email || '' };
+  });
+
+  const result: Record<string, CardMember[]> = {};
+  for (const row of rows) {
+    if (!result[row.card_id]) result[row.card_id] = [];
+    result[row.card_id].push({
+      user_id: row.user_id,
+      user_name: profileMap[row.user_id]?.name || '',
+      user_email: profileMap[row.user_id]?.email || '',
+    });
+  }
+  return result;
+}
+
 // ─── Item detail (with comments + activity) ───
 
 export async function fetchItemDetail(itemId: string): Promise<{
   card: Item;
   comments: Comment[];
   activity: Activity[];
+  cardMembers: CardMember[];
 }> {
-  const [itemRes, commentsRes, activityRes] = await Promise.all([
+  const [itemRes, commentsRes, activityRes, cardMembers] = await Promise.all([
     supabase.from('teamhub_cards').select('*').eq('id', itemId).single(),
     supabase.from('teamhub_comments').select('*').eq('card_id', itemId).order('created_at', { ascending: true }),
     supabase.from('teamhub_activity').select('*').eq('card_id', itemId).order('created_at', { ascending: false }).limit(50),
+    fetchCardMembers(itemId),
   ]);
 
   if (itemRes.error) throw itemRes.error;
 
   return {
-    card: itemRes.data,
+    card: { ...itemRes.data, assigned_members: cardMembers },
     comments: commentsRes.data || [],
     activity: activityRes.data || [],
+    cardMembers,
   };
 }
 
@@ -475,19 +571,35 @@ export async function fetchFlowActivity(flowId: string, limit = 30): Promise<Act
 export async function fetchFlowMembers(flowId: string): Promise<FlowMember[]> {
   const { data, error } = await supabase
     .from('teamhub_flow_members')
-    .select('*, profiles:user_id(name, email)')
+    .select('*')
     .eq('flow_id', flowId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data || []).map((m: any) => ({
+
+  const members = data || [];
+  const userIds = members.map((m: any) => m.user_id);
+
+  // Fetch profiles separately (no FK from flow_members to profiles)
+  let profileMap: Record<string, { name: string; email: string }> = {};
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, name, email')
+      .in('id', userIds);
+    (profiles || []).forEach((p: any) => {
+      profileMap[p.id] = { name: p.name || '', email: p.email || '' };
+    });
+  }
+
+  return members.map((m: any) => ({
     id: m.id,
     flow_id: m.flow_id,
     user_id: m.user_id,
     role: m.role,
     created_at: m.created_at,
     updated_at: m.updated_at,
-    user_name: m.profiles?.name || '',
-    user_email: m.profiles?.email || '',
+    user_name: profileMap[m.user_id]?.name || '',
+    user_email: profileMap[m.user_id]?.email || '',
   }));
 }
 
