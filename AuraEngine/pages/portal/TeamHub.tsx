@@ -240,6 +240,7 @@ const TeamHub: React.FC = () => {
           .from('team_invites')
           .select('id, email, name, role, status, created_at')
           .eq('team_id', team.id)
+          .neq('status', 'left')
           .order('created_at', { ascending: false });
         if (!cancelled && data) {
           setSentInvites(data.map((inv: any) => ({
@@ -594,6 +595,7 @@ const TeamHub: React.FC = () => {
 
   const handleLeaveTeam = useCallback(async () => {
     if (!team) return;
+    if (!window.confirm(`Are you sure you want to leave "${team.name}"? You'll need a new invite to rejoin.`)) return;
     try {
       const { error } = await supabase
         .from('team_members')
@@ -601,11 +603,19 @@ const TeamHub: React.FC = () => {
         .eq('team_id', team.id)
         .eq('user_id', user.id);
       if (error) throw error;
+
+      // Mark the invite as 'left' so the inviter no longer sees it as pending/accepted
+      await supabase
+        .from('team_invites')
+        .update({ status: 'left' })
+        .eq('team_id', team.id)
+        .eq('email', user.email.toLowerCase());
+
       reloadData();
     } catch (err) {
       console.error('Failed to leave team:', err);
     }
-  }, [team, user.id, reloadData]);
+  }, [team, user.id, user.email, reloadData]);
 
   const handleRenameTeam = useCallback(async () => {
     if (!team || !editTeamNameValue.trim()) return;
