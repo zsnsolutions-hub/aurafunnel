@@ -84,8 +84,8 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
   const hasActiveFilter = activeFilter.priority !== '' || activeFilter.due !== '';
 
   return (
-    <div className="bg-white border-b border-gray-200 shrink-0">
-      <div className="flex items-center gap-3 px-5 py-3">
+    <div className="bg-white border-b border-gray-200/80 shrink-0">
+      <div className="flex items-center gap-3 px-5 py-3.5">
         {/* Back */}
         <button
           onClick={onBack}
@@ -110,7 +110,7 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
         ) : (
           <h1
             onClick={() => { if (permissions.canEditFlow) setEditing(true); }}
-            className={`text-lg font-bold text-gray-900 ${permissions.canEditFlow ? 'cursor-pointer hover:text-blue-600' : ''}`}
+            className={`text-lg font-bold text-gray-900 tracking-[-0.02em] ${permissions.canEditFlow ? 'cursor-pointer hover:text-blue-600 transition-colors' : ''}`}
           >
             {flow.name}
           </h1>
@@ -129,7 +129,7 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
               {members.slice(0, 3).map(m => (
                 <div
                   key={m.id}
-                  className={`w-8 h-8 rounded-full ${avatarColor(m.user_id)} border-2 border-white flex items-center justify-center text-[10px] font-bold text-white uppercase shadow-sm`}
+                  className={`w-8 h-8 rounded-full ${avatarColor(m.user_id)} border-2 border-white flex items-center justify-center text-[10px] font-bold text-white uppercase shadow-sm transition-transform hover:scale-110 hover:z-10`}
                   title={m.user_name || m.user_email}
                 >
                   {(m.user_name || m.user_email || '?').charAt(0)}
@@ -152,7 +152,7 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
         </button>
 
         {/* View tabs */}
-        <div className="flex items-center bg-gray-100 rounded-lg p-0.5 ml-1">
+        <div className="flex items-center bg-gray-100/80 rounded-lg p-0.5 ml-1">
           {([
             { mode: 'board' as const, label: 'Board', Icon: LayoutGrid },
             { mode: 'list' as const, label: 'List', Icon: List },
@@ -189,7 +189,7 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
             Filter
           </button>
           {filterOpen && (
-            <div className="absolute right-0 top-10 w-56 bg-white rounded-xl border border-gray-200 shadow-xl z-30 py-2">
+            <div className="absolute right-0 top-10 w-56 bg-white rounded-xl border border-gray-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.12)] z-30 py-2">
               <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Priority</p>
               {([['', 'All'], ['high', 'High Priority'], ['medium', 'Medium'], ['low', 'Low']] as const).map(([val, label]) => (
                 <button
@@ -233,7 +233,7 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
             {SORT_LABELS[activeSort]}
           </button>
           {sortOpen && (
-            <div className="absolute right-0 top-10 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-30 py-1">
+            <div className="absolute right-0 top-10 w-44 bg-white rounded-xl border border-gray-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.12)] z-30 py-1">
               {(['default', 'priority', 'due_date', 'recent'] as const).map(val => (
                 <button
                   key={val}

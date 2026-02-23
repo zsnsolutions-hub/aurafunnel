@@ -262,8 +262,8 @@ const TeamHubPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Team Flows</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Organize work across your projects</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-[-0.02em]">Team Flows</h1>
+          <p className="text-[13px] text-slate-500 mt-1">Organize work across your projects</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -276,7 +276,7 @@ const TeamHubPage: React.FC = () => {
           </button>
           <button
             onClick={() => setShowTemplateSelector(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200/50 transition-all hover:shadow-xl hover:shadow-indigo-200/40"
           >
             <Plus size={16} />
             New Flow
@@ -386,10 +386,10 @@ const TeamHubPage: React.FC = () => {
                   {filteredFlows.map((flow, idx) => (
                     <div
                       key={flow.id}
-                      className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all group relative"
+                      className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:border-slate-300 transition-all group relative"
                     >
                       {/* Color banner */}
-                      <div className={`h-2 bg-gradient-to-r ${getFlowColor(idx)}`} />
+                      <div className={`h-1.5 bg-gradient-to-r ${getFlowColor(idx)}`} />
 
                       {/* Content */}
                       <button
@@ -485,11 +485,11 @@ const TeamHubPage: React.FC = () => {
 
             {/* Activity sidebar (1/3) */}
             <div className="lg:col-span-1">
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden sticky top-4">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden sticky top-4">
+                <div className="px-4 py-3.5 border-b border-slate-100/80 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-xs font-black text-slate-600 uppercase tracking-wider">Activity</span>
+                    <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-widest">Activity</span>
                   </div>
                   <Activity size={14} className="text-slate-400" />
                 </div>
@@ -516,17 +516,17 @@ const TeamHubPage: React.FC = () => {
                         }
 
                         return (
-                          <div key={item.id} className="px-4 py-3 hover:bg-slate-50/50 transition-colors">
-                            <p className="text-xs text-slate-600 leading-relaxed">
-                              <span className="font-bold text-slate-700">{item.actor_name || 'You'}</span>{' '}
+                          <div key={item.id} className="px-4 py-3.5 hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-b-0">
+                            <p className="text-[12px] text-slate-600 leading-relaxed">
+                              <span className="font-bold text-slate-800">{item.actor_name || 'You'}</span>{' '}
                               {label}
                             </p>
                             {detail && (
-                              <p className="text-[10px] text-slate-500 mt-0.5 truncate font-medium">
+                              <p className="text-[10px] text-slate-500 mt-1 truncate font-medium">
                                 {detail}
                               </p>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-0.5">
+                            <p className="text-[10px] text-slate-400 mt-1 font-medium">
                               {timeAgo(item.created_at)}
                             </p>
                           </div>
@@ -577,13 +577,13 @@ const StatCard: React.FC<{
 }> = ({ icon, label, value, color }) => {
   const styles = STAT_STYLES[color] || STAT_STYLES.indigo;
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 flex items-center gap-3 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-shadow">
       <div className={`w-9 h-9 rounded-xl ${styles.bg} flex items-center justify-center ${styles.text} shrink-0`}>
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-lg font-bold text-slate-800 leading-none">{value}</p>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5 truncate">{label}</p>
+        <p className="text-lg font-bold text-slate-800 leading-none tracking-[-0.02em]">{value}</p>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 truncate">{label}</p>
       </div>
     </div>
   );
@@ -644,7 +644,7 @@ const FlowContextMenu: React.FC<{
   }, [onClose]);
 
   return (
-    <div ref={ref} className="absolute right-0 top-8 w-36 bg-white rounded-xl border border-slate-200 shadow-lg z-20 py-1 animate-in fade-in zoom-in-95 duration-150">
+    <div ref={ref} className="absolute right-0 top-8 w-36 bg-white rounded-xl border border-slate-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.12)] z-20 py-1.5 animate-in fade-in zoom-in-95 duration-150">
       <button
         onClick={e => { e.stopPropagation(); onRename(); }}
         className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"

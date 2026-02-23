@@ -507,8 +507,8 @@ const FlowView: React.FC<FlowViewProps> = ({
             onDragEnd={handleDragEnd}
           >
             {/* Board area — clean light gray like TaskHub */}
-            <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50 px-6 py-5">
-              <div className="flex items-start gap-6 h-full">
+            <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gradient-to-b from-gray-50 to-gray-100/50 px-6 py-6">
+              <div className="flex items-start gap-7 h-full">
                 <SortableContext items={laneIds} strategy={horizontalListSortingStrategy}>
                   {filteredLanes.map((lane, idx) => (
                     <LaneColumn
@@ -533,7 +533,7 @@ const FlowView: React.FC<FlowViewProps> = ({
             {/* Drag overlay ghost */}
             <DragOverlay>
               {activeItem && (
-                <div className="bg-white rounded-xl shadow-2xl w-[320px] rotate-2 opacity-90 border border-blue-200 ring-2 ring-blue-100">
+                <div className="bg-white rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] w-[320px] rotate-2 opacity-90 border border-blue-200 ring-2 ring-blue-100">
                   <div className="p-4">
                     {activeItem.priority && (
                       <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase mb-2 ${

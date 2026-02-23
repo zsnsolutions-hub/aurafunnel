@@ -50,21 +50,21 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, header, onClose 
     <div
       ref={ref}
       style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999 }}
-      className="min-w-[180px] bg-white rounded-xl border border-gray-200 shadow-xl py-1.5 animate-in fade-in zoom-in-95 duration-100"
+      className="min-w-[200px] bg-white rounded-xl border border-gray-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.12)] py-1.5 animate-in fade-in zoom-in-95 duration-100"
     >
       {header && (
-        <div className="px-3 py-1.5 border-b border-gray-100 mb-1">
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{header}</p>
+        <div className="px-3 py-2 border-b border-gray-100/80 mb-1">
+          <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">{header}</p>
         </div>
       )}
       {items.map((item, i) => (
         <React.Fragment key={i}>
           <button
             onClick={() => { item.onClick(); onClose(); }}
-            className={`w-full text-left flex items-center gap-2 px-3 py-2 text-[13px] font-medium transition-colors ${
+            className={`w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-[13px] font-medium rounded-md mx-auto transition-colors ${
               item.danger
                 ? 'text-rose-600 hover:bg-rose-50'
-                : 'text-gray-700 hover:bg-gray-50'
+                : 'text-gray-700 hover:bg-gray-50/80'
             }`}
           >
             {item.icon && <span className="w-4 h-4 flex items-center justify-center shrink-0">{item.icon}</span>}

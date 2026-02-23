@@ -70,20 +70,20 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
       data-card="flow-item"
       onClick={onClick}
       onContextMenu={onContextMenu}
-      className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 group overflow-hidden"
+      className="bg-white rounded-xl border border-gray-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:border-gray-300 cursor-pointer transition-all duration-200 group overflow-hidden"
     >
       {/* ═══ SECTION A — Header ═══ */}
       <div className="flex">
         {/* Priority accent bar */}
         {accentColor && (
-          <div className={`w-1 shrink-0 ${accentColor} rounded-l-xl`} />
+          <div className={`w-[3px] shrink-0 ${accentColor} rounded-l-xl`} />
         )}
         <div className="flex-1 px-4 pt-3 pb-2">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 {priority && (
-                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${priority.bg} ${priority.text}`}>
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${priority.bg} ${priority.text}`}>
                     {priority.label}
                   </span>
                 )}
@@ -94,7 +94,7 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
                   <GripVertical size={13} />
                 </button>
               </div>
-              <h4 className="text-[13px] font-semibold text-gray-900 leading-snug">
+              <h4 className="text-sm font-semibold text-gray-900 leading-snug tracking-[-0.01em]">
                 {item.title}
               </h4>
             </div>
@@ -104,7 +104,7 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
                 {tags.slice(0, 2).map((tag: ItemTag, i: number) => (
                   <span
                     key={i}
-                    className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-100 text-gray-500 truncate max-w-[56px]"
+                    className="inline-block px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-gray-100/80 text-gray-500 truncate max-w-[56px]"
                   >
                     #{tag.text}
                   </span>
@@ -123,7 +123,7 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
         <div className={`px-4 pb-2 space-y-1.5 ${accentColor ? 'ml-1' : ''}`}>
           {/* Description preview */}
           {hasDescription && (
-            <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-2">
+            <p className="text-[11.5px] text-gray-500/90 leading-relaxed line-clamp-2">
               {item.description}
             </p>
           )}
@@ -153,7 +153,7 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
       )}
 
       {/* ═══ SECTION C — Footer ═══ */}
-      <div className={`flex items-center justify-between px-4 py-2 border-t border-gray-100 ${accentColor ? 'ml-1' : ''}`}>
+      <div className={`flex items-center justify-between px-4 py-2.5 border-t border-gray-100/80 ${accentColor ? 'ml-1' : ''}`}>
         <div className="flex items-center gap-2.5">
           {commentCount > 0 && (
             <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
@@ -175,20 +175,20 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
               <div
                 key={m.user_id}
                 title={m.user_name || m.user_email}
-                className={`w-6 h-6 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-white shadow-sm`}
+                className={`w-7 h-7 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
               >
                 {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
               </div>
             ))}
             {item.assigned_members.length > 3 && (
-              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-600 ring-2 ring-white shadow-sm">
+              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 ring-2 ring-white shadow-sm">
                 +{item.assigned_members.length - 3}
               </div>
             )}
           </div>
         ) : (
           <div
-            className={`w-6 h-6 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-white shadow-sm`}
+            className={`w-7 h-7 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
           >
             {(item.created_by || '?').charAt(0).toUpperCase()}
           </div>

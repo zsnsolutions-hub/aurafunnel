@@ -118,13 +118,13 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
     <div
       ref={setSortableRef}
       style={style}
-      className={`shrink-0 w-[320px] flex flex-col max-h-full ${hasAccent ? `border-l-[3px] ${accent.border}` : ''}`}
+      className={`shrink-0 w-[320px] flex flex-col max-h-full rounded-xl ${hasAccent ? `border-l-[3px] ${accent.border}` : ''}`}
     >
       {/* ─── Header ─── */}
       <div
         {...attributes}
         {...listeners}
-        className="flex items-center gap-2.5 px-1 pb-3 cursor-grab active:cursor-grabbing"
+        className="flex items-center gap-2.5 px-2 pb-4 cursor-grab active:cursor-grabbing"
       >
         {editing ? (
           <input
@@ -142,10 +142,10 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
           />
         ) : (
           <>
-            <h3 className={`text-[13px] font-bold uppercase tracking-wider ${hasAccent ? accent.headerText : 'text-gray-800'}`}>
+            <h3 className={`text-[12px] font-extrabold uppercase tracking-widest ${hasAccent ? accent.headerText : 'text-gray-700'}`}>
               {lane.name}
             </h3>
-            <span className={`inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-[11px] font-bold ${accent.countBg}`}>
+            <span className={`inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-bold ${accent.countBg}`}>
               {lane.cards.length}
             </span>
           </>
@@ -175,7 +175,7 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
               <MoreHorizontal size={16} />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-8 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-20 py-1">
+              <div className="absolute right-0 top-8 w-44 bg-white rounded-xl border border-gray-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.12)] z-20 py-1.5">
                 <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Lane Actions</p>
                 <button
                   onClick={() => { setEditing(true); setEditName(lane.name); setMenuOpen(false); }}
@@ -199,7 +199,7 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
       {/* ─── Items area ─── */}
       <div
         ref={setDroppableRef}
-        className="flex-1 overflow-y-auto space-y-2.5 min-h-[8px] pb-2 px-0.5"
+        className="flex-1 overflow-y-auto space-y-3 min-h-[8px] pb-2 px-1"
         onContextMenu={(e) => {
           if ((e.target as HTMLElement).closest('[data-card]')) return;
           if (onLaneContextMenu) {
@@ -220,8 +220,8 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
         </SortableContext>
 
         {lane.cards.length === 0 && (
-          <div className="py-8 text-center">
-            <p className="text-xs text-gray-400">No items</p>
+          <div className="py-10 text-center border-2 border-dashed border-gray-200/60 rounded-xl mx-0.5">
+            <p className="text-[11px] text-gray-400 font-medium">No items yet</p>
           </div>
         )}
       </div>

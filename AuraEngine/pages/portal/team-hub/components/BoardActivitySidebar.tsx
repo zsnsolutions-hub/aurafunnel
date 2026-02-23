@@ -60,12 +60,14 @@ const BoardActivitySidebar: React.FC<BoardActivitySidebarProps> = ({ flowId, lan
   const progressPct = totalForProgress > 0 ? Math.round((archivedCount / totalForProgress) * 100) : 0;
 
   return (
-    <div className="w-[320px] border-l border-gray-200 bg-white flex flex-col shrink-0 h-full overflow-hidden">
+    <div className="w-[340px] border-l border-gray-200/80 bg-white flex flex-col shrink-0 h-full overflow-hidden">
       {/* ─── Header ─── */}
-      <div className="px-5 py-4 flex items-center justify-between shrink-0 border-b border-gray-100">
+      <div className="px-5 py-4 flex items-center justify-between shrink-0 border-b border-gray-100/80">
         <div className="flex items-center gap-2.5">
-          <BarChart3 size={16} className="text-blue-600" />
-          <span className="text-[14px] font-bold text-gray-900">Activity Feed</span>
+          <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+            <BarChart3 size={14} className="text-blue-600" />
+          </div>
+          <span className="text-sm font-bold text-gray-900 tracking-[-0.01em]">Activity</span>
         </div>
         <button
           onClick={onClose}
@@ -88,7 +90,7 @@ const BoardActivitySidebar: React.FC<BoardActivitySidebarProps> = ({ flowId, lan
             <p className="text-xs text-gray-300 mt-1">Activity will appear as your team works</p>
           </div>
         ) : (
-          <div className="px-5 py-4 space-y-5">
+          <div className="px-5 py-4 space-y-1">
             {activity.map(item => {
               const meta = item.meta_json || {};
               const config = ACTION_CONFIG[item.action_type] || { verb: item.action_type, color: 'bg-gray-400' };
@@ -115,15 +117,15 @@ const BoardActivitySidebar: React.FC<BoardActivitySidebarProps> = ({ flowId, lan
               const actorInitial = (item.actor_name || 'U').charAt(0).toUpperCase();
 
               return (
-                <div key={item.id} className="flex items-start gap-3">
+                <div key={item.id} className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-b-0">
                   {/* Actor avatar */}
-                  <div className={`w-8 h-8 rounded-full ${config.color} flex items-center justify-center text-[11px] font-bold text-white shrink-0 mt-0.5`}>
+                  <div className={`w-9 h-9 rounded-full ${config.color} flex items-center justify-center text-[11px] font-bold text-white shrink-0 mt-0.5 shadow-sm`}>
                     {actorInitial}
                   </div>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-gray-700 leading-relaxed">
+                    <p className="text-[13px] text-gray-600 leading-relaxed">
                       <span className="font-bold text-gray-900">{item.actor_name || 'You'}</span>{' '}
                       {config.verb}{' '}
                       {item.action_type === 'card_moved' && (
@@ -144,14 +146,14 @@ const BoardActivitySidebar: React.FC<BoardActivitySidebarProps> = ({ flowId, lan
 
                     {/* Quoted comment text */}
                     {quotedText && (
-                      <div className="mt-1.5 px-3 py-2 bg-gray-50 rounded-lg border-l-2 border-gray-200">
+                      <div className="mt-2 px-3 py-2 bg-gray-50/80 rounded-lg border-l-2 border-gray-300">
                         <p className="text-[12px] text-gray-500 italic leading-relaxed">
                           "{quotedText}"
                         </p>
                       </div>
                     )}
 
-                    <p className="text-[10px] font-bold text-gray-400 tracking-wider mt-1.5">
+                    <p className="text-[10px] font-semibold text-gray-400 tracking-wider mt-2">
                       {timeAgo(item.created_at)}
                     </p>
                   </div>
@@ -163,18 +165,18 @@ const BoardActivitySidebar: React.FC<BoardActivitySidebarProps> = ({ flowId, lan
       </div>
 
       {/* ─── Board Progress footer ─── */}
-      <div className="px-5 py-4 border-t border-gray-100 shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[13px] font-medium text-gray-700">Board Progress</span>
-          <span className="text-[13px] font-bold text-gray-900">{progressPct}%</span>
+      <div className="px-5 py-4 border-t border-gray-100/80 shrink-0 bg-gray-50/50">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-[12px] font-semibold text-gray-600">Board Progress</span>
+          <span className="text-sm font-bold text-gray-900">{progressPct}%</span>
         </div>
-        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="w-full h-2 bg-gray-200/60 rounded-full overflow-hidden">
           <div
-            className="h-full bg-blue-500 rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        <button className="mt-3 text-[12px] font-semibold text-blue-600 hover:text-blue-700">
+        <button className="mt-3 text-[12px] font-semibold text-blue-600 hover:text-blue-700 transition-colors">
           View Detailed Report
         </button>
       </div>

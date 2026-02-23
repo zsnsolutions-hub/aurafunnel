@@ -71,14 +71,14 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, canDrag, onDragStart, onConte
       draggable={canDrag}
       onDragStart={canDrag ? (e) => onDragStart(e, task.id) : undefined}
       onContextMenu={onContextMenu}
-      className={`${cardBg} rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 group ${
+      className={`${cardBg} rounded-xl border border-gray-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:border-gray-300 transition-all duration-200 group ${
         canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
       } [&.dragging]:opacity-40${task.is_auto_suggested ? ' border-l-4 border-l-violet-400' : ''}`}
     >
       <div className="p-4">
         {/* Row 1: Priority badge + drag handle */}
         <div className="flex items-start justify-between mb-2.5">
-          <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${priority.bg} ${priority.text}`}>
+          <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${priority.bg} ${priority.text}`}>
             {priority.label}
           </span>
           {canDrag ? (
@@ -102,7 +102,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, canDrag, onDragStart, onConte
         )}
 
         {/* Row 2: Title */}
-        <h4 className="text-[14px] font-semibold text-gray-900 leading-snug mb-3 line-clamp-2">
+        <h4 className="text-sm font-semibold text-gray-900 leading-snug tracking-[-0.01em] mb-3 line-clamp-2">
           {task.title}
         </h4>
 
@@ -157,7 +157,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, canDrag, onDragStart, onConte
         )}
 
         {/* Row 3: Bottom metadata */}
-        <div className="flex items-center justify-between pt-2.5 border-t border-gray-100">
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100/80">
           <div className="flex items-center gap-3">
             {task.deadline && (
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
@@ -179,14 +179,14 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, canDrag, onDragStart, onConte
           {/* Assignee avatar */}
           {task.assigned_name ? (
             <div
-              className={`w-7 h-7 rounded-full ${avatarColor(task.assigned_to || task.user_id)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
+              className={`w-8 h-8 rounded-full ${avatarColor(task.assigned_to || task.user_id)} flex items-center justify-center text-[11px] font-bold text-white ring-2 ring-white shadow-sm`}
               title={task.assigned_name}
             >
               {task.assigned_name.charAt(0).toUpperCase()}
             </div>
           ) : (
             <div
-              className={`w-7 h-7 rounded-full ${avatarColor(task.user_id)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm opacity-50`}
+              className={`w-8 h-8 rounded-full ${avatarColor(task.user_id)} flex items-center justify-center text-[11px] font-bold text-white ring-2 ring-white shadow-sm opacity-40`}
               title="Unassigned"
             >
               {task.user_id.charAt(0).toUpperCase()}

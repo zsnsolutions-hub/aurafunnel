@@ -125,7 +125,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   }, []);
 
   return (
-    <div className="flex items-start gap-6 overflow-x-auto pb-4">
+    <div className="flex items-start gap-7 overflow-x-auto pb-4">
       {COLUMNS.map(col => {
         const colTasks = columnTasks[col.id];
         const isOver = dragOverColumn === col.id;
@@ -152,12 +152,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               {colColor && (
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${getColorClasses(colColor).dot}`} />
               )}
-              <h3 className={`text-[13px] font-bold uppercase tracking-wider ${
+              <h3 className={`text-[12px] font-extrabold uppercase tracking-widest ${
                 colorClasses ? colorClasses.text : col.headerText
               }`}>
                 {col.label}
               </h3>
-              <span className={`inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-[11px] font-bold ${
+              <span className={`inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-bold ${
                 colorClasses ? `${colorClasses.bg} ${colorClasses.text} ring-1 ring-inset ring-current/10` : col.countBg
               }`}>
                 {colTasks.length}
@@ -186,13 +186,13 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
 
             {/* Cards */}
-            <div className="flex-1 overflow-y-auto space-y-2.5 min-h-[120px] pb-2 px-0.5 max-h-[calc(100vh-340px)]">
+            <div className="flex-1 overflow-y-auto space-y-3 min-h-[120px] pb-2 px-1 max-h-[calc(100vh-340px)]">
               {colTasks.length === 0 ? (
-                <div className={`py-8 text-center border-2 border-dashed rounded-xl transition-colors ${
-                  isOver ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'
+                <div className={`py-10 text-center border-2 border-dashed rounded-xl transition-colors ${
+                  isOver ? 'border-blue-300 bg-blue-50/40' : 'border-gray-200/60'
                 }`}>
-                  <p className="text-xs text-gray-400 font-medium">
-                    {isOver ? 'Drop here' : 'No items'}
+                  <p className="text-[11px] text-gray-400 font-medium">
+                    {isOver ? 'Drop here' : 'No items yet'}
                   </p>
                 </div>
               ) : (

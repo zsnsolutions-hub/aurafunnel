@@ -75,11 +75,11 @@ const ColumnActionsMenu: React.FC<ColumnActionsMenuProps> = ({
         top: Math.min(menuTop, window.innerHeight - 420),
         zIndex: 9999,
       }}
-      className="w-[260px] bg-white rounded-xl border border-gray-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+      className="w-[260px] bg-white rounded-xl border border-gray-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.12)] overflow-hidden animate-in fade-in zoom-in-95 duration-100"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <h4 className="text-[13px] font-bold text-gray-800">List actions</h4>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100/80">
+        <h4 className="text-[12px] font-extrabold text-gray-700 uppercase tracking-wider">List actions</h4>
         <button
           onClick={onClose}
           className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
@@ -118,7 +118,7 @@ const ColumnActionsMenu: React.FC<ColumnActionsMenuProps> = ({
 
         {/* Change list color — inline swatches */}
         <div className="px-4 py-2">
-          <p className="text-[11px] font-semibold text-gray-500 mb-2">Change list color</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">Change list color</p>
           <div className="grid grid-cols-6 gap-1.5">
             {COLOR_TOKENS.map(({ token, label }) => {
               const classes = getColorClasses(token);
@@ -128,8 +128,8 @@ const ColumnActionsMenu: React.FC<ColumnActionsMenuProps> = ({
                   key={token}
                   title={label}
                   onClick={() => { onChangeColor(token); onClose(); }}
-                  className={`w-8 h-6 rounded-md ${classes.dot} transition-all hover:scale-110 hover:ring-2 hover:ring-offset-1 hover:${classes.ring} ${
-                    isActive ? 'ring-2 ring-offset-1 ' + classes.ring : ''
+                  className={`w-8 h-6 rounded-lg ${classes.dot} transition-all hover:scale-110 hover:ring-2 hover:ring-offset-1 hover:${classes.ring} ${
+                    isActive ? 'ring-2 ring-offset-2 ' + classes.ring + ' scale-110' : ''
                   }`}
                 />
               );
