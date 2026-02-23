@@ -451,30 +451,25 @@ const TeamHub: React.FC = () => {
     setTeamCreating(true);
     setTeamCreateError(null);
     try {
-      const { data: newTeam, error: teamErr } = await supabase
+      // Generate ID client-side so we don't need .select() after insert
+      // (avoids RLS SELECT failure before team_members row exists)
+      const teamId = crypto.randomUUID();
+      const { error: teamErr } = await supabase
         .from('teams')
-        .insert({ name: teamName.trim(), owner_id: user.id })
-        .select()
-        .single();
+        .insert({ id: teamId, name: teamName.trim(), owner_id: user.id });
       if (teamErr) throw teamErr;
 
       const { error: memberErr } = await supabase
         .from('team_members')
-        .insert({ team_id: newTeam.id, user_id: user.id, role: 'owner' });
+        .insert({ team_id: teamId, user_id: user.id, role: 'owner' });
       if (memberErr) throw memberErr;
 
       setTeamName('');
       reloadData();
     } catch (err: any) {
       console.error('Failed to create team:', err);
-      const msg = err?.message || err?.details || 'Unknown error';
-      if (msg.includes('does not exist') || msg.includes('relation')) {
-        setTeamCreateError('Team tables not found. Please run the database migration first.');
-      } else if (msg.includes('permission') || msg.includes('policy')) {
-        setTeamCreateError('Permission denied. Check your database RLS policies.');
-      } else {
-        setTeamCreateError(`Failed to create team: ${msg}`);
-      }
+      const msg = err?.message || err?.details || err?.code || 'Unknown error';
+      setTeamCreateError(`Failed to create team: ${msg}`);
     } finally {
       setTeamCreating(false);
     }
