@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -16,18 +16,25 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable';
-import { LayoutGrid } from 'lucide-react';
+import { LayoutGrid, Eye, Flag, ArrowRight, Pencil, Plus, Trash2, Archive, Users } from 'lucide-react';
 import type { FlowWithData, Item, Lane, FlowMember } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
-import type { BoardFilter, BoardSort } from './FlowHeader';
+import type { BoardFilter, BoardSort, ViewMode } from './FlowHeader';
 import * as api from '../teamHubApi';
-import LaneColumn from './LaneColumn';
+import LaneColumn, { type LaneColumnHandle } from './LaneColumn';
+import ContextMenu, { type ContextMenuItem } from '../../../../components/teamhub/ContextMenu';
 import AddLaneInline from './AddLaneInline';
 import ItemInspector from './ItemInspector';
 import FlowHeader from './FlowHeader';
+import FlowListView from './FlowListView';
+import FlowCalendarView from './FlowCalendarView';
 import BoardActivitySidebar from './BoardActivitySidebar';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+type FlowContextTarget =
+  | { type: 'item'; item: Item; laneId: string }
+  | { type: 'lane'; lane: Lane & { cards: Item[] } };
 
 interface FlowViewProps {
   flow: FlowWithData;
@@ -48,10 +55,13 @@ const FlowView: React.FC<FlowViewProps> = ({
   const [activeItem, setActiveItem] = useState<Item | null>(null);
   const [inspectorItem, setInspectorItem] = useState<Item | null>(null);
 
+  const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [boardFilter, setBoardFilter] = useState<BoardFilter>({ priority: '', due: '' });
   const [boardSort, setBoardSort] = useState<BoardSort>('default');
   const [showActivity, setShowActivity] = useState(false);
   const [members, setMembers] = useState<FlowMember[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: FlowContextTarget } | null>(null);
+  const laneRefs = useRef<Map<string, React.RefObject<LaneColumnHandle | null>>>(new Map());
 
   React.useEffect(() => { setLanes(flow.lists); }, [flow.lists]);
 
@@ -228,6 +238,181 @@ const FlowView: React.FC<FlowViewProps> = ({
     setLanes(prev => prev.map(l => ({ ...l, cards: l.cards.filter(c => c.id !== itemId) })));
   };
 
+  // ─── Context menu handlers ───
+  const handleItemContextMenu = useCallback((e: React.MouseEvent, item: Item) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const lane = lanes.find(l => l.cards.some(c => c.id === item.id));
+    if (!lane) return;
+    setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'item', item, laneId: lane.id } });
+  }, [lanes]);
+
+  const handleLaneContextMenu = useCallback((e: React.MouseEvent, lane: Lane & { cards: Item[] }) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'lane', lane } });
+  }, []);
+
+  const handleChangeItemPriority = useCallback(async (itemId: string, priority: string | null) => {
+    setLanes(prev => prev.map(l => ({
+      ...l,
+      cards: l.cards.map(c => c.id === itemId ? { ...c, priority: priority as Item['priority'] } : c),
+    })));
+    try { await api.updateItem(itemId, { priority: priority as Item['priority'] }); } catch { onRefresh(); }
+  }, [onRefresh]);
+
+  const handleMoveItemToLane = useCallback(async (itemId: string, fromLaneId: string, toLaneId: string) => {
+    const fromLane = lanes.find(l => l.id === fromLaneId);
+    const toLane = lanes.find(l => l.id === toLaneId);
+    if (!fromLane || !toLane) return;
+
+    const item = fromLane.cards.find(c => c.id === itemId);
+    if (!item) return;
+
+    setLanes(prev => prev.map(l => {
+      if (l.id === fromLaneId) return { ...l, cards: l.cards.filter(c => c.id !== itemId) };
+      if (l.id === toLaneId) return { ...l, cards: [...l.cards, { ...item, list_id: toLaneId }] };
+      return l;
+    }));
+
+    try {
+      const newOrder = [...toLane.cards.map(c => c.id), itemId];
+      await api.moveItem(itemId, toLaneId, newOrder, flow.id, fromLane.name, toLane.name);
+    } catch { onRefresh(); }
+  }, [lanes, flow.id, onRefresh]);
+
+  const handleArchiveItem = useCallback(async (itemId: string) => {
+    setLanes(prev => prev.map(l => ({ ...l, cards: l.cards.filter(c => c.id !== itemId) })));
+    try { await api.archiveItem(itemId, flow.id); } catch { onRefresh(); }
+  }, [flow.id, onRefresh]);
+
+  const handleAssignMember = useCallback(async (itemId: string, userId: string) => {
+    try {
+      await api.addCardMember(itemId, userId, flow.id);
+      onRefresh();
+    } catch (err) { console.error('Failed to assign member:', err); }
+  }, [flow.id, onRefresh]);
+
+  const handleUnassignMember = useCallback(async (itemId: string, userId: string) => {
+    try {
+      await api.removeCardMember(itemId, userId, flow.id);
+      onRefresh();
+    } catch (err) { console.error('Failed to unassign member:', err); }
+  }, [flow.id, onRefresh]);
+
+  const getLaneRef = useCallback((laneId: string) => {
+    if (!laneRefs.current.has(laneId)) {
+      laneRefs.current.set(laneId, React.createRef<LaneColumnHandle>());
+    }
+    return laneRefs.current.get(laneId)!;
+  }, []);
+
+  const buildFlowContextMenuItems = useCallback((): ContextMenuItem[] => {
+    if (!contextMenu) return [];
+    const { target } = contextMenu;
+
+    if (target.type === 'item') {
+      const { item, laneId } = target;
+      const items: ContextMenuItem[] = [];
+
+      // Open inspector
+      items.push({
+        label: 'Open',
+        icon: <Eye size={14} />,
+        dividerAfter: true,
+        onClick: () => setInspectorItem(item),
+      });
+
+      // Priority submenu items
+      if (permissions.canEditItems) {
+        const priorities: { value: string | null; label: string }[] = [
+          { value: 'high', label: 'High Priority' },
+          { value: 'medium', label: 'Medium Priority' },
+          { value: 'low', label: 'Low Priority' },
+          { value: null, label: 'No Priority' },
+        ];
+        for (const p of priorities) {
+          items.push({
+            label: `${item.priority === p.value ? '● ' : ''}${p.label}`,
+            icon: <Flag size={14} />,
+            onClick: () => handleChangeItemPriority(item.id, p.value),
+          });
+        }
+        items[items.length - 1].dividerAfter = true;
+
+        // Assign members
+        if (members.length > 0) {
+          for (const m of members) {
+            const isAssigned = (item.assigned_members || []).some(cm => cm.user_id === m.user_id);
+            items.push({
+              label: `${isAssigned ? '● ' : ''}${m.user_name || m.user_email}`,
+              icon: <Users size={14} />,
+              onClick: () => isAssigned
+                ? handleUnassignMember(item.id, m.user_id)
+                : handleAssignMember(item.id, m.user_id),
+            });
+          }
+          items[items.length - 1].dividerAfter = true;
+        }
+
+        // Move to other lanes
+        const otherLanes = lanes.filter(l => l.id !== laneId);
+        if (otherLanes.length > 0) {
+          for (const lane of otherLanes) {
+            items.push({
+              label: `Move to ${lane.name}`,
+              icon: <ArrowRight size={14} />,
+              onClick: () => handleMoveItemToLane(item.id, laneId, lane.id),
+            });
+          }
+          items[items.length - 1].dividerAfter = true;
+        }
+
+        // Archive / close
+        items.push({
+          label: 'Close Item',
+          icon: <Archive size={14} />,
+          danger: true,
+          onClick: () => handleArchiveItem(item.id),
+        });
+      }
+
+      return items;
+    }
+
+    // Lane context menu
+    if (target.type === 'lane') {
+      const { lane } = target;
+      const items: ContextMenuItem[] = [];
+
+      if (permissions.canEditItems) {
+        items.push({
+          label: 'Add Item',
+          icon: <Plus size={14} />,
+          onClick: () => laneRefs.current.get(lane.id)?.current?.triggerAddItem(),
+        });
+      }
+
+      if (permissions.canManageLanes) {
+        items.push({
+          label: 'Rename Lane',
+          icon: <Pencil size={14} />,
+          dividerAfter: true,
+          onClick: () => laneRefs.current.get(lane.id)?.current?.triggerRename(),
+        });
+        items.push({
+          label: 'Delete Lane',
+          icon: <Trash2 size={14} />,
+          danger: true,
+          onClick: () => handleDeleteLane(lane.id),
+        });
+      }
+
+      return items;
+    }
+
+    return [];
+  }, [contextMenu, permissions, lanes, members, handleChangeItemPriority, handleMoveItemToLane, handleArchiveItem, handleDeleteLane, handleAssignMember, handleUnassignMember]);
+
   // ─── Render ───
   const headerProps = {
     flow,
@@ -243,6 +428,8 @@ const FlowView: React.FC<FlowViewProps> = ({
     onSortChange: setBoardSort,
     showActivity,
     onToggleActivity: () => setShowActivity(s => !s),
+    viewMode,
+    onViewModeChange: setViewMode,
   };
 
   if (lanes.length === 0) {
@@ -268,56 +455,79 @@ const FlowView: React.FC<FlowViewProps> = ({
       <FlowHeader {...headerProps} />
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          {/* Board area — clean light gray like TaskHub */}
-          <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50 px-6 py-5">
-            <div className="flex items-start gap-6 h-full">
-              <SortableContext items={laneIds} strategy={horizontalListSortingStrategy}>
-                {filteredLanes.map((lane, idx) => (
-                  <LaneColumn
-                    key={lane.id}
-                    lane={lane}
-                    laneIndex={idx}
-                    onAddItem={handleAddItem}
-                    onItemClick={setInspectorItem}
-                    onRenameLane={handleRenameLane}
-                    onDeleteLane={handleDeleteLane}
-                    permissions={permissions}
-                  />
-                ))}
-              </SortableContext>
-              {permissions.canManageLanes && <AddLaneInline onAdd={handleAddLane} />}
-            </div>
-          </div>
-
-          {/* Drag overlay ghost */}
-          <DragOverlay>
-            {activeItem && (
-              <div className="bg-white rounded-xl shadow-2xl w-[320px] rotate-2 opacity-90 border border-blue-200 ring-2 ring-blue-100">
-                <div className="p-4">
-                  {activeItem.priority && (
-                    <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase mb-2 ${
-                      activeItem.priority === 'high' ? 'bg-red-500 text-white' :
-                      activeItem.priority === 'medium' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
-                      {activeItem.priority === 'high' ? 'HIGH PRIORITY' : activeItem.priority === 'medium' ? 'MEDIUM' : 'LOW'}
-                    </span>
-                  )}
-                  <h4 className="text-[14px] font-semibold text-gray-900 leading-snug">
-                    {activeItem.title}
-                  </h4>
-                </div>
+        {viewMode === 'board' && (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            {/* Board area — clean light gray like TaskHub */}
+            <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50 px-6 py-5">
+              <div className="flex items-start gap-6 h-full">
+                <SortableContext items={laneIds} strategy={horizontalListSortingStrategy}>
+                  {filteredLanes.map((lane, idx) => (
+                    <LaneColumn
+                      key={lane.id}
+                      ref={getLaneRef(lane.id)}
+                      lane={lane}
+                      laneIndex={idx}
+                      onAddItem={handleAddItem}
+                      onItemClick={setInspectorItem}
+                      onRenameLane={handleRenameLane}
+                      onDeleteLane={handleDeleteLane}
+                      permissions={permissions}
+                      onItemContextMenu={handleItemContextMenu}
+                      onLaneContextMenu={handleLaneContextMenu}
+                    />
+                  ))}
+                </SortableContext>
+                {permissions.canManageLanes && <AddLaneInline onAdd={handleAddLane} />}
               </div>
-            )}
-          </DragOverlay>
-        </DndContext>
+            </div>
+
+            {/* Drag overlay ghost */}
+            <DragOverlay>
+              {activeItem && (
+                <div className="bg-white rounded-xl shadow-2xl w-[320px] rotate-2 opacity-90 border border-blue-200 ring-2 ring-blue-100">
+                  <div className="p-4">
+                    {activeItem.priority && (
+                      <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase mb-2 ${
+                        activeItem.priority === 'high' ? 'bg-red-500 text-white' :
+                        activeItem.priority === 'medium' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {activeItem.priority === 'high' ? 'HIGH PRIORITY' : activeItem.priority === 'medium' ? 'MEDIUM' : 'LOW'}
+                      </span>
+                    )}
+                    <h4 className="text-[14px] font-semibold text-gray-900 leading-snug">
+                      {activeItem.title}
+                    </h4>
+                  </div>
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        )}
+
+        {viewMode === 'list' && (
+          <FlowListView
+            filteredLanes={filteredLanes}
+            onItemClick={setInspectorItem}
+            onItemContextMenu={handleItemContextMenu}
+            permissions={permissions}
+          />
+        )}
+
+        {viewMode === 'calendar' && (
+          <FlowCalendarView
+            filteredLanes={filteredLanes}
+            onItemClick={setInspectorItem}
+            onItemContextMenu={handleItemContextMenu}
+            permissions={permissions}
+          />
+        )}
 
         <BoardActivitySidebar
           flowId={flow.id}
@@ -336,7 +546,18 @@ const FlowView: React.FC<FlowViewProps> = ({
         onItemUpdated={onRefresh}
         onItemClosed={handleItemClosed}
         permissions={permissions}
+        members={members}
       />
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={buildFlowContextMenuItems()}
+          header={contextMenu.target.type === 'item' ? 'Item Actions' : 'Lane Actions'}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </>
   );
 };

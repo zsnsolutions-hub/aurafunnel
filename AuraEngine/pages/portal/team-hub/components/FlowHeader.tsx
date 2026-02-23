@@ -8,6 +8,7 @@ import type { FlowPermissions } from '../hooks/useFlowPermissions';
 
 export type BoardFilter = { priority: '' | 'high' | 'medium' | 'low'; due: '' | 'overdue' | 'this_week' };
 export type BoardSort = 'default' | 'priority' | 'due_date' | 'recent';
+export type ViewMode = 'board' | 'list' | 'calendar';
 
 interface FlowHeaderProps {
   flow: Flow;
@@ -23,6 +24,8 @@ interface FlowHeaderProps {
   onSortChange: (s: BoardSort) => void;
   showActivity: boolean;
   onToggleActivity: () => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
 }
 
 // Avatar colors
@@ -46,7 +49,7 @@ const SORT_LABELS: Record<BoardSort, string> = {
 const FlowHeader: React.FC<FlowHeaderProps> = ({
   flow, onBack, onRename, onDelete, permissions, onManageTeam,
   members, activeFilter, activeSort, onFilterChange, onSortChange,
-  showActivity, onToggleActivity,
+  showActivity, onToggleActivity, viewMode, onViewModeChange,
 }) => {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(flow.name);
@@ -147,17 +150,26 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
           Share
         </button>
 
-        {/* View tabs (Board is always active since this is the board view) */}
+        {/* View tabs */}
         <div className="flex items-center bg-gray-100 rounded-lg p-0.5 ml-1">
-          <span className="px-3 py-1.5 text-[12px] font-semibold bg-white text-gray-800 rounded-md shadow-sm">
-            Board
-          </span>
-          <span className="px-3 py-1.5 text-[12px] font-medium text-gray-400 cursor-default">
-            List
-          </span>
-          <span className="px-3 py-1.5 text-[12px] font-medium text-gray-400 cursor-default">
-            Calendar
-          </span>
+          {([
+            { mode: 'board' as const, label: 'Board', Icon: LayoutGrid },
+            { mode: 'list' as const, label: 'List', Icon: List },
+            { mode: 'calendar' as const, label: 'Calendar', Icon: Calendar },
+          ]).map(({ mode, label, Icon }) => (
+            <button
+              key={mode}
+              onClick={() => onViewModeChange(mode)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-md transition-all ${
+                viewMode === mode
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <Icon size={13} />
+              {label}
+            </button>
+          ))}
         </div>
 
         <div className="flex-1" />
