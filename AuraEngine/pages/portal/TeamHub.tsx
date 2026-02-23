@@ -7,9 +7,13 @@ import {
   ClockIcon, PlusIcon, XIcon, MessageIcon,
   KeyboardIcon, DocumentIcon, EditIcon
 } from '../../components/Icons';
-import { Filter, ArrowUpDown, BarChart3, X as LucideX } from 'lucide-react';
+import { Filter, ArrowUpDown, BarChart3, X as LucideX, Palette, Trash2, UserPlus, ArrowRight, Signal, Search } from 'lucide-react';
+import { fetchBatchEmailSummary, BatchEmailSummary } from '../../lib/emailTracking';
 import KanbanBoard from '../../components/teamhub/KanbanBoard';
 import { TaskStatus, TaskPriority } from '../../components/teamhub/TaskCard';
+import ContextMenu, { ContextMenuItem } from '../../components/teamhub/ContextMenu';
+import ColorPicker from '../../components/teamhub/ColorPicker';
+import { getColorClasses, ColorToken } from '../../lib/leadColors';
 
 interface LayoutContext {
   user: User;
@@ -33,6 +37,7 @@ interface StrategyTask {
   assigned_name?: string;
   team_id: string | null;
   status: TaskStatus;
+  card_color?: string | null;
 }
 
 interface StrategyNote {
@@ -43,6 +48,7 @@ interface StrategyNote {
   created_at: string;
   team_id: string | null;
   author_name: string | null;
+  card_color?: string | null;
 }
 
 interface TeamMemberInfo {
@@ -52,6 +58,7 @@ interface TeamMemberInfo {
   joined_at: string;
   name: string;
   email: string;
+  card_color?: string | null;
 }
 
 // ─── Constants ───
@@ -90,6 +97,13 @@ const TeamHub: React.FC = () => {
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [teamName, setTeamName] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState<string | null>(null);
+  const [newTaskLeadId, setNewTaskLeadId] = useState<string | null>(null);
+  const [leadSearchQuery, setLeadSearchQuery] = useState('');
+  const [leadSearchResults, setLeadSearchResults] = useState<{ id: string; name: string; company: string; status: string }[]>([]);
+  const [selectedLeadDisplay, setSelectedLeadDisplay] = useState<{ name: string; company: string; status: string } | null>(null);
+  const [showLeadDropdown, setShowLeadDropdown] = useState(false);
+  const leadDropdownRef = React.useRef<HTMLDivElement>(null);
+  const leadSearchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
   const isTeamMode = team !== null;
 
@@ -112,6 +126,28 @@ const TeamHub: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<{ id: string; action: string; details: string; created_at: string; user_id: string; user_name?: string }[]>([]);
   const filterRef = React.useRef<HTMLDivElement>(null);
   const sortRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-suggested task tracking
+  const autoCreatedIdsRef = React.useRef<Set<string>>(new Set());
+
+  // Lead enrichment maps
+  const [leadInfoMap, setLeadInfoMap] = useState<Map<string, { name: string; company: string; status: string }>>(new Map());
+  const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
+  const [scheduledEmailLeadIds, setScheduledEmailLeadIds] = useState<Set<string>>(new Set());
+
+  // Context menu state
+  type ContextTarget =
+    | { type: 'background'; tab: TabView }
+    | { type: 'task'; taskId: string }
+    | { type: 'note'; noteId: string }
+    | { type: 'member'; memberId: string; memberUserId: string };
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: ContextTarget } | null>(null);
+  const [colorPickerTarget, setColorPickerTarget] = useState<{
+    x: number; y: number;
+    entityType: 'task' | 'note' | 'member';
+    entityId: string;
+    currentColor: string | null;
+  } | null>(null);
 
   // ─── Data Loading ───
   useEffect(() => {
@@ -165,6 +201,7 @@ const TeamHub: React.FC = () => {
                 joined_at: m.joined_at,
                 name: profileMap[m.user_id]?.name || 'Unknown',
                 email: profileMap[m.user_id]?.email || '',
+                card_color: m.card_color || null,
               }));
               setTeamMembers(members);
               memberUserIds = members.map(m => m.user_id);
@@ -207,6 +244,7 @@ const TeamHub: React.FC = () => {
           assigned_name: t.assigned_to ? (memberNameMap[t.assigned_to] || 'Unknown') : undefined,
           team_id: t.team_id || null,
           status: t.status || (t.completed ? 'done' : 'todo'),
+          card_color: t.card_color || null,
         }));
         const loadedNotes: StrategyNote[] = (notesRes.data || []).map((n: any) => ({
           id: n.id,
@@ -216,10 +254,105 @@ const TeamHub: React.FC = () => {
           created_at: n.created_at,
           team_id: n.team_id || null,
           author_name: n.author_name || (memberNameMap[n.user_id] || null),
+          card_color: n.card_color || null,
         }));
 
-        setTasks(loadedTasks);
         setNotes(loadedNotes);
+
+        // Fetch ALL eligible leads for the user (excluding Converted/Lost)
+        const { data: allUserLeads } = await supabase
+          .from('leads')
+          .select('id, name, company, status')
+          .eq('client_id', user.id)
+          .not('status', 'in', '("Converted","Lost")');
+
+        const allLeadIds = (allUserLeads || []).map((l: any) => l.id);
+
+        // Parallel: email summaries + scheduled emails for ALL leads
+        const [emailMap, scheduledRes] = await Promise.all([
+          allLeadIds.length > 0 ? fetchBatchEmailSummary(allLeadIds) : Promise.resolve(new Map<string, BatchEmailSummary>()),
+          allLeadIds.length > 0
+            ? supabase.from('scheduled_emails').select('lead_id').in('lead_id', allLeadIds).eq('status', 'pending')
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
+
+        // Build enrichment maps from the broader dataset
+        const infoMap = new Map<string, { name: string; company: string; status: string }>();
+        (allUserLeads || []).forEach((l: any) => {
+          infoMap.set(l.id, { name: l.name || '', company: l.company || '', status: l.status || 'New' });
+        });
+        const scheduledEmailLeadIdSet = new Set((scheduledRes.data || []).map((r: any) => r.lead_id));
+
+        // Compute auto-task candidates
+        const existingTaskLeadIds = new Set(
+          loadedTasks.map(t => t.lead_id).filter(Boolean)
+        );
+
+        const dismissedKey = `teamhub_dismissed_auto_${user.id}`;
+        const dismissedLeadIds: Set<string> = new Set(
+          JSON.parse(localStorage.getItem(dismissedKey) || '[]')
+        );
+
+        const autoTaskCandidates: { lead: { id: string; name: string; company: string; status: string }; source: string; title: string; priority: TaskPriority }[] = [];
+        for (const lead of (allUserLeads || [])) {
+          if (existingTaskLeadIds.has(lead.id)) continue;
+          if (dismissedLeadIds.has(lead.id)) continue;
+          const summary = emailMap.get(lead.id);
+          const hasScheduled = scheduledEmailLeadIdSet.has(lead.id);
+
+          if (summary && summary.openCount >= 2) {
+            autoTaskCandidates.push({ lead, source: 'follow_up', title: `Follow up with ${lead.name}`, priority: 'high' });
+          } else if (summary && summary.hasClicked) {
+            autoTaskCandidates.push({ lead, source: 'clicked', title: `${lead.name} clicked your email`, priority: 'high' });
+          } else if (hasScheduled) {
+            autoTaskCandidates.push({ lead, source: 'scheduled', title: `Scheduled email pending for ${lead.name}`, priority: 'normal' });
+          }
+        }
+
+        // Batch-insert auto-tasks into DB
+        if (autoTaskCandidates.length > 0) {
+          const insertRows = autoTaskCandidates.map(c => ({
+            user_id: user.id,
+            title: c.title,
+            priority: c.priority,
+            status: 'todo' as const,
+            completed: false,
+            lead_id: c.lead.id,
+            ...(isTeam ? { team_id: teamId } : {}),
+          }));
+
+          const { data: inserted } = await supabase
+            .from('strategy_tasks').insert(insertRows).select();
+
+          if (inserted) {
+            for (const t of inserted) {
+              loadedTasks.unshift({
+                id: t.id,
+                user_id: t.user_id,
+                title: t.title,
+                priority: t.priority || 'normal',
+                deadline: t.deadline || null,
+                completed: t.completed || false,
+                lead_id: t.lead_id || null,
+                created_at: t.created_at,
+                lead_name: undefined,
+                assigned_to: t.assigned_to || null,
+                assigned_name: t.assigned_to ? (memberNameMap[t.assigned_to] || 'Unknown') : undefined,
+                team_id: t.team_id || null,
+                status: t.status || 'todo',
+                card_color: t.card_color || null,
+              });
+            }
+            autoCreatedIdsRef.current = new Set(inserted.map((t: any) => t.id));
+          }
+        } else {
+          autoCreatedIdsRef.current = new Set();
+        }
+
+        setTasks(loadedTasks);
+        setLeadInfoMap(infoMap);
+        setEmailSummaryMap(emailMap);
+        setScheduledEmailLeadIds(scheduledEmailLeadIdSet);
       } catch (err) {
         console.error('TeamHub data load error:', err);
       } finally {
@@ -240,7 +373,6 @@ const TeamHub: React.FC = () => {
           .from('team_invites')
           .select('id, email, name, role, status, created_at')
           .eq('team_id', team.id)
-          .neq('status', 'left')
           .order('created_at', { ascending: false });
         if (!cancelled && data) {
           setSentInvites(data.map((inv: any) => ({
@@ -280,17 +412,32 @@ const TeamHub: React.FC = () => {
         return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
       });
     }
-    return filtered.map(t => ({
-      id: t.id,
-      title: t.title,
-      priority: t.priority,
-      deadline: t.deadline,
-      assigned_to: t.assigned_to,
-      assigned_name: t.assigned_name,
-      user_id: t.user_id,
-      status: t.status,
-    }));
-  }, [tasks, boardFilter, sortMode]);
+    return filtered.map(t => {
+      const leadInfo = t.lead_id ? leadInfoMap.get(t.lead_id) : undefined;
+      const emailSummary = t.lead_id ? emailSummaryMap.get(t.lead_id) : undefined;
+      return {
+        id: t.id,
+        title: t.title,
+        priority: t.priority,
+        deadline: t.deadline,
+        assigned_to: t.assigned_to,
+        assigned_name: t.assigned_name,
+        user_id: t.user_id,
+        status: t.status,
+        card_color: t.card_color,
+        lead_id: t.lead_id,
+        lead_name: leadInfo?.name ?? null,
+        lead_company: leadInfo?.company ?? null,
+        lead_status: (leadInfo?.status as any) ?? null,
+        email_hasSent: emailSummary?.hasSent ?? false,
+        email_hasOpened: emailSummary?.hasOpened ?? false,
+        email_hasClicked: emailSummary?.hasClicked ?? false,
+        email_openCount: emailSummary?.openCount ?? 0,
+        has_scheduled_email: t.lead_id ? scheduledEmailLeadIds.has(t.lead_id) : false,
+        is_auto_suggested: autoCreatedIdsRef.current.has(t.id),
+      };
+    });
+  }, [tasks, boardFilter, sortMode, leadInfoMap, emailSummaryMap, scheduledEmailLeadIds]);
 
   // ─── Handlers ───
   const handleStatusChange = useCallback(async (taskId: string, newStatus: TaskStatus) => {
@@ -326,6 +473,47 @@ const TeamHub: React.FC = () => {
     }
   }, [user.id, isTeamMode, team, tasks]);
 
+  const closeNewTaskModal = useCallback(() => {
+    setShowNewTask(false);
+    setNewTaskTitle('');
+    setNewTaskDeadline('');
+    setNewTaskAssignee(null);
+    setNewTaskLeadId(null);
+    setLeadSearchQuery('');
+    setLeadSearchResults([]);
+    setSelectedLeadDisplay(null);
+    setShowLeadDropdown(false);
+  }, []);
+
+  const handleLeadSearch = useCallback((query: string) => {
+    setLeadSearchQuery(query);
+    if (leadSearchTimerRef.current) clearTimeout(leadSearchTimerRef.current);
+    if (!query.trim()) {
+      setLeadSearchResults([]);
+      setShowLeadDropdown(false);
+      return;
+    }
+    leadSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase
+          .from('leads')
+          .select('id, name, company, status')
+          .eq('client_id', user.id)
+          .or(`name.ilike.%${query}%,company.ilike.%${query}%`)
+          .limit(8);
+        setLeadSearchResults((data || []).map((l: any) => ({
+          id: l.id,
+          name: l.name || '',
+          company: l.company || '',
+          status: l.status || 'New',
+        })));
+        setShowLeadDropdown(true);
+      } catch {
+        setLeadSearchResults([]);
+      }
+    }, 300);
+  }, [user.id]);
+
   const handleAddTask = useCallback(async () => {
     if (!newTaskTitle.trim()) return;
     const tempId = `tt-${Date.now()}`;
@@ -337,7 +525,7 @@ const TeamHub: React.FC = () => {
       priority: newTaskPriority,
       deadline: newTaskDeadline || null,
       completed: false,
-      lead_id: null,
+      lead_id: newTaskLeadId || null,
       created_at: new Date().toISOString(),
       assigned_to: isTeamMode ? (newTaskAssignee || null) : null,
       assigned_name: assigneeName,
@@ -345,10 +533,7 @@ const TeamHub: React.FC = () => {
       status: 'todo',
     };
     setTasks(prev => [optimisticTask, ...prev]);
-    setNewTaskTitle('');
-    setNewTaskDeadline('');
-    setNewTaskAssignee(null);
-    setShowNewTask(false);
+    closeNewTaskModal();
 
     try {
       const insertPayload: any = {
@@ -359,6 +544,7 @@ const TeamHub: React.FC = () => {
         completed: false,
         status: 'todo',
       };
+      if (optimisticTask.lead_id) insertPayload.lead_id = optimisticTask.lead_id;
       if (isTeamMode) {
         insertPayload.team_id = team!.id;
         if (newTaskAssignee) insertPayload.assigned_to = newTaskAssignee;
@@ -380,7 +566,7 @@ const TeamHub: React.FC = () => {
       console.error('Failed to create task:', err);
       setTasks(prev => prev.filter(t => t.id !== tempId));
     }
-  }, [newTaskTitle, newTaskPriority, newTaskDeadline, newTaskAssignee, user.id, isTeamMode, team, teamMembers]);
+  }, [newTaskTitle, newTaskPriority, newTaskDeadline, newTaskAssignee, newTaskLeadId, user.id, isTeamMode, team, teamMembers, closeNewTaskModal]);
 
   const handleAddNote = useCallback(async () => {
     if (!newNoteContent.trim()) return;
@@ -604,10 +790,10 @@ const TeamHub: React.FC = () => {
         .eq('user_id', user.id);
       if (error) throw error;
 
-      // Mark the invite as 'left' so the inviter no longer sees it as pending/accepted
+      // Remove the invite row so the inviter no longer sees it
       await supabase
         .from('team_invites')
-        .update({ status: 'left' })
+        .delete()
         .eq('team_id', team.id)
         .eq('email', user.email.toLowerCase());
 
@@ -634,6 +820,306 @@ const TeamHub: React.FC = () => {
       console.error('Failed to rename team:', err);
     }
   }, [team, editTeamNameValue]);
+
+  // ─── Context Menu Handlers ───
+  const handleContextMenu = useCallback((e: React.MouseEvent, target: ContextTarget) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, target });
+    setColorPickerTarget(null);
+  }, []);
+
+  const handleBackgroundContextMenu = useCallback((e: React.MouseEvent) => {
+    // Skip if the target is a card element
+    const el = e.target as HTMLElement;
+    if (el.closest('[data-card]')) return;
+    handleContextMenu(e, { type: 'background', tab: activeTab });
+  }, [activeTab, handleContextMenu]);
+
+  const handleChangeCardColor = useCallback(async (entityType: 'task' | 'note' | 'member', entityId: string, color: ColorToken | null) => {
+    const colorValue = color || null;
+    // Optimistic update
+    if (entityType === 'task') {
+      setTasks(prev => prev.map(t => t.id === entityId ? { ...t, card_color: colorValue } : t));
+    } else if (entityType === 'note') {
+      setNotes(prev => prev.map(n => n.id === entityId ? { ...n, card_color: colorValue } : n));
+    } else if (entityType === 'member') {
+      setTeamMembers(prev => prev.map(m => m.id === entityId ? { ...m, card_color: colorValue } : m));
+    }
+
+    try {
+      const table = entityType === 'task' ? 'strategy_tasks' : entityType === 'note' ? 'strategy_notes' : 'team_members';
+      const { error } = await supabase.from(table).update({ card_color: colorValue }).eq('id', entityId);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to update card color:', err);
+    }
+  }, []);
+
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!window.confirm(`Delete task "${task?.title || ''}"?`)) return;
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+
+    try {
+      const { error } = await supabase.from('strategy_tasks').delete().eq('id', taskId);
+      if (error) throw error;
+
+      // Dismiss auto-suggested task so it won't be re-created
+      if (task?.lead_id && autoCreatedIdsRef.current.has(taskId)) {
+        const key = `teamhub_dismissed_auto_${user.id}`;
+        const dismissed: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+        dismissed.push(task.lead_id);
+        localStorage.setItem(key, JSON.stringify([...new Set(dismissed)]));
+      }
+
+      try {
+        await supabase.from('audit_logs').insert({
+          user_id: user.id,
+          action: 'Deleted task',
+          details: task?.title || '',
+          ...(isTeamMode ? { team_id: team!.id } : {}),
+        });
+      } catch { /* ignore */ }
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+      if (task) setTasks(prev => [task, ...prev]);
+    }
+  }, [tasks, user.id, isTeamMode, team]);
+
+  const handleChangePriority = useCallback(async (taskId: string, priority: TaskPriority) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority } : t));
+    try {
+      const { error } = await supabase.from('strategy_tasks').update({ priority }).eq('id', taskId);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to update priority:', err);
+    }
+  }, []);
+
+  const handleAssignTask = useCallback(async (taskId: string, assigneeUserId: string | null) => {
+    const assigneeName = assigneeUserId ? (teamMembers.find(m => m.user_id === assigneeUserId)?.name || 'Unknown') : undefined;
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_to: assigneeUserId, assigned_name: assigneeName } : t));
+    try {
+      const { error } = await supabase.from('strategy_tasks').update({ assigned_to: assigneeUserId }).eq('id', taskId);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to assign task:', err);
+    }
+  }, [teamMembers]);
+
+  // ─── Column Actions (for Trello-style menu) ───
+  const handleMoveAllTo = useCallback(async (fromStatus: TaskStatus, toStatus: TaskStatus) => {
+    const affectedIds = tasks.filter(t => t.status === fromStatus).map(t => t.id);
+    if (affectedIds.length === 0) return;
+    if (!window.confirm(`Move all ${affectedIds.length} task(s) from ${fromStatus.replace('_', ' ')} to ${toStatus.replace('_', ' ')}?`)) return;
+
+    // Optimistic
+    setTasks(prev => prev.map(t =>
+      t.status === fromStatus ? { ...t, status: toStatus, completed: toStatus === 'done' } : t
+    ));
+
+    try {
+      const { error } = await supabase
+        .from('strategy_tasks')
+        .update({ status: toStatus, completed: toStatus === 'done' })
+        .in('id', affectedIds);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to move all tasks:', err);
+      setDataVersion(v => v + 1); // reload on error
+    }
+  }, [tasks]);
+
+  const handleClearDone = useCallback(async () => {
+    const doneTasks = tasks.filter(t => t.status === 'done');
+    if (doneTasks.length === 0) return;
+    if (!window.confirm(`Delete all ${doneTasks.length} completed task(s)? This cannot be undone.`)) return;
+
+    const doneIds = doneTasks.map(t => t.id);
+    setTasks(prev => prev.filter(t => t.status !== 'done'));
+
+    try {
+      const { error } = await supabase.from('strategy_tasks').delete().in('id', doneIds);
+      if (error) throw error;
+
+      // Dismiss any auto-suggested tasks in the cleared set
+      const autoDoneLeadIds = doneTasks
+        .filter(t => t.lead_id && autoCreatedIdsRef.current.has(t.id))
+        .map(t => t.lead_id!);
+      if (autoDoneLeadIds.length > 0) {
+        const key = `teamhub_dismissed_auto_${user.id}`;
+        const dismissed: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+        dismissed.push(...autoDoneLeadIds);
+        localStorage.setItem(key, JSON.stringify([...new Set(dismissed)]));
+      }
+    } catch (err) {
+      console.error('Failed to clear done tasks:', err);
+      setDataVersion(v => v + 1);
+    }
+  }, [tasks, user.id]);
+
+  const buildContextMenuItems = useCallback((): ContextMenuItem[] => {
+    if (!contextMenu) return [];
+    const { target } = contextMenu;
+
+    if (target.type === 'background') {
+      const items: ContextMenuItem[] = [
+        { label: 'Add Task', icon: <PlusIcon className="w-4 h-4" />, onClick: () => setShowNewTask(true) },
+      ];
+      if (isTeamMode && isAdmin && target.tab === 'team') {
+        items.push({ label: 'Add Team Member', icon: <UserPlus size={14} />, onClick: () => setActiveTab('team') });
+      }
+      return items;
+    }
+
+    if (target.type === 'task') {
+      const task = tasks.find(t => t.id === target.taskId);
+      if (!task) return [];
+
+      const items: ContextMenuItem[] = [
+        {
+          label: 'Change Color',
+          icon: <Palette size={14} />,
+          dividerAfter: !isTeamMode,
+          onClick: () => {
+            setColorPickerTarget({
+              x: contextMenu.x,
+              y: contextMenu.y,
+              entityType: 'task',
+              entityId: target.taskId,
+              currentColor: task.card_color || null,
+            });
+          },
+        },
+      ];
+
+      // Assign member (team mode only)
+      if (isTeamMode) {
+        teamMembers.forEach(m => {
+          items.push({
+            label: `Assign → ${m.name}${m.user_id === user.id ? ' (You)' : ''}`,
+            icon: <UserPlus size={14} />,
+            onClick: () => handleAssignTask(target.taskId, m.user_id),
+          });
+        });
+        if (task.assigned_to) {
+          items.push({
+            label: 'Unassign',
+            icon: <UserPlus size={14} />,
+            dividerAfter: true,
+            onClick: () => handleAssignTask(target.taskId, null),
+          });
+        } else if (teamMembers.length > 0) {
+          items[items.length - 1].dividerAfter = true;
+        }
+      }
+
+      // Change priority
+      const priorities: TaskPriority[] = ['urgent', 'high', 'normal', 'low'];
+      priorities.filter(p => p !== task.priority).forEach(p => {
+        items.push({
+          label: `Priority → ${p.charAt(0).toUpperCase() + p.slice(1)}`,
+          icon: <Signal size={14} />,
+          onClick: () => handleChangePriority(target.taskId, p),
+        });
+      });
+      items[items.length - 1].dividerAfter = true;
+
+      // Move to status
+      const statuses: { id: TaskStatus; label: string }[] = [
+        { id: 'todo', label: 'To Do' },
+        { id: 'in_progress', label: 'In Progress' },
+        { id: 'done', label: 'Done' },
+      ];
+      statuses.filter(s => s.id !== task.status).forEach(s => {
+        items.push({
+          label: `Move → ${s.label}`,
+          icon: <ArrowRight size={14} />,
+          onClick: () => handleStatusChange(target.taskId, s.id),
+        });
+      });
+      items[items.length - 1].dividerAfter = true;
+
+      // Delete
+      items.push({
+        label: 'Delete Task',
+        icon: <Trash2 size={14} />,
+        danger: true,
+        onClick: () => handleDeleteTask(target.taskId),
+      });
+
+      return items;
+    }
+
+    if (target.type === 'note') {
+      const note = notes.find(n => n.id === target.noteId);
+      return [
+        {
+          label: 'Change Color',
+          icon: <Palette size={14} />,
+          dividerAfter: true,
+          onClick: () => {
+            setColorPickerTarget({
+              x: contextMenu.x,
+              y: contextMenu.y,
+              entityType: 'note',
+              entityId: target.noteId,
+              currentColor: note?.card_color || null,
+            });
+          },
+        },
+        {
+          label: 'Delete Note',
+          icon: <Trash2 size={14} />,
+          danger: true,
+          onClick: () => handleDeleteNote(target.noteId),
+        },
+      ];
+    }
+
+    if (target.type === 'member') {
+      const member = teamMembers.find(m => m.id === target.memberId);
+      if (!member) return [];
+
+      const items: ContextMenuItem[] = [
+        {
+          label: 'Change Color',
+          icon: <Palette size={14} />,
+          dividerAfter: true,
+          onClick: () => {
+            setColorPickerTarget({
+              x: contextMenu.x,
+              y: contextMenu.y,
+              entityType: 'member',
+              entityId: target.memberId,
+              currentColor: member.card_color || null,
+            });
+          },
+        },
+      ];
+
+      if (isAdmin && member.user_id !== user.id && member.role !== 'owner') {
+        const newRole = member.role === 'admin' ? 'member' : 'admin';
+        items.push({
+          label: `Make ${newRole === 'admin' ? 'Admin' : 'Member'}`,
+          icon: <UsersIcon className="w-4 h-4" />,
+          dividerAfter: true,
+          onClick: () => handleChangeRole(member.id, member.user_id, newRole),
+        });
+        items.push({
+          label: 'Remove from Team',
+          icon: <Trash2 size={14} />,
+          danger: true,
+          onClick: () => handleRemoveMember(member.user_id),
+        });
+      }
+
+      return items;
+    }
+
+    return [];
+  }, [contextMenu, tasks, notes, teamMembers, isTeamMode, isAdmin, user.id, handleAssignTask, handleChangePriority, handleStatusChange, handleDeleteTask, handleDeleteNote, handleChangeRole, handleRemoveMember]);
 
   // ─── Keyboard Shortcuts ───
   useEffect(() => {
@@ -665,16 +1151,17 @@ const TeamHub: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showNewTask, showShortcuts]);
 
-  // Click-outside for filter/sort dropdowns
+  // Click-outside for filter/sort dropdowns and lead dropdown
   useEffect(() => {
-    if (!filterOpen && !sortOpen) return;
+    if (!filterOpen && !sortOpen && !showLeadDropdown) return;
     const handler = (e: MouseEvent) => {
       if (filterOpen && filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
       if (sortOpen && sortRef.current && !sortRef.current.contains(e.target as Node)) setSortOpen(false);
+      if (showLeadDropdown && leadDropdownRef.current && !leadDropdownRef.current.contains(e.target as Node)) setShowLeadDropdown(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [filterOpen, sortOpen]);
+  }, [filterOpen, sortOpen, showLeadDropdown]);
 
   // Activity feed: fetch recent audit logs
   useEffect(() => {
@@ -918,13 +1405,17 @@ const TeamHub: React.FC = () => {
               {/* Board + Activity sidebar */}
               <div className="flex gap-5">
                 {/* Kanban board */}
-                <div className="flex-1 min-w-0 bg-gray-50 rounded-xl p-5 border border-gray-100">
+                <div className="flex-1 min-w-0 bg-gray-50 rounded-xl p-5 border border-gray-100" onContextMenu={handleBackgroundContextMenu}>
                   <KanbanBoard
                     tasks={kanbanTasks}
                     currentUserId={user.id}
                     isAdmin={isAdmin || !isTeamMode}
                     onStatusChange={handleStatusChange}
                     onNewTask={() => setShowNewTask(true)}
+                    onTaskContextMenu={(e, task) => handleContextMenu(e, { type: 'task', taskId: task.id })}
+                    onSortChange={(mode) => setSortMode(mode)}
+                    onMoveAllTo={handleMoveAllTo}
+                    onClearDone={handleClearDone}
                   />
                 </div>
 
@@ -1004,7 +1495,7 @@ const TeamHub: React.FC = () => {
 
           {/* TAB: NOTES */}
           {activeTab === 'notes' && (
-            <div className="space-y-5">
+            <div className="space-y-5" onContextMenu={handleBackgroundContextMenu}>
               {/* Compose Note */}
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
                 <div className="flex items-start space-x-3">
@@ -1043,7 +1534,12 @@ const TeamHub: React.FC = () => {
                 </div>
               ) : (
                 notes.map(note => (
-                  <div key={note.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm group">
+                  <div
+                    key={note.id}
+                    data-card="note"
+                    onContextMenu={(e) => handleContextMenu(e, { type: 'note', noteId: note.id })}
+                    className={`${note.card_color ? getColorClasses(note.card_color as ColorToken).bg : 'bg-white'} rounded-2xl border border-slate-100 shadow-sm group`}
+                  >
                     <div className="p-5">
                       <div className="flex items-start space-x-3">
                         <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm shrink-0">
@@ -1084,7 +1580,7 @@ const TeamHub: React.FC = () => {
 
           {/* TAB: TEAM */}
           {activeTab === 'team' && (
-            <div className="space-y-5">
+            <div className="space-y-5" onContextMenu={handleBackgroundContextMenu}>
               {!isTeamMode ? (
                 /* Solo: Create Team */
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 max-w-md mx-auto text-center">
@@ -1218,7 +1714,12 @@ const TeamHub: React.FC = () => {
                           const bgColor = colors[Math.abs(h) % colors.length];
 
                           return (
-                            <div key={member.id} className="px-6 py-3.5 flex items-center space-x-4 hover:bg-slate-50/50 transition-colors">
+                            <div
+                              key={member.id}
+                              data-card="member"
+                              onContextMenu={(e) => handleContextMenu(e, { type: 'member', memberId: member.id, memberUserId: member.user_id })}
+                              className={`px-6 py-3.5 flex items-center space-x-4 hover:bg-slate-50/50 transition-colors ${member.card_color ? getColorClasses(member.card_color as ColorToken).bg : ''}`}
+                            >
                               <div className={`w-9 h-9 rounded-full ${bgColor} flex items-center justify-center text-[11px] font-bold text-white shrink-0 shadow-sm`}>
                                 {member.name.charAt(0).toUpperCase()}
                               </div>
@@ -1387,14 +1888,21 @@ const TeamHub: React.FC = () => {
                                 </div>
                               </div>
                               <div className="flex items-center space-x-2 shrink-0 ml-2">
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
-                                  inv.status === 'pending' ? 'bg-amber-50 text-amber-600' :
-                                  inv.status === 'accepted' ? 'bg-emerald-50 text-emerald-600' :
-                                  'bg-slate-100 text-slate-500'
-                                }`}>
-                                  {inv.status}
-                                </span>
-                                {inv.status === 'pending' && (
+                                {(() => {
+                                  const memberLeft = inv.status === 'accepted' && !teamMembers.some(m => m.email.toLowerCase() === inv.email.toLowerCase());
+                                  const label = memberLeft ? 'left' : inv.status;
+                                  return (
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
+                                      inv.status === 'pending' ? 'bg-amber-50 text-amber-600' :
+                                      memberLeft ? 'bg-rose-50 text-rose-500' :
+                                      inv.status === 'accepted' ? 'bg-emerald-50 text-emerald-600' :
+                                      'bg-slate-100 text-slate-500'
+                                    }`}>
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
+                                {(inv.status === 'pending' || (inv.status === 'accepted' && !teamMembers.some(m => m.email.toLowerCase() === inv.email.toLowerCase()))) && (
                                   <button
                                     onClick={() => handleCancelInvite(inv.id)}
                                     className="flex items-center space-x-1 px-2 py-1 text-[10px] font-bold text-rose-500 border border-rose-200 rounded-lg hover:bg-rose-50 hover:text-rose-600 transition-all"
@@ -1450,12 +1958,12 @@ const TeamHub: React.FC = () => {
 
           {/* NEW TASK MODAL */}
           {showNewTask && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowNewTask(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={closeNewTaskModal}>
               <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" />
               <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
                   <h3 className="font-black text-slate-900 font-heading">New Task</h3>
-                  <button onClick={() => setShowNewTask(false)} className="p-1 text-slate-400 hover:text-slate-600"><XIcon className="w-5 h-5" /></button>
+                  <button onClick={closeNewTaskModal} className="p-1 text-slate-400 hover:text-slate-600"><XIcon className="w-5 h-5" /></button>
                 </div>
                 <div className="px-6 py-5 space-y-4">
                   <div>
@@ -1481,6 +1989,77 @@ const TeamHub: React.FC = () => {
                       <input type="date" value={newTaskDeadline} onChange={e => setNewTaskDeadline(e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                   </div>
+
+                  {/* Link to Lead */}
+                  <div ref={leadDropdownRef} className="relative">
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Link to Lead</label>
+                    {selectedLeadDisplay ? (
+                      <div className="flex items-center gap-2 px-3 py-2.5 border border-indigo-200 bg-indigo-50 rounded-xl">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${
+                          selectedLeadDisplay.status === 'New' ? 'bg-slate-400' :
+                          selectedLeadDisplay.status === 'Contacted' ? 'bg-blue-400' :
+                          selectedLeadDisplay.status === 'Qualified' ? 'bg-amber-400' :
+                          selectedLeadDisplay.status === 'Converted' ? 'bg-emerald-400' :
+                          selectedLeadDisplay.status === 'Lost' ? 'bg-red-400' : 'bg-slate-400'
+                        }`} />
+                        <span className="text-sm font-medium text-indigo-700 truncate flex-1">
+                          {selectedLeadDisplay.name}{selectedLeadDisplay.company ? ` · ${selectedLeadDisplay.company}` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewTaskLeadId(null);
+                            setSelectedLeadDisplay(null);
+                            setLeadSearchQuery('');
+                          }}
+                          className="p-0.5 text-indigo-400 hover:text-indigo-600 transition-colors"
+                        >
+                          <LucideX size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={leadSearchQuery}
+                          onChange={e => handleLeadSearch(e.target.value)}
+                          onFocus={() => { if (leadSearchResults.length > 0) setShowLeadDropdown(true); }}
+                          placeholder="Search by name or company..."
+                          className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none placeholder-slate-300"
+                        />
+                      </div>
+                    )}
+                    {showLeadDropdown && leadSearchResults.length > 0 && !selectedLeadDisplay && (
+                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white rounded-xl border border-gray-200 shadow-xl max-h-[200px] overflow-y-auto py-1">
+                        {leadSearchResults.map(lead => (
+                          <button
+                            key={lead.id}
+                            type="button"
+                            onClick={() => {
+                              setNewTaskLeadId(lead.id);
+                              setSelectedLeadDisplay({ name: lead.name, company: lead.company, status: lead.status });
+                              setLeadSearchQuery('');
+                              setLeadSearchResults([]);
+                              setShowLeadDropdown(false);
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-indigo-50 transition-colors flex items-center gap-2"
+                          >
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${
+                              lead.status === 'New' ? 'bg-slate-400' :
+                              lead.status === 'Contacted' ? 'bg-blue-400' :
+                              lead.status === 'Qualified' ? 'bg-amber-400' :
+                              lead.status === 'Converted' ? 'bg-emerald-400' :
+                              lead.status === 'Lost' ? 'bg-red-400' : 'bg-slate-400'
+                            }`} />
+                            <span className="text-sm font-medium text-gray-800 truncate">{lead.name}</span>
+                            {lead.company && <span className="text-xs text-gray-400 truncate">{lead.company}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {isTeamMode && (
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">Assign To</label>
@@ -1498,7 +2077,7 @@ const TeamHub: React.FC = () => {
                   )}
                 </div>
                 <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end space-x-2">
-                  <button onClick={() => setShowNewTask(false)} className="px-4 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors">Cancel</button>
+                  <button onClick={closeNewTaskModal} className="px-4 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors">Cancel</button>
                   <button
                     onClick={handleAddTask}
                     disabled={!newTaskTitle.trim()}
@@ -1555,6 +2134,33 @@ const TeamHub: React.FC = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* CONTEXT MENU */}
+          {contextMenu && (
+            <ContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              items={buildContextMenuItems()}
+              header={
+                contextMenu.target.type === 'background' ? undefined :
+                contextMenu.target.type === 'task' ? 'Task' :
+                contextMenu.target.type === 'note' ? 'Note' :
+                'Member'
+              }
+              onClose={() => setContextMenu(null)}
+            />
+          )}
+
+          {/* COLOR PICKER */}
+          {colorPickerTarget && (
+            <ColorPicker
+              x={colorPickerTarget.x}
+              y={colorPickerTarget.y}
+              currentColor={colorPickerTarget.currentColor}
+              onSelect={(color) => handleChangeCardColor(colorPickerTarget.entityType, colorPickerTarget.entityId, color)}
+              onClose={() => setColorPickerTarget(null)}
+            />
           )}
         </>
       )}
