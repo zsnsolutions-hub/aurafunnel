@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { User } from '../../types';
@@ -62,6 +62,7 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
   const [saving, setSaving] = useState(false);
 
   const totalSteps = 4; // 0-3
+  const savingRef = useRef(false);
 
   const canNext = useCallback(() => {
     if (step === 0) return !!role && !!teamSize;
@@ -75,55 +76,56 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
     navigate('/portal', { replace: true });
   }, [navigate]);
 
-  const saveAndFinish = useCallback(async () => {
-    if (saving) return;
-    setSaving(true);
-
-    // Store UI-only metadata
-    localStorage.setItem('scaliyo_onboarding_role', role);
-    localStorage.setItem('scaliyo_onboarding_goal', goal);
-    localStorage.setItem('scaliyo_onboarding_complete', 'true');
-    localStorage.setItem('scaliyo_onboarding_ts', new Date().toISOString());
-
-    // Save business data to Supabase
-    try {
-      const patch: Record<string, unknown> = {
-        companyName,
-        teamSize,
-        industry: industry || undefined,
-      };
-      if (companyWebsite) patch.companyWebsite = companyWebsite;
-
-      // Merge with existing businessProfile
-      const existing = user.businessProfile ?? {};
-      const merged = { ...existing, ...patch };
-
-      await supabase
-        .from('profiles')
-        .update({ businessProfile: merged })
-        .eq('id', user.id);
-
-      await refreshProfile();
-    } catch (err) {
-      console.warn('Onboarding save failed:', err);
-    }
-
-    navigate('/portal', { replace: true });
-  }, [saving, role, goal, companyName, companyWebsite, industry, teamSize, user, refreshProfile, navigate]);
-
-  // Processing animation (step 3)
+  // Processing animation (step 3) — uses refs to avoid dependency loops
   useEffect(() => {
     if (step !== 3) return;
+    if (savingRef.current) return;
+
     setProcessingLine(0);
     const timers: ReturnType<typeof setTimeout>[] = [];
+
     PROCESSING_LINES.forEach((_, i) => {
       if (i === 0) return;
-      timers.push(setTimeout(() => setProcessingLine(i), i * 1000));
+      timers.push(setTimeout(() => setProcessingLine(i), i * 1200));
     });
-    // Finish after all lines shown
-    timers.push(setTimeout(() => saveAndFinish(), PROCESSING_LINES.length * 1000));
+
+    // Save and finish after all lines shown
+    timers.push(setTimeout(async () => {
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setSaving(true);
+
+      localStorage.setItem('scaliyo_onboarding_role', role);
+      localStorage.setItem('scaliyo_onboarding_goal', goal);
+      localStorage.setItem('scaliyo_onboarding_complete', 'true');
+      localStorage.setItem('scaliyo_onboarding_ts', new Date().toISOString());
+
+      try {
+        const patch: Record<string, unknown> = {
+          companyName,
+          teamSize,
+          industry: industry || undefined,
+        };
+        if (companyWebsite) patch.companyWebsite = companyWebsite;
+
+        const existing = user.businessProfile ?? {};
+        const merged = { ...existing, ...patch };
+
+        await supabase
+          .from('profiles')
+          .update({ businessProfile: merged })
+          .eq('id', user.id);
+
+        await refreshProfile();
+      } catch (err) {
+        console.warn('Onboarding save failed:', err);
+      }
+
+      navigate('/portal', { replace: true });
+    }, PROCESSING_LINES.length * 1200));
+
     return () => timers.forEach(clearTimeout);
-  }, [step, saveAndFinish]);
+  }, [step]); // only depends on step
 
   const next = () => {
     if (step < totalSteps - 1) setStep(step + 1);
@@ -265,50 +267,63 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
     </div>
   );
 
-  const renderStep3 = () => (
-    <div className="flex flex-col items-center justify-center text-center space-y-10 animate-in fade-in duration-700 py-12">
-      {/* Spinner */}
-      <div className="relative">
-        <div className="w-20 h-20 border-4 border-slate-700 border-t-teal-400 rounded-full animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-10 h-10 bg-teal-500/20 rounded-full animate-pulse" />
+  const renderStep3 = () => {
+    const progressPercent = Math.round(((processingLine + 1) / PROCESSING_LINES.length) * 100);
+
+    return (
+      <div className="flex flex-col items-center justify-center text-center space-y-10 animate-in fade-in duration-700 py-12">
+        {/* Progress ring */}
+        <div className="relative w-24 h-24">
+          <svg className="w-24 h-24 -rotate-90" viewBox="0 0 96 96">
+            <circle cx="48" cy="48" r="40" fill="none" stroke="#1e293b" strokeWidth="6" />
+            <circle
+              cx="48" cy="48" r="40" fill="none"
+              stroke="#14b8a6" strokeWidth="6" strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 40}
+              strokeDashoffset={2 * Math.PI * 40 * (1 - progressPercent / 100)}
+              className="transition-all duration-700 ease-out"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-white font-bold text-lg">{progressPercent}%</span>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Setting up your workspace</h2>
+          <p className="text-slate-400">This will only take a moment…</p>
+        </div>
+
+        <div className="space-y-3 w-full max-w-sm">
+          {PROCESSING_LINES.map((line, i) => (
+            <div
+              key={i}
+              className={`flex items-center space-x-3 transition-all duration-500 ${
+                i <= processingLine ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
+                i < processingLine
+                  ? 'bg-teal-500'
+                  : i === processingLine
+                  ? 'bg-teal-500/30 animate-pulse'
+                  : 'bg-slate-700'
+              }`}>
+                {i < processingLine && (
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                )}
+              </div>
+              <span className={`text-sm ${i <= processingLine ? 'text-slate-200' : 'text-slate-500'}`}>
+                {line}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
-
-      <div>
-        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Setting up your workspace</h2>
-        <p className="text-slate-400">This will only take a moment…</p>
-      </div>
-
-      <div className="space-y-3 w-full max-w-sm">
-        {PROCESSING_LINES.map((line, i) => (
-          <div
-            key={i}
-            className={`flex items-center space-x-3 transition-all duration-500 ${
-              i <= processingLine ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
-            }`}
-          >
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
-              i < processingLine
-                ? 'bg-teal-500'
-                : i === processingLine
-                ? 'bg-teal-500/30 animate-pulse'
-                : 'bg-slate-700'
-            }`}>
-              {i < processingLine && (
-                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-              )}
-            </div>
-            <span className={`text-sm ${i <= processingLine ? 'text-slate-200' : 'text-slate-500'}`}>
-              {line}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#0A1628] flex flex-col">
