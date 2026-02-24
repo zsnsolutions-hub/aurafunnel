@@ -235,11 +235,11 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
             search={
               <button
                 onClick={() => setCommandPaletteOpen(true)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-400 text-sm hover:bg-gray-100 hover:border-gray-300 transition-all duration-150 ease-out"
+                className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-200 text-gray-400 hover:bg-gray-100 hover:border-gray-300 hover:text-gray-600 transition-all duration-150 ease-out"
+                aria-label="Search"
+                title="Search (⌘K)"
               >
-                <Search size={14} />
-                <span className="text-xs">Search...</span>
-                <kbd className="ml-auto px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] font-medium text-gray-400">⌘K</kbd>
+                <Search size={16} />
               </button>
             }
             actions={
