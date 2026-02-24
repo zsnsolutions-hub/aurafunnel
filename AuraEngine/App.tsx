@@ -24,6 +24,9 @@ const BlogPostPage = lazy(() => import('./pages/marketing/BlogPostPage'));
 // Auth
 const AuthPage = lazy(() => import('./pages/portal/AuthPage'));
 
+// Onboarding
+const OnboardingPage = lazy(() => import('./pages/portal/OnboardingPage'));
+
 // Client Portal
 const ClientDashboard = lazy(() => import('./pages/portal/ClientDashboard'));
 const LeadManagement = lazy(() => import('./pages/portal/LeadManagement'));
@@ -217,10 +220,22 @@ const App: React.FC = () => {
           <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
 
           <Route
-            path="/portal"
+            path="/onboarding"
             element={
               user?.role === UserRole.CLIENT ?
-              <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} /> :
+              <OnboardingPage user={user!} refreshProfile={refreshProfile} /> :
+              <Navigate to="/auth" state={{ from: location }} />
+            }
+          />
+
+          <Route
+            path="/portal"
+            element={
+              user?.role === UserRole.CLIENT ? (
+                !user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete') ?
+                <Navigate to="/onboarding" replace /> :
+                <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} />
+              ) :
               <Navigate to="/auth" state={{ from: location }} />
             }
           >

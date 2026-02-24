@@ -25,8 +25,9 @@ import CSVImportModal from '../../components/dashboard/CSVImportModal';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import LeadSegmentation from '../../components/dashboard/LeadSegmentation';
 import EmailPerformanceCard from '../../components/dashboard/EmailPerformanceCard';
+import ActivationChecklist from '../../components/dashboard/ActivationChecklist';
 
-const LISTS_STORAGE_KEY = 'aurafunnel_manual_lists';
+const LISTS_STORAGE_KEY = 'scaliyo_manual_lists';
 
 interface ClientDashboardProps {
   user: User;
@@ -2378,6 +2379,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
           </div>
         </div>
       )}
+
+      {/* Activation Checklist (post-onboarding) */}
+      <ActivationChecklist user={user} />
     </div>
   );
 };
