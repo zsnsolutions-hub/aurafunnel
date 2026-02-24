@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
 const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY") ?? "";
-const SITE_URL = Deno.env.get("SITE_URL") ?? "https://app.scaliyo.com";
+const SITE_URL = Deno.env.get("SITE_URL") ?? "https://scaliyo.com";
 const SENDER_EMAIL = Deno.env.get("AUTH_SENDER_EMAIL") ?? "support@scaliyo.com";
 const SENDER_NAME = Deno.env.get("AUTH_SENDER_NAME") ?? "Scaliyo";
 
@@ -75,7 +75,7 @@ function buildConfirmationEmail(confirmUrl: string): { subject: string; html: st
     <h1>Welcome to Scaliyo</h1>
     <p>Thanks for signing up! Please confirm your email address by clicking the button below.</p>
     <div class="cta-wrapper">
-      <a href="${confirmUrl}" class="cta" target="_blank">Confirm Email Address</a>
+      <a href="${confirmUrl}" class="cta" target="_blank" clicktracking="off">Confirm Email Address</a>
     </div>
     <div class="note">
       <p>This link expires in 24 hours. If you didn&rsquo;t create a Scaliyo account, you can safely ignore this email.</p>
@@ -93,7 +93,7 @@ function buildRecoveryEmail(resetUrl: string): { subject: string; html: string }
     <h1>Reset your password</h1>
     <p>We received a request to reset the password for your Scaliyo account. Click the button below to choose a new password.</p>
     <div class="cta-wrapper">
-      <a href="${resetUrl}" class="cta" target="_blank">Reset Password</a>
+      <a href="${resetUrl}" class="cta" target="_blank" clicktracking="off">Reset Password</a>
     </div>
     <div class="note">
       <p>This link expires in 1 hour. If you didn&rsquo;t request a password reset, you can safely ignore this email &mdash; your password will remain unchanged.</p>
@@ -111,7 +111,7 @@ function buildEmailChangeEmail(confirmUrl: string): { subject: string; html: str
     <h1>Confirm email change</h1>
     <p>You requested to change the email address on your Scaliyo account. Please confirm your new address by clicking the button below.</p>
     <div class="cta-wrapper">
-      <a href="${confirmUrl}" class="cta" target="_blank">Confirm New Email</a>
+      <a href="${confirmUrl}" class="cta" target="_blank" clicktracking="off">Confirm New Email</a>
     </div>
     <div class="note">
       <p>If you didn&rsquo;t request this change, please contact support immediately.</p>
@@ -145,6 +145,10 @@ async function sendViaSendGrid(
       from: { email: SENDER_EMAIL, name: SENDER_NAME },
       subject,
       content: [{ type: "text/html", value: html }],
+      tracking_settings: {
+        click_tracking: { enable: false, enable_text: false },
+        open_tracking: { enable: false },
+      },
     }),
   });
 
@@ -166,26 +170,23 @@ serve(async (req) => {
   try {
     const payload = await req.json();
 
-    // Supabase Auth Hook payload shape:
-    // { user: { email }, email_data: { token, token_hash, redirect_to, email_action_type, site_url } }
     const userEmail: string = payload.user?.email;
     const emailAction: string = payload.email_data?.email_action_type;
-    const tokenHash: string = payload.email_data?.token_hash;
-    const redirectTo: string = payload.email_data?.redirect_to || SITE_URL;
-    const siteUrl: string = payload.email_data?.site_url || SITE_URL;
+    const tokenHash: string = payload.email_data?.token_hash ?? "";
 
     if (!userEmail || !emailAction || !tokenHash) {
-      console.error("Missing required fields in auth hook payload:", { userEmail, emailAction, tokenHash: !!tokenHash });
+      console.error("Missing required fields:", { userEmail, emailAction, tokenHash: !!tokenHash });
       return new Response(JSON.stringify({ error: "Missing fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Build the confirmation/action URL
-    // Supabase expects: {site_url}/auth/confirm?token_hash={hash}&type={type}&next={redirect}
+    // Build the verification URL pointing to the app (HashRouter)
+    // The app will verify the token client-side using supabase.auth.verifyOtp()
     const actionType = emailAction === "recovery" ? "recovery" : emailAction === "email_change" ? "email_change" : "signup";
-    const confirmUrl = `${siteUrl}/auth/confirm?token_hash=${encodeURIComponent(tokenHash)}&type=${actionType}&next=${encodeURIComponent(redirectTo)}`;
+    const verifyParams = new URLSearchParams({ token_hash: tokenHash, type: actionType });
+    const confirmUrl = `${SITE_URL}/#/auth/confirm?${verifyParams.toString()}`;
 
     let email: { subject: string; html: string };
 
