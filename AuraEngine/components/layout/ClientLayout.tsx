@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
+import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import GlobalInviteBanner from './GlobalInviteBanner';
@@ -161,14 +162,17 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
               </Link>
             }
             topSlot={
-              <button
-                onClick={() => setCommandPaletteOpen(true)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out group"
-              >
-                <Search size={16} />
-                <span className="text-xs font-medium flex-1 text-left">Search...</span>
-                <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px] font-bold text-gray-400">⌘K</kbd>
-              </button>
+              <div className="flex items-center gap-2">
+                <GuideMenuButton />
+                <button
+                  onClick={() => setCommandPaletteOpen(true)}
+                  className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
+                  aria-label="Search"
+                  title="Search (⌘K)"
+                >
+                  <Search size={16} />
+                </button>
+              </div>
             }
             footer={
               sidebarCollapsed ? (
@@ -213,16 +217,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
         <GlobalInviteBanner user={user} />
         <Outlet context={{ user, refreshProfile }} />
       </AppShell>
-
-      {/* Floating search button — right edge */}
-      <button
-        onClick={() => setCommandPaletteOpen(true)}
-        className="fixed right-0 top-1/2 -translate-y-1/2 z-30 w-10 h-10 flex items-center justify-center bg-white/90 backdrop-blur border border-gray-200 border-r-0 rounded-l-xl shadow-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-all duration-200"
-        aria-label="Search"
-        title="Search (⌘K)"
-      >
-        <Search size={16} />
-      </button>
 
       {/* Global Overlays */}
       <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
