@@ -314,11 +314,8 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
     <div className="min-h-screen bg-[#0A1628] flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-6 md:px-10 py-6">
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-teal-400 to-indigo-500 rounded-xl flex items-center justify-center">
-            <span className="text-white font-black text-sm">S</span>
-          </div>
-          <span className="text-white font-bold text-lg tracking-tight">Scaliyo</span>
+        <div className="flex items-center">
+          <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-9 w-auto" />
         </div>
         {step < 3 && (
           <button
