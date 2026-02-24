@@ -225,8 +225,10 @@ interface AuthPageProps {
   onLogin: (user: User) => void;
 }
 
+type AuthView = 'login' | 'signup' | 'confirm_email' | 'forgot_password';
+
 const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [view, setView] = useState<AuthView>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -235,8 +237,13 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isDbMissing, setIsDbMissing] = useState(false);
   const [copyStatus, setCopyStatus] = useState('Copy SQL Script');
+  const [resetSent, setResetSent] = useState(false);
+  const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   const [showPassword, setShowPassword] = useState(false);
+
+  // Derived helpers for backward compat with existing template logic
+  const isLogin = view === 'login';
 
   const authTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
@@ -327,11 +334,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
         });
         if (authError) throw authError;
 
-        if (data.user) {
-          const profile = await pollForProfile(data.user.id, 10);
-          if (profile) onLogin(profile);
-          else throw new Error("Account provisioned, but profile sync failed.");
+        // If identities is empty, email already exists
+        if (data.user && data.user.identities && data.user.identities.length === 0) {
+          throw new Error('An account with this email already exists.');
         }
+
+        // Show "check your email" screen instead of auto-login
+        setView('confirm_email');
+        return;
       }
 
       setShowSuccess(true);
@@ -379,6 +389,140 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
            >
              Reload Platform
            </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Email Confirmation Screen ───
+  if (view === 'confirm_email') {
+    const handleResend = async () => {
+      setResendStatus('sending');
+      await supabase.auth.resend({ type: 'signup', email });
+      setResendStatus('sent');
+      setTimeout(() => setResendStatus('idle'), 5000);
+    };
+
+    return (
+      <div className="min-h-screen bg-[#0A1628] text-white flex items-center justify-center px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-teal-500/15 flex items-center justify-center">
+            <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h1 className="text-3xl font-black font-heading mb-3">Check your email</h1>
+          <p className="text-slate-400 mb-2">
+            We&rsquo;ve sent a confirmation link to <strong className="text-white">{email}</strong>.
+          </p>
+          <p className="text-sm text-slate-500 mb-6">
+            Click the link in the email to verify your account, then come back to sign in.
+          </p>
+          <button
+            onClick={handleResend}
+            disabled={resendStatus === 'sending'}
+            className="text-sm font-semibold text-teal-400 hover:text-teal-300 transition-colors disabled:opacity-50"
+          >
+            {resendStatus === 'sent' ? 'Email resent!' : resendStatus === 'sending' ? 'Sending...' : "Didn\u2019t get it? Resend email"}
+          </button>
+          <div className="mt-6">
+            <button onClick={() => { setView('login'); setError(''); setPassword(''); }} className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+              Back to sign in
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Forgot Password Screen ───
+  if (view === 'forgot_password') {
+    const handleResetPassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+      setError('');
+      try {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (resetError) throw resetError;
+        setResetSent(true);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to send reset email.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-[#0A1628] text-white flex items-center justify-center px-6">
+        <div className="max-w-[420px] w-full">
+          <div className="text-center mb-8">
+            <Link to="/" className="inline-flex items-center mb-8 group">
+              <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
+            </Link>
+            <h2 className="text-3xl font-black text-white font-heading tracking-tight">Reset password</h2>
+            <p className="text-slate-400 mt-2 text-sm">
+              {resetSent ? 'Check your inbox for the reset link.' : 'Enter your email and we\u2019ll send you a reset link.'}
+            </p>
+          </div>
+
+          <div className="bg-[#0F1D32] p-8 rounded-2xl border border-slate-700/50 shadow-2xl shadow-black/20">
+            {error && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start space-x-3">
+                <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-red-400 text-xs font-black">!</span>
+                </div>
+                <p className="text-red-300 text-sm font-medium">{error}</p>
+              </div>
+            )}
+
+            {resetSent ? (
+              <div className="text-center space-y-4">
+                <div className="w-14 h-14 mx-auto rounded-full bg-teal-500/15 flex items-center justify-center">
+                  <svg className="w-7 h-7 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-slate-300 text-sm font-medium">
+                  If an account exists for <strong className="text-white">{email}</strong>, you&rsquo;ll receive a password reset link shortly.
+                </p>
+                <button
+                  onClick={() => { setView('login'); setError(''); setPassword(''); setResetSent(false); }}
+                  className="w-full py-4 rounded-xl bg-teal-500 text-white font-bold text-sm transition-all hover:bg-teal-400 shadow-lg shadow-teal-500/20 hover:scale-[1.02] active:scale-95"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-5">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Email Address</label>
+                  <div className="relative">
+                    <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com"
+                      className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-white/5 border border-slate-700/50 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 transition-all font-medium text-sm" />
+                  </div>
+                </div>
+
+                <button type="submit" disabled={isSubmitting} className="w-full py-4 rounded-xl bg-teal-500 text-white font-bold text-sm transition-all flex items-center justify-center space-x-2 hover:bg-teal-400 shadow-lg shadow-teal-500/20 hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100">
+                  {isSubmitting ? (
+                    <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /><span>Sending...</span></>
+                  ) : (
+                    <span>Send Reset Link</span>
+                  )}
+                </button>
+              </form>
+            )}
+
+            <div className="mt-6 pt-6 border-t border-slate-700/50 text-center">
+              <button onClick={() => { setView('login'); setError(''); setPassword(''); setResetSent(false); }} className="text-sm font-medium text-slate-400">
+                <span className="text-teal-400 font-bold hover:text-teal-300 transition-colors">Back to sign in</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -522,7 +666,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Password</label>
                   {isLogin && (
-                    <button type="button" className="text-[10px] font-bold text-teal-400 hover:text-teal-300 transition-colors">Forgot password?</button>
+                    <button type="button" onClick={() => { setView('forgot_password'); setError(''); setResetSent(false); }} className="text-[10px] font-bold text-teal-400 hover:text-teal-300 transition-colors">Forgot password?</button>
                   )}
                 </div>
                 <div className="relative">
@@ -613,7 +757,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
 
             {/* Toggle Auth Mode */}
             <div className="mt-8 pt-6 border-t border-slate-700/50 text-center">
-              <button onClick={() => { setIsLogin(!isLogin); setError(''); setPassword(''); }} className="text-sm font-medium text-slate-400">
+              <button onClick={() => { setView(isLogin ? 'signup' : 'login'); setError(''); setPassword(''); }} className="text-sm font-medium text-slate-400">
                 {isLogin ? "Don't have an account? " : "Already have an account? "}
                 <span className="text-teal-400 font-bold hover:text-teal-300 transition-colors">
                   {isLogin ? 'Sign up free' : 'Sign in'}

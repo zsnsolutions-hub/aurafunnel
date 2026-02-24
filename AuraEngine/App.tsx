@@ -24,6 +24,7 @@ const TrialSignupPage = lazy(() => import('./pages/marketing/TrialSignupPage'));
 
 // Auth
 const AuthPage = lazy(() => import('./pages/portal/AuthPage'));
+const ResetPasswordPage = lazy(() => import('./pages/portal/ResetPasswordPage'));
 
 // Onboarding
 const OnboardingPage = lazy(() => import('./pages/portal/OnboardingPage'));
@@ -134,6 +135,10 @@ const App: React.FC = () => {
         setUser(null);
         return;
       }
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/reset-password');
+        return;
+      }
       if (session) {
         const profile = await fetchProfile(session.user.id);
         if (profile) setUser(profile);
@@ -220,6 +225,7 @@ const App: React.FC = () => {
 
           <Route path="/signup" element={<ErrorBoundary><TrialSignupPage /></ErrorBoundary>} />
           <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
+          <Route path="/reset-password" element={<ErrorBoundary><ResetPasswordPage /></ErrorBoundary>} />
 
           <Route
             path="/onboarding"

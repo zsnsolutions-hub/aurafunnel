@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { createTrialAccount } from '../../lib/trialApi';
+import { supabase } from '../../lib/supabase';
 import { track } from '../../lib/analytics';
 
 type FormState = 'idle' | 'submitting' | 'success' | 'error';
@@ -12,7 +13,6 @@ interface FormErrors {
 }
 
 const TrialSignupPage: React.FC = () => {
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [company, setCompany] = useState('');
@@ -20,6 +20,7 @@ const TrialSignupPage: React.FC = () => {
   const [formState, setFormState] = useState<FormState>('idle');
   const [serverError, setServerError] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
+  const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   const validate = useCallback((): boolean => {
     const next: FormErrors = {};
@@ -49,10 +50,6 @@ const TrialSignupPage: React.FC = () => {
     if (result.ok) {
       track('signup_success', { email });
       setFormState('success');
-      // Redirect after a brief success message
-      setTimeout(() => {
-        navigate(result.next || '/auth');
-      }, 2000);
     } else {
       track('signup_error', { email, error: result.error });
       setServerError(result.error || 'Something went wrong. Please try again.');
@@ -60,21 +57,42 @@ const TrialSignupPage: React.FC = () => {
     }
   };
 
-  /* ── Success state ── */
+  const handleResend = async () => {
+    setResendStatus('sending');
+    await supabase.auth.resend({ type: 'signup', email });
+    setResendStatus('sent');
+    setTimeout(() => setResendStatus('idle'), 5000);
+  };
+
+  /* ── Success state: Check your email ── */
   if (formState === 'success') {
     return (
       <div className="bg-[#0A1628] text-white min-h-screen flex items-center justify-center px-6">
         <div className="max-w-md w-full text-center">
           <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-teal-500/15 flex items-center justify-center">
             <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-black font-heading mb-3">You&rsquo;re in!</h1>
+          <h1 className="text-3xl font-black font-heading mb-3">Check your email</h1>
           <p className="text-slate-400 mb-2">
             We&rsquo;ve sent a confirmation link to <strong className="text-white">{email}</strong>.
           </p>
-          <p className="text-sm text-slate-500">Redirecting you to the dashboard...</p>
+          <p className="text-sm text-slate-500 mb-6">
+            Click the link in the email to activate your account, then sign in.
+          </p>
+          <button
+            onClick={handleResend}
+            disabled={resendStatus === 'sending'}
+            className="text-sm font-semibold text-teal-400 hover:text-teal-300 transition-colors disabled:opacity-50"
+          >
+            {resendStatus === 'sent' ? 'Email resent!' : resendStatus === 'sending' ? 'Sending...' : "Didn\u2019t get it? Resend email"}
+          </button>
+          <div className="mt-6">
+            <Link to="/auth" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+              Go to sign in
+            </Link>
+          </div>
         </div>
       </div>
     );

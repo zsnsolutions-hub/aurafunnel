@@ -1,7 +1,4 @@
-/**
- * Mock trial signup API.
- * Structured so it's easy to swap with a real backend later.
- */
+import { supabase } from './supabase';
 
 export interface TrialSignupPayload {
   email: string;
@@ -11,32 +8,37 @@ export interface TrialSignupPayload {
 
 export interface TrialSignupResponse {
   ok: boolean;
-  next?: string;
+  email?: string;
   error?: string;
 }
-
-/** Simulate latency + in-memory user store */
-const registeredEmails = new Set<string>();
 
 export async function createTrialAccount(
   payload: TrialSignupPayload,
 ): Promise<TrialSignupResponse> {
-  // Simulate network delay
-  await new Promise((r) => setTimeout(r, 1200));
-
-  // Basic validation
   if (!payload.email || !payload.email.includes('@')) {
     return { ok: false, error: 'Please enter a valid email address.' };
   }
   if (!payload.password || payload.password.length < 8) {
     return { ok: false, error: 'Password must be at least 8 characters.' };
   }
-  if (registeredEmails.has(payload.email)) {
+
+  const { data, error } = await supabase.auth.signUp({
+    email: payload.email,
+    password: payload.password,
+    options: {
+      data: { full_name: payload.company || '' },
+    },
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  // Supabase returns a user with identities=[] when the email is already registered
+  // and "Confirm email" is enabled
+  if (data.user && data.user.identities && data.user.identities.length === 0) {
     return { ok: false, error: 'An account with this email already exists.' };
   }
 
-  // "Create" the user
-  registeredEmails.add(payload.email);
-
-  return { ok: true, next: '/portal' };
+  return { ok: true, email: payload.email };
 }
