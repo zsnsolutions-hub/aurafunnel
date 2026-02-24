@@ -353,6 +353,7 @@ const ContentStudio: React.FC = () => {
   const [sendHistoryLoading, setSendHistoryLoading] = useState(false);
   const [linkedinCopied, setLinkedinCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showSendPostMenu, setShowSendPostMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showCtaBuilder, setShowCtaBuilder] = useState(false);
@@ -1457,7 +1458,7 @@ const ContentStudio: React.FC = () => {
           <button
             onClick={handleGenerateWithAI}
             disabled={aiGenerating || leads.length === 0}
-            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {aiGenerating ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1467,38 +1468,53 @@ const ContentStudio: React.FC = () => {
             <span>{aiGenerating ? 'Generating...' : 'Generate with AI'}</span>
             {!aiGenerating && <span className="ml-1 px-1.5 py-0.5 text-[9px] font-black bg-white/20 rounded-md">{CREDIT_COSTS[contentMode === 'email' ? 'email_sequence' : 'content_generation']} cr</span>}
           </button>
-          {contentMode === 'email' && (
+          <div className="relative">
             <button
-              onClick={() => { setSendResult(null); setShowSendModal(true); }}
-              disabled={!connectedProvider}
-              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setShowSendPostMenu(prev => !prev)}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
             >
               <SendIcon className="w-4 h-4" />
-              <span>Send Emails</span>
+              <span>Send / Post</span>
+              <ChevronDownIcon className="w-3.5 h-3.5 ml-0.5" />
             </button>
-          )}
-          <button
-            onClick={() => {
-              let content = '';
-              if (contentMode === 'email' && activeVariant) {
-                content = activeVariant.body;
-              } else if (contentMode === 'linkedin') {
-                content = resolvePersonalizationTags(
-                  linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
-                  leads[0] || {},
-                  user.businessProfile
-                );
-              } else if (contentMode === 'proposal') {
-                content = Object.values(proposalSections).filter(Boolean).join('\n\n');
-              }
-              if (content) navigate('/portal/social-scheduler', { state: { content } });
-            }}
-            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200"
-          >
-            <SendIcon className="w-4 h-4" />
-            <span>Post to Social</span>
-          </button>
-          <button onClick={handleSave} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
+            {showSendPostMenu && (
+              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-48 py-1">
+                {contentMode === 'email' && (
+                  <button
+                    onClick={() => { setShowSendPostMenu(false); setSendResult(null); setShowSendModal(true); }}
+                    disabled={!connectedProvider}
+                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <MailIcon className="w-4 h-4 text-emerald-500" />
+                    <span>Send Email</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowSendPostMenu(false);
+                    let content = '';
+                    if (contentMode === 'email' && activeVariant) {
+                      content = activeVariant.body;
+                    } else if (contentMode === 'linkedin') {
+                      content = resolvePersonalizationTags(
+                        linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
+                        leads[0] || {},
+                        user.businessProfile
+                      );
+                    } else if (contentMode === 'proposal') {
+                      content = Object.values(proposalSections).filter(Boolean).join('\n\n');
+                    }
+                    if (content) navigate('/portal/social-scheduler', { state: { content } });
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2"
+                >
+                  <LinkedInIcon className="w-4 h-4 text-indigo-500" />
+                  <span>Post to Social</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <button onClick={handleSave} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
             {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
             <span>{saved ? 'Saved!' : 'Save'}</span>
           </button>
