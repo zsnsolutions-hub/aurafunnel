@@ -7,7 +7,7 @@ import { TargetIcon, SparklesIcon, BoltIcon } from '../../components/Icons';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import LeadSegmentation from '../../components/dashboard/LeadSegmentation';
 
-const LISTS_STORAGE_KEY = 'aurafunnel_admin_manual_lists';
+const LISTS_STORAGE_KEY = 'scaliyo_admin_manual_lists';
 
 const LeadsManagement: React.FC = () => {
   const navigate = useNavigate();

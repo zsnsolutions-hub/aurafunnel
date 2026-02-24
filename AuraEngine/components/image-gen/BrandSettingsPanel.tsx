@@ -58,7 +58,7 @@ const BrandSettingsPanel: React.FC<BrandSettingsPanelProps> = ({
               type="text"
               value={settings.brandName || ''}
               onChange={e => update({ brandName: e.target.value })}
-              placeholder="e.g. AuraFunnel"
+              placeholder="e.g. Scaliyo"
               className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"
             />
           </div>

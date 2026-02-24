@@ -17,7 +17,7 @@ import {
   FacebookIcon, LinkedInIcon, InstagramIcon,
 } from '../../components/Icons';
 
-const DRAFT_KEY = 'aurafunnel_social_draft';
+const DRAFT_KEY = 'scaliyo_social_draft';
 
 const SocialScheduler: React.FC = () => {
   const { user } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();

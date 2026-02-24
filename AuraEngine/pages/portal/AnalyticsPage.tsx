@@ -589,7 +589,7 @@ const AnalyticsPage: React.FC = () => {
   };
 
   const handleExportInsights = () => {
-    const content = `AuraFunnel AI Insights Report\nGenerated: ${new Date().toLocaleDateString()}\n\n--- Top Insights ---\n${weeklyInsights.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}\n\n--- Recommendations ---\n${recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\n--- Key Metrics ---\nTotal Leads: ${metrics.total}\nHot Leads: ${metrics.hot}\nConversion Rate: ${metrics.convRate}%\nEmails Sent: ${metrics.emailsSent}\nOpen Rate: ${metrics.openRate}%\nWorkflow ROI: ${metrics.workflowRoi}%`;
+    const content = `Scaliyo AI Insights Report\nGenerated: ${new Date().toLocaleDateString()}\n\n--- Top Insights ---\n${weeklyInsights.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}\n\n--- Recommendations ---\n${recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\n--- Key Metrics ---\nTotal Leads: ${metrics.total}\nHot Leads: ${metrics.hot}\nConversion Rate: ${metrics.convRate}%\nEmails Sent: ${metrics.emailsSent}\nOpen Rate: ${metrics.openRate}%\nWorkflow ROI: ${metrics.workflowRoi}%`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -721,7 +721,7 @@ const AnalyticsPage: React.FC = () => {
   }, [selectedMetrics, metrics, analyticsData, leads, leadSourceBreakdown]);
 
   const generateShareLink = () => {
-    const link = `https://app.aurafunnel.io/reports/shared/${Date.now().toString(36)}`;
+    const link = `https://app.scaliyo.com/reports/shared/${Date.now().toString(36)}`;
     setShareLink(link);
     navigator.clipboard.writeText(link);
     setShareLinkCopied(true);

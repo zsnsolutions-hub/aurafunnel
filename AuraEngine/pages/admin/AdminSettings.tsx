@@ -5,7 +5,7 @@ import { IntegrationConfig, TeamMember, RolePermission } from '../../types';
 
 type AdminTab = 'config' | 'team' | 'integrations';
 
-const INTEGRATIONS_STORAGE_KEY = 'aurafunnel_integrations';
+const INTEGRATIONS_STORAGE_KEY = 'scaliyo_integrations';
 
 const ROLE_PERMISSIONS: RolePermission[] = [
   {
@@ -389,7 +389,7 @@ const AdminSettings: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex items-center space-x-4 p-4 border border-slate-100 rounded-2xl bg-slate-50/50">
                     <span className="px-2 py-1 bg-slate-900 text-white text-[9px] font-black rounded uppercase">REST</span>
-                    <input readOnly value="https://api.aurafunnel.io/v1/telemetry" className="flex-grow bg-transparent text-xs font-mono text-slate-500 outline-none" />
+                    <input readOnly value="https://api.scaliyo.com/v1/telemetry" className="flex-grow bg-transparent text-xs font-mono text-slate-500 outline-none" />
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                   </div>
                 </div>

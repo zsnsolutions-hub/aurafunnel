@@ -21,7 +21,7 @@ export const guideTours: GuideTour[] = [
       {
         id: 'dashboard-hero',
         target: '[data-guide="dashboard-hero"]',
-        title: 'Welcome to AuraFunnel',
+        title: 'Welcome to Scaliyo',
         description: 'Your command center with key metrics, pipeline insights, and quick access to all tools.',
         route: '/portal',
       },

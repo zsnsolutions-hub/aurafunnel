@@ -53,7 +53,7 @@ const BlogPage: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="absolute top-6 left-6">
                      <span className="bg-white/90 backdrop-blur-md text-[9px] font-black uppercase tracking-widest text-slate-900 px-4 py-1.5 rounded-full shadow-lg">
-                        {post.blog_categories?.name || 'Aura Engine'}
+                        {post.blog_categories?.name || 'Scaliyo'}
                      </span>
                   </div>
                 </div>

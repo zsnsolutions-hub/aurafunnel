@@ -11,7 +11,7 @@ const AboutPage: React.FC = () => {
               Our Mission: Humanizing Sales with AI
             </h1>
             <p className="mt-6 text-lg leading-8 text-slate-600">
-              Founded in 2023, AuraFunnel was built to solve a simple problem: sales outreach has become too loud and impersonal. 
+              Founded in 2023, Scaliyo was built to solve a simple problem: sales outreach has become too loud and impersonal. 
               We believe AI shouldn't just spam more people—it should help sales professionals build deeper, more meaningful connections.
             </p>
           </div>
@@ -27,7 +27,7 @@ const AboutPage: React.FC = () => {
             <div className="bg-indigo-50 p-8 rounded-3xl border border-indigo-100">
               <h3 className="text-2xl font-bold text-slate-900 mb-4">Our Story</h3>
               <p className="text-slate-600 leading-relaxed">
-                AuraFunnel started in a small garage with a group of data scientists and sales veterans. 
+                Scaliyo started in a small garage with a group of data scientists and sales veterans. 
                 Today, we support thousands of sales teams globally, from high-growth startups to Fortune 500 enterprises.
               </p>
             </div>

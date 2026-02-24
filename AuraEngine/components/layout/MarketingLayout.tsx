@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link } from 'react-router-dom';
+import { track } from '../../lib/analytics';
 
 const MarketingLayout: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
@@ -46,8 +47,12 @@ const MarketingLayout: React.FC = () => {
 
             <div className="flex items-center space-x-3">
               <Link to="/auth" className="hidden sm:block text-sm font-semibold text-slate-400 px-4 py-2 hover:text-white transition-colors duration-300">Log in</Link>
-              <Link to="/contact" className="bg-teal-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-teal-400 hover:scale-105 transition-all duration-300 shadow-lg shadow-teal-500/20 active:scale-95">
-                Book a Demo
+              <Link
+                to="/signup"
+                onClick={() => track('cta_click', { location: 'navbar', label: 'start_free_trial' })}
+                className="bg-teal-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-teal-400 hover:scale-105 transition-all duration-300 shadow-lg shadow-teal-500/20 active:scale-95"
+              >
+                Start Free Trial
               </Link>
               {/* Mobile hamburger */}
               <button
@@ -82,6 +87,13 @@ const MarketingLayout: React.FC = () => {
                 ))}
                 <hr className="border-slate-700/50" />
                 <Link to="/auth" onClick={() => setMobileOpen(false)} className="block text-lg font-semibold text-slate-400">Log in</Link>
+                <Link
+                  to="/signup"
+                  onClick={() => { setMobileOpen(false); track('cta_click', { location: 'navbar_mobile', label: 'start_free_trial' }); }}
+                  className="block text-center bg-teal-500 text-white px-5 py-3 rounded-xl text-base font-bold hover:bg-teal-400 transition-all"
+                >
+                  Start Free Trial
+                </Link>
               </div>
             </div>
           )}
@@ -110,7 +122,7 @@ const MarketingLayout: React.FC = () => {
                 <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
               </Link>
               <p className="text-slate-500 leading-relaxed max-w-sm mb-6 text-sm">
-                The AI-powered predictive revenue engine that detects buyer intent, scores leads, and closes deals automatically.
+                The AI-powered outbound growth platform that finds leads, enriches your pipeline, and closes deals automatically.
               </p>
 
               <div className="space-y-3 mb-8">
@@ -166,6 +178,8 @@ const MarketingLayout: React.FC = () => {
                   <li><Link to="/about" className="hover:text-teal-400 transition-colors duration-300">Our Vision</Link></li>
                   <li><Link to="/contact" className="hover:text-teal-400 transition-colors duration-300">Careers</Link></li>
                   <li><Link to="/contact" className="hover:text-teal-400 transition-colors duration-300">Contact</Link></li>
+                  {/* Book a demo — secondary, footer-only */}
+                  <li><Link to="/contact" className="hover:text-teal-400 transition-colors duration-300">Book a Demo</Link></li>
                 </ul>
               </div>
               <div>

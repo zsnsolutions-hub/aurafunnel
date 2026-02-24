@@ -20,6 +20,7 @@ const AboutPage = lazy(() => import('./pages/marketing/AboutPage'));
 const ContactPage = lazy(() => import('./pages/marketing/ContactPage'));
 const BlogPage = lazy(() => import('./pages/marketing/BlogPage'));
 const BlogPostPage = lazy(() => import('./pages/marketing/BlogPostPage'));
+const TrialSignupPage = lazy(() => import('./pages/marketing/TrialSignupPage'));
 
 // Auth
 const AuthPage = lazy(() => import('./pages/portal/AuthPage'));
@@ -217,6 +218,7 @@ const App: React.FC = () => {
             <Route path="/contact" element={<ErrorBoundary><ContactPage /></ErrorBoundary>} />
           </Route>
 
+          <Route path="/signup" element={<ErrorBoundary><TrialSignupPage /></ErrorBoundary>} />
           <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
 
           <Route

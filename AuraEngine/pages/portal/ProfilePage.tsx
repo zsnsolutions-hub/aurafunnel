@@ -14,9 +14,9 @@ import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
 import { useGuide } from '../../components/guide/useGuide';
 
-const PREFS_STORAGE_KEY = 'aurafunnel_dashboard_prefs';
-const NOTIF_STORAGE_KEY = 'aurafunnel_notification_prefs';
-const APIKEYS_STORAGE_KEY = 'aurafunnel_api_keys';
+const PREFS_STORAGE_KEY = 'scaliyo_dashboard_prefs';
+const NOTIF_STORAGE_KEY = 'scaliyo_notification_prefs';
+const APIKEYS_STORAGE_KEY = 'scaliyo_api_keys';
 
 type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferences' | 'api_keys' | 'security' | 'pipeline_colors';
 
@@ -967,7 +967,7 @@ const ProfilePage: React.FC = () => {
             <div className="p-8 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 font-heading">API Access Keys</h3>
-                <p className="text-sm text-slate-500 mt-1">Generate keys for programmatic access to the AuraFunnel API.</p>
+                <p className="text-sm text-slate-500 mt-1">Generate keys for programmatic access to the Scaliyo API.</p>
               </div>
             </div>
 

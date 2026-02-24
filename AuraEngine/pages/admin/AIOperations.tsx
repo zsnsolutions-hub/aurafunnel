@@ -82,7 +82,7 @@ const AIOperations: React.FC = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AuraFunnel_AI_Finance_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `Scaliyo_AI_Finance_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 

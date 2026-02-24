@@ -315,7 +315,7 @@ const AICommandCenter: React.FC = () => {
     const content = messages.map(m =>
       `[${m.role.toUpperCase()}] ${m.timestamp.toLocaleTimeString()}\n${m.content.replace(/\*\*/g, '')}\n`
     ).join('\n---\n\n');
-    const blob = new Blob([`AuraFunnel AI Command Center — Chat Export\nDate: ${new Date().toLocaleDateString()}\nMode: ${aiMode}\n\n${content}`], { type: 'text/plain' });
+    const blob = new Blob([`Scaliyo AI Command Center — Chat Export\nDate: ${new Date().toLocaleDateString()}\nMode: ${aiMode}\n\n${content}`], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

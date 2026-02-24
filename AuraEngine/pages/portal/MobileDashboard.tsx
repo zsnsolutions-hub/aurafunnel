@@ -420,7 +420,7 @@ const MobileDashboard: React.FC = () => {
         <div className="flex items-center space-x-2.5">
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg">A</div>
           <div>
-            <h1 className="text-lg font-black text-slate-900 font-heading tracking-tight">AuraFunnel AI</h1>
+            <h1 className="text-lg font-black text-slate-900 font-heading tracking-tight">Scaliyo AI</h1>
             <p className="text-[10px] text-slate-400 font-semibold">Welcome back, {user.name?.split(' ')[0] || 'User'}</p>
           </div>
         </div>
@@ -1051,7 +1051,7 @@ const MobileDashboard: React.FC = () => {
               <RocketIcon className="w-5 h-5 text-indigo-200" />
               <h2 className="text-sm font-black uppercase tracking-wider">30-Day Onboarding</h2>
             </div>
-            <p className="text-indigo-200 text-xs mb-4">Master AuraFunnel in 4 weeks with guided tasks</p>
+            <p className="text-indigo-200 text-xs mb-4">Master Scaliyo in 4 weeks with guided tasks</p>
 
             {/* Progress Bar */}
             <div className="mb-3">

@@ -99,7 +99,7 @@ const CheckoutForm: React.FC<{
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
               <SparklesIcon className="w-6 h-6" />
             </div>
-            <span className="text-xl font-bold text-slate-900 font-heading">AuraFunnel</span>
+            <span className="text-xl font-bold text-slate-900 font-heading">Scaliyo</span>
           </div>
 
           <div className="flex-grow space-y-8">
@@ -139,7 +139,7 @@ const CheckoutForm: React.FC<{
           <div className="mt-12 p-5 bg-white rounded-2xl border border-slate-200 flex items-start space-x-3 shadow-sm">
             <ShieldIcon className="w-5 h-5 text-emerald-500 mt-0.5" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight leading-relaxed">
-              Payments are secured by Stripe. AuraFunnel does not store full card information.
+              Payments are secured by Stripe. Scaliyo does not store full card information.
               <br />
               <span className="text-indigo-600">Encrypted AES-256 GCM</span>
             </p>

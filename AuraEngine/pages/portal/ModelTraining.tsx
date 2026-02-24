@@ -495,7 +495,7 @@ const ModelTraining: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">AI Prompt Studio</h1>
-          <p className="text-sm text-gray-500 mt-1">Customize the AI prompts that power every feature across AuraFunnel</p>
+          <p className="text-sm text-gray-500 mt-1">Customize the AI prompts that power every feature across Scaliyo</p>
         </div>
         <button
           onClick={loadPrompts}

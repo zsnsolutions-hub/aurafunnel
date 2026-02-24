@@ -18,7 +18,7 @@ interface SmartSegment {
   filter: (lead: Lead) => boolean;
 }
 
-const STORAGE_KEY = 'aurafunnel_manual_lists';
+const STORAGE_KEY = 'scaliyo_manual_lists';
 
 const LeadSegmentation: React.FC<LeadSegmentationProps> = ({
   leads,

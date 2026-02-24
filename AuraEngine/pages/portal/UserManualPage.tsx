@@ -49,7 +49,7 @@ const LEAD_ADD_METHODS = [
     id: 'extension',
     title: 'Chrome Extension',
     icon: <BoltIcon className="w-5 h-5" />,
-    steps: ['Install from Chrome Web Store: "AuraFunnel Lead Capture"', 'Capture leads from LinkedIn profiles', 'One-click import from company websites', 'Auto-enrich with AI research'],
+    steps: ['Install from Chrome Web Store: "Scaliyo Lead Capture"', 'Capture leads from LinkedIn profiles', 'One-click import from company websites', 'Auto-enrich with AI research'],
   },
 ];
 
@@ -117,7 +117,7 @@ const ADVANTAGES = [
       'Proactively engages when AI predicts readiness',
       'Individualized strategies per lead',
     ],
-    example: 'While others wait for a lead to download an ebook, AuraFunnel\'s AI identifies browsing patterns that indicate purchase intent 3 days earlier and initiates personalized engagement.',
+    example: 'While others wait for a lead to download an ebook, Scaliyo\'s AI identifies browsing patterns that indicate purchase intent 3 days earlier and initiates personalized engagement.',
   },
   {
     id: 2,
@@ -136,7 +136,7 @@ const ADVANTAGES = [
       'Content evolves based on performance',
       'Multi-format adaptation (email \u2192 social \u2192 web)',
     ],
-    example: 'A tech company saw 400% higher engagement when AuraFunnel generated content mentioning a prospect\'s specific technology stack vs. generic industry content.',
+    example: 'A tech company saw 400% higher engagement when Scaliyo generated content mentioning a prospect\'s specific technology stack vs. generic industry content.',
   },
   {
     id: 3,
@@ -152,10 +152,10 @@ const ADVANTAGES = [
     auraFunnel: [
       'Campaign \u2192 AI Analysis \u2192 Auto-Optimization',
       'Improved Campaign \u2192 AI Learns \u2192 Repeat',
-      'Every interaction makes AuraFunnel smarter',
+      'Every interaction makes Scaliyo smarter',
       'Knows optimal subject lines, send times, themes',
     ],
-    example: 'After 3 months, AuraFunnel knows which subject lines work for your specific audience, optimal send times per industry/role, and lead scoring patterns unique to your business.',
+    example: 'After 3 months, Scaliyo knows which subject lines work for your specific audience, optimal send times per industry/role, and lead scoring patterns unique to your business.',
   },
   {
     id: 4,
@@ -193,7 +193,7 @@ const ADVANTAGES = [
       'Intent Detection \u2192 Hyper-Targeted Offer',
       'Custom conversion journeys per lead',
     ],
-    example: 'Leads don\'t follow linear paths. AuraFunnel creates custom conversion journeys based on each lead\'s behavior, industry, role, and timing.',
+    example: 'Leads don\'t follow linear paths. Scaliyo creates custom conversion journeys based on each lead\'s behavior, industry, role, and timing.',
   },
 ];
 
@@ -210,7 +210,7 @@ const EXCLUSIVE_FEATURES = [
   {
     id: 'feat-2',
     title: 'Cross-Channel Intent Synthesis',
-    description: 'While other tools see email opens, website visits, and social follows as separate events, AuraFunnel synthesizes them into a unified intent signal.',
+    description: 'While other tools see email opens, website visits, and social follows as separate events, Scaliyo synthesizes them into a unified intent signal.',
     example: 'A lead who opened your pricing page 3x, follows your CEO on Twitter, and just attended your webinar is 85% likely to convert in 7 days.',
     icon: <GitBranchIcon className="w-5 h-5" />,
     color: 'violet',
@@ -218,7 +218,7 @@ const EXCLUSIVE_FEATURES = [
   {
     id: 'feat-3',
     title: 'Predictive Content Performance',
-    description: 'Before you send anything, AuraFunnel\'s AI predicts performance metrics so you can optimize before launch.',
+    description: 'Before you send anything, Scaliyo\'s AI predicts performance metrics so you can optimize before launch.',
     example: 'Open rate probability: "42% opens with your audience" \u2022 Conversion likelihood: "3.2% conversion with enterprise leads" \u2022 Optimal timing: "Healthcare leads Tuesday 10 AM, tech leads Thursday 2 PM"',
     icon: <ChartIcon className="w-5 h-5" />,
     color: 'emerald',
@@ -226,8 +226,8 @@ const EXCLUSIVE_FEATURES = [
   {
     id: 'feat-4',
     title: 'AI-Driven A/B Testing',
-    description: 'Instead of testing 2 variations and waiting, AuraFunnel generates 5 AI-optimized variations, tests simultaneously, analyzes why winners work, then creates even better versions.',
-    example: 'Traditional: Test 2 \u2192 Wait \u2192 Pick winner. AuraFunnel: Generate 5 \u2192 Test \u2192 AI analyzes why \u2192 Creates 3 better versions \u2192 Continuously improves.',
+    description: 'Instead of testing 2 variations and waiting, Scaliyo generates 5 AI-optimized variations, tests simultaneously, analyzes why winners work, then creates even better versions.',
+    example: 'Traditional: Test 2 \u2192 Wait \u2192 Pick winner. Scaliyo: Generate 5 \u2192 Test \u2192 AI analyzes why \u2192 Creates 3 better versions \u2192 Continuously improves.',
     icon: <SparklesIcon className="w-5 h-5" />,
     color: 'amber',
   },
@@ -273,11 +273,11 @@ const COMPARISON = [
   { need: 'Reactive automation', tools: 'Marketo, HubSpot', category: 'basic' },
   { need: 'Manual optimization', tools: 'Mailchimp, ActiveCampaign', category: 'basic' },
   { need: 'Basic personalization', tools: 'Pardot, Eloqua', category: 'basic' },
-  { need: 'Predictive intelligence', tools: 'AuraFunnel', category: 'aura' },
-  { need: 'Generative creativity', tools: 'AuraFunnel', category: 'aura' },
-  { need: 'Continuous optimization', tools: 'AuraFunnel', category: 'aura' },
-  { need: 'Unified intelligence', tools: 'AuraFunnel', category: 'aura' },
-  { need: 'Scalable personalization', tools: 'AuraFunnel', category: 'aura' },
+  { need: 'Predictive intelligence', tools: 'Scaliyo', category: 'aura' },
+  { need: 'Generative creativity', tools: 'Scaliyo', category: 'aura' },
+  { need: 'Continuous optimization', tools: 'Scaliyo', category: 'aura' },
+  { need: 'Unified intelligence', tools: 'Scaliyo', category: 'aura' },
+  { need: 'Scalable personalization', tools: 'Scaliyo', category: 'aura' },
 ];
 
 // === Content Creation ===
@@ -853,7 +853,7 @@ const TROUBLESHOOT_ISSUES = [
     escalation: [
       'Check internet speed, avoid VPN if possible',
       'Use wired connection if available',
-      'Limit open tabs in AuraFunnel',
+      'Limit open tabs in Scaliyo',
     ],
     color: 'amber',
   },
@@ -998,7 +998,7 @@ const ADVANCED_MODULES = [
 const CERTIFICATIONS = [
   {
     abbr: 'AFCU',
-    title: 'AuraFunnel Certified User',
+    title: 'Scaliyo Certified User',
     level: 'Basic',
     color: 'indigo',
     requirements: ['Basic platform proficiency', 'Can perform day-to-day tasks', 'Understands core features'],
@@ -1006,7 +1006,7 @@ const CERTIFICATIONS = [
   },
   {
     abbr: 'AFCP',
-    title: 'AuraFunnel Certified Professional',
+    title: 'Scaliyo Certified Professional',
     level: 'Intermediate',
     color: 'violet',
     requirements: ['Advanced feature mastery', 'Can design complex campaigns', 'Implements automation'],
@@ -1014,7 +1014,7 @@ const CERTIFICATIONS = [
   },
   {
     abbr: 'AFCE',
-    title: 'AuraFunnel Certified Expert',
+    title: 'Scaliyo Certified Expert',
     level: 'Advanced',
     color: 'emerald',
     requirements: ['AI optimization skills', 'Team training capability', 'Strategic implementation'],
@@ -1022,7 +1022,7 @@ const CERTIFICATIONS = [
   },
   {
     abbr: 'AFCA',
-    title: 'AuraFunnel Certified Architect',
+    title: 'Scaliyo Certified Architect',
     level: 'Expert',
     color: 'amber',
     requirements: ['Enterprise implementation', 'Custom integration design', 'Multi-team management'],
@@ -1341,7 +1341,7 @@ const UserManualPage: React.FC = () => {
         'team-collaboration': 'Team', 'integrations': 'Integrations', 'troubleshooting': 'Troubleshooting',
         'advanced-features': 'Advanced', 'training': 'Training', 'outreach-templates': 'Outreach',
         'whats-next': "What's Next", 'advantages': 'Competitive Edge', 'features': 'Exclusive Features',
-        'impact': 'Business Impact', 'future': 'Future-Ready', 'comparison': 'Why AuraFunnel',
+        'impact': 'Business Impact', 'future': 'Future-Ready', 'comparison': 'Why Scaliyo',
       };
       return {
         key,
@@ -1426,7 +1426,7 @@ const UserManualPage: React.FC = () => {
     { key: 'features', label: 'Exclusive Features', icon: <SparklesIcon className="w-4 h-4" /> },
     { key: 'impact', label: 'Business Impact', icon: <TrendUpIcon className="w-4 h-4" /> },
     { key: 'future', label: 'Future-Ready', icon: <BoltIcon className="w-4 h-4" /> },
-    { key: 'comparison', label: 'Why AuraFunnel', icon: <TargetIcon className="w-4 h-4" /> },
+    { key: 'comparison', label: 'Why Scaliyo', icon: <TargetIcon className="w-4 h-4" /> },
   ];
 
   return (
@@ -1439,7 +1439,7 @@ const UserManualPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">User Manual</h1>
-            <p className="text-slate-500 text-sm">AuraFunnel AI Platform \u2014 Complete Reference Guide</p>
+            <p className="text-slate-500 text-sm">Scaliyo AI Platform \u2014 Complete Reference Guide</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -1488,12 +1488,12 @@ const UserManualPage: React.FC = () => {
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3"></div>
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/4"></div>
             <div className="relative">
-              <p className="text-xs font-black text-indigo-200 uppercase tracking-[0.3em] mb-4">Welcome to AuraFunnel</p>
+              <p className="text-xs font-black text-indigo-200 uppercase tracking-[0.3em] mb-4">Welcome to Scaliyo</p>
               <h2 className="text-3xl md:text-4xl font-black mb-4 leading-tight">
                 The world's first AI-native<br />marketing platform
               </h2>
               <p className="text-indigo-100 text-lg max-w-2xl leading-relaxed">
-                AuraFunnel thinks, learns, and grows with your business. It's not just a tool\u2014it's an AI co-pilot
+                Scaliyo thinks, learns, and grows with your business. It's not just a tool\u2014it's an AI co-pilot
                 that predicts opportunities, creates personalized content, and continuously optimizes your marketing.
               </p>
             </div>
@@ -1536,7 +1536,7 @@ const UserManualPage: React.FC = () => {
                 </div>
               </div>
               <div className="bg-indigo-50 rounded-xl p-5 border-2 border-indigo-200">
-                <p className="text-xs font-black text-indigo-600 uppercase tracking-wider mb-3">AuraFunnel</p>
+                <p className="text-xs font-black text-indigo-600 uppercase tracking-wider mb-3">Scaliyo</p>
                 <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs text-slate-300 leading-relaxed">
                   <p className="text-slate-500">// Intelligence-focused: understands context</p>
                   <p><span className="text-violet-400">const</span> aiPrediction = {'{'}</p>
@@ -3612,7 +3612,7 @@ const UserManualPage: React.FC = () => {
             <div className="p-6">
               <div className="bg-slate-900 rounded-xl p-5 font-mono text-xs leading-relaxed overflow-x-auto">
                 <p className="text-slate-500">{'// Advanced API Example: Custom Integration'}</p>
-                <p className="text-violet-400">const <span className="text-emerald-400">aurafunnelAPI</span> = {'{'}</p>
+                <p className="text-violet-400">const <span className="text-emerald-400">scaliyoAPI</span> = {'{'}</p>
                 <p className="text-sky-300 pl-4">baseURL: <span className="text-emerald-300">'https://api.aura-funnel.com/v2'</span>,</p>
                 <p className="text-white pl-4" />
                 <p className="text-slate-500 pl-4">{'// Custom webhook handler'}</p>
@@ -3655,7 +3655,7 @@ const UserManualPage: React.FC = () => {
                 <p className="text-violet-400">import <span className="text-white">requests</span></p>
                 <p className="text-violet-400">import <span className="text-white">pandas</span> as <span className="text-white">pd</span></p>
                 <p className="text-white mt-2" />
-                <p className="text-violet-400">class <span className="text-emerald-400">AuraFunnelAnalytics</span>:</p>
+                <p className="text-violet-400">class <span className="text-emerald-400">ScaliyoAnalytics</span>:</p>
                 <p className="text-amber-400 pl-4">def <span className="text-sky-300">__init__</span>(self, api_key):</p>
                 <p className="text-white pl-8">self.api_key = api_key</p>
                 <p className="text-white pl-8">self.base_url = <span className="text-emerald-300">"https://api.aura-funnel.com/v2"</span></p>
@@ -4093,7 +4093,7 @@ const UserManualPage: React.FC = () => {
           <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-6 text-center">
             <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mb-2">Last Updated: January 15, 2024 | Version: 4.2 | Manual ID: AF-UM-2024-Q1</p>
             <p className="text-xs text-white/80">This manual is continuously updated. Always check the in-app "What's New" section for the latest features and changes.</p>
-            <p className="text-sm font-bold text-white mt-3">The more you use AuraFunnel and provide feedback, the smarter it becomes for your specific needs. Your success is our priority.</p>
+            <p className="text-sm font-bold text-white mt-3">The more you use Scaliyo and provide feedback, the smarter it becomes for your specific needs. Your success is our priority.</p>
           </div>
         </div>
       )}
@@ -4103,7 +4103,7 @@ const UserManualPage: React.FC = () => {
         <div className="space-y-6">
           <div>
             <h2 className="text-lg font-black text-slate-900">5 Unbreakable Competitive Advantages</h2>
-            <p className="text-xs text-slate-500 mt-0.5">What makes AuraFunnel fundamentally different from every other platform</p>
+            <p className="text-xs text-slate-500 mt-0.5">What makes Scaliyo fundamentally different from every other platform</p>
           </div>
 
           {ADVANTAGES.map(adv => {
@@ -4149,9 +4149,9 @@ const UserManualPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* AuraFunnel */}
+                      {/* Scaliyo */}
                       <div className={`bg-${adv.color}-50/50 rounded-xl p-4 border-2 border-${adv.color}-200`}>
-                        <p className={`text-xs font-black text-${adv.color}-600 uppercase tracking-wider mb-3`}>AuraFunnel</p>
+                        <p className={`text-xs font-black text-${adv.color}-600 uppercase tracking-wider mb-3`}>Scaliyo</p>
                         <div className="space-y-2.5">
                           {adv.auraFunnel.map((item, i) => (
                             <div key={i} className="flex items-start space-x-2">
@@ -4184,7 +4184,7 @@ const UserManualPage: React.FC = () => {
         <div className="space-y-6">
           <div>
             <h2 className="text-lg font-black text-slate-900">Exclusive Features No Other Platform Has</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Capabilities that are unique to AuraFunnel's AI-native architecture</p>
+            <p className="text-xs text-slate-500 mt-0.5">Capabilities that are unique to Scaliyo's AI-native architecture</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4227,7 +4227,7 @@ const UserManualPage: React.FC = () => {
         <div className="space-y-6">
           <div>
             <h2 className="text-lg font-black text-slate-900">Tangible Business Impact</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Real metrics from enterprise SaaS companies using AuraFunnel</p>
+            <p className="text-xs text-slate-500 mt-0.5">Real metrics from enterprise SaaS companies using Scaliyo</p>
           </div>
 
           {/* Comparison Table */}
@@ -4241,7 +4241,7 @@ const UserManualPage: React.FC = () => {
                   <tr className="border-b border-slate-100">
                     <th className="text-left px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Metric</th>
                     <th className="text-left px-5 py-3 text-[10px] font-black text-red-400 uppercase tracking-wider">Traditional Tools</th>
-                    <th className="text-left px-5 py-3 text-[10px] font-black text-indigo-500 uppercase tracking-wider">With AuraFunnel</th>
+                    <th className="text-left px-5 py-3 text-[10px] font-black text-indigo-500 uppercase tracking-wider">With Scaliyo</th>
                     <th className="text-left px-5 py-3 text-[10px] font-black text-emerald-500 uppercase tracking-wider">Improvement</th>
                   </tr>
                 </thead>
@@ -4318,7 +4318,7 @@ const UserManualPage: React.FC = () => {
         <div className="space-y-6">
           <div>
             <h2 className="text-lg font-black text-slate-900">The Future-Ready Difference</h2>
-            <p className="text-xs text-slate-500 mt-0.5">AuraFunnel was built AI-native from day one, not retrofitted</p>
+            <p className="text-xs text-slate-500 mt-0.5">Scaliyo was built AI-native from day one, not retrofitted</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4340,9 +4340,9 @@ const UserManualPage: React.FC = () => {
               </div>
             </div>
 
-            {/* AuraFunnel */}
+            {/* Scaliyo */}
             <div className="bg-indigo-50 rounded-2xl border-2 border-indigo-200 shadow-sm p-6">
-              <p className="text-xs font-black text-indigo-600 uppercase tracking-wider mb-4">AuraFunnel Was Born AI-Native...</p>
+              <p className="text-xs font-black text-indigo-600 uppercase tracking-wider mb-4">Scaliyo Was Born AI-Native...</p>
               <div className="space-y-3">
                 {[
                   'AI-First architecture from day one',
@@ -4378,9 +4378,9 @@ const UserManualPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* AuraFunnel */}
+              {/* Scaliyo */}
               <div>
-                <p className="text-xs font-black text-indigo-500 uppercase tracking-wider mb-4 text-center">AuraFunnel</p>
+                <p className="text-xs font-black text-indigo-500 uppercase tracking-wider mb-4 text-center">Scaliyo</p>
                 <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl p-5 text-center text-white mb-3 shadow-lg">
                   <SparklesIcon className="w-8 h-8 mx-auto mb-2" />
                   <p className="text-sm font-black">AI BRAIN</p>
@@ -4418,12 +4418,12 @@ const UserManualPage: React.FC = () => {
         </div>
       )}
 
-      {/* === SECTION: Why AuraFunnel === */}
+      {/* === SECTION: Why Scaliyo === */}
       {activeSection === 'comparison' && (
         <div className="space-y-6">
           <div>
             <h2 className="text-lg font-black text-slate-900">The Bottom Line</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Other marketing platforms help you execute tasks. AuraFunnel does the marketing thinking for you.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Other marketing platforms help you execute tasks. Scaliyo does the marketing thinking for you.</p>
           </div>
 
           {/* Comparison Table */}
@@ -4460,7 +4460,7 @@ const UserManualPage: React.FC = () => {
             </div>
           </div>
 
-          {/* AuraFunnel Capabilities */}
+          {/* Scaliyo Capabilities */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {[
               { label: 'Predictive Intelligence', desc: 'Finds opportunities before they\'re visible', icon: <SparklesIcon className="w-5 h-5" />, color: 'indigo' },
@@ -4485,7 +4485,7 @@ const UserManualPage: React.FC = () => {
             <div className="relative">
               <p className="text-xs font-black text-indigo-200 uppercase tracking-[0.3em] mb-3">The Bottom Line</p>
               <h2 className="text-2xl md:text-3xl font-black mb-4 leading-tight">
-                AuraFunnel doesn't just change how you do marketing\u2014<br />
+                Scaliyo doesn't just change how you do marketing\u2014<br />
                 <span className="text-indigo-200">it changes what's possible.</span>
               </h2>
               <p className="text-indigo-100 text-sm max-w-xl mx-auto">
@@ -4498,7 +4498,7 @@ const UserManualPage: React.FC = () => {
           {/* Version Footer */}
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-center">
             <p className="text-[10px] text-slate-400 font-semibold">
-              AuraFunnel User Manual v3.1 \u2022 Last Updated January 2024 \u2022 Document ID: AURA-USER-MANUAL-2024
+              Scaliyo User Manual v3.1 \u2022 Last Updated January 2024 \u2022 Document ID: AURA-USER-MANUAL-2024
             </p>
           </div>
         </div>
@@ -4605,7 +4605,7 @@ const UserManualPage: React.FC = () => {
                 </div>
                 <p className="text-xs font-bold leading-relaxed">
                   {contentCoverage.coveragePct > 70
-                    ? `Excellent coverage at ${contentCoverage.coveragePct}%! You've explored ${contentCoverage.visited} of ${contentCoverage.totalSections} sections. Focus on the remaining ${contentCoverage.totalSections - contentCoverage.visited} sections to achieve full manual mastery and unlock the complete AuraFunnel potential.`
+                    ? `Excellent coverage at ${contentCoverage.coveragePct}%! You've explored ${contentCoverage.visited} of ${contentCoverage.totalSections} sections. Focus on the remaining ${contentCoverage.totalSections - contentCoverage.visited} sections to achieve full manual mastery and unlock the complete Scaliyo potential.`
                     : contentCoverage.coveragePct > 30
                     ? `Good progress at ${contentCoverage.coveragePct}%. The Core Features and Automation categories are critical for daily use. Prioritize completing those sections next to maximize your platform efficiency.`
                     : `You've explored ${contentCoverage.visited} sections so far. Start with "Getting Started" and "Lead Management" for the quickest path to productivity. Each section takes 2-5 minutes to review.`}
@@ -4728,7 +4728,7 @@ const UserManualPage: React.FC = () => {
                 </div>
                 <p className="text-xs font-bold leading-relaxed">
                   {readingProgress.pct === 100
-                    ? "Congratulations! You've read the entire manual. You now have comprehensive knowledge of the AuraFunnel platform. Consider bookmarking the Advanced Features and Automation sections for quick reference during daily use."
+                    ? "Congratulations! You've read the entire manual. You now have comprehensive knowledge of the Scaliyo platform. Consider bookmarking the Advanced Features and Automation sections for quick reference during daily use."
                     : readingProgress.pct > 50
                     ? `Great progress at ${readingProgress.pct}%! About ${readingProgress.estimatedTimeLeft} minutes to complete. The "${readingProgress.nextUnvisited?.label}" section is the most impactful to read next based on common user workflows.`
                     : `You've started your journey through the manual. The quickest path to productivity: read Getting Started, Lead Management, and Content Creation first. These 3 sections cover 80% of daily platform usage.`}

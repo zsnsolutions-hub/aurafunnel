@@ -203,7 +203,7 @@ const PRO_TIPS = [
   {
     id: 'tip-5',
     title: 'Mobile Productivity',
-    text: 'Access AuraFunnel on your mobile browser for push notifications on hot leads and manage campaigns on the go.',
+    text: 'Access Scaliyo on your mobile browser for push notifications on hot leads and manage campaigns on the go.',
     icon: <PhoneIcon className="w-5 h-5" />,
     color: 'rose',
   },
@@ -412,7 +412,7 @@ const HelpCenterPage: React.FC = () => {
     const overallProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
     const certifications = [
-      { name: 'AuraFunnel Foundations', status: overallProgress > 30 ? 'earned' as const : 'locked' as const, earnedDate: overallProgress > 30 ? '2024-01-10' : null },
+      { name: 'Scaliyo Foundations', status: overallProgress > 30 ? 'earned' as const : 'locked' as const, earnedDate: overallProgress > 30 ? '2024-01-10' : null },
       { name: 'Lead Scoring Specialist', status: overallProgress > 50 ? 'earned' as const : overallProgress > 30 ? 'in_progress' as const : 'locked' as const, earnedDate: overallProgress > 50 ? '2024-01-18' : null },
       { name: 'AI Power User', status: overallProgress > 70 ? 'earned' as const : overallProgress > 50 ? 'in_progress' as const : 'locked' as const, earnedDate: null },
     ];
@@ -536,7 +536,7 @@ const HelpCenterPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">Help Center</h1>
-          <p className="text-slate-500 mt-1 text-sm">Troubleshooting, guides, shortcuts, and expert tips to maximize your AuraFunnel experience</p>
+          <p className="text-slate-500 mt-1 text-sm">Troubleshooting, guides, shortcuts, and expert tips to maximize your Scaliyo experience</p>
         </div>
         <div className="flex items-center space-x-2">
           <button onClick={() => setShowSystemStatus(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
@@ -1031,7 +1031,7 @@ const HelpCenterPage: React.FC = () => {
           {/* Version & Doc Info */}
           <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 text-center">
             <p className="text-xs text-slate-400 font-semibold">
-              AuraFunnel Help Center v3.1 &bull; Last Updated January 2024 &bull; Document ID: AURA-USER-MANUAL-2024
+              Scaliyo Help Center v3.1 &bull; Last Updated January 2024 &bull; Document ID: AURA-USER-MANUAL-2024
             </p>
             <p className="text-[11px] text-slate-400 mt-1">
               This is a living document. New features and updates are added monthly. Check "What's New" for latest capabilities.

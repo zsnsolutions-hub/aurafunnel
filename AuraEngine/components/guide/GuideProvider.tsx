@@ -5,8 +5,8 @@ import { GuideOverlay } from './GuideOverlay';
 import { GuideTooltip } from './GuideTooltip';
 import ReactDOM from 'react-dom';
 
-const COMPLETED_KEY = 'aurafunnel_guide_completed';
-const SEEN_KEY = 'aurafunnel_guide_seen';
+const COMPLETED_KEY = 'scaliyo_guide_completed';
+const SEEN_KEY = 'scaliyo_guide_seen';
 
 interface GuideContextValue {
   startTour: (tourId: string) => void;

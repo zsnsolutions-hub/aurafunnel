@@ -1,14 +1,29 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Plan } from '../../types';
+import Reveal from '../../components/marketing/Reveal';
+import { track } from '../../lib/analytics';
+
+const getPlanDescription = (name: string) => {
+  switch (name) {
+    case 'Starter':
+      return 'Perfect for solo founders and small sales teams getting started.';
+    case 'Professional':
+      return 'For growing teams that need scale, precision, and multi-channel outreach.';
+    case 'Enterprise':
+      return 'Dedicated support, custom AI models, and infrastructure for large companies.';
+    default:
+      return 'Custom intelligence tailored to your business needs.';
+  }
+};
 
 const PricingPage: React.FC = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    track('pricing_view');
     const fetchPlans = async () => {
       setLoading(true);
       try {
@@ -16,100 +31,142 @@ const PricingPage: React.FC = () => {
           .from('plans')
           .select('*')
           .order('credits', { ascending: true });
-        
         if (error) throw error;
         if (data) setPlans(data);
-      } catch (err) {
-        console.error("Error fetching plans:", err);
+      } catch {
+        // Plans will remain empty — fallback renders below
       } finally {
         setLoading(false);
       }
     };
-
     fetchPlans();
   }, []);
 
-  // Helper to provide design-specific descriptions not in the DB schema
-  const getPlanDescription = (name: string) => {
-    switch (name) {
-      case 'Starter': return 'Perfect for solo founders and small sales teams.';
-      case 'Professional': return 'For growing teams that need scale and precision.';
-      case 'Enterprise': return 'Dedicated support and infrastructure for large companies.';
-      default: return 'Custom intelligence tailored to your business needs.';
-    }
-  };
-
   return (
-    <div className="bg-white py-24 sm:py-32">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <div className="mx-auto max-w-4xl text-center">
-          <h2 className="text-base font-semibold leading-7 text-indigo-600 uppercase tracking-widest">Pricing</h2>
-          <p className="mt-2 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl font-heading">
-            Choose the plan that fits your growth
-          </p>
-        </div>
-        <p className="mx-auto mt-6 max-w-2xl text-center text-lg leading-8 text-slate-600">
-          Scale your outreach without breaking the bank. Start for free and upgrade as you grow.
-        </p>
+    <div className="bg-[#0A1628] text-white pt-32 pb-24">
+      <div className="max-w-[1200px] mx-auto px-6">
+        {/* Header */}
+        <Reveal>
+          <div className="text-center mb-16">
+            <p className="text-xs font-bold text-teal-400 uppercase tracking-[0.25em] mb-4">
+              Pricing
+            </p>
+            <h1 className="text-4xl lg:text-5xl font-black tracking-tight font-heading mb-4">
+              Start free. Scale when you&rsquo;re ready.
+            </h1>
+            <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+              Every plan includes a 14-day free trial. No credit card required.
+              Upgrade, downgrade, or cancel anytime.
+            </p>
+          </div>
+        </Reveal>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 space-y-4">
-            <div className="w-12 h-12 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Syncing with Intelligence Grid...</p>
+            <div className="w-12 h-12 border-4 border-slate-700 border-t-teal-500 rounded-full animate-spin" />
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              Loading plans...
+            </p>
           </div>
         ) : (
-          <div className="isolate mx-auto mt-16 grid max-w-md grid-cols-1 gap-y-8 lg:mx-0 lg:max-w-none lg:grid-cols-3 lg:gap-x-8">
-            {plans.map((plan) => {
-              const isMostPopular = plan.name === 'Professional';
-              return (
-                <div
-                  key={plan.id}
-                  className={`rounded-3xl p-8 ring-1 ring-slate-200 transition-all duration-500 ease-in-out hover:shadow-2xl hover:-translate-y-2 animate-in fade-in zoom-in-95 duration-700 ${
-                    isMostPopular ? 'relative bg-slate-900 text-white ring-slate-900 shadow-2xl lg:scale-105 hover:lg:scale-[1.08]' : 'bg-white text-slate-900 hover:ring-indigo-200'
-                  }`}
-                >
-                  {isMostPopular && (
-                    <p className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-3 py-1 text-sm font-semibold leading-5 text-white shadow-lg animate-pulse">
-                      Most popular
-                    </p>
-                  )}
-                  <h3 className={`text-lg font-bold leading-8 font-heading ${isMostPopular ? 'text-white' : 'text-slate-900'}`}>
-                    {plan.name}
-                  </h3>
-                  <p className={`mt-4 text-sm leading-6 ${isMostPopular ? 'text-slate-300' : 'text-slate-600'}`}>
-                    {getPlanDescription(plan.name)}
-                  </p>
-                  <p className="mt-6 flex items-baseline gap-x-1">
-                    <span className="text-4xl font-black tracking-tight font-heading">{plan.price}</span>
-                    {plan.price !== 'Custom' && <span className="text-sm font-semibold leading-6">/month</span>}
-                  </p>
-                  <Link
-                    to="/auth"
-                    className={`mt-6 block rounded-xl px-3 py-3 text-center text-sm font-bold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-all duration-300 ${
+          <Reveal delay={200}>
+            <div className="grid max-w-4xl mx-auto grid-cols-1 md:grid-cols-3 gap-6">
+              {plans.map((plan) => {
+                const isMostPopular = plan.name === 'Professional';
+                return (
+                  <div
+                    key={plan.id}
+                    className={`rounded-2xl p-8 flex flex-col transition-all duration-500 hover:-translate-y-1 ${
                       isMostPopular
-                        ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-500 hover:scale-105 active:scale-95'
-                        : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:scale-105 active:scale-95'
+                        ? 'bg-gradient-to-b from-teal-500/10 to-[#0F1D32] border-2 border-teal-500/30 shadow-xl shadow-teal-500/10 relative'
+                        : 'bg-[#0F1D32] border border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    {plan.price === 'Custom' ? 'Contact Sales' : 'Start Free Trial'}
-                  </Link>
-                  <div className={`mt-8 p-4 rounded-2xl ${isMostPopular ? 'bg-white/5 border border-white/10' : 'bg-slate-50 border border-slate-100'}`}>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Compute Capacity</p>
-                    <p className={`text-xs font-bold ${isMostPopular ? 'text-white' : 'text-slate-900'}`}>{plan.credits.toLocaleString()} AI Generations / Mo</p>
+                    {isMostPopular && (
+                      <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold bg-teal-500 text-white px-4 py-1 rounded-full shadow-lg">
+                        Most popular
+                      </span>
+                    )}
+
+                    <h3 className="text-lg font-bold font-heading">{plan.name}</h3>
+                    <p className="text-sm text-slate-500 mt-1 mb-5">
+                      {getPlanDescription(plan.name)}
+                    </p>
+
+                    <div className="flex items-baseline gap-1 mb-2">
+                      <span className="text-4xl font-black font-heading">{plan.price}</span>
+                      {plan.price !== 'Custom' && (
+                        <span className="text-sm text-slate-500 font-semibold">/month</span>
+                      )}
+                    </div>
+
+                    {/* Credits badge */}
+                    <div className="mb-6 inline-flex items-center gap-2 bg-white/5 border border-slate-700/50 rounded-lg px-3 py-1.5 w-fit">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        AI Credits
+                      </span>
+                      <span className="text-xs font-bold text-white">
+                        {plan.credits.toLocaleString()}/mo
+                      </span>
+                    </div>
+
+                    <Link
+                      to={plan.price === 'Custom' ? '/contact' : '/signup'}
+                      onClick={() => track('cta_click', { location: 'pricing', tier: plan.name })}
+                      className={`block text-center px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 mb-8 ${
+                        isMostPopular
+                          ? 'bg-teal-500 text-white hover:bg-teal-400 shadow-lg shadow-teal-500/25 hover:scale-105 active:scale-95'
+                          : 'bg-white/5 border border-slate-700 text-white hover:border-teal-500/40 hover:bg-teal-500/5'
+                      }`}
+                    >
+                      {plan.price === 'Custom' ? 'Contact Sales' : 'Start Free Trial'}
+                    </Link>
+
+                    <ul className="space-y-3 flex-1">
+                      {plan.features.map((feature) => (
+                        <li
+                          key={feature}
+                          className="flex items-start gap-2.5 text-sm text-slate-400"
+                        >
+                          <svg
+                            className="w-4 h-4 text-teal-400 mt-0.5 shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className={`mt-8 space-y-3 text-sm leading-6 ${isMostPopular ? 'text-slate-300' : 'text-slate-600'}`}>
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex gap-x-3 group cursor-default">
-                        <span className="text-indigo-500 transition-transform duration-300 group-hover:scale-125">✓</span>
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </Reveal>
         )}
+
+        {/* FAQ teaser */}
+        <Reveal delay={400}>
+          <div className="text-center mt-20">
+            <p className="text-slate-500 mb-2">
+              Have questions?{' '}
+              <Link to="/contact" className="text-teal-400 font-bold hover:text-teal-300 transition-colors">
+                Talk to us
+              </Link>
+            </p>
+            <p className="text-xs text-slate-600">
+              14-day free trial on all paid plans &middot; No credit card
+              required &middot; Cancel anytime
+            </p>
+          </div>
+        </Reveal>
       </div>
     </div>
   );

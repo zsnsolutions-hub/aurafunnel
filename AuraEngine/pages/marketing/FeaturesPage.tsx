@@ -51,7 +51,7 @@ const FeaturesPage: React.FC = () => {
             Everything you need to scale your sales funnel
           </p>
           <p className="mt-6 text-lg leading-8 text-slate-600">
-            AuraFunnel combines state-of-the-art AI with intuitive workflows to help your sales team focus on what matters most: closing deals.
+            Scaliyo combines state-of-the-art AI with intuitive workflows to help your sales team focus on what matters most: closing deals.
           </p>
         </div>
         <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">

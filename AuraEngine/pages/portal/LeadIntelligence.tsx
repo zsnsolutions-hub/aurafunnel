@@ -414,7 +414,7 @@ const LeadIntelligence: React.FC = () => {
 
   const handleExportAnalysis = () => {
     if (!selectedLead || !leadFactors) return;
-    const content = `AuraFunnel Lead Intelligence Report
+    const content = `Scaliyo Lead Intelligence Report
 Generated: ${new Date().toLocaleDateString()}
 Lead: ${selectedLead.name}
 Company: ${selectedLead.company}

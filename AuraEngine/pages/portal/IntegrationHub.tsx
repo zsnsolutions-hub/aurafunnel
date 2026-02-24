@@ -564,8 +564,8 @@ const IntegrationHub: React.FC = () => {
           },
           body: JSON.stringify({
             to_email: fromEmail,
-            subject: `AuraFunnel Test — ${id.toUpperCase()} connection verified`,
-            html_body: `<div style="font-family:sans-serif;padding:20px;"><h2>Connection Test Successful</h2><p>Your <strong>${id.toUpperCase()}</strong> integration is working correctly.</p><p style="color:#888;font-size:12px;">Sent by AuraFunnel at ${new Date().toLocaleString()}</p></div>`,
+            subject: `Scaliyo Test — ${id.toUpperCase()} connection verified`,
+            html_body: `<div style="font-family:sans-serif;padding:20px;"><h2>Connection Test Successful</h2><p>Your <strong>${id.toUpperCase()}</strong> integration is working correctly.</p><p style="color:#888;font-size:12px;">Sent by Scaliyo at ${new Date().toLocaleString()}</p></div>`,
             provider: id,
             track_opens: false,
             track_clicks: false,
@@ -655,7 +655,7 @@ const IntegrationHub: React.FC = () => {
       const res = await fetch(wh.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'test', timestamp: new Date().toISOString(), source: 'AuraFunnel' }),
+        body: JSON.stringify({ event: 'test', timestamp: new Date().toISOString(), source: 'Scaliyo' }),
       });
       const success = res.ok;
       await updateWebhookStats(id, success);
@@ -798,8 +798,8 @@ const IntegrationHub: React.FC = () => {
         },
         body: JSON.stringify({
           to_email: emailSetupFromEmail,
-          subject: `AuraFunnel Test — ${emailSetupId.toUpperCase()} connection verified`,
-          html_body: `<div style="font-family:sans-serif;padding:20px;"><h2>Connection Test Successful</h2><p>This email confirms your <strong>${emailSetupId.toUpperCase()}</strong> integration is working correctly.</p><p style="color:#888;font-size:12px;">Sent by AuraFunnel at ${new Date().toLocaleString()}</p></div>`,
+          subject: `Scaliyo Test — ${emailSetupId.toUpperCase()} connection verified`,
+          html_body: `<div style="font-family:sans-serif;padding:20px;"><h2>Connection Test Successful</h2><p>This email confirms your <strong>${emailSetupId.toUpperCase()}</strong> integration is working correctly.</p><p style="color:#888;font-size:12px;">Sent by Scaliyo at ${new Date().toLocaleString()}</p></div>`,
           provider: emailSetupId,
           track_opens: false,
           track_clicks: false,
@@ -963,7 +963,7 @@ const IntegrationHub: React.FC = () => {
     s === 'connected' ? 'Connected' : s === 'partial' ? 'Partial' : 'Disconnected';
 
   const syncLabel = (d: SyncDirection) =>
-    d === 'bidirectional' ? 'Bi-directional' : d === 'outbound' ? 'AuraFunnel → External' : 'External → AuraFunnel';
+    d === 'bidirectional' ? 'Bi-directional' : d === 'outbound' ? 'Scaliyo → External' : 'External → Scaliyo';
 
   const categories: { key: IntegrationCategory; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -1309,9 +1309,9 @@ const IntegrationHub: React.FC = () => {
             </h3>
             <div className="bg-slate-50 rounded-xl p-4">
               <div className="flex flex-col items-center space-y-2">
-                {/* Row 1: AuraFunnel Core */}
+                {/* Row 1: Scaliyo Core */}
                 <div className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-md">
-                  AuraFunnel Core
+                  Scaliyo Core
                 </div>
                 <div className="flex items-center space-x-1 text-slate-300">
                   <span>↓</span><span>↓</span><span>↓</span><span>↓</span>
@@ -1398,13 +1398,13 @@ const IntegrationHub: React.FC = () => {
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Recent Sync Logs</p>
               <div className="font-mono text-[11px] text-slate-400 space-y-0.5">
                 {[
-                  { time: '14:32:05', msg: 'Salesforce → AuraFunnel: 12 contacts synced', ok: true },
-                  { time: '14:31:48', msg: 'AuraFunnel → HubSpot: Campaign update sent', ok: true },
+                  { time: '14:32:05', msg: 'Salesforce → Scaliyo: 12 contacts synced', ok: true },
+                  { time: '14:31:48', msg: 'Scaliyo → HubSpot: Campaign update sent', ok: true },
                   { time: '14:30:22', msg: 'Slack notification sent to #sales-alerts', ok: true },
                   { time: '14:28:15', msg: 'Slack: Channel #leads-archive not found', ok: false },
                   { time: '14:25:40', msg: 'Google Analytics: Traffic data imported', ok: true },
-                  { time: '14:22:10', msg: 'Salesforce → AuraFunnel: 8 leads synced', ok: true },
-                  { time: '14:18:33', msg: 'AuraFunnel → Mailchimp: List updated (42 contacts)', ok: true },
+                  { time: '14:22:10', msg: 'Salesforce → Scaliyo: 8 leads synced', ok: true },
+                  { time: '14:18:33', msg: 'Scaliyo → Mailchimp: List updated (42 contacts)', ok: true },
                   { time: '14:15:01', msg: 'Webhook: Hot Lead Alert fired successfully', ok: true },
                 ].map((log, i) => (
                   <p key={i}>
