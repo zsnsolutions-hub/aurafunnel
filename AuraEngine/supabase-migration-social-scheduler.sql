@@ -121,20 +121,31 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- 4. TRACKING_LINKS
+-- 4. TRACKING_LINKS (may already exist with partial schema)
 CREATE TABLE IF NOT EXISTS tracking_links (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  post_id UUID REFERENCES social_posts(id) ON DELETE SET NULL,
-  original_url TEXT NOT NULL,
-  short_code TEXT NOT NULL UNIQUE,
-  click_count INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Add columns that may be missing on an existing table
+ALTER TABLE tracking_links ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE tracking_links ADD COLUMN IF NOT EXISTS post_id UUID REFERENCES social_posts(id) ON DELETE SET NULL;
+ALTER TABLE tracking_links ADD COLUMN IF NOT EXISTS original_url TEXT;
+ALTER TABLE tracking_links ADD COLUMN IF NOT EXISTS short_code TEXT;
+ALTER TABLE tracking_links ADD COLUMN IF NOT EXISTS click_count INTEGER DEFAULT 0;
+
+-- Add unique constraint on short_code only if not already present
+DO $$ BEGIN
+  ALTER TABLE tracking_links ADD CONSTRAINT tracking_links_short_code_key UNIQUE (short_code);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_tracking_links_user_id ON tracking_links(user_id);
 CREATE INDEX IF NOT EXISTS idx_tracking_links_post_id ON tracking_links(post_id);
-CREATE INDEX IF NOT EXISTS idx_tracking_links_short_code ON tracking_links(short_code);
+DO $$ BEGIN
+  CREATE INDEX idx_tracking_links_short_code ON tracking_links(short_code);
+EXCEPTION WHEN duplicate_table THEN NULL;
+END $$;
 
 ALTER TABLE tracking_links ENABLE ROW LEVEL SECURITY;
 
