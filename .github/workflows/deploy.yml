@@ -44,5 +44,3 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
           rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key" dist/ $USER@$HOST:/var/www/aurafunnel/
-          scp -i ~/.ssh/deploy_key ../nginx/aurafunnel.conf $USER@$HOST:/tmp/aurafunnel.conf
-          ssh -i ~/.ssh/deploy_key $USER@$HOST "sudo mv /tmp/aurafunnel.conf /etc/nginx/sites-available/aurafunnel && sudo ln -sf /etc/nginx/sites-available/aurafunnel /etc/nginx/sites-enabled/aurafunnel && sudo nginx -t && sudo systemctl reload nginx"
