@@ -59,39 +59,9 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
 
   // Step 4 (processing)
   const [processingLine, setProcessingLine] = useState(0);
-  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
 
   const totalSteps = 4; // 0-3
-  const savingRef = useRef(false);
-
-  // Keep a ref to the save function so the timer always calls the latest version
-  const saveAndFinishRef = useRef<() => void>(() => {});
-  saveAndFinishRef.current = () => {
-    localStorage.setItem('scaliyo_onboarding_role', role);
-    localStorage.setItem('scaliyo_onboarding_goal', goal);
-    localStorage.setItem('scaliyo_onboarding_complete', 'true');
-    localStorage.setItem('scaliyo_onboarding_ts', new Date().toISOString());
-
-    // Fire-and-forget save to Supabase — don't block navigation
-    const patch: Record<string, unknown> = {
-      companyName,
-      teamSize,
-      industry: industry || undefined,
-    };
-    if (companyWebsite) patch.companyWebsite = companyWebsite;
-    const existing = user.businessProfile ?? {};
-    const merged = { ...existing, ...patch };
-
-    supabase
-      .from('profiles')
-      .update({ businessProfile: merged })
-      .eq('id', user.id)
-      .then(() => refreshProfile())
-      .catch((err) => console.warn('Onboarding save failed:', err));
-
-    // Navigate immediately — don't wait for Supabase
-    navigate('/portal', { replace: true });
-  };
 
   const canNext = useCallback(() => {
     if (step === 0) return !!role && !!teamSize;
@@ -105,28 +75,50 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
     navigate('/portal', { replace: true });
   }, [navigate]);
 
-  // Processing animation (step 3)
+  // Processing animation (step 3) — just animate the checklist lines
   useEffect(() => {
     if (step !== 3) return;
-    if (savingRef.current) return;
-
     setProcessingLine(0);
-    const timers: ReturnType<typeof setTimeout>[] = [];
+    setDone(false);
 
-    PROCESSING_LINES.forEach((_, i) => {
-      if (i === 0) return;
-      timers.push(setTimeout(() => setProcessingLine(i), i * 1200));
-    });
-
-    // After all lines shown, call save via ref (always gets latest closure)
-    timers.push(setTimeout(() => {
-      if (savingRef.current) return;
-      savingRef.current = true;
-      saveAndFinishRef.current();
-    }, PROCESSING_LINES.length * 1200));
+    const timers = PROCESSING_LINES.map((_, i) =>
+      setTimeout(() => {
+        setProcessingLine(i);
+        if (i === PROCESSING_LINES.length - 1) setDone(true);
+      }, i * 1200)
+    );
 
     return () => timers.forEach(clearTimeout);
   }, [step]);
+
+  // When animation finishes, save and navigate
+  useEffect(() => {
+    if (!done) return;
+
+    localStorage.setItem('scaliyo_onboarding_role', role);
+    localStorage.setItem('scaliyo_onboarding_goal', goal);
+    localStorage.setItem('scaliyo_onboarding_complete', 'true');
+    localStorage.setItem('scaliyo_onboarding_ts', new Date().toISOString());
+
+    // Fire-and-forget save to Supabase
+    const patch: Record<string, unknown> = {
+      companyName,
+      teamSize,
+      industry: industry || undefined,
+    };
+    if (companyWebsite) patch.companyWebsite = companyWebsite;
+    const merged = { ...(user.businessProfile ?? {}), ...patch };
+
+    supabase
+      .from('profiles')
+      .update({ businessProfile: merged })
+      .eq('id', user.id)
+      .then(() => refreshProfile())
+      .catch((err) => console.warn('Onboarding save failed:', err));
+
+    // Navigate immediately
+    navigate('/portal', { replace: true });
+  }, [done, role, goal, companyName, companyWebsite, industry, teamSize, user, refreshProfile, navigate]);
 
   const next = () => {
     if (step < totalSteps - 1) setStep(step + 1);
