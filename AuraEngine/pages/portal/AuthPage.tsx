@@ -400,7 +400,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
           {/* Logo */}
           <Link to="/" className="flex items-center group">
-            <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
+            <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
           </Link>
 
           {/* Hero Text */}
@@ -474,7 +474,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
           {/* Mobile Logo */}
           <div className="text-center mb-10 lg:mb-8">
             <Link to="/" className="lg:hidden inline-flex items-center mb-8 group">
-              <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
+              <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
             </Link>
             <h2 className="text-3xl font-black text-white font-heading tracking-tight">
               {isLogin ? 'Welcome back' : 'Create account'}

@@ -86,7 +86,7 @@ const TrialSignupPage: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-10">
           <Link to="/" className="inline-block mb-8">
-            <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-8 w-auto" />
+            <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-8 w-auto" />
           </Link>
           <h1 className="text-3xl font-black font-heading mb-2">Start your free trial</h1>
           <p className="text-slate-400">

@@ -173,14 +173,13 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
             navItems={navItems}
             activePath={location.pathname}
             header={
-              <Link to="/" className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-lg">A</div>
-                <span className="text-lg font-bold tracking-tight text-gray-900">Scaliyo</span>
+              <Link to="/" className="flex items-center">
+                <img src="/scaliyo-logo-light.png" alt="Scaliyo" className="h-8 w-auto" />
               </Link>
             }
             headerCollapsed={
               <Link to="/">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-lg">A</div>
+                <img src="/scaliyo-logo-light.png" alt="Scaliyo" className="h-8 w-auto" />
               </Link>
             }
             topSlot={

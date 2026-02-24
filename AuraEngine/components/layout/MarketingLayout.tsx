@@ -29,7 +29,7 @@ const MarketingLayout: React.FC = () => {
               : 'h-16 bg-white/5 backdrop-blur-md border-white/10'
           }`}>
             <Link to="/" className="flex items-center group" aria-label="Scaliyo home">
-              <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
+              <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
             </Link>
 
             <div className="hidden lg:flex items-center space-x-8">
@@ -119,7 +119,7 @@ const MarketingLayout: React.FC = () => {
             {/* Brand + Contact */}
             <div className="md:col-span-4">
               <Link to="/" className="flex items-center mb-6 group">
-                <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
+                <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
               </Link>
               <p className="text-slate-500 leading-relaxed max-w-sm mb-6 text-sm">
                 The AI-powered outbound growth platform that finds leads, enriches your pipeline, and closes deals automatically.
