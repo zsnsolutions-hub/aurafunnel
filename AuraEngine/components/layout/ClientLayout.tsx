@@ -35,7 +35,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const activeIntegrationCount = integrationStatuses.filter(i => i.status === 'connected').length;
 
   const navItems = [
-    { label: 'Main Dashboard', path: '/portal', icon: <Target size={20} /> },
+    { label: 'Dashboard', path: '/portal', icon: <Target size={20} /> },
     { label: 'Lead Management', path: '/portal/leads', icon: <Users size={20} />, children: [
       { label: 'People Search', path: '/portal/leads/apollo', icon: <Compass size={20} /> },
       { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <Brain size={20} /> },
