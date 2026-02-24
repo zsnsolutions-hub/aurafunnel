@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Lead, User, ContentType } from '../../types';
-import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon } from '../../components/Icons';
+import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchBatchEmailSummary } from '../../lib/emailTracking';
@@ -216,6 +216,7 @@ const LeadManagement: React.FC = () => {
   const [showEngagementMetrics, setShowEngagementMetrics] = useState(false);
   const [showScoreIntelligence, setShowScoreIntelligence] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
 
   // ── Lead Color State ──
   const [stageColors, setStageColors] = useState<StageColorMap>({ ...DEFAULT_STAGE_COLORS });
@@ -1010,6 +1011,13 @@ const LeadManagement: React.FC = () => {
             <BrainIcon className="w-3.5 h-3.5" />
             <span className="hidden xl:inline">Scores</span>
           </button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all shadow-sm"
+            title="Keyboard Shortcuts (?)"
+          >
+            <KeyboardIcon className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -1224,23 +1232,33 @@ const LeadManagement: React.FC = () => {
         </div>
       )}
 
-      {/* ── Two Panel Layout: Filters (25%) + Lead List (75%) ── */}
+      {/* ── Two Panel Layout: Filters + Lead List ── */}
       <div className="flex flex-col lg:flex-row gap-6">
 
-        {/* ── FILTER PANEL (25%) ── */}
-        <div className="w-full lg:w-[25%] space-y-5" data-guide="leads-filters">
+        {/* ── FILTER PANEL ── */}
+        <div className={`w-full shrink-0 space-y-5 transition-all duration-200 ${filtersCollapsed ? 'lg:w-auto' : 'lg:w-[25%]'}`} data-guide="leads-filters">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center space-x-2">
                 <FilterIcon className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-bold text-slate-800 font-heading text-sm">Filters</h3>
+                {!filtersCollapsed && <h3 className="font-bold text-slate-800 font-heading text-sm">Filters</h3>}
                 {activeFilterCount > 0 && (
                   <span className="w-5 h-5 bg-indigo-600 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
                     {activeFilterCount}
                   </span>
                 )}
               </div>
+              <button
+                onClick={() => setFiltersCollapsed(prev => !prev)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                title={filtersCollapsed ? 'Expand filters' : 'Collapse filters'}
+              >
+                <svg className={`w-4 h-4 transition-transform duration-200 ${filtersCollapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+                </svg>
+              </button>
             </div>
+            {filtersCollapsed ? null : (<>
 
             {/* Status */}
             <div className="mb-5">
@@ -1422,41 +1440,13 @@ const LeadManagement: React.FC = () => {
                 Clear All
               </button>
             </div>
+            </>)}
           </div>
 
-          {/* Keyboard Shortcuts */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Keyboard Shortcuts</p>
-              <button onClick={() => setShowShortcuts(true)} className="text-[9px] font-bold text-indigo-500 hover:text-indigo-700 transition-colors">
-                View All
-              </button>
-            </div>
-            <div className="space-y-1.5">
-              {[
-                ['j / k', 'Navigate leads'],
-                ['Enter', 'Open lead'],
-                ['x', 'Toggle select'],
-                ['v', 'Toggle view'],
-                ['n', 'New lead'],
-                ['i', 'Import CSV'],
-                ['p', 'Pipeline panel'],
-                ['e', 'Engagement panel'],
-                ['s', 'Score panel'],
-                ['?', 'All shortcuts'],
-                ['Esc', 'Close panels'],
-              ].map(([key, desc]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-500">{key}</kbd>
-                  <span className="text-[10px] text-slate-400">{desc}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* ── LEAD LIST (75%) ── */}
-        <div className="w-full lg:w-[75%] space-y-4">
+        {/* ── LEAD LIST ── */}
+        <div className="flex-1 min-w-0 space-y-4">
 
           {/* View Mode Toggle */}
           <div className="flex items-center justify-between">
