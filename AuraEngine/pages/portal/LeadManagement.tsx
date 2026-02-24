@@ -1885,10 +1885,19 @@ const LeadManagement: React.FC = () => {
                           <span className="text-xs text-slate-500 font-medium">{formatRelativeTime(lead.created_at || lead.lastActivity)}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <div className="flex items-center gap-1 flex-nowrap">
-                            <span className={`inline-block px-1.5 py-px rounded text-[9px] font-bold border whitespace-nowrap ${TAG_COLORS[tag]}`}>
-                              {tag}
-                            </span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-block px-1.5 py-px rounded text-[9px] font-bold border whitespace-nowrap ${TAG_COLORS[tag]}`}>
+                                {tag}
+                              </span>
+                              {(() => {
+                                const summary = emailSummaryMap.get(lead.id);
+                                if (!summary || !summary.hasSent) return null;
+                                const best = summary.hasClicked ? 'Clicked' : summary.hasOpened ? 'Opened' : 'Sent';
+                                const cls = summary.hasClicked ? 'bg-amber-50 text-amber-600' : summary.hasOpened ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600';
+                                return <span className={`px-1.5 py-px rounded text-[9px] font-bold whitespace-nowrap ${cls}`}>{best}</span>;
+                              })()}
+                            </div>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1897,7 +1906,7 @@ const LeadManagement: React.FC = () => {
                                 setInlineStatusPos({ top: rect.bottom + 4, left: rect.left });
                                 setInlineStatusId(lead.id);
                               }}
-                              className={`px-1.5 py-px rounded text-[9px] font-bold whitespace-nowrap transition-all ${
+                              className={`self-start px-1.5 py-px rounded text-[9px] font-bold whitespace-nowrap transition-all ${
                                 lead.status === 'New' ? 'bg-slate-50 text-slate-600' :
                                 lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
                                 lead.status === 'Qualified' ? 'bg-amber-50 text-amber-600' :
@@ -1907,13 +1916,6 @@ const LeadManagement: React.FC = () => {
                             >
                               {lead.status}
                             </button>
-                            {(() => {
-                              const summary = emailSummaryMap.get(lead.id);
-                              if (!summary || !summary.hasSent) return null;
-                              const best = summary.hasClicked ? 'Clicked' : summary.hasOpened ? 'Opened' : 'Sent';
-                              const cls = summary.hasClicked ? 'bg-amber-50 text-amber-600' : summary.hasOpened ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600';
-                              return <span className={`px-1.5 py-px rounded text-[9px] font-bold whitespace-nowrap ${cls}`}>{best}</span>;
-                            })()}
                           </div>
                         </td>
                         <td className="px-3 py-3 text-right">
