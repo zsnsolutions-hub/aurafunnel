@@ -36,6 +36,7 @@ interface LaneColumnProps {
   permissions: FlowPermissions;
   onItemContextMenu?: (e: React.MouseEvent, item: Item) => void;
   onLaneContextMenu?: (e: React.MouseEvent, lane: Lane & { cards: Item[] }) => void;
+  onAddNote?: (itemId: string, body: string) => void;
 }
 
 const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
@@ -48,6 +49,7 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
   permissions,
   onItemContextMenu,
   onLaneContextMenu,
+  onAddNote,
 }, ref) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -118,7 +120,7 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
     <div
       ref={setSortableRef}
       style={style}
-      className={`shrink-0 w-[320px] flex flex-col max-h-full rounded-xl ${hasAccent ? `border-l-[3px] ${accent.border}` : ''}`}
+      className={`flex-1 min-w-[280px] max-w-[480px] flex flex-col max-h-full rounded-xl ${hasAccent ? `border-l-[3px] ${accent.border}` : ''}`}
     >
       {/* ─── Header ─── */}
       <div
@@ -215,6 +217,7 @@ const LaneColumn = forwardRef<LaneColumnHandle, LaneColumnProps>(({
               item={item}
               onClick={() => onItemClick(item)}
               onContextMenu={onItemContextMenu ? (e) => onItemContextMenu(e, item) : undefined}
+              onAddNote={onAddNote}
             />
           ))}
         </SortableContext>

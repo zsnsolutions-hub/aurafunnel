@@ -16,7 +16,7 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable';
-import { LayoutGrid, Eye, Flag, ArrowRight, Pencil, Plus, Trash2, Archive, Users, Link2, Unlink } from 'lucide-react';
+import { LayoutGrid, Eye, Flag, ArrowRight, Pencil, Plus, Trash2, Archive, Users, Link2, Unlink, CircleDot, AlertTriangle } from 'lucide-react';
 import type { FlowWithData, Item, Lane, FlowMember, ItemLeadLink } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import type { BoardFilter, BoardSort, ViewMode } from './FlowHeader';
@@ -24,7 +24,7 @@ import * as api from '../teamHubApi';
 import LaneColumn, { type LaneColumnHandle } from './LaneColumn';
 import ContextMenu, { type ContextMenuItem } from '../../../../components/teamhub/ContextMenu';
 import AddLaneInline from './AddLaneInline';
-import ItemInspector from './ItemInspector';
+import ItemDialog from './ItemDialog';
 import FlowHeader from './FlowHeader';
 import FlowListView from './FlowListView';
 import FlowCalendarView from './FlowCalendarView';
@@ -65,6 +65,7 @@ const FlowView: React.FC<FlowViewProps> = ({
   const [leadLinkItem, setLeadLinkItem] = useState<Item | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const laneRefs = useRef<Map<string, React.RefObject<LaneColumnHandle | null>>>(new Map());
 
   React.useEffect(() => { setLanes(flow.lists); }, [flow.lists]);
@@ -208,6 +209,10 @@ const FlowView: React.FC<FlowViewProps> = ({
       const fromLaneName = flow.lists.find(l => l.cards.some(c => c.id === itemId))?.name || '';
       try {
         await api.moveItem(itemId, currentLane.id, currentLane.cards.map(c => c.id), flow.id, fromLaneName, currentLane.name);
+        // After move completes, refresh to pick up any lead status changes from sync
+        if (fromLaneName !== currentLane.name) {
+          onRefresh();
+        }
       } catch { onRefresh(); }
     }
   }, [lanes, flow, onRefresh, permissions.canEditItems]);
@@ -229,6 +234,15 @@ const FlowView: React.FC<FlowViewProps> = ({
     setLanes(prev => prev.filter(l => l.id !== laneId));
     try { await api.deleteLane(laneId); } catch { onRefresh(); }
   };
+
+  const handleDeleteLaneWithConfirm = useCallback((laneId: string) => {
+    const lane = lanes.find(l => l.id === laneId);
+    setConfirmAction({
+      title: 'Delete Lane',
+      message: `Are you sure you want to delete "${lane?.name || 'this lane'}"? All items in this lane will be removed.`,
+      onConfirm: () => handleDeleteLane(laneId),
+    });
+  }, [lanes, handleDeleteLane]);
 
   const handleAddItem = async (laneId: string, title: string) => {
     const targetLane = lanes.find(l => l.id === laneId);
@@ -312,6 +326,38 @@ const FlowView: React.FC<FlowViewProps> = ({
       })));
     } catch (err) { console.error('Failed to unlink lead:', err); }
   }, [flow.id]);
+
+  const handleAddNote = useCallback(async (itemId: string, body: string) => {
+    // Optimistically update latest_comment and comment_count
+    setLanes(prev => prev.map(l => ({
+      ...l,
+      cards: l.cards.map(c => c.id === itemId
+        ? { ...c, latest_comment: body, comment_count: (c.comment_count ?? 0) + 1 }
+        : c),
+    })));
+    try {
+      await api.addComment(itemId, userId, body, flow.id, userName);
+    } catch (err) {
+      console.error('Failed to add note:', err);
+      onRefresh();
+    }
+  }, [userId, userName, flow.id, onRefresh]);
+
+  const handleChangeLeadStatus = useCallback(async (itemId: string, leadId: string, status: string) => {
+    // Optimistically update lead_link status on the card
+    setLanes(prev => prev.map(l => ({
+      ...l,
+      cards: l.cards.map(c => c.id === itemId && c.lead_link
+        ? { ...c, lead_link: { ...c.lead_link, lead_status: status } }
+        : c),
+    })));
+    try {
+      await api.updateLeadStatus(itemId, flow.id, leadId, status);
+    } catch (err) {
+      console.error('Failed to update lead status:', err);
+      onRefresh();
+    }
+  }, [flow.id, onRefresh]);
 
   const handleLeadLinked = useCallback((link: ItemLeadLink) => {
     setLanes(prev => prev.map(l => ({
@@ -409,12 +455,28 @@ const FlowView: React.FC<FlowViewProps> = ({
           }
         }
 
+        // Pipeline status submenu (when lead is linked)
+        if (item.lead_link && permissions.canEditItems) {
+          for (const status of api.LEAD_PIPELINE_STATUSES) {
+            items.push({
+              label: `${item.lead_link.lead_status === status ? '● ' : ''}${status}`,
+              icon: <CircleDot size={14} />,
+              onClick: () => handleChangeLeadStatus(item.id, item.lead_link!.lead_id, status),
+            });
+          }
+          items[items.length - 1].dividerAfter = true;
+        }
+
         // Archive / close
         items.push({
           label: 'Close Item',
           icon: <Archive size={14} />,
           danger: true,
-          onClick: () => handleArchiveItem(item.id),
+          onClick: () => setConfirmAction({
+            title: 'Close Item',
+            message: `Are you sure you want to close "${item.title}"? This will archive the item.`,
+            onConfirm: () => handleArchiveItem(item.id),
+          }),
         });
       }
 
@@ -445,7 +507,11 @@ const FlowView: React.FC<FlowViewProps> = ({
           label: 'Delete Lane',
           icon: <Trash2 size={14} />,
           danger: true,
-          onClick: () => handleDeleteLane(lane.id),
+          onClick: () => setConfirmAction({
+            title: 'Delete Lane',
+            message: `Are you sure you want to delete "${lane.name}"? All items in this lane will be removed.`,
+            onConfirm: () => handleDeleteLane(lane.id),
+          }),
         });
       }
 
@@ -453,7 +519,7 @@ const FlowView: React.FC<FlowViewProps> = ({
     }
 
     return [];
-  }, [contextMenu, permissions, lanes, members, handleChangeItemPriority, handleMoveItemToLane, handleArchiveItem, handleDeleteLane, handleAssignMember, handleUnassignMember, handleUnlinkLead]);
+  }, [contextMenu, permissions, lanes, members, handleChangeItemPriority, handleMoveItemToLane, handleArchiveItem, handleDeleteLane, handleAssignMember, handleUnassignMember, handleUnlinkLead, handleChangeLeadStatus]);
 
   // ─── Render ───
   const headerProps = {
@@ -508,7 +574,7 @@ const FlowView: React.FC<FlowViewProps> = ({
           >
             {/* Board area — clean light gray like TaskHub */}
             <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gradient-to-b from-gray-50 to-gray-100/50 px-6 py-6">
-              <div className="flex items-start gap-7 h-full">
+              <div className="flex items-start gap-7 h-full mx-auto max-w-[1600px]">
                 <SortableContext items={laneIds} strategy={horizontalListSortingStrategy}>
                   {filteredLanes.map((lane, idx) => (
                     <LaneColumn
@@ -519,10 +585,11 @@ const FlowView: React.FC<FlowViewProps> = ({
                       onAddItem={handleAddItem}
                       onItemClick={setInspectorItem}
                       onRenameLane={handleRenameLane}
-                      onDeleteLane={handleDeleteLane}
+                      onDeleteLane={handleDeleteLaneWithConfirm}
                       permissions={permissions}
                       onItemContextMenu={handleItemContextMenu}
                       onLaneContextMenu={handleLaneContextMenu}
+                      onAddNote={permissions.canComment ? handleAddNote : undefined}
                     />
                   ))}
                 </SortableContext>
@@ -533,7 +600,7 @@ const FlowView: React.FC<FlowViewProps> = ({
             {/* Drag overlay ghost */}
             <DragOverlay>
               {activeItem && (
-                <div className="bg-white rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] w-[320px] rotate-2 opacity-90 border border-blue-200 ring-2 ring-blue-100">
+                <div className="bg-white rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] w-[340px] rotate-2 opacity-90 border border-blue-200 ring-2 ring-blue-100">
                   <div className="p-4">
                     {activeItem.priority && (
                       <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase mb-2 ${
@@ -580,7 +647,7 @@ const FlowView: React.FC<FlowViewProps> = ({
         />
       </div>
 
-      <ItemInspector
+      <ItemDialog
         item={inspectorItem}
         flowId={flow.id}
         userId={userId}
@@ -648,6 +715,40 @@ const FlowView: React.FC<FlowViewProps> = ({
                   className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {confirmAction && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmAction(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={18} className="text-red-500" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">{confirmAction.title}</h3>
+              </div>
+              <p className="text-sm text-slate-500 mb-5 leading-relaxed">{confirmAction.message}</p>
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    confirmAction.onConfirm();
+                    setConfirmAction(null);
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Confirm
                 </button>
               </div>
             </div>

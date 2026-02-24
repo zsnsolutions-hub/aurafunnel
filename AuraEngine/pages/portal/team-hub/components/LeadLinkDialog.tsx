@@ -61,8 +61,8 @@ const LeadLinkDialog: React.FC<LeadLinkDialogProps> = ({ itemId, flowId, onLinke
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
+      <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">

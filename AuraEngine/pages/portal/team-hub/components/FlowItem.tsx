@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Clock, MessageSquare, Paperclip, GripVertical, UserCircle } from 'lucide-react';
+import { Clock, MessageSquare, MessageSquarePlus, GripVertical, UserCircle } from 'lucide-react';
 import type { Item, ItemTag } from '../teamHubApi';
 
 // ─── Priority accent bar colors ───
@@ -32,9 +32,14 @@ interface FlowItemProps {
   item: Item;
   onClick: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  onAddNote?: (itemId: string, body: string) => void;
 }
 
-const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => {
+const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu, onAddNote }) => {
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const {
     attributes,
     listeners,
@@ -60,6 +65,30 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
   const priority = item.priority ? PRIORITY_BADGE[item.priority] : null;
   const accentColor = item.priority ? PRIORITY_ACCENT[item.priority] : null;
   const leadLink = item.lead_link;
+  const latestComment = item.latest_comment;
+
+  const handleNoteOpen = (e: React.MouseEvent | React.PointerEvent) => {
+    e.stopPropagation();
+    setNoteOpen(true);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  };
+
+  const handleNoteSubmit = () => {
+    const body = noteText.trim();
+    if (body && onAddNote) {
+      onAddNote(item.id, body);
+    }
+    setNoteText('');
+    setNoteOpen(false);
+  };
+
+  const handleNoteCancel = () => {
+    setNoteText('');
+    setNoteOpen(false);
+  };
+
+  // Chips row visibility: tags, lead badge, due date, comment count, or note icon
+  const showChipsRow = tags.length > 0 || leadLink || item.due_date || commentCount > 0 || !!onAddNote;
 
   return (
     <div
@@ -72,14 +101,14 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
       onContextMenu={onContextMenu}
       className="bg-white rounded-xl border border-gray-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:border-gray-300 cursor-pointer transition-all duration-200 group overflow-hidden"
     >
-      {/* ═══ SECTION A — Header ═══ */}
+      {/* ═══ HEADER — Priority badge + Title + Avatars ═══ */}
       <div className="flex">
         {/* Priority accent bar */}
         {accentColor && (
           <div className={`w-[3px] shrink-0 ${accentColor} rounded-l-xl`} />
         )}
-        <div className="flex-1 px-4 pt-3 pb-2">
-          <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 px-4 pt-3 pb-2 min-w-0">
+          <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 {priority && (
@@ -98,37 +127,55 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
                 {item.title}
               </h4>
             </div>
-            {/* Tags (right aligned) */}
-            {tags.length > 0 && (
-              <div className="flex flex-wrap justify-end gap-1 shrink-0 max-w-[120px]">
-                {tags.slice(0, 2).map((tag: ItemTag, i: number) => (
-                  <span
-                    key={i}
-                    className="inline-block px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-gray-100/80 text-gray-500 truncate max-w-[56px]"
+
+            {/* Avatars (header right, compact) */}
+            {item.assigned_members && item.assigned_members.length > 0 ? (
+              <div className="flex items-center -space-x-1 shrink-0 mt-0.5">
+                {item.assigned_members.slice(0, 2).map(m => (
+                  <div
+                    key={m.user_id}
+                    title={m.user_name || m.user_email}
+                    className={`w-6 h-6 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-white shadow-sm`}
                   >
-                    #{tag.text}
-                  </span>
+                    {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
+                  </div>
                 ))}
-                {tags.length > 2 && (
-                  <span className="text-[9px] font-semibold text-gray-400">+{tags.length - 2}</span>
+                {item.assigned_members.length > 2 && (
+                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-600 ring-2 ring-white shadow-sm">
+                    +{item.assigned_members.length - 2}
+                  </div>
                 )}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
 
-      {/* ═══ SECTION B — Content ═══ */}
-      {(hasDescription || leadLink || item.due_date) && (
-        <div className={`px-4 pb-2 space-y-1.5 ${accentColor ? 'ml-1' : ''}`}>
-          {/* Description preview */}
-          {hasDescription && (
-            <p className="text-[11.5px] text-gray-500/90 leading-relaxed line-clamp-2">
-              {item.description}
-            </p>
-          )}
+      {/* ═══ CONTENT — Description + Chips + Latest comment + Quick note ═══ */}
+      <div className={`px-4 pb-3 space-y-1.5 ${accentColor ? 'ml-1' : ''}`}>
+        {/* Description preview */}
+        {hasDescription && (
+          <p className="text-[11.5px] text-gray-500/90 leading-relaxed line-clamp-2">
+            {item.description}
+          </p>
+        )}
 
-          <div className="flex items-center gap-2 flex-wrap">
+        {/* Chips row: tags + lead badge + due date + comment count + note icon */}
+        {showChipsRow && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Tags */}
+            {tags.slice(0, 2).map((tag: ItemTag, i: number) => (
+              <span
+                key={i}
+                className="inline-block px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-gray-100/80 text-gray-500 truncate max-w-[56px]"
+              >
+                #{tag.text}
+              </span>
+            ))}
+            {tags.length > 2 && (
+              <span className="text-[9px] font-semibold text-gray-400">+{tags.length - 2}</span>
+            )}
+
             {/* Lead badge */}
             {leadLink && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
@@ -148,49 +195,60 @@ const FlowItem: React.FC<FlowItemProps> = ({ item, onClick, onContextMenu }) => 
                 {new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
             )}
-          </div>
-        </div>
-      )}
 
-      {/* ═══ SECTION C — Footer ═══ */}
-      <div className={`flex items-center justify-between px-4 py-2.5 border-t border-gray-100/80 ${accentColor ? 'ml-1' : ''}`}>
-        <div className="flex items-center gap-2.5">
-          {commentCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
-              <MessageSquare size={12} />
-              {commentCount}
-            </span>
-          )}
-          {hasDescription && (
-            <span className="inline-flex items-center text-[11px] text-gray-400">
-              <Paperclip size={12} />
-            </span>
-          )}
-        </div>
+            {/* Comment count chip */}
+            {commentCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-gray-400 bg-gray-50 border border-gray-100">
+                <MessageSquare size={10} />
+                {commentCount}
+              </span>
+            )}
 
-        {/* Assignee avatars (right aligned, max 3 + overflow) */}
-        {item.assigned_members && item.assigned_members.length > 0 ? (
-          <div className="flex items-center -space-x-1.5">
-            {item.assigned_members.slice(0, 3).map(m => (
-              <div
-                key={m.user_id}
-                title={m.user_name || m.user_email}
-                className={`w-7 h-7 rounded-full ${avatarColor(m.user_id)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
+            {/* Quick-note icon (visible on hover) */}
+            {onAddNote && (
+              <button
+                className="inline-flex items-center p-0.5 rounded text-gray-300 opacity-0 group-hover:opacity-100 hover:text-indigo-500 hover:bg-indigo-50 transition-all"
+                onClick={handleNoteOpen}
+                onPointerDown={e => e.stopPropagation()}
+                title="Add a quick note"
               >
-                {(m.user_name || m.user_email || '?').charAt(0).toUpperCase()}
-              </div>
-            ))}
-            {item.assigned_members.length > 3 && (
-              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 ring-2 ring-white shadow-sm">
-                +{item.assigned_members.length - 3}
-              </div>
+                <MessageSquarePlus size={12} />
+              </button>
             )}
           </div>
-        ) : (
+        )}
+
+        {/* Latest comment snippet (when available and note input is closed) */}
+        {latestComment && !noteOpen && (
+          <p className="text-[11px] text-gray-400 italic line-clamp-1 leading-snug">
+            &ldquo;{latestComment}&rdquo;
+          </p>
+        )}
+
+        {/* Quick-note textarea (expanded) */}
+        {noteOpen && (
           <div
-            className={`w-7 h-7 rounded-full ${avatarColor(item.created_by)} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shadow-sm`}
+            className="mt-1"
+            onClick={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
           >
-            {(item.created_by || '?').charAt(0).toUpperCase()}
+            <textarea
+              ref={textareaRef}
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleNoteSubmit();
+                }
+                if (e.key === 'Escape') {
+                  handleNoteCancel();
+                }
+              }}
+              placeholder="Add a quick note... (Enter to send)"
+              rows={2}
+              className="w-full px-2.5 py-1.5 text-[11px] bg-gray-50 border border-gray-200 rounded-lg resize-none outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 placeholder-gray-400 transition-all"
+            />
           </div>
         )}
       </div>

@@ -42,6 +42,7 @@ export interface Item {
   created_at: string;
   updated_at: string;
   comment_count?: number;
+  latest_comment?: string | null;
   assigned_members?: CardMember[];
   lead_link?: ItemLeadLink | null;
 }
@@ -286,17 +287,22 @@ export async function fetchFlowWithData(flowId: string): Promise<FlowWithData> {
   if (lanesRes.error) throw lanesRes.error;
   if (itemsRes.error) throw itemsRes.error;
 
-  // Get comment counts
+  // Get comment counts + latest comment per card
   const itemIds = (itemsRes.data || []).map(c => c.id);
   let commentCounts: Record<string, number> = {};
+  let latestComments: Record<string, string> = {};
   if (itemIds.length > 0) {
     const { data: comments } = await supabase
       .from('teamhub_comments')
-      .select('card_id')
-      .in('card_id', itemIds);
+      .select('card_id, body, created_at')
+      .in('card_id', itemIds)
+      .order('created_at', { ascending: false });
     if (comments) {
       for (const c of comments) {
         commentCounts[c.card_id] = (commentCounts[c.card_id] || 0) + 1;
+        if (!latestComments[c.card_id]) {
+          latestComments[c.card_id] = c.body;
+        }
       }
     }
   }
@@ -311,6 +317,7 @@ export async function fetchFlowWithData(flowId: string): Promise<FlowWithData> {
     ...c,
     labels: c.labels || [],
     comment_count: commentCounts[c.id] || 0,
+    latest_comment: latestComments[c.id] || null,
     assigned_members: allCardMembers[c.id] || [],
     lead_link: allLeadLinks[c.id] || null,
   }));
@@ -862,36 +869,66 @@ export async function unlinkItemFromLead(
   await logActivity(flowId, itemId, 'lead_unlinked', {});
 }
 
+// ─── Lead Status Update ───
+
+export const LEAD_PIPELINE_STATUSES = ['New', 'Contacted', 'Qualified', 'Converted', 'Lost'] as const;
+
+export async function updateLeadStatus(
+  itemId: string,
+  flowId: string,
+  leadId: string,
+  status: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('leads')
+    .update({
+      status,
+      lastActivity: `Status changed to ${status}`,
+    })
+    .eq('id', leadId);
+  if (error) throw error;
+  await logActivity(flowId, itemId, 'lead_status_changed', { lead_id: leadId, status });
+}
+
 // ─── Lead Sync Helpers ───
+
+// Default lane name → lead status mapping (case-insensitive match)
+const DEFAULT_LANE_STATUS_MAP: Record<string, string> = {
+  'to do': 'New',
+  'todo': 'New',
+  'backlog': 'New',
+  'in progress': 'Contacted',
+  'doing': 'Contacted',
+  'review': 'Qualified',
+  'in review': 'Qualified',
+  'done': 'Converted',
+  'complete': 'Converted',
+  'completed': 'Converted',
+  'closed': 'Converted',
+  'lost': 'Lost',
+  'cancelled': 'Lost',
+  'canceled': 'Lost',
+};
+
+function resolveLeadStatusForLane(
+  toLaneName: string,
+  laneStatusMap?: Record<string, string> | null
+): string | null {
+  // Try exact match from template map first
+  if (laneStatusMap) {
+    const exact = laneStatusMap[toLaneName];
+    if (exact) return exact;
+  }
+  // Fallback to default map (case-insensitive)
+  return DEFAULT_LANE_STATUS_MAP[toLaneName.toLowerCase().trim()] || null;
+}
 
 async function syncLeadStatusOnMove(
   itemId: string,
   flowId: string,
   toLaneName: string
 ): Promise<void> {
-  // Check if flow was created from a template with lead_sync
-  const { data: flow } = await supabase
-    .from('teamhub_boards')
-    .select('template_id')
-    .eq('id', flowId)
-    .single();
-
-  if (!flow?.template_id) return;
-
-  const { data: template } = await supabase
-    .from('teamhub_flow_templates')
-    .select('structure_json')
-    .eq('id', flow.template_id)
-    .single();
-
-  if (!template) return;
-  const structure = template.structure_json as any;
-  if (!structure.lead_sync || !structure.lane_status_map) return;
-
-  const newStatus = structure.lane_status_map[toLaneName];
-  if (!newStatus) return;
-
-  // Check if item has an active lead link
+  // Check if item has an active lead link first (cheapest query)
   const { data: link } = await supabase
     .from('teamhub_item_leads')
     .select('lead_id')
@@ -901,13 +938,39 @@ async function syncLeadStatusOnMove(
 
   if (!link) return;
 
+  // Try to get lane_status_map from template (if flow has one)
+  let laneStatusMap: Record<string, string> | null = null;
+  const { data: flow } = await supabase
+    .from('teamhub_boards')
+    .select('template_id')
+    .eq('id', flowId)
+    .single();
+
+  if (flow?.template_id) {
+    const { data: template } = await supabase
+      .from('teamhub_flow_templates')
+      .select('structure_json')
+      .eq('id', flow.template_id)
+      .single();
+
+    if (template) {
+      const structure = template.structure_json as any;
+      if (structure.lead_sync && structure.lane_status_map) {
+        laneStatusMap = structure.lane_status_map;
+      }
+    }
+  }
+
+  // Resolve the new status using template map or default fallback
+  const newStatus = resolveLeadStatusForLane(toLaneName, laneStatusMap);
+  if (!newStatus) return;
+
   // Update lead status
   await supabase
     .from('leads')
     .update({
       status: newStatus,
       lastActivity: `Status changed to ${newStatus}`,
-      updated_at: new Date().toISOString(),
     })
     .eq('id', link.lead_id);
 
