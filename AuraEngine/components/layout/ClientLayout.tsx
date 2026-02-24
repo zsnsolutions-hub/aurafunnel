@@ -3,10 +3,11 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Target, Users, Brain, MessageSquare, Sparkles, PenSquare, Zap,
   PieChart, GitBranch, SlidersHorizontal, Plug, CreditCard,
-  HelpCircle, BookOpen, Settings, LogOut, Search, Compass, FileText, Send, LayoutGrid
+  HelpCircle, BookOpen, Settings, LogOut, Search, Bell, Compass, FileText, Send, LayoutGrid
 } from 'lucide-react';
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
+import DailyBriefing from '../dashboard/DailyBriefing';
 import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
@@ -24,6 +25,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const location = useLocation();
   const navigate = useNavigate();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gPressedRef = useRef(false);
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -172,6 +174,14 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
                 >
                   <Search size={16} />
                 </button>
+                <button
+                  onClick={() => setNotificationsOpen(true)}
+                  className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
+                  aria-label="Notifications"
+                  title="Notifications"
+                >
+                  <Bell size={16} />
+                </button>
               </div>
             }
             footer={
@@ -220,6 +230,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
 
       {/* Global Overlays */}
       <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
+      <DailyBriefing user={user} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
     </>
   );
 };
