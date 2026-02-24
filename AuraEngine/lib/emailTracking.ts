@@ -241,49 +241,60 @@ export async function fetchBatchEmailSummary(
   const map = new Map<string, BatchEmailSummary>();
   if (leadIds.length === 0) return map;
 
-  // Query 1: messages for these leads → mark hasSent, build messageId→leadId map
-  const { data: messages, error: msgErr } = await supabase
-    .from('email_messages')
-    .select('id, lead_id')
-    .in('lead_id', leadIds);
-
-  if (msgErr || !messages || messages.length === 0) return map;
-
-  const msgToLead = new Map<string, string>();
-  for (const m of messages) {
-    msgToLead.set(m.id, m.lead_id);
-    if (!map.has(m.lead_id)) {
-      map.set(m.lead_id, { hasSent: true, hasOpened: false, hasClicked: false, openCount: 0 });
-    }
+  // Process in chunks to avoid massive .in() queries (PostgREST URL limits)
+  const CHUNK = 50;
+  const chunks: string[][] = [];
+  for (let i = 0; i < leadIds.length; i += CHUNK) {
+    chunks.push(leadIds.slice(i, i + CHUNK));
   }
 
-  const messageIds = [...msgToLead.keys()];
+  // Run all chunks in parallel
+  await Promise.all(chunks.map(async (chunk) => {
+    // Query 1: messages for these leads
+    const { data: messages, error: msgErr } = await supabase
+      .from('email_messages')
+      .select('id, lead_id')
+      .in('lead_id', chunk);
 
-  // Query 2: non-bot events in last 30 days
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
-  const { data: events, error: evtErr } = await supabase
-    .from('email_events')
-    .select('message_id, event_type')
-    .in('message_id', messageIds)
-    .eq('is_bot', false)
-    .gte('created_at', thirtyDaysAgo)
-    .in('event_type', ['open', 'click']);
+    if (msgErr || !messages || messages.length === 0) return;
 
-  if (evtErr || !events) return map;
-
-  for (const ev of events) {
-    const leadId = msgToLead.get(ev.message_id);
-    if (!leadId) continue;
-    const summary = map.get(leadId);
-    if (!summary) continue;
-    if (ev.event_type === 'open') {
-      summary.hasOpened = true;
-      summary.openCount++;
+    const msgToLead = new Map<string, string>();
+    for (const m of messages) {
+      msgToLead.set(m.id, m.lead_id);
+      if (!map.has(m.lead_id)) {
+        map.set(m.lead_id, { hasSent: true, hasOpened: false, hasClicked: false, openCount: 0 });
+      }
     }
-    if (ev.event_type === 'click') {
-      summary.hasClicked = true;
+
+    const messageIds = [...msgToLead.keys()];
+    if (messageIds.length === 0) return;
+
+    // Query 2: non-bot events in last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+    const { data: events, error: evtErr } = await supabase
+      .from('email_events')
+      .select('message_id, event_type')
+      .in('message_id', messageIds)
+      .eq('is_bot', false)
+      .gte('created_at', thirtyDaysAgo)
+      .in('event_type', ['open', 'click']);
+
+    if (evtErr || !events) return;
+
+    for (const ev of events) {
+      const leadId = msgToLead.get(ev.message_id);
+      if (!leadId) continue;
+      const summary = map.get(leadId);
+      if (!summary) continue;
+      if (ev.event_type === 'open') {
+        summary.hasOpened = true;
+        summary.openCount++;
+      }
+      if (ev.event_type === 'click') {
+        summary.hasClicked = true;
+      }
     }
-  }
+  }));
 
   return map;
 }

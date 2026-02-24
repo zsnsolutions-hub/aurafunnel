@@ -220,10 +220,6 @@ const LeadManagement: React.FC = () => {
   // ── Lead Color State ──
   const [stageColors, setStageColors] = useState<StageColorMap>({ ...DEFAULT_STAGE_COLORS });
   const [colorOverrides, setColorOverrides] = useState<ColorOverrideMap>({});
-  useEffect(() => {
-    fetchStageColors().then(setStageColors);
-    fetchColorOverrides().then(setColorOverrides);
-  }, []);
   const handleColorOverride = useCallback(async (leadId: string, token: ColorToken | null) => {
     await setLeadColorOverride(leadId, token);
     if (token === null) {
@@ -249,16 +245,12 @@ const LeadManagement: React.FC = () => {
     }
   }, []);
 
-  // ── Fetch ──
-  useEffect(() => {
-    fetchLeads();
-  }, [user]);
-
+  // ── Fetch (leads + colors in parallel) ──
   const fetchLeads = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('leads')
-      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase')
+      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at')
       .eq('client_id', user.id)
       .order('score', { ascending: false });
     if (error) {
@@ -268,6 +260,13 @@ const LeadManagement: React.FC = () => {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    // Fire all initial data fetches in parallel
+    fetchLeads();
+    fetchStageColors().then(setStageColors);
+    fetchColorOverrides().then(setColorOverrides);
+  }, [user]);
 
   // ── Batch email summary fetch ──
   useEffect(() => {
@@ -673,16 +672,28 @@ const LeadManagement: React.FC = () => {
     }
   };
 
-  const openEditLead = (lead: Lead) => {
+  const openEditLead = async (lead: Lead) => {
     setEditLeadId(lead.id);
-    const kb = lead.knowledgeBase || {};
     setEditLead({
       name: lead.name || '',
       email: lead.email || '',
       company: lead.company || '',
-      phone: (kb as Record<string, string>).phone || '',
+      phone: '',
       insights: lead.insights || '',
     });
+    setEditLeadKb({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
+    setEditVisibleKbFields(new Set());
+    setEditLeadError('');
+    setIsEditLeadOpen(true);
+
+    // Lazy-load knowledgeBase for this lead
+    const { data } = await supabase
+      .from('leads')
+      .select('knowledgeBase')
+      .eq('id', lead.id)
+      .single();
+    const kb = data?.knowledgeBase || {};
+    setEditLead(prev => ({ ...prev, phone: (kb as Record<string, string>).phone || '' }));
     setEditLeadKb({
       website: kb.website || '',
       linkedin: kb.linkedin || '',
@@ -698,8 +709,6 @@ const LeadManagement: React.FC = () => {
     if (kb.instagram) visible.add('instagram');
     if (kb.facebook) visible.add('facebook');
     setEditVisibleKbFields(visible);
-    setEditLeadError('');
-    setIsEditLeadOpen(true);
   };
 
   const handleEditLead = async (e: React.FormEvent) => {
