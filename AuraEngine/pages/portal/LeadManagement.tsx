@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
@@ -193,9 +194,11 @@ const LeadManagement: React.FC = () => {
 
   // ── Inline Status Edit ──
   const [inlineStatusId, setInlineStatusId] = useState<string | null>(null);
+  const [inlineStatusPos, setInlineStatusPos] = useState<{ top: number; left: number } | null>(null);
 
   // ── Actions Dropdown ──
   const [actionsDropdownId, setActionsDropdownId] = useState<string | null>(null);
+  const [actionsDropdownPos, setActionsDropdownPos] = useState<{ top: number; right: number } | null>(null);
 
   // ── Activity Log ──
   const [activityLogOpen, setActivityLogOpen] = useState(false);
@@ -1886,35 +1889,24 @@ const LeadManagement: React.FC = () => {
                             <span className={`inline-block px-1.5 py-px rounded text-[9px] font-bold border whitespace-nowrap ${TAG_COLORS[tag]}`}>
                               {tag}
                             </span>
-                            <div className="relative">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setInlineStatusId(inlineStatusId === lead.id ? null : lead.id); }}
-                                className={`px-1.5 py-px rounded text-[9px] font-bold whitespace-nowrap transition-all ${
-                                  lead.status === 'New' ? 'bg-slate-50 text-slate-600' :
-                                  lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
-                                  lead.status === 'Qualified' ? 'bg-amber-50 text-amber-600' :
-                                  lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-600' :
-                                  'bg-red-50 text-red-500'
-                                } hover:ring-1 hover:ring-indigo-200`}
-                              >
-                                {lead.status}
-                              </button>
-                              {inlineStatusId === lead.id && (
-                                <div className="absolute top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden min-w-[100px]">
-                                  {STATUS_OPTIONS.map(s => (
-                                    <button
-                                      key={s}
-                                      onClick={(e) => { e.stopPropagation(); handleStatusUpdate(lead.id, s); setInlineStatusId(null); }}
-                                      className={`w-full text-left px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                                        lead.status === s ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
-                                      }`}
-                                    >
-                                      {s}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (inlineStatusId === lead.id) { setInlineStatusId(null); return; }
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setInlineStatusPos({ top: rect.bottom + 4, left: rect.left });
+                                setInlineStatusId(lead.id);
+                              }}
+                              className={`px-1.5 py-px rounded text-[9px] font-bold whitespace-nowrap transition-all ${
+                                lead.status === 'New' ? 'bg-slate-50 text-slate-600' :
+                                lead.status === 'Contacted' ? 'bg-blue-50 text-blue-600' :
+                                lead.status === 'Qualified' ? 'bg-amber-50 text-amber-600' :
+                                lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-600' :
+                                'bg-red-50 text-red-500'
+                              } hover:ring-1 hover:ring-indigo-200`}
+                            >
+                              {lead.status}
+                            </button>
                             {(() => {
                               const summary = emailSummaryMap.get(lead.id);
                               if (!summary || !summary.hasSent) return null;
@@ -1933,38 +1925,21 @@ const LeadManagement: React.FC = () => {
                             >
                               <EyeIcon className="w-3.5 h-3.5" />
                             </button>
-                            <div className="relative">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setActionsDropdownId(actionsDropdownId === lead.id ? null : lead.id); }}
-                                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                                title="Actions"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                  <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                              </button>
-                              {actionsDropdownId === lead.id && (
-                                <div className="absolute top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden min-w-[130px] py-1">
-                                  <button onClick={(ev) => { ev.stopPropagation(); openEditLead(lead); setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
-                                    <PencilIcon className="w-3.5 h-3.5 text-amber-500" /> Edit
-                                  </button>
-                                  <button onClick={() => { setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
-                                    <MailIcon className="w-3.5 h-3.5 text-blue-500" /> Email
-                                  </button>
-                                  <button onClick={() => { setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
-                                    <PhoneIcon className="w-3.5 h-3.5 text-emerald-500" /> Call
-                                  </button>
-                                  {crmConnected && (
-                                    <button onClick={(ev) => { ev.stopPropagation(); handleSyncToCrm(lead.id); setActionsDropdownId(null); }} disabled={syncingCrm === lead.id} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                                      <GlobeIcon className="w-3.5 h-3.5 text-violet-500" /> Sync CRM
-                                    </button>
-                                  )}
-                                  <button onClick={() => { setActivityLogLead(lead); setActivityLogOpen(true); setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
-                                    <EditIcon className="w-3.5 h-3.5 text-violet-500" /> Log Activity
-                                  </button>
-                                </div>
-                              )}
-                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (actionsDropdownId === lead.id) { setActionsDropdownId(null); return; }
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setActionsDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                setActionsDropdownId(lead.id);
+                              }}
+                              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                              title="Actions"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -2845,6 +2820,65 @@ const LeadManagement: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Portal: Inline Status Dropdown */}
+      {inlineStatusId && inlineStatusPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setInlineStatusId(null)} />
+          <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden min-w-[100px]" style={{ top: inlineStatusPos.top, left: inlineStatusPos.left }}>
+            {STATUS_OPTIONS.map(s => {
+              const current = paginatedLeads.find(l => l.id === inlineStatusId);
+              return (
+                <button
+                  key={s}
+                  onClick={(e) => { e.stopPropagation(); handleStatusUpdate(inlineStatusId, s); setInlineStatusId(null); }}
+                  className={`w-full text-left px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                    current?.status === s ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+        </>,
+        document.body
+      )}
+
+      {/* Portal: Actions Dropdown */}
+      {actionsDropdownId && actionsDropdownPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setActionsDropdownId(null)} />
+          <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden min-w-[130px] py-1" style={{ top: actionsDropdownPos.top, right: actionsDropdownPos.right }}>
+            {(() => {
+              const lead = paginatedLeads.find(l => l.id === actionsDropdownId);
+              if (!lead) return null;
+              return (
+                <>
+                  <button onClick={(ev) => { ev.stopPropagation(); openEditLead(lead); setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
+                    <PencilIcon className="w-3.5 h-3.5 text-amber-500" /> Edit
+                  </button>
+                  <button onClick={() => setActionsDropdownId(null)} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
+                    <MailIcon className="w-3.5 h-3.5 text-blue-500" /> Email
+                  </button>
+                  <button onClick={() => setActionsDropdownId(null)} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
+                    <PhoneIcon className="w-3.5 h-3.5 text-emerald-500" /> Call
+                  </button>
+                  {crmConnected && (
+                    <button onClick={(ev) => { ev.stopPropagation(); handleSyncToCrm(lead.id); setActionsDropdownId(null); }} disabled={syncingCrm === lead.id} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                      <GlobeIcon className="w-3.5 h-3.5 text-violet-500" /> Sync CRM
+                    </button>
+                  )}
+                  <button onClick={() => { setActivityLogLead(lead); setActivityLogOpen(true); setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
+                    <EditIcon className="w-3.5 h-3.5 text-violet-500" /> Log Activity
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );
