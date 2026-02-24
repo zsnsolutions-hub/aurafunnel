@@ -47,12 +47,14 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       { label: 'Content Studio', path: '/portal/content-studio', icon: <PenSquare size={20} /> },
       { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranch size={20} /> },
     ]},
-    { label: 'Team Hub', path: '/portal/strategy', icon: <Zap size={20} /> },
-    { label: 'Team Boards', path: '/portal/team-hub', icon: <LayoutGrid size={20} /> },
-    { label: 'Guest Posts', path: '/portal/blog', icon: <PenSquare size={20} /> },
+    { label: 'Team Hub', path: '/portal/strategy', icon: <Zap size={20} />, children: [
+      { label: 'Team Boards', path: '/portal/team-hub', icon: <LayoutGrid size={20} /> },
+    ]},
+    { label: 'Social Scheduler', path: '/portal/social-scheduler', icon: <Send size={20} />, children: [
+      { label: 'Guest Posts', path: '/portal/blog', icon: <PenSquare size={20} /> },
+    ]},
     { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChart size={20} /> },
     { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },
-    { label: 'Social Scheduler', path: '/portal/social-scheduler', icon: <Send size={20} /> },
     { label: 'Invoices', path: '/portal/invoices', icon: <FileText size={20} /> },
     { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCard size={20} /> },
     { label: 'Settings', path: '/portal/settings', icon: <Settings size={20} />, children: [
