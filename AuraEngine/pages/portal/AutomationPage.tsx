@@ -49,6 +49,7 @@ const PANEL_ICONS: Record<string, React.FC<{ className?: string }>> = {
 export default function AutomationPage() {
   const { user } = useOutletContext<LayoutContext>();
   const h = useAutomationWorkflow(user?.id);
+  const [showPanelsMenu, setShowPanelsMenu] = React.useState(false);
 
   const sc = WORKFLOW_STATUS_STYLES[h.workflow.status];
 
@@ -66,32 +67,47 @@ export default function AutomationPage() {
           )}
         </div>
         <div className="flex items-center space-x-2">
-          {/* Data-driven panel toggle buttons */}
-          {HEADER_PANEL_BUTTONS.map(btn => {
-            const isActive = h.panelVisibility[btn.panel];
-            const Icon = PANEL_ICONS[btn.iconName];
-            return (
-              <button
-                key={btn.panel}
-                onClick={() => h.togglePanel(btn.panel)}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border shadow-sm ${
-                  isActive
-                    ? `${btn.activeBg} ${btn.activeColor} ${btn.activeBorder}`
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {Icon && <Icon className="w-3.5 h-3.5" />}
-                <span>{btn.label}</span>
-              </button>
-            );
-          })}
-          <button
-            onClick={() => h.togglePanel('shortcuts')}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <span>Shortcuts</span>
-          </button>
+          {/* Panels dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowPanelsMenu(prev => !prev)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <ActivityIcon className="w-3.5 h-3.5" />
+              <span>Panels</span>
+              <svg className="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+            </button>
+            {showPanelsMenu && (
+              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-30 w-52 py-1">
+                {HEADER_PANEL_BUTTONS.map(btn => {
+                  const isActive = h.panelVisibility[btn.panel];
+                  const Icon = PANEL_ICONS[btn.iconName];
+                  return (
+                    <button
+                      key={btn.panel}
+                      onClick={() => { h.togglePanel(btn.panel); setShowPanelsMenu(false); }}
+                      className={`w-full text-left px-3 py-2.5 text-xs font-bold transition-colors flex items-center space-x-2.5 ${
+                        isActive ? `${btn.activeColor} ${btn.activeBg}` : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {Icon && <Icon className="w-4 h-4" />}
+                      <span>{btn.label}</span>
+                      {isActive && <CheckIcon className="w-3.5 h-3.5 ml-auto" />}
+                    </button>
+                  );
+                })}
+                <div className="border-t border-slate-100 mt-1 pt-1">
+                  <button
+                    onClick={() => { h.togglePanel('shortcuts'); setShowPanelsMenu(false); }}
+                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2.5"
+                  >
+                    <KeyboardIcon className="w-4 h-4" />
+                    <span>Shortcuts</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Workflow Switcher */}
           <div className="relative">
