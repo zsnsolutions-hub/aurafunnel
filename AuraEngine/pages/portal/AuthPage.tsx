@@ -399,13 +399,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
 
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2.5 group">
-            <div className="w-9 h-9 bg-teal-500 rounded-lg flex items-center justify-center group-hover:rotate-12 group-hover:scale-110 transition-all duration-500 ease-out">
-              <span className="text-white font-black text-sm">S</span>
-            </div>
-            <span className="text-xl font-bold text-white tracking-tight font-heading group-hover:text-teal-400 transition-colors duration-300">
-              Scaliyo
-            </span>
+          <Link to="/" className="flex items-center group">
+            <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
           </Link>
 
           {/* Hero Text */}
@@ -478,11 +473,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
         <div className="max-w-[420px] w-full">
           {/* Mobile Logo */}
           <div className="text-center mb-10 lg:mb-8">
-            <Link to="/" className="lg:hidden inline-flex items-center space-x-2.5 mb-8 group">
-              <div className="w-9 h-9 bg-teal-500 rounded-lg flex items-center justify-center group-hover:rotate-12 transition-all duration-500">
-                <span className="text-white font-black text-sm">S</span>
-              </div>
-              <span className="text-xl font-bold tracking-tight text-white font-heading group-hover:text-teal-400 transition-colors">Scaliyo</span>
+            <Link to="/" className="lg:hidden inline-flex items-center mb-8 group">
+              <img src="/scaliyo-logo.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
             </Link>
             <h2 className="text-3xl font-black text-white font-heading tracking-tight">
               {isLogin ? 'Welcome back' : 'Create account'}
