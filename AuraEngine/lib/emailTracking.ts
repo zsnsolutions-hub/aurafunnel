@@ -367,7 +367,7 @@ interface EmailLead {
   company?: string;
   insights?: string;
   score?: number;
-  status?: string;
+  status?: 'New' | 'Contacted' | 'Qualified' | 'Converted' | 'Lost';
   lastActivity?: string;
   knowledgeBase?: KnowledgeBase;
 }

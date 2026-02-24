@@ -393,11 +393,11 @@ const AnalyticsPage: React.FC = () => {
 
   // ─── Industry Benchmarks (real "Yours" column) ───
   const benchmarks = useMemo(() => [
-    { metric: 'Conversion Rate', yours: metrics.convRate, industry: 3.2, top10: 8.5, unit: '%' },
-    { metric: 'Open Rate', yours: metrics.openRate, industry: 21.5, top10: 45.0, unit: '%' },
-    { metric: 'Click Rate', yours: analyticsData.emailAnalytics.clickRate, industry: 2.6, top10: 8.0, unit: '%' },
-    { metric: 'Hot Lead %', yours: metrics.total > 0 ? Math.round((metrics.hot / metrics.total) * 100) : 0, industry: 8, top10: 18, unit: '%' },
-    { metric: 'Workflow Success', yours: analyticsData.workflowAnalytics.successRate, industry: 85, top10: 97, unit: '%' },
+    { metric: 'Conversion Rate', yours: metrics.convRate, industry: 3.2, top10: 8.5, unit: '%', lower: false },
+    { metric: 'Open Rate', yours: metrics.openRate, industry: 21.5, top10: 45.0, unit: '%', lower: false },
+    { metric: 'Click Rate', yours: analyticsData.emailAnalytics.clickRate, industry: 2.6, top10: 8.0, unit: '%', lower: false },
+    { metric: 'Hot Lead %', yours: metrics.total > 0 ? Math.round((metrics.hot / metrics.total) * 100) : 0, industry: 8, top10: 18, unit: '%', lower: false },
+    { metric: 'Workflow Success', yours: analyticsData.workflowAnalytics.successRate, industry: 85, top10: 97, unit: '%', lower: false },
   ], [metrics, analyticsData]);
 
   // ─── Cohort Analysis (real weekly cohorts from leads) ───

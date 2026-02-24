@@ -1263,7 +1263,7 @@ const ProfilePage: React.FC = () => {
                   { key: 'businessEmail' as const, label: 'Email', icon: <MailIcon className="w-4 h-4" />, type: 'input' },
                   { key: 'address' as const, label: 'Address', icon: <MapPinIcon className="w-4 h-4" />, type: 'input' },
                 ]).map(field => {
-                  const confidence = (analysisResult as Record<string, BusinessAnalysisField | undefined>)[field.key]?.confidence || 0;
+                  const confidence = (analysisResult as unknown as Record<string, BusinessAnalysisField | undefined>)[field.key]?.confidence || 0;
                   const confidenceColor = confidence >= 80 ? 'emerald' : confidence >= 50 ? 'amber' : 'rose';
                   const confidenceLabel = confidence >= 80 ? 'High confidence' : confidence >= 50 ? 'Medium' : 'Low — please review';
 

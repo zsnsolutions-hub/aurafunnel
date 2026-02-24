@@ -1027,7 +1027,7 @@ const ContentGen: React.FC = () => {
     setTestEmailSending(true);
     setTestEmailResult(null);
     try {
-      const footer = buildEmailFooter(user);
+      const footer = buildEmailFooter(user.businessProfile);
       const htmlBody = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">${activeBlock.body.split('\n').map(l => l.trim() ? `<p style="margin:0 0 12px;">${l}</p>` : '').join('')}${footer}</div>`;
       const result = await sendTrackedEmail({
         toEmail: testEmailAddress.trim(),
@@ -1037,7 +1037,6 @@ const ContentGen: React.FC = () => {
         trackOpens: true,
         trackClicks: true,
         provider: connectedProvider?.provider as EmailProvider,
-        fromName: connectedProvider?.from_name,
       });
       setTestEmailResult({ success: result.success, error: result.error });
     } catch (err) {

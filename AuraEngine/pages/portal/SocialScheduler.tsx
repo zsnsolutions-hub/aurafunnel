@@ -124,7 +124,7 @@ const SocialScheduler: React.FC = () => {
   }, []);
 
   // ─── Debounced draft saving ───
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     if (!draftRestored.current) return;
     clearTimeout(saveTimer.current);

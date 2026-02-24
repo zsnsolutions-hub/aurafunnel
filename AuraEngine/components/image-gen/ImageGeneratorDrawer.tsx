@@ -90,8 +90,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
   useEffect(() => {
     if (!open) return;
     supabase.from('plans').select('*').order('credits', { ascending: true })
-      .then(({ data }) => { if (data) setPlans(data); })
-      .catch(console.error);
+      .then(({ data, error }) => { if (error) console.error(error); else if (data) setPlans(data); });
   }, [open]);
 
   const handlePresetClick = (id: string, presetPrompt: string) => {

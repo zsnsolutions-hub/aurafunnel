@@ -277,7 +277,7 @@ export default function AutomationPage() {
                 onUpdateConfig={h.updateNodeConfig}
                 onUpdateTitle={h.updateNodeTitle}
                 onUpdateDescription={h.updateNodeDescription}
-                onRemoveNode={h.removeNode}
+                onMoveNode={h.moveNode}
                 integrationStatuses={h.integrationStatuses}
                 availableWebhooks={h.availableWebhooks}
               />

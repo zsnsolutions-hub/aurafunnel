@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Lead, ContentType, User, DashboardQuickStats, AIInsight, ManualList, FunnelStage } from '../../types';
+import { Lead, ContentType, User, DashboardQuickStats, AIInsight, ManualList, FunnelStage, KnowledgeBase } from '../../types';
 import {
   FlameIcon, SparklesIcon, TargetIcon, ChartIcon, TrendUpIcon, CreditCardIcon,
   KeyboardIcon, XIcon, TrendDownIcon, ActivityIcon, ShieldIcon, CheckIcon,
@@ -583,7 +583,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${briefText}`
         : `${AI_RESEARCH_HEADER}\n${briefText}`;
 
-      const updatedKb = {
+      const updatedKb: KnowledgeBase = {
         ...kb,
         extraNotes: merged,
         title: structured.title || kb.title,
@@ -591,9 +591,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         employeeCount: structured.employeeCount || kb.employeeCount,
         location: structured.location || kb.location,
         companyOverview: structured.companyOverview || kb.companyOverview,
-        talkingPoints: structured.talkingPoints || kb.talkingPoints,
+        talkingPoints: structured.talkingPoints || (Array.isArray(kb.talkingPoints) ? kb.talkingPoints : undefined),
         outreachAngle: structured.outreachAngle || kb.outreachAngle,
-        riskFactors: structured.riskFactors || kb.riskFactors,
+        riskFactors: structured.riskFactors || (Array.isArray(kb.riskFactors) ? kb.riskFactors : undefined),
         aiResearchBrief: briefText,
         aiResearchedAt: structured.aiResearchedAt,
         mentionedOnWebsite: structured.mentionedOnWebsite || kb.mentionedOnWebsite,

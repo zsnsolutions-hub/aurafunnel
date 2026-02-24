@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import type { ImageGenBrandAsset, LogoPlacement, LogoSize } from '../../types';
-import { CheckIcon, TrashIcon, XIcon } from '../Icons';
+import { CheckIcon, XIcon } from '../Icons';
+import { Trash2 as TrashIcon } from 'lucide-react';
 
 interface LogoPickerProps {
   logos: ImageGenBrandAsset[];

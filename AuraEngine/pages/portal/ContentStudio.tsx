@@ -1091,13 +1091,13 @@ const ContentStudio: React.FC = () => {
           { label: 'Pricing', body: proposalSections.pricing },
           { label: 'Next Steps', body: proposalSections.nextSteps },
         ];
-        const selectedLead = leads[0] || {};
+        const selectedLead = leads[0];
         const personalization: Record<string, string> = {
-          '{{company}}': selectedLead.company || 'Acme Corp',
-          '{{industry}}': selectedLead.knowledgeBase?.industry || 'your industry',
+          '{{company}}': selectedLead?.company || 'Acme Corp',
+          '{{industry}}': selectedLead?.knowledgeBase?.industry || 'your industry',
           '{{pain_point}}': 'scaling lead generation',
-          '{{company_size}}': selectedLead.knowledgeBase?.employeeCount || '',
-          '{{first_name}}': selectedLead.name?.split(' ')[0] || '',
+          '{{company_size}}': selectedLead?.knowledgeBase?.employeeCount || '',
+          '{{first_name}}': selectedLead?.name?.split(' ')[0] || '',
         };
         generateProposalPdf({
           companyName: user.name || 'Your Company',
