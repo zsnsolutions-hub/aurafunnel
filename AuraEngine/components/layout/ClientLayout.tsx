@@ -3,12 +3,10 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Target, Users, Brain, MessageSquare, Sparkles, PenSquare, Zap,
   PieChart, GitBranch, SlidersHorizontal, Plug, CreditCard,
-  HelpCircle, BookOpen, Settings, LogOut, Search, Bell, Compass, FileText, Send, LayoutGrid
+  HelpCircle, BookOpen, Settings, LogOut, Search, Compass, FileText, Send, LayoutGrid
 } from 'lucide-react';
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
-import DailyBriefing from '../dashboard/DailyBriefing';
-import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -26,8 +24,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const location = useLocation();
   const navigate = useNavigate();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [briefingOpen, setBriefingOpen] = useState(false);
-  const [briefingShown, setBriefingShown] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gPressedRef = useRef(false);
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,22 +64,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const creditsUsed = user.credits_used || 0;
   const usagePercentage = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
 
-  // ─── Show daily briefing once per session ───
-  useEffect(() => {
-    if (!briefingShown) {
-      const key = `briefing_shown_${new Date().toISOString().split('T')[0]}`;
-      const alreadyShown = sessionStorage.getItem(key);
-      if (!alreadyShown) {
-        const timer = setTimeout(() => {
-          setBriefingOpen(true);
-          setBriefingShown(true);
-          sessionStorage.setItem(key, 'true');
-        }, 800);
-        return () => clearTimeout(timer);
-      }
-      setBriefingShown(true);
-    }
-  }, [briefingShown]);
 
   // ─── Global keyboard shortcuts ───
   useEffect(() => {
@@ -99,14 +79,14 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       }
 
       // / → Search (open command palette) - only when not in input
-      if (e.key === '/' && !isInput && !commandPaletteOpen && !briefingOpen) {
+      if (e.key === '/' && !isInput && !commandPaletteOpen) {
         e.preventDefault();
         setCommandPaletteOpen(true);
         return;
       }
 
       // ? → Help
-      if (e.key === '?' && !isInput && !commandPaletteOpen && !briefingOpen) {
+      if (e.key === '?' && !isInput && !commandPaletteOpen) {
         e.preventDefault();
         navigate('/portal/help');
         return;
@@ -115,12 +95,11 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       // Escape → close overlays
       if (e.key === 'Escape') {
         if (commandPaletteOpen) setCommandPaletteOpen(false);
-        if (briefingOpen) setBriefingOpen(false);
-        return;
+                return;
       }
 
       // Skip G-shortcuts if in input or overlay is open
-      if (isInput || commandPaletteOpen || briefingOpen) return;
+      if (isInput || commandPaletteOpen) return;
 
       // G then <key> navigation shortcuts
       if (e.key === 'g' || e.key === 'G') {
@@ -160,7 +139,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       window.removeEventListener('keydown', handleKeyDown);
       if (gTimerRef.current) clearTimeout(gTimerRef.current);
     };
-  }, [navigate, commandPaletteOpen, briefingOpen]);
+  }, [navigate, commandPaletteOpen]);
 
   return (
     <>
@@ -242,18 +221,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
                 <Search size={16} />
               </button>
             }
-            actions={
-              <>
-                <GuideMenuButton />
-                <button
-                  onClick={() => setBriefingOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 rounded-xl text-xs font-medium hover:bg-gray-100 hover:border-gray-300 transition-all duration-150 ease-out"
-                >
-                  <Bell size={16} />
-                  <span>Briefing</span>
-                </button>
-              </>
-            }
+            actions={null}
           />
         }
       >
@@ -263,7 +231,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
 
       {/* Global Overlays */}
       <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
-      <DailyBriefing user={user} open={briefingOpen} onClose={() => setBriefingOpen(false)} />
     </>
   );
 };
