@@ -26,6 +26,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const navigate = useNavigate();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsAutoShown, setNotificationsAutoShown] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gPressedRef = useRef(false);
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,6 +67,22 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const creditsUsed = user.credits_used || 0;
   const usagePercentage = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
 
+
+  // ─── Auto-show notifications once per session ───
+  useEffect(() => {
+    if (notificationsAutoShown) return;
+    const key = `notifications_shown_${new Date().toISOString().split('T')[0]}`;
+    if (sessionStorage.getItem(key)) {
+      setNotificationsAutoShown(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setNotificationsOpen(true);
+      setNotificationsAutoShown(true);
+      sessionStorage.setItem(key, 'true');
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [notificationsAutoShown]);
 
   // ─── Global keyboard shortcuts ───
   useEffect(() => {
