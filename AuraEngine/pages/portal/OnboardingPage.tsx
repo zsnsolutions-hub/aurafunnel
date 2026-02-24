@@ -109,10 +109,12 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
     if (companyWebsite) patch.companyWebsite = companyWebsite;
     const merged = { ...(user.businessProfile ?? {}), ...patch };
 
-    supabase
-      .from('profiles')
-      .update({ businessProfile: merged })
-      .eq('id', user.id)
+    Promise.resolve(
+      supabase
+        .from('profiles')
+        .update({ businessProfile: merged })
+        .eq('id', user.id)
+    )
       .then(() => refreshProfile())
       .catch((err) => console.warn('Onboarding save failed:', err));
 
