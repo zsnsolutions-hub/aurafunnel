@@ -272,20 +272,20 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
 
     return (
       <div className="flex flex-col items-center justify-center text-center space-y-10 animate-in fade-in duration-700 py-12">
-        {/* Progress ring */}
-        <div className="relative w-24 h-24">
-          <svg className="w-24 h-24 -rotate-90" viewBox="0 0 96 96">
-            <circle cx="48" cy="48" r="40" fill="none" stroke="#1e293b" strokeWidth="6" />
+        {/* Progress ring with percentage */}
+        <div className="relative" style={{ width: 120, height: 120 }}>
+          <svg width="120" height="120" viewBox="0 0 120 120" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="60" cy="60" r="50" fill="none" stroke="#1e293b" strokeWidth="8" />
             <circle
-              cx="48" cy="48" r="40" fill="none"
-              stroke="#14b8a6" strokeWidth="6" strokeLinecap="round"
-              strokeDasharray={2 * Math.PI * 40}
-              strokeDashoffset={2 * Math.PI * 40 * (1 - progressPercent / 100)}
-              className="transition-all duration-700 ease-out"
+              cx="60" cy="60" r="50" fill="none"
+              stroke="#14b8a6" strokeWidth="8" strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 50}`}
+              strokeDashoffset={`${2 * Math.PI * 50 * (1 - progressPercent / 100)}`}
+              style={{ transition: 'stroke-dashoffset 0.7s ease-out' }}
             />
           </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">{progressPercent}%</span>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: 800 }}>{progressPercent}%</span>
           </div>
         </div>
 
