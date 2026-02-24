@@ -354,6 +354,7 @@ const ContentStudio: React.FC = () => {
   const [linkedinCopied, setLinkedinCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showSendPostMenu, setShowSendPostMenu] = useState(false);
+  const [showGenerateMenu, setShowGenerateMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showCtaBuilder, setShowCtaBuilder] = useState(false);
@@ -1440,10 +1441,6 @@ const ContentStudio: React.FC = () => {
               </>
             )}
           </div>
-          <button data-guide="content-image-gen" onClick={() => setShowImageGen(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm" title="Generate Image">
-            <CameraIcon className="w-3.5 h-3.5" />
-            <span>Generate Image</span>
-          </button>
           <div className="relative">
             <button onClick={() => setShowExportMenu(prev => !prev)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
               <DownloadIcon className="w-3.5 h-3.5" />
@@ -1455,19 +1452,41 @@ const ContentStudio: React.FC = () => {
               </div>
             )}
           </div>
-          <button
-            onClick={handleGenerateWithAI}
-            disabled={aiGenerating || leads.length === 0}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {aiGenerating ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <SparklesIcon className="w-4 h-4" />
+          <div className="relative" data-guide="content-image-gen">
+            <button
+              onClick={() => setShowGenerateMenu(prev => !prev)}
+              disabled={aiGenerating}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {aiGenerating ? (
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <SparklesIcon className="w-3.5 h-3.5" />
+              )}
+              <span>{aiGenerating ? 'Generating...' : 'Generate'}</span>
+              {!aiGenerating && <ChevronDownIcon className="w-3 h-3 ml-0.5" />}
+            </button>
+            {showGenerateMenu && !aiGenerating && (
+              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-48 py-1">
+                <button
+                  onClick={() => { setShowGenerateMenu(false); handleGenerateWithAI(); }}
+                  disabled={leads.length === 0}
+                  className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <SparklesIcon className="w-4 h-4 text-violet-500" />
+                  <span>Content</span>
+                  <span className="ml-auto px-1.5 py-0.5 text-[9px] font-black bg-violet-50 text-violet-600 rounded">{CREDIT_COSTS[contentMode === 'email' ? 'email_sequence' : 'content_generation']} cr</span>
+                </button>
+                <button
+                  onClick={() => { setShowGenerateMenu(false); setShowImageGen(true); }}
+                  className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2"
+                >
+                  <CameraIcon className="w-4 h-4 text-indigo-500" />
+                  <span>Image</span>
+                </button>
+              </div>
             )}
-            <span>{aiGenerating ? 'Generating...' : 'Generate with AI'}</span>
-            {!aiGenerating && <span className="ml-1 px-1.5 py-0.5 text-[9px] font-black bg-white/20 rounded-md">{CREDIT_COSTS[contentMode === 'email' ? 'email_sequence' : 'content_generation']} cr</span>}
-          </button>
+          </div>
           <div className="relative">
             <button
               onClick={() => setShowSendPostMenu(prev => !prev)}
