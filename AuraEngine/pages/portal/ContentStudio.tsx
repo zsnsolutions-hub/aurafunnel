@@ -1483,6 +1483,7 @@ const ContentStudio: React.FC = () => {
                 >
                   <CameraIcon className="w-4 h-4 text-indigo-500" />
                   <span>Image</span>
+                  <span className="ml-auto px-1.5 py-0.5 text-[9px] font-black bg-indigo-50 text-indigo-600 rounded">{CREDIT_COSTS.image_generation} cr</span>
                 </button>
               </div>
             )}
