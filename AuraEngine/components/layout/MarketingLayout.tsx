@@ -1,11 +1,22 @@
 
 import React, { useState, useEffect } from 'react';
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { track } from '../../lib/analytics';
+
+/** Pages that have a white/light background at the top. */
+const LIGHT_BG_PAGES = ['/features', '/blog', '/about', '/contact'];
 
 const MarketingLayout: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+
+  const isLightPage = LIGHT_BG_PAGES.includes(location.pathname);
+  // On light pages: use coloured logo until user scrolls (nav turns dark)
+  // On dark pages: always use the dark-bg logo
+  const logoSrc = isLightPage && !scrolled
+    ? '/scaliyo-logo-light.png'
+    : '/scaliyo-logo-dark.png';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -26,10 +37,12 @@ const MarketingLayout: React.FC = () => {
           <div className={`border rounded-2xl px-6 flex items-center justify-between transition-all duration-300 ${
             scrolled
               ? 'h-14 bg-[#0A1628]/90 backdrop-blur-xl border-slate-700/50 shadow-lg shadow-black/20'
-              : 'h-16 bg-white/5 backdrop-blur-md border-white/10'
+              : isLightPage
+                ? 'h-16 bg-white/80 backdrop-blur-md border-slate-200'
+                : 'h-16 bg-white/5 backdrop-blur-md border-white/10'
           }`}>
             <Link to="/" className="flex items-center group" aria-label="Scaliyo home">
-              <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
+              <img src={logoSrc} alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
             </Link>
 
             <div className="hidden lg:flex items-center space-x-8">
@@ -37,7 +50,11 @@ const MarketingLayout: React.FC = () => {
                 <Link
                   key={item}
                   to={`/${item.toLowerCase()}`}
-                  className="relative text-sm font-semibold text-slate-400 hover:text-white transition-colors duration-300 group"
+                  className={`relative text-sm font-semibold transition-colors duration-300 group ${
+                    isLightPage && !scrolled
+                      ? 'text-slate-600 hover:text-slate-900'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
                 >
                   {item}
                   <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-teal-500 transition-all duration-300 group-hover:w-full" />
@@ -46,7 +63,9 @@ const MarketingLayout: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-3">
-              <Link to="/auth" className="hidden sm:block text-sm font-semibold text-slate-400 px-4 py-2 hover:text-white transition-colors duration-300">Log in</Link>
+              <Link to="/auth" className={`hidden sm:block text-sm font-semibold px-4 py-2 transition-colors duration-300 ${
+                isLightPage && !scrolled ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+              }`}>Log in</Link>
               <Link
                 to="/signup"
                 onClick={() => track('cta_click', { location: 'navbar', label: 'start_free_trial' })}
