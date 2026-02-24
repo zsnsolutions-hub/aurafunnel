@@ -877,10 +877,10 @@ const ContentGen: React.FC = () => {
 
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
-  const downloadAll = (format: 'txt' | 'pdf' = 'txt') => {
+  const downloadAll = async (format: 'txt' | 'pdf' = 'txt') => {
     setShowDownloadMenu(false);
     if (format === 'pdf') {
-      generateEmailSequencePdf(blocks.map(b => ({ title: b.title, subject: b.subject, body: b.body })));
+      await generateEmailSequencePdf(blocks.map(b => ({ title: b.title, subject: b.subject, body: b.body })));
       return;
     }
     const full = blocks.map(b => `--- ${b.title} ---\nSubject: ${b.subject}\n\n${b.body}`).join('\n\n');
@@ -920,7 +920,7 @@ const ContentGen: React.FC = () => {
 
           // Mode B: Auto-mark New leads as Contacted if preference is enabled
           try {
-            const storedPrefs = localStorage.getItem('aurafunnel_dashboard_prefs');
+            const storedPrefs = localStorage.getItem('scaliyo_dashboard_prefs');
             const prefs = storedPrefs ? JSON.parse(storedPrefs) : {};
             if (prefs.autoContactedOnSend) {
               const newLeadIds = eligibleLeads.filter(l => l.status === 'New').map(l => l.id);

@@ -1079,7 +1079,7 @@ const ContentStudio: React.FC = () => {
     window.open('https://www.linkedin.com/feed/?shareActive=true', '_blank');
   };
 
-  const handleExport = (format: 'txt' | 'pdf' = 'txt') => {
+  const handleExport = async (format: 'txt' | 'pdf' = 'txt') => {
     setShowExportMenu(false);
     if (format === 'pdf') {
       if (contentMode === 'proposal') {
@@ -1099,7 +1099,7 @@ const ContentStudio: React.FC = () => {
           '{{company_size}}': selectedLead?.knowledgeBase?.employeeCount || '',
           '{{first_name}}': selectedLead?.name?.split(' ')[0] || '',
         };
-        generateProposalPdf({
+        await generateProposalPdf({
           companyName: user.name || 'Your Company',
           recipientCompany: leads[0]?.company || '{{company}}',
           date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
@@ -1111,9 +1111,9 @@ const ContentStudio: React.FC = () => {
           const v = step.variants.find(vr => vr.id === step.activeVariantId) || step.variants[0];
           return { title: `Email ${step.stepNumber} (${step.delay})`, subject: v.subject, body: v.body };
         });
-        generateEmailSequencePdf(blocks);
+        await generateEmailSequencePdf(blocks);
       } else if (contentMode === 'linkedin') {
-        generateEmailSequencePdf([{ title: 'LinkedIn Post', subject: linkedinTone, body: linkedinPost }]);
+        await generateEmailSequencePdf([{ title: 'LinkedIn Post', subject: linkedinTone, body: linkedinPost }]);
       }
       return;
     }
@@ -1239,7 +1239,7 @@ const ContentStudio: React.FC = () => {
 
         // Auto-mark New leads as Contacted
         try {
-          const storedPrefs = localStorage.getItem('aurafunnel_dashboard_prefs');
+          const storedPrefs = localStorage.getItem('scaliyo_dashboard_prefs');
           const prefs = storedPrefs ? JSON.parse(storedPrefs) : {};
           if (prefs.autoContactedOnSend) {
             const newLeadIds = eligibleLeads.filter(l => l.status === 'New').map(l => l.id);

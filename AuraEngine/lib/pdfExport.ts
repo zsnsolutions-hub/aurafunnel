@@ -1,13 +1,19 @@
-import jsPDF from 'jspdf';
+// jsPDF is loaded on-demand (~400 kB + html2canvas ~200 kB) so the cost is
+// only paid when the user actually triggers a PDF export.
+async function loadJsPDF() {
+  const { default: jsPDF } = await import('jspdf');
+  return jsPDF;
+}
 
 // ── Proposal PDF ──
-export function generateProposalPdf(params: {
+export async function generateProposalPdf(params: {
   companyName: string;
   recipientCompany: string;
   date: string;
   sections: { label: string; body: string }[];
   personalization?: Record<string, string>;
-}): void {
+}): Promise<void> {
+  const jsPDF = await loadJsPDF();
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -90,9 +96,10 @@ export function generateProposalPdf(params: {
 }
 
 // ── Email Sequence PDF ──
-export function generateEmailSequencePdf(
+export async function generateEmailSequencePdf(
   blocks: { title: string; subject: string; body: string }[]
-): void {
+): Promise<void> {
+  const jsPDF = await loadJsPDF();
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
