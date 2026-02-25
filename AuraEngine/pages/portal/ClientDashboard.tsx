@@ -900,45 +900,42 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/*  FOLLOW-UP + AI INSIGHTS ROW                                  */}
+      {/*  FOLLOW-UP ALERT CARD                                         */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col lg:flex-row gap-6">
-        {followUpLeads.length > 0 && (
-          <div className="w-full lg:w-[35%]" data-guide="dashboard-followup">
-            <button
-              onClick={() => navigate('/portal/leads?followUp=true')}
-              className="w-full h-full bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col justify-center hover:shadow-md hover:border-amber-300 transition-all group text-left"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-amber-100 rounded-xl group-hover:bg-amber-200 transition-colors">
-                  <BellIcon className="w-5 h-5 text-amber-600" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 font-heading text-sm">Follow-up Needed</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    <span className="font-bold text-amber-700">{followUpLeads.length}</span> {followUpLeads.length === 1 ? 'lead' : 'leads'} opened your emails multiple times
-                  </p>
-                </div>
-              </div>
-              <span className="mt-4 self-start px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-xs font-bold group-hover:bg-amber-200 transition-colors flex items-center space-x-1.5">
-                <span>View Leads</span>
-                <ArrowRightIcon className="w-3.5 h-3.5" />
-              </span>
-            </button>
+      {followUpLeads.length > 0 && (
+        <div data-guide="dashboard-followup">
+        <button
+          onClick={() => navigate('/portal/leads?followUp=true')}
+          className="w-full bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200 rounded-2xl p-5 flex items-center justify-between hover:shadow-md hover:border-amber-300 transition-all group text-left"
+        >
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-amber-100 rounded-xl group-hover:bg-amber-200 transition-colors">
+              <BellIcon className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 font-heading text-sm">Follow-up Needed</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                <span className="font-bold text-amber-700">{followUpLeads.length}</span> {followUpLeads.length === 1 ? 'lead' : 'leads'} opened your emails multiple times — potential clients
+              </p>
+            </div>
           </div>
-        )}
-
-        <div className={followUpLeads.length > 0 ? 'w-full lg:w-[65%]' : 'w-full'}>
-          <AIInsightsPanel
-            insights={insights}
-            loading={insightsLoading}
-            onRefresh={handleRefreshInsights}
-            onDeepAnalysis={handleDeepAnalysis}
-            deepAnalysisLoading={deepAnalysisLoading}
-            deepAnalysisResult={deepAnalysisResult}
-          />
+          <span className="px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-xs font-bold group-hover:bg-amber-200 transition-colors flex items-center space-x-1.5">
+            <span>View Leads</span>
+            <ArrowRightIcon className="w-3.5 h-3.5" />
+          </span>
+        </button>
         </div>
-      </div>
+      )}
+
+      {/* AI Insights Panel (shared component) */}
+      <AIInsightsPanel
+        insights={insights}
+        loading={insightsLoading}
+        onRefresh={handleRefreshInsights}
+        onDeepAnalysis={handleDeepAnalysis}
+        deepAnalysisLoading={deepAnalysisLoading}
+        deepAnalysisResult={deepAnalysisResult}
+      />
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  LEADS TABLE + SEGMENTATION (full width)                      */}
