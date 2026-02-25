@@ -6,7 +6,7 @@ import {
   AlertTriangleIcon, ClockIcon, UsersIcon, LayersIcon, BrainIcon, PieChartIcon,
   StarIcon, ArrowRightIcon, RocketIcon, DocumentIcon, GlobeIcon, DatabaseIcon,
   PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon,
-  BellIcon, SendIcon
+  BellIcon, SendIcon, BoltIcon
 } from '../../components/Icons';
 import { fetchBatchEmailSummary, type BatchEmailSummary } from '../../lib/emailTracking';
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
@@ -153,6 +153,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [showRevenueForecast, setShowRevenueForecast] = useState(false);
   const [showContentPerformance, setShowContentPerformance] = useState(false);
   const [showActivityFeed, setShowActivityFeed] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(false);
 
   // ─── Pipeline Health ───
   const pipelineHealth = useMemo(() => {
@@ -864,6 +865,10 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             <ActivityIcon className="w-3.5 h-3.5" />
             <span>Activity</span>
           </button>
+          <button onClick={() => setShowQuickActions(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
+            <BoltIcon className="w-3.5 h-3.5" />
+            <span>Quick Actions</span>
+          </button>
           <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
             <KeyboardIcon className="w-3.5 h-3.5" />
             <span>?</span>
@@ -1016,33 +1021,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             )}
           </div>
 
-          {/* Quick Actions */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <h3 className="font-bold text-slate-800 font-heading mb-4">Quick Actions</h3>
-            <div className="space-y-2.5">
-              <button
-                onClick={() => setIsAddLeadOpen(true)}
-                className="w-full flex items-center space-x-3 p-3 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors font-semibold text-sm"
-              >
-                <TargetIcon className="w-4 h-4" />
-                <span>Add New Lead</span>
-              </button>
-              <button
-                onClick={() => { if (leads.length > 0) openGenModal(); }}
-                className="w-full flex items-center space-x-3 p-3 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors font-semibold text-sm"
-              >
-                <SparklesIcon className="w-4 h-4" />
-                <span>Generate Content</span>
-              </button>
-              <button
-                onClick={() => setIsCSVOpen(true)}
-                className="w-full flex items-center space-x-3 p-3 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors font-semibold text-sm"
-              >
-                <ChartIcon className="w-4 h-4" />
-                <span>Import CSV</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* ── RIGHT PANEL (70%) ── */}
@@ -2282,6 +2260,49 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <LiveActivityFeed userId={user.id} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Quick Actions Sidebar ─── */}
+      {showQuickActions && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowQuickActions(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-500">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <BoltIcon className="w-4 h-4" />
+                </div>
+                <h2 className="text-sm font-black text-slate-900">Quick Actions</h2>
+              </div>
+              <button onClick={() => setShowQuickActions(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-3">
+                <button
+                  onClick={() => { setShowQuickActions(false); setIsAddLeadOpen(true); }}
+                  className="w-full flex items-center space-x-3 p-4 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors font-semibold text-sm"
+                >
+                  <TargetIcon className="w-5 h-5" />
+                  <span>Add New Lead</span>
+                </button>
+                <button
+                  onClick={() => { setShowQuickActions(false); if (leads.length > 0) openGenModal(); }}
+                  className="w-full flex items-center space-x-3 p-4 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors font-semibold text-sm"
+                >
+                  <SparklesIcon className="w-5 h-5" />
+                  <span>Generate Content</span>
+                </button>
+                <button
+                  onClick={() => { setShowQuickActions(false); setIsCSVOpen(true); }}
+                  className="w-full flex items-center space-x-3 p-4 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors font-semibold text-sm"
+                >
+                  <ChartIcon className="w-5 h-5" />
+                  <span>Import CSV</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
