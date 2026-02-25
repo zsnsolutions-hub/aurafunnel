@@ -12,7 +12,6 @@ import { supabase } from '../../lib/supabase';
 import StageColorSettings from '../../components/leads/StageColorSettings';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
-import { useGuide } from '../../components/guide/useGuide';
 
 const PREFS_STORAGE_KEY = 'scaliyo_dashboard_prefs';
 const NOTIF_STORAGE_KEY = 'scaliyo_notification_prefs';
@@ -22,7 +21,6 @@ type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferenc
 
 const ProfilePage: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
-  const { resetAllGuides } = useGuide();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const tab = searchParams.get('tab');
@@ -737,11 +735,7 @@ const ProfilePage: React.FC = () => {
             <DownloadIcon className="w-3.5 h-3.5" />
             <span>Export</span>
           </button>
-          <button onClick={() => resetAllGuides()} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-100 transition-all">
-            <RefreshIcon className="w-3.5 h-3.5" />
-            <span>Reset Guide</span>
-          </button>
-          <button onClick={() => setShowUsageAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showUsageAnalytics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+<button onClick={() => setShowUsageAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showUsageAnalytics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
             <TrendUpIcon className="w-3.5 h-3.5" />
             <span>Usage</span>
           </button>
