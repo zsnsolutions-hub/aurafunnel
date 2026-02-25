@@ -138,15 +138,23 @@ const ProfilePage: React.FC = () => {
       setBusinessProfile(updatedProfile);
       const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(updatedProfile)) {
-        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
+        if (v == null) continue;
+        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
           const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
           );
           if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
         } else if (Array.isArray(v)) {
           if (v.length > 0) cleaned[k] = v;
         } else if (typeof v === 'string' && v.trim()) {
           cleaned[k] = v.trim();
+        } else if (typeof v === 'number' || typeof v === 'boolean') {
+          cleaned[k] = v;
+        } else if (typeof v === 'object') {
+          const obj = v as Record<string, unknown>;
+          if ('value' in obj && obj.value != null) {
+            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
+          }
         }
       }
       await supabase.from('profiles').update({ businessProfile: cleaned }).eq('id', user.id);
@@ -168,15 +176,23 @@ const ProfilePage: React.FC = () => {
     try {
       const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(next)) {
-        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
+        if (v == null) continue;
+        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
           const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
           );
           if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
         } else if (Array.isArray(v)) {
           if (v.length > 0) cleaned[k] = v;
         } else if (typeof v === 'string' && v.trim()) {
           cleaned[k] = v.trim();
+        } else if (typeof v === 'number' || typeof v === 'boolean') {
+          cleaned[k] = v;
+        } else if (typeof v === 'object') {
+          const obj = v as Record<string, unknown>;
+          if ('value' in obj && obj.value != null) {
+            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
+          }
         }
       }
       await supabase.from('profiles').update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null }).eq('id', user.id);
@@ -242,15 +258,23 @@ const ProfilePage: React.FC = () => {
     try {
       const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(businessProfile)) {
-        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
+        if (v == null) continue;
+        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
           const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
           );
           if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
         } else if (Array.isArray(v)) {
           if (v.length > 0) cleaned[k] = v;
         } else if (typeof v === 'string' && v.trim()) {
           cleaned[k] = v.trim();
+        } else if (typeof v === 'number' || typeof v === 'boolean') {
+          cleaned[k] = v;
+        } else if (typeof v === 'object') {
+          const obj = v as Record<string, unknown>;
+          if ('value' in obj && obj.value != null) {
+            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
+          }
         }
       }
       const { error: updateError } = await supabase
@@ -461,15 +485,24 @@ const ProfilePage: React.FC = () => {
 
       const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(mergedProfile)) {
-        if (k === 'socialLinks' && v && typeof v === 'object' && !Array.isArray(v)) {
+        if (v == null) continue;
+        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
           const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => sv?.trim())
+            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
           );
           if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
         } else if (Array.isArray(v)) {
           if (v.length > 0) cleaned[k] = v;
         } else if (typeof v === 'string' && v.trim()) {
           cleaned[k] = v.trim();
+        } else if (typeof v === 'number' || typeof v === 'boolean') {
+          cleaned[k] = v;
+        } else if (typeof v === 'object') {
+          // Handle { value, confidence } objects — extract the value
+          const obj = v as Record<string, unknown>;
+          if ('value' in obj && obj.value != null) {
+            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
+          }
         }
       }
       const { error: updateError } = await supabase
