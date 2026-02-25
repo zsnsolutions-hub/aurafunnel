@@ -721,8 +721,13 @@ Return ONE structured JSON object in this exact schema (no commentary outside th
           }
         });
       } catch (groundingError: unknown) {
-        // Fallback without grounding
         console.warn('Google Search grounding failed for lead research, falling back:', groundingError instanceof Error ? groundingError.message : 'Unknown error');
+        response = null;
+      }
+
+      // If grounding returned empty (no candidates/text), fall back to inference-only
+      if (!response?.text) {
+        console.warn('Google Search grounding returned empty response for lead research, falling back to inference-only.');
         response = await ai.models.generateContent({
           model: MODEL_NAME,
           contents: prompt,
@@ -972,8 +977,14 @@ Guidelines:
           }
         });
       } catch (groundingError: unknown) {
-        // Google Search grounding failed, fall back to inference-only
+        // Google Search grounding threw an error, fall back to inference-only
         console.warn('Google Search grounding failed, falling back to inference:', groundingError instanceof Error ? groundingError.message : 'Unknown error');
+        response = null;
+      }
+
+      // If grounding returned empty (no candidates/text), fall back to inference-only
+      if (!response?.text) {
+        console.warn('Google Search grounding returned empty response, falling back to inference-only.');
         response = await ai.models.generateContent({
           model: MODEL_NAME,
           contents: prompt,
