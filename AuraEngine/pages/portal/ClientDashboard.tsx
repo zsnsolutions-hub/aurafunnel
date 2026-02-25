@@ -152,6 +152,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [showEngagementAnalytics, setShowEngagementAnalytics] = useState(false);
   const [showRevenueForecast, setShowRevenueForecast] = useState(false);
   const [showContentPerformance, setShowContentPerformance] = useState(false);
+  const [showActivityFeed, setShowActivityFeed] = useState(false);
 
   // ─── Pipeline Health ───
   const pipelineHealth = useMemo(() => {
@@ -859,6 +860,10 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             <DocumentIcon className="w-3.5 h-3.5" />
             <span>Content</span>
           </button>
+          <button onClick={() => setShowActivityFeed(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-50 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-100 transition-all">
+            <ActivityIcon className="w-3.5 h-3.5" />
+            <span>Activity</span>
+          </button>
           <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
             <KeyboardIcon className="w-3.5 h-3.5" />
             <span>?</span>
@@ -1101,8 +1106,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             </div>
           </div>
 
-          {/* Team Activity Feed */}
-          <LiveActivityFeed userId={user.id} />
         </div>
       </div>
 
@@ -2258,6 +2261,27 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                     : ' Generate more content to build statistical significance. Aim for 20+ pieces per type for reliable ROI measurement.'}
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Activity Feed Sidebar ─── */}
+      {showActivityFeed && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowActivityFeed(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-500">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                  <ActivityIcon className="w-4 h-4" />
+                </div>
+                <h2 className="text-sm font-black text-slate-900">Live Activity Feed</h2>
+              </div>
+              <button onClick={() => setShowActivityFeed(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <LiveActivityFeed userId={user.id} />
             </div>
           </div>
         </div>
