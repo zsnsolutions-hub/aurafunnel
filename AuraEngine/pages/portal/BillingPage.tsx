@@ -4,7 +4,7 @@ import {
   BoltIcon, CreditCardIcon, CheckIcon, SparklesIcon, ShieldIcon, RefreshIcon, DatabaseIcon,
   MailIcon, TargetIcon, KeyboardIcon, TrendUpIcon, TrendDownIcon, XIcon, ClockIcon,
   ActivityIcon, AlertTriangleIcon, PieChartIcon, BrainIcon, LayersIcon, DownloadIcon,
-  EyeIcon, UsersIcon, ArrowRightIcon
+  EyeIcon, UsersIcon, ArrowRightIcon, SlidersIcon, ChevronDownIcon
 } from '../../components/Icons';
 import { User, Plan, UsageMetrics } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -123,6 +123,7 @@ const BillingPage: React.FC = () => {
   const [showSpendForecast, setShowSpendForecast] = useState(false);
   const [showCreditAnalytics, setShowCreditAnalytics] = useState(false);
   const [showPlanComparison, setShowPlanComparison] = useState(false);
+  const [panelsDropdownOpen, setPanelsDropdownOpen] = useState(false);
 
   // ─── KPI Stats ───
   const kpiStats = useMemo(() => {
@@ -333,48 +334,45 @@ const BillingPage: React.FC = () => {
           <p className="text-slate-500 mt-1">Manage your enterprise compute allocation and payment methods.</p>
         </div>
         <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setShowCostAnalysis(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCostAnalysis ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <PieChartIcon className="w-3.5 h-3.5" />
-            <span>Cost Analysis</span>
-          </button>
-          <button
-            onClick={() => setShowUsageTrends(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showUsageTrends ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <ActivityIcon className="w-3.5 h-3.5" />
-            <span>Usage Trends</span>
-          </button>
-          <button
-            onClick={() => setShowROICalculator(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showROICalculator ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <TrendUpIcon className="w-3.5 h-3.5" />
-            <span>ROI</span>
-          </button>
-          <button
-            onClick={() => setShowSpendForecast(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSpendForecast ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <TargetIcon className="w-3.5 h-3.5" />
-            <span>Forecast</span>
-          </button>
-          <button
-            onClick={() => setShowCreditAnalytics(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCreditAnalytics ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <BoltIcon className="w-3.5 h-3.5" />
-            <span>Credits</span>
-          </button>
-          <button
-            onClick={() => setShowPlanComparison(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPlanComparison ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <LayersIcon className="w-3.5 h-3.5" />
-            <span>Compare</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setPanelsDropdownOpen(s => !s)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border shadow-sm ${
+                (showCostAnalysis || showUsageTrends || showROICalculator || showSpendForecast || showCreditAnalytics || showPlanComparison)
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <SlidersIcon className="w-3.5 h-3.5" />
+              <span>Panels</span>
+              <ChevronDownIcon className={`w-3 h-3 transition-transform ${panelsDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {panelsDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setPanelsDropdownOpen(false)} />
+                <div className="absolute top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden min-w-[160px] py-1">
+                  {[
+                    { label: 'Cost Analysis', active: showCostAnalysis, toggle: () => setShowCostAnalysis(s => !s), icon: <PieChartIcon className="w-3.5 h-3.5" /> },
+                    { label: 'Usage Trends', active: showUsageTrends, toggle: () => setShowUsageTrends(s => !s), icon: <ActivityIcon className="w-3.5 h-3.5" /> },
+                    { label: 'ROI', active: showROICalculator, toggle: () => setShowROICalculator(s => !s), icon: <TrendUpIcon className="w-3.5 h-3.5" /> },
+                    { label: 'Forecast', active: showSpendForecast, toggle: () => setShowSpendForecast(s => !s), icon: <TargetIcon className="w-3.5 h-3.5" /> },
+                    { label: 'Credits', active: showCreditAnalytics, toggle: () => setShowCreditAnalytics(s => !s), icon: <BoltIcon className="w-3.5 h-3.5" /> },
+                    { label: 'Compare', active: showPlanComparison, toggle: () => setShowPlanComparison(s => !s), icon: <LayersIcon className="w-3.5 h-3.5" /> },
+                  ].map(item => (
+                    <button
+                      key={item.label}
+                      onClick={() => { item.toggle(); setPanelsDropdownOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      {item.icon}
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {item.active && <CheckIcon className="w-3.5 h-3.5 text-indigo-600" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={() => setShowShortcuts(true)}
             className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
