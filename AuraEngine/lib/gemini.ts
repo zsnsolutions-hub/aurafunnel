@@ -537,12 +537,24 @@ export const generateLeadResearch = async (
 
   const emailDomain = lead.email?.includes('@') ? lead.email.split('@')[1] : '';
 
-  const resolved = await resolvePrompt('lead_research', userId, {
-    systemInstruction: 'You are a senior B2B research analyst with access to web search. Produce comprehensive, actionable intelligence briefs using real web data. Search thoroughly for the lead and their company. Always use the exact delimited format requested.',
-    promptTemplate: `Research the following B2B lead comprehensively.
+  // Determine the best website URL to crawl
+  const websiteUrl = socialUrls.website || (emailDomain ? `https://${emailDomain}` : `https://${lead.company.toLowerCase().replace(/\s+/g, '')}.com`);
 
-LEAD DATA:
-- Name: {{lead_name}}
+  const resolved = await resolvePrompt('lead_research', userId, {
+    systemInstruction: `You are an advanced Web Intelligence Agent acting as a Senior Data Extraction Engineer and Business Analyst.
+
+Your task is to crawl and analyze a business website and generate a structured Business Profile knowledge base that can auto-populate a SaaS business profile form.
+
+You must extract only verified information directly from the website's public pages.
+
+Do NOT guess.
+Do NOT infer beyond explicit content.
+If a field cannot be verified, return null and include a reason.`,
+    promptTemplate: `Given a website URL, crawl relevant public pages, identify business identity and positioning, extract structured business information, normalize and format data into a clean JSON schema, and include confidence scores and citations for each extracted field.
+
+INPUT:
+- Root website URL: {{website_url}}
+- Lead Name: {{lead_name}}
 - Company: {{company}}
 {{email_domain}}
 {{insights}}
@@ -550,33 +562,136 @@ LEAD DATA:
 SOCIAL / WEB PRESENCE:
 {{url_context}}
 
-RESEARCH INSTRUCTIONS:
-1. Search the company website for pages mentioning the lead by name.
-2. Search LinkedIn for the lead's profile, activity, and recent posts.
-3. Look for news articles, press releases, podcast appearances.
-4. Identify the company's industry, size, products, and recent milestones.
-5. Find potential common ground with the sender's business.
-6. Identify the lead's recent projects, publications, or achievements.
+CRAWLING STRATEGY:
+Start at homepage. Extract internal links from header navigation, footer navigation, sitemap.xml (if available), robots.txt (for sitemap reference), and primary anchor links.
 
-Respond using EXACTLY this delimited format (every field required):
+Prioritize crawling pages with URLs or anchor text containing: about, company, team, services, solutions, products, platform, features, pricing, plans, contact, locations, faq, support, terms, privacy.
 
-===FIELD===TITLE: [Job title]===END===
-===FIELD===INDUSTRY: [Industry sector]===END===
-===FIELD===EMPLOYEE_COUNT: [Approximate company size]===END===
-===FIELD===LOCATION: [City, State, Country]===END===
-===FIELD===COMPANY_OVERVIEW: [2-3 sentences]===END===
-===FIELD===TALKING_POINTS: [3-4 items separated by | pipes]===END===
-===FIELD===OUTREACH_ANGLE: [2-3 sentences]===END===
-===FIELD===RISK_FACTORS: [1-2 items separated by | pipes]===END===
-===FIELD===MENTIONED_ON_WEBSITE: [Quote or "Not found"]===END===
-===FIELD===RESEARCH_BRIEF: [150-250 word summary]===END===
+Stay within the same domain (and relevant subdomains like app.domain.com). Stop crawling early once all required sections are found. Crawl depth limit: 50 relevant internal pages maximum.
 
-Be specific and data-driven.`,
+PAGE CLASSIFICATION:
+Classify each crawled page as: Home, About, Services, Products, Pricing, Contact, FAQ, Legal, Blog, or Other. Prefer official company pages over blog posts.
+
+EXTRACTION RULES:
+- Business Name: Extract from logo alt text, header branding, footer copyright, legal pages. Must match official branding.
+- Industry: Determine only from explicit statements like "We are a digital marketing agency", "We build accounting software". If ambiguous, return null with low confidence.
+- Services: Extract service names as separate structured items. Summaries must be concise (max 2 sentences).
+- Products: Extract actual product names. If SaaS, identify platform type, key features, and integrations.
+- Pricing: Only extract if clearly visible. If pricing requires login or contact form, set pricing_model to "quote-based" and has_pricing_page to false. Do not estimate prices.
+- Contact: Extract only publicly listed email addresses, phone numbers, and contact form URLs.
+- Address: Extract structured address fields if clearly stated. If multiple offices exist, include all.
+
+CONFIDENCE SCORING:
+- 1.0 = explicitly stated and confirmed across pages
+- 0.7 = clearly implied but not repeated
+- 0.4 = partial evidence
+- 0.0 = not found
+
+DO NOT: Hallucinate pricing, guess founding year, assume industry from domain name, extract from unrelated blog guest posts, include third-party reviews unless hosted on main domain.
+
+Return ONE structured JSON object in this exact schema (no commentary outside the JSON):
+
+{
+  "identity": {
+    "business_name": "",
+    "tagline": "",
+    "short_description": "",
+    "long_description": "",
+    "founded_year": null,
+    "company_type": "",
+    "logo_url": "",
+    "primary_domain": ""
+  },
+  "industry": {
+    "primary_industry": "",
+    "secondary_industries": [],
+    "industry_keywords": [],
+    "confidence_score": 0.0,
+    "evidence": []
+  },
+  "offerings": {
+    "services": [
+      {
+        "name": "",
+        "summary": "",
+        "categories": [],
+        "target_customers": [],
+        "evidence": []
+      }
+    ],
+    "products": [
+      {
+        "name": "",
+        "type": "",
+        "summary": "",
+        "features": [],
+        "use_cases": [],
+        "integrations": [],
+        "evidence": []
+      }
+    ]
+  },
+  "pricing": {
+    "has_pricing_page": false,
+    "pricing_url": "",
+    "pricing_model": "",
+    "plans": [
+      {
+        "plan_name": "",
+        "price": "",
+        "billing_period": "",
+        "included_features": [],
+        "limits": [],
+        "evidence": []
+      }
+    ],
+    "confidence_score": 0.0
+  },
+  "contact": {
+    "primary_email": "",
+    "primary_phone": "",
+    "contact_form_url": "",
+    "support_email": "",
+    "sales_email": "",
+    "evidence": []
+  },
+  "locations": {
+    "headquarters": {
+      "street": "",
+      "city": "",
+      "state_region": "",
+      "postal_code": "",
+      "country": ""
+    },
+    "other_locations": [],
+    "evidence": []
+  },
+  "social_links": {
+    "linkedin": "",
+    "facebook": "",
+    "instagram": "",
+    "twitter": "",
+    "youtube": ""
+  },
+  "lead_context": {
+    "mentioned_on_website": "",
+    "title": "",
+    "talking_points": [],
+    "outreach_angle": "",
+    "risk_factors": []
+  },
+  "meta": {
+    "crawl_pages_count": 0,
+    "last_updated_detected": "",
+    "confidence_overall": 0.0
+  }
+}`,
     temperature: 0.3,
     topP: 0.9,
   });
 
   const prompt = resolved.promptTemplate
+    .replace('{{website_url}}', websiteUrl)
     .replace('{{lead_name}}', lead.name)
     .replace('{{company}}', lead.company)
     .replace('{{email_domain}}', emailDomain ? `- Email Domain: ${emailDomain}` : '')
@@ -650,52 +765,77 @@ Be specific and data-driven.`,
 };
 
 /**
- * Parse the delimited research response into structured KnowledgeBase fields.
+ * Parse the JSON research response into structured KnowledgeBase fields.
+ * Maps the new web intelligence JSON schema to the existing KnowledgeBase interface.
  */
 export const parseLeadResearchResponse = (text: string): Partial<KnowledgeBase> => {
   const result: Partial<KnowledgeBase> = {};
 
-  const extractField = (fieldName: string): string | undefined => {
-    const regex = new RegExp(`===FIELD===${fieldName}:\\s*([\\s\\S]*?)===END===`, 'i');
-    const match = text.match(regex);
-    return match?.[1]?.trim() || undefined;
-  };
-
-  const title = extractField('TITLE');
-  if (title) result.title = title;
-
-  const industry = extractField('INDUSTRY');
-  if (industry) result.industry = industry;
-
-  const employeeCount = extractField('EMPLOYEE_COUNT');
-  if (employeeCount) result.employeeCount = employeeCount;
-
-  const location = extractField('LOCATION');
-  if (location) result.location = location;
-
-  const companyOverview = extractField('COMPANY_OVERVIEW');
-  if (companyOverview) result.companyOverview = companyOverview;
-
-  const talkingPointsRaw = extractField('TALKING_POINTS');
-  if (talkingPointsRaw) {
-    result.talkingPoints = talkingPointsRaw.split('|').map(p => p.trim()).filter(Boolean);
+  // Try to parse JSON from the response
+  let data: any = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    const stripped = text.replace(/```(?:json)?\s*/g, '').replace(/```/g, '').trim();
+    try {
+      data = JSON.parse(stripped);
+    } catch {
+      const match = stripped.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { data = JSON.parse(match[0]); } catch { /* fall through */ }
+      }
+    }
   }
 
-  const outreachAngle = extractField('OUTREACH_ANGLE');
-  if (outreachAngle) result.outreachAngle = outreachAngle;
+  if (data) {
+    // Map identity fields
+    if (data.identity) {
+      if (data.identity.company_type) result.title = data.identity.company_type;
+      if (data.identity.long_description || data.identity.short_description) {
+        result.companyOverview = data.identity.long_description || data.identity.short_description;
+      }
+    }
 
-  const riskFactorsRaw = extractField('RISK_FACTORS');
-  if (riskFactorsRaw) {
-    result.riskFactors = riskFactorsRaw.split('|').map(p => p.trim()).filter(Boolean);
+    // Map industry
+    if (data.industry?.primary_industry) {
+      result.industry = data.industry.primary_industry;
+    }
+
+    // Map location from headquarters
+    if (data.locations?.headquarters) {
+      const hq = data.locations.headquarters;
+      const parts = [hq.city, hq.state_region, hq.country].filter(Boolean);
+      if (parts.length > 0) result.location = parts.join(', ');
+    }
+
+    // Map lead context
+    if (data.lead_context) {
+      if (data.lead_context.title) result.title = data.lead_context.title;
+      if (data.lead_context.talking_points?.length) result.talkingPoints = data.lead_context.talking_points;
+      if (data.lead_context.outreach_angle) result.outreachAngle = data.lead_context.outreach_angle;
+      if (data.lead_context.risk_factors?.length) result.riskFactors = data.lead_context.risk_factors;
+      if (data.lead_context.mentioned_on_website && data.lead_context.mentioned_on_website.toLowerCase() !== 'not found') {
+        result.mentionedOnWebsite = data.lead_context.mentioned_on_website;
+      }
+    }
+
+    // Build a comprehensive research brief from extracted data
+    const briefParts: string[] = [];
+    if (data.identity?.business_name) briefParts.push(`${data.identity.business_name}${data.identity.tagline ? ' — ' + data.identity.tagline : ''}`);
+    if (data.identity?.long_description) briefParts.push(data.identity.long_description);
+    if (data.industry?.primary_industry) briefParts.push(`Industry: ${data.industry.primary_industry}${data.industry.secondary_industries?.length ? ' (' + data.industry.secondary_industries.join(', ') + ')' : ''}`);
+    if (data.offerings?.services?.length) briefParts.push(`Services: ${data.offerings.services.map((s: any) => s.name).join(', ')}`);
+    if (data.offerings?.products?.length) briefParts.push(`Products: ${data.offerings.products.map((p: any) => p.name).join(', ')}`);
+    if (data.pricing?.pricing_model) briefParts.push(`Pricing: ${data.pricing.pricing_model}${data.pricing.plans?.length ? ' — ' + data.pricing.plans.map((p: any) => `${p.plan_name}: ${p.price}`).join(', ') : ''}`);
+    if (data.contact?.primary_email) briefParts.push(`Contact: ${data.contact.primary_email}`);
+    if (data.meta?.confidence_overall != null) briefParts.push(`Overall confidence: ${(data.meta.confidence_overall * 100).toFixed(0)}%`);
+    if (briefParts.length > 0) result.aiResearchBrief = briefParts.join('\n\n');
+
+    // Map employee count from meta if available
+    if (data.meta?.crawl_pages_count) {
+      result.employeeCount = result.employeeCount || undefined;
+    }
   }
-
-  const mentioned = extractField('MENTIONED_ON_WEBSITE');
-  if (mentioned && mentioned.toLowerCase() !== 'not found') {
-    result.mentionedOnWebsite = mentioned;
-  }
-
-  const brief = extractField('RESEARCH_BRIEF');
-  if (brief) result.aiResearchBrief = brief;
 
   result.aiResearchedAt = new Date().toISOString();
 
