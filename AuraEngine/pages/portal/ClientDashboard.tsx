@@ -101,7 +101,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [deepAnalysisResult, setDeepAnalysisResult] = useState<string | null>(null);
 
   // Funnel
-  const [funnelStages, setFunnelStages] = useState<FunnelStage[]>([]);
 
   // Form states for adding lead
   const [newLead, setNewLead] = useState({ name: '', email: '', company: '', phone: '', insights: '' });
@@ -390,13 +389,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       const statusCounts: Record<string, number> = { New: 0, Contacted: 0, Qualified: 0, Converted: 0 };
       data.forEach(l => { if (statusCounts[l.status] !== undefined) statusCounts[l.status]++; });
       const total = data.length || 1;
-      setFunnelStages([
-        { label: 'Awareness', count: total, color: '#6366f1', percentage: 100 },
-        { label: 'Interest', count: statusCounts.New + statusCounts.Contacted + statusCounts.Qualified, color: '#818cf8', percentage: Math.round(((statusCounts.New + statusCounts.Contacted + statusCounts.Qualified) / total) * 100) },
-        { label: 'Intent', count: statusCounts.Contacted + statusCounts.Qualified, color: '#a5b4fc', percentage: Math.round(((statusCounts.Contacted + statusCounts.Qualified) / total) * 100) },
-        { label: 'Decision', count: statusCounts.Qualified, color: '#c7d2fe', percentage: Math.round((statusCounts.Qualified / total) * 100) },
-        { label: 'Action', count: Math.round(statusCounts.Qualified * 0.35), color: '#e0e7ff', percentage: Math.round((statusCounts.Qualified * 0.35 / total) * 100) }
-      ]);
     }
     setLoadingLeads(false);
   };
@@ -937,66 +929,15 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="space-y-6">
-          {/* AI Insights Panel (shared component) */}
-          <AIInsightsPanel
-            insights={insights}
-            loading={insightsLoading}
-            onRefresh={handleRefreshInsights}
-            onDeepAnalysis={handleDeepAnalysis}
-            deepAnalysisLoading={deepAnalysisLoading}
-            deepAnalysisResult={deepAnalysisResult}
-          />
-
-          {/* Conversion Funnel */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center space-x-3">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                <ChartIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-800 font-heading">Conversion Funnel</h3>
-                <p className="text-xs text-slate-400">Awareness &gt; Interest &gt; Intent &gt; Decision &gt; Action</p>
-              </div>
-            </div>
-            <div className="p-6">
-              {loadingLeads ? (
-                <div className="space-y-4">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <div key={i} className="h-10 bg-slate-50 animate-pulse rounded-xl" style={{ width: `${100 - i * 12}%`, margin: '0 auto' }}></div>
-                  ))}
-                </div>
-              ) : funnelStages.length === 0 || leads.length === 0 ? (
-                <p className="text-center text-slate-400 text-sm italic py-8">No funnel data available yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {funnelStages.map((stage) => {
-                    const maxCount = Math.max(...funnelStages.map(s => s.count), 1);
-                    const widthPct = Math.max((stage.count / maxCount) * 100, 8);
-                    return (
-                      <div key={stage.label} className="flex items-center space-x-4">
-                        <div className="w-20 flex-shrink-0 text-right">
-                          <p className="text-xs font-bold text-slate-700">{stage.label}</p>
-                          <p className="text-[10px] text-slate-400">{stage.percentage}%</p>
-                        </div>
-                        <div className="flex-grow">
-                          <div className="relative h-9 rounded-xl overflow-hidden bg-slate-50">
-                            <div
-                              className="h-full rounded-xl flex items-center justify-end pr-3 transition-all duration-1000 ease-out"
-                              style={{ width: `${widthPct}%`, backgroundColor: stage.color }}
-                            >
-                              <span className="text-white text-xs font-bold drop-shadow-sm">{stage.count}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-      </div>
+      {/* AI Insights Panel (shared component) */}
+      <AIInsightsPanel
+        insights={insights}
+        loading={insightsLoading}
+        onRefresh={handleRefreshInsights}
+        onDeepAnalysis={handleDeepAnalysis}
+        deepAnalysisLoading={deepAnalysisLoading}
+        deepAnalysisResult={deepAnalysisResult}
+      />
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  LEADS TABLE + SEGMENTATION (full width)                      */}
