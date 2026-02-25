@@ -14,7 +14,6 @@ const tiers = [
       { label: 'AI Credits', value: '500/mo' },
       { label: 'Leads', value: '1,000' },
       { label: 'Email Credits', value: '500' },
-      { label: 'AI Tokens', value: '100K' },
       { label: 'Storage', value: '5 GB' },
     ],
     features: [
@@ -37,7 +36,6 @@ const tiers = [
       { label: 'AI Credits', value: '5,000/mo' },
       { label: 'Leads', value: '5,000' },
       { label: 'Email Credits', value: '2,500' },
-      { label: 'AI Tokens', value: '500K' },
       { label: 'Storage', value: '25 GB' },
     ],
     features: [
@@ -62,7 +60,6 @@ const tiers = [
       { label: 'AI Credits', value: '100,000/mo' },
       { label: 'Leads', value: 'Unlimited' },
       { label: 'Email Credits', value: '50,000' },
-      { label: 'AI Tokens', value: '1M' },
       { label: 'Storage', value: '100 GB' },
     ],
     features: [

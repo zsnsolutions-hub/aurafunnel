@@ -141,7 +141,6 @@ const BillingPage: React.FC = () => {
       { label: 'Credits Used', value: `${usagePct}%`, icon: <BoltIcon className="w-5 h-5" />, color: 'emerald', trend: `${creditsRemaining.toLocaleString()} remaining`, up: usagePct < 80 },
       { label: 'Monthly Cost', value: `$${monthlyPrice}`, icon: <CreditCardIcon className="w-5 h-5" />, color: 'blue', trend: `$${(monthlyPrice / daysInMonth).toFixed(2)}/day`, up: true },
       { label: 'Cost per Lead', value: `$${costPerLead}`, icon: <UsersIcon className="w-5 h-5" />, color: 'violet', trend: `${usage.leadsProcessed} leads processed`, up: true },
-      { label: 'AI Tokens', value: `${(usage.aiTokensUsed / 1000).toFixed(1)}K`, icon: <BrainIcon className="w-5 h-5" />, color: 'amber', trend: `of ${(usage.aiTokensLimit / 1000).toFixed(0)}K limit`, up: usage.aiTokensUsed < usage.aiTokensLimit * 0.8 },
       { label: 'Days Left', value: daysRemaining.toString(), icon: <ClockIcon className="w-5 h-5" />, color: 'fuchsia', trend: `of ${daysInMonth} day cycle`, up: daysRemaining > 7 },
     ];
   }, [creditsTotal, creditsUsed, currentPlanName, usage]);
@@ -164,7 +163,7 @@ const BillingPage: React.FC = () => {
   const roiMetrics = useMemo(() => {
     const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
     const leadsValue = usage.leadsProcessed * 42; // avg $42 per lead
-    const timeSavedHrs = Math.round(usage.leadsProcessed * 0.15 + (usage.aiTokensUsed / 10000) * 0.5);
+    const timeSavedHrs = Math.round(usage.leadsProcessed * 0.15 + creditsUsed * 0.02);
     const timeSavedValue = timeSavedHrs * 50; // $50/hr
     const totalValue = leadsValue + timeSavedValue;
     const roi = monthlyPrice > 0 ? Math.round(((totalValue - monthlyPrice) / monthlyPrice) * 100) : 0;
@@ -204,7 +203,7 @@ const BillingPage: React.FC = () => {
     const annualSavings = Math.round(annualCost * 0.17); // annual billing discount
     const budgetAlerts = [
       { threshold: '80% credits', status: creditsUsed / creditsTotal > 0.8 ? 'triggered' as const : 'ok' as const, value: `${Math.round((creditsUsed / creditsTotal) * 100)}%` },
-      { threshold: '90% AI tokens', status: usage.aiTokensUsed / usage.aiTokensLimit > 0.9 ? 'triggered' as const : 'ok' as const, value: `${Math.round((usage.aiTokensUsed / usage.aiTokensLimit) * 100)}%` },
+      { threshold: '90% email credits', status: usage.emailCreditsUsed / usage.emailCreditsLimit > 0.9 ? 'triggered' as const : 'ok' as const, value: `${Math.round((usage.emailCreditsUsed / usage.emailCreditsLimit) * 100)}%` },
       { threshold: 'Overage risk', status: projectedOverage > 0 ? 'triggered' as const : 'ok' as const, value: projectedOverage > 0 ? `+$${projectedOverage}` : 'None' },
     ];
 
@@ -488,9 +487,8 @@ const BillingPage: React.FC = () => {
             <RefreshIcon className="w-5 h-5" />
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
-            { label: 'AI Tokens Used', used: usage.aiTokensUsed, limit: usage.aiTokensLimit, icon: <SparklesIcon className="w-5 h-5" />, color: 'indigo' },
             { label: 'Leads Processed', used: usage.leadsProcessed, limit: usage.leadsLimit, icon: <TargetIcon className="w-5 h-5" />, color: 'emerald' },
             { label: 'Storage Used', used: usage.storageUsedMb, limit: usage.storageLimitMb, icon: <DatabaseIcon className="w-5 h-5" />, color: 'purple', unit: 'MB' },
             { label: 'Email Credits', used: usage.emailCreditsUsed, limit: usage.emailCreditsLimit, icon: <MailIcon className="w-5 h-5" />, color: 'amber' },
@@ -790,7 +788,6 @@ const BillingPage: React.FC = () => {
               <div>
                 <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Resource Utilization</p>
                 {[
-                  { label: 'AI Tokens', used: usage.aiTokensUsed, limit: usage.aiTokensLimit, color: 'indigo', icon: <SparklesIcon className="w-4 h-4" /> },
                   { label: 'Leads Processed', used: usage.leadsProcessed, limit: usage.leadsLimit, color: 'emerald', icon: <UsersIcon className="w-4 h-4" /> },
                   { label: 'Storage', used: usage.storageUsedMb, limit: usage.storageLimitMb, color: 'violet', icon: <DatabaseIcon className="w-4 h-4" />, unit: 'MB' },
                   { label: 'Email Credits', used: usage.emailCreditsUsed, limit: usage.emailCreditsLimit, color: 'amber', icon: <MailIcon className="w-4 h-4" /> },
@@ -942,7 +939,7 @@ const BillingPage: React.FC = () => {
                     <p className="text-xs font-black text-indigo-700 uppercase tracking-wider">Upgrade Opportunity</p>
                   </div>
                   <p className="text-xs text-indigo-700 leading-relaxed">
-                    Upgrading to Professional could increase your ROI by 3-5x with higher lead limits and AI token capacity.
+                    Upgrading to Professional could increase your ROI by 3-5x with higher lead limits and credit capacity.
                   </p>
                 </div>
               )}
@@ -1296,10 +1293,6 @@ const BillingPage: React.FC = () => {
                             <p className="text-[9px] text-slate-400">Leads</p>
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-violet-600">{tier.tokens >= 999999 ? 'Unlimited' : `${(tier.tokens / 1000).toFixed(0)}K`}</p>
-                            <p className="text-[9px] text-slate-400">Tokens</p>
-                          </div>
-                          <div>
                             <p className="text-xs font-bold text-amber-600">{tier.emails >= 99999 ? 'Unlimited' : tier.emails.toLocaleString()}</p>
                             <p className="text-[9px] text-slate-400">Emails</p>
                           </div>
@@ -1327,10 +1320,6 @@ const BillingPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-emerald-700">Additional Leads</span>
                       <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalLeads.toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-emerald-700">Additional Tokens</span>
-                      <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalTokens.toLocaleString()}</span>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
                       <span className="text-xs font-bold text-emerald-800">Price Difference</span>
