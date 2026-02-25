@@ -888,43 +888,150 @@ export const analyzeBusinessFromWeb = async (
     : '';
 
   const resolved = await resolvePrompt('business_analysis', userId, {
-    systemInstruction: 'You are a business intelligence analyst. Extract structured company data from websites and online presence. Always respond with valid JSON only.',
-    promptTemplate: `Research the following company thoroughly and extract structured business intelligence.
+    systemInstruction: `You are an advanced Web Intelligence Agent.
 
-COMPANY WEBSITE: {{website_url}}
+Your task is to crawl and analyze a public business website and extract accurate business information to help auto-populate a structured business profile.
+
+You must extract only explicitly verifiable information from the website.
+
+Do not guess.
+Do not infer unstated facts.
+If information cannot be confirmed, state that it was not found.
+
+Always respond with valid JSON only.`,
+    promptTemplate: `INPUT
+
+Website URL: {{website_url}}
 {{social_context}}
 
-Navigate and analyze EVERY page of the website you can find: Home, About, Products/Services, Pricing, Testimonials, Team, Contact, Blog, and Footer sections. Look specifically for:
-- Contact pages, footer sections, and "About Us" pages
-- Social media links in the website header, footer, or contact page
-- Company information, products, target market, and business model
-- **Pricing page**: Look for the pricing/plans page and extract ALL actual plan names, prices, and what each plan includes
-- **About page**: Company story, founding year, team size, team bios
-- **Testimonials/Reviews**: Common themes in customer feedback
-- **Services/Products pages**: Each distinct service or product offered
-- Brand voice and tone used across the site
+Maximum crawl depth: 40 internal pages
+Language: English (unless otherwise detected)
 
-Return a JSON object with the following structure.
+CRAWLING INSTRUCTIONS
+
+Start from the homepage.
+
+Extract internal links from:
+- Header navigation
+- Footer navigation
+- Sitemap.xml (if available)
+- Primary internal anchor links
+
+Prioritize crawling pages containing:
+about, company, team, services, solutions, products, platform, features, pricing, plans, contact, locations, faq, terms, privacy
+
+Remain within the same root domain.
+
+Ignore:
+- Login-only content
+- Blog posts unrelated to core business identity
+- Third-party embedded content
+
+Stop crawling once all required business information is found.
+
+INFORMATION TO EXTRACT
+
+Extract and clearly label the following:
+
+1. Business Identity
+- Official business name
+- Tagline (if explicitly shown)
+- Short description (1-2 sentences from homepage or About)
+- Detailed description (3-6 sentences summarizing company positioning)
+- Company type (e.g., SaaS, marketing agency, ecommerce store, healthcare provider)
+- Primary domain
+Only use statements clearly written on the website.
+
+2. Industry Classification
+Determine the primary industry ONLY if explicitly stated.
+Valid examples: "We are a digital marketing agency", "We build accounting software", "We are a private medical clinic"
+If unclear or implied only, state "Industry not explicitly stated."
+
+3. Services
+List each service separately. For each service:
+- Service name
+- Brief explanation
+- Target audience (if stated)
+Do not combine multiple services into one paragraph.
+
+4. Products
+If the company sells products or offers a software platform, for each product:
+- Product name
+- Product type (software, subscription, physical product, etc.)
+- Summary
+- Key features (if listed)
+- Integrations (if listed)
+If no distinct product exists, clearly state that.
+
+5. Pricing
+Determine:
+- Whether a pricing page exists
+- Pricing model (subscription, per-project, hourly, quote-based)
+- Plan names (if available)
+- Public price amounts (if visible)
+If pricing requires contacting sales, state: "Pricing is quote-based."
+Never estimate prices.
+
+6. Contact Information
+Extract:
+- Public email addresses
+- Phone numbers
+- Contact form URL
+- Support email (if separate)
+- Sales email (if separate)
+Only extract visible contact details.
+
+7. Address / Location
+If listed, extract: Full address, City, Region/state, Postal code, Country
+If multiple offices exist, list all.
+Do not infer from domain country.
+
+8. Social Media
+Extract official links from header/footer:
+LinkedIn, Facebook, Instagram, Twitter/X, YouTube
+
+VALIDATION RULES
+- Prefer About and Contact pages over blog posts.
+- If conflicting information appears, prefer the most detailed and most recent page.
+- If information appears multiple times consistently, treat it as confirmed.
+- If uncertain, state that it cannot be verified.
+
+BEHAVIORAL CONSTRAINTS
+- Do not hallucinate missing data.
+- Do not assume industry from domain name.
+- Do not generate marketing copy.
+- Do not summarize beyond what is written.
+- Be factual and concise.
+
+OUTPUT FORMAT
+
+Return a JSON object using this exact structure.
 
 For string fields, use { "value": "...", "confidence": 0-100 }.
 For array fields (services, pricingTiers, uniqueSellingPoints), use { "value": [...], "confidence": 0-100 }.
 
+Confidence rules:
+- 80-100: Information explicitly found and confirmed on the website
+- 50-79: Information found but only in one place or partially stated
+- 1-49: Information could not be confirmed — set value to "" for string fields
+- 0: Information not found at all — set value to ""
+
 {
   "companyName": { "value": "...", "confidence": 0-100 },
   "industry": { "value": "...", "confidence": 0-100 },
-  "productsServices": { "value": "summary of all products/services", "confidence": 0-100 },
+  "productsServices": { "value": "summary of all products/services found", "confidence": 0-100 },
   "targetAudience": { "value": "...", "confidence": 0-100 },
-  "valueProp": { "value": "...", "confidence": 0-100 },
-  "pricingModel": { "value": "e.g. Starter $X/mo, Pro $Y/mo, Enterprise $Z/mo", "confidence": 0-100 },
-  "salesApproach": { "value": "...", "confidence": 0-100 },
+  "valueProp": { "value": "short description or tagline", "confidence": 0-100 },
+  "pricingModel": { "value": "e.g. Starter $X/mo, Pro $Y/mo or Pricing is quote-based", "confidence": 0-100 },
+  "salesApproach": { "value": "company type or business model", "confidence": 0-100 },
   "phone": { "value": "...", "confidence": 0-100 },
   "businessEmail": { "value": "...", "confidence": 0-100 },
-  "address": { "value": "...", "confidence": 0-100 },
-  "socialLinks": { "linkedin": "...", "twitter": "...", "instagram": "...", "facebook": "..." },
+  "address": { "value": "full address if found", "confidence": 0-100 },
+  "socialLinks": { "linkedin": "...", "twitter": "...", "instagram": "...", "facebook": "...", "youtube": "..." },
   "followUpQuestions": ["..."],
   "services": { "value": [{ "id": "svc-1", "name": "Service Name", "description": "What this service does" }], "confidence": 0-100 },
   "pricingTiers": { "value": [{ "id": "tier-1", "name": "Plan Name", "price": "$29/mo", "description": "Plan summary", "features": ["feature1", "feature2"] }], "confidence": 0-100 },
-  "companyStory": { "value": "Company founding story and mission", "confidence": 0-100 },
+  "companyStory": { "value": "Company founding story and mission from About page", "confidence": 0-100 },
   "foundedYear": { "value": "2020", "confidence": 0-100 },
   "teamSize": { "value": "50-100 employees", "confidence": 0-100 },
   "teamHighlights": { "value": "Key team members or leadership info", "confidence": 0-100 },
@@ -935,18 +1042,14 @@ For array fields (services, pricingTiers, uniqueSellingPoints), use { "value": [
   "keyClients": { "value": "Notable clients or logos found on site", "confidence": 0-100 }
 }
 
-Guidelines:
-- For fields you can confidently determine, set confidence 80-100
-- For fields you can reasonably infer, set confidence 50-79
-- For uncertain fields, set confidence below 50
-- For phone, businessEmail, address: only include if found. Set confidence to 0 and value to "" if not found
-- For socialLinks: only include platforms found on the website
-- For pricingModel: ALWAYS include the actual plan names, exact prices, and key features for each tier. Visit the /pricing page if needed
-- For services: list every distinct service/product as a separate entry with id, name, description
-- For pricingTiers: list every pricing tier with id, name, price, description, and features array
-- For uniqueSellingPoints: extract 3-5 specific USPs from the website
-- Generate 2-4 follow-up questions for fields with confidence below 70
-- Return ONLY valid JSON`,
+Rules:
+- For phone, businessEmail, address: only include if explicitly found on the website. Set confidence to 0 and value to "" if not found.
+- For socialLinks: only include platforms with links found on the website. Omit platforms not found.
+- For services: list every distinct service/product as a separate entry with id, name, description.
+- For pricingTiers: list every pricing tier with id, name, price, description, and features array. If quote-based, return an empty array.
+- For uniqueSellingPoints: extract 3-5 specific USPs only if clearly stated on the website.
+- Generate 2-4 follow-up questions for any fields with confidence below 70 or value set to "".
+- Return ONLY valid JSON.`,
     temperature: 0.3,
     topP: 0.9,
   });
