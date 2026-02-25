@@ -8,7 +8,7 @@ import {
 } from '../../components/Icons';
 import { User, Plan, UsageMetrics } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { TIER_LIMITS, CREDIT_COSTS } from '../../lib/credits';
+import { TIER_LIMITS, CREDIT_COSTS, PLANS } from '../../lib/credits';
 import StripeCheckoutModal from '../../components/portal/StripeCheckoutModal';
 
 const COLOR_CLASSES: Record<string, { bg50: string; text600: string; bg500: string }> = {
@@ -261,23 +261,8 @@ const BillingPage: React.FC = () => {
 
   // ─── Plan Comparison ───
   const planComparison = useMemo(() => {
-    const tiers = [
-      {
-        name: 'Starter', price: 49, ...TIER_LIMITS.Starter,
-        features: ['Basic AI scoring', 'Email templates', '5 integrations', 'Standard support'],
-      },
-      {
-        name: 'Professional', price: 149, ...TIER_LIMITS.Professional,
-        features: ['Advanced AI models', 'Custom templates', '15 integrations', 'Priority support', 'Analytics dashboard', 'Team collaboration'],
-      },
-      {
-        name: 'Enterprise', price: 499, ...TIER_LIMITS.Enterprise,
-        features: ['Custom AI training', 'White-label', 'Unlimited integrations', 'Dedicated CSM', 'SLA guarantee', 'API access', 'Custom workflows'],
-      },
-    ];
-
-    const currentTier = tiers.find(t => t.name === currentPlanName) || tiers[0];
-    const nextTier = tiers[tiers.indexOf(currentTier) + 1] || null;
+    const currentTier = PLANS.find(t => t.name === currentPlanName) || PLANS[0];
+    const nextTier = PLANS[PLANS.indexOf(currentTier) + 1] || null;
     const upgradeValue = nextTier ? {
       additionalCredits: nextTier.credits - currentTier.credits,
       additionalLeads: nextTier.leads - currentTier.leads,
@@ -287,7 +272,7 @@ const BillingPage: React.FC = () => {
       newFeatures: nextTier.features.filter(f => !currentTier.features.includes(f)),
     } : null;
 
-    return { tiers, currentTier, nextTier, upgradeValue };
+    return { currentTier, nextTier, upgradeValue };
   }, [currentPlanName]);
 
   // ─── Keyboard Shortcuts ───
@@ -1268,7 +1253,7 @@ const BillingPage: React.FC = () => {
               <div>
                 <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Tier Comparison</p>
                 <div className="space-y-2">
-                  {planComparison.tiers.map((tier, i) => {
+                  {PLANS.map((tier, i) => {
                     const isCurrent = tier.name === currentPlanName;
                     return (
                       <div key={i} className={`p-4 rounded-xl border transition-all ${
