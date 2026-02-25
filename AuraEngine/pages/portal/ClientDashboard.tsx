@@ -936,52 +936,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/*  TWO-PANEL LAYOUT: Left (30%) + Right (70%)                   */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col lg:flex-row gap-6">
-
-        {/* ── LEFT PANEL (30%) ── */}
-        <div className="w-full lg:w-[30%] space-y-6">
-          {/* Live AI Stats (dark card) */}
-          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl"></div>
-            <div className="flex items-center space-x-3 mb-5">
-              <div className="p-2.5 bg-indigo-500/20 rounded-xl">
-                <SparklesIcon className="w-5 h-5 text-indigo-300" />
-              </div>
-              <div>
-                <h2 className="font-bold font-heading text-lg">Live AI Stats</h2>
-                <div className="flex items-center space-x-2 mt-0.5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest">Processing</span>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                <span className="text-xs text-slate-300">Pipeline Size</span>
-                <span className="text-sm font-bold text-indigo-300">{leads.length} leads</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                <span className="text-xs text-slate-300">AI Accuracy</span>
-                <span className="text-sm font-bold text-emerald-300">{quickStats.avgAiScore}%</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                <span className="text-xs text-slate-300">Content Generated</span>
-                <span className="text-sm font-bold text-amber-300">{quickStats.contentCreated}</span>
-              </div>
-            </div>
-          </div>
-
-
-
-        </div>
-
-        {/* ── RIGHT PANEL (70%) ── */}
-        <div className="w-full lg:w-[70%] space-y-6">
+      <div className="space-y-6">
           {/* AI Insights Panel (shared component) */}
           <AIInsightsPanel
             insights={insights}
@@ -1040,8 +996,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
               )}
             </div>
           </div>
-
-        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
