@@ -763,7 +763,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   };
 
   // Derived stats
-  const topPredictions = leads.slice(0, 3);
   const creditsRemaining = (user.credits_total || 500) - (user.credits_used || 0);
 
   return (
@@ -977,49 +976,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             </div>
           </div>
 
-          {/* Top Predictions */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <div className="flex items-center space-x-3 mb-5">
-              <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
-                <TrendUpIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-800 font-heading">Top Predictions</h3>
-                <p className="text-xs text-slate-400">Highest conversion potential</p>
-              </div>
-            </div>
-            {statsLoading || loadingLeads ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map(i => <div key={i} className="h-14 bg-slate-50 animate-pulse rounded-xl"></div>)}
-              </div>
-            ) : topPredictions.length === 0 ? (
-              <p className="text-sm text-slate-400 italic text-center py-6">Add leads to see predictions.</p>
-            ) : (
-              <div className="space-y-3">
-                {topPredictions.map((lead, idx) => (
-                  <button
-                    key={lead.id}
-                    onClick={() => openActionsModal(lead)}
-                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-indigo-50/50 transition-colors text-left group"
-                  >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white ${
-                      idx === 0 ? 'bg-indigo-600' : idx === 1 ? 'bg-indigo-400' : 'bg-indigo-300'
-                    }`}>
-                      {idx + 1}
-                    </div>
-                    <div className="flex-grow min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
-                      <p className="text-[10px] text-slate-400 truncate">{lead.company}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-black text-indigo-600">{lead.score}%</p>
-                      <p className="text-[10px] text-slate-400">chance</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+
 
         </div>
 
