@@ -162,6 +162,10 @@ export interface Plan {
   name: string;
   price: string;
   credits: number;
+  contacts: number;
+  seats: number;
+  emails: number;
+  storage: number;
   description: string;
   features: string[];
 }
@@ -349,10 +353,8 @@ export interface IntegrationConfig {
 }
 
 export interface UsageMetrics {
-  aiTokensUsed: number;
-  aiTokensLimit: number;
-  leadsProcessed: number;
-  leadsLimit: number;
+  contactsUsed: number;
+  contactsLimit: number;
   storageUsedMb: number;
   storageLimitMb: number;
   emailCreditsUsed: number;

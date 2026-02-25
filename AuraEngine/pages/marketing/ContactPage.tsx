@@ -15,7 +15,7 @@ const ContactPage: React.FC = () => {
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Let's Talk Growth</h2>
           <p className="mt-2 text-lg leading-8 text-slate-600">
-            Have questions about our AI models or need a custom enterprise quote? We're here to help.
+            Have questions about our AI models or need help choosing the right plan? We're here to help.
           </p>
         </div>
 

@@ -12,7 +12,7 @@ import { fetchBatchEmailSummary, type BatchEmailSummary } from '../../lib/emailT
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 
 import { supabase } from '../../lib/supabase';
-import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
+import { consumeCredits, CREDIT_COSTS, resolvePlanName } from '../../lib/credits';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -785,7 +785,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <h1 className="text-2xl md:text-3xl font-bold tracking-tight font-heading">{getGreeting()}, {user.name?.split(' ')[0] || 'there'}</h1>
                 <div className="flex items-center space-x-3 mt-1">
                   <span className="px-2 py-0.5 bg-indigo-500/20 rounded-md text-[9px] font-bold text-indigo-300 uppercase tracking-widest">
-                    {user.plan || 'Free'} Plan
+                    {resolvePlanName(user.plan || 'Starter')} Plan
                   </span>
                   <span className="text-xs text-slate-400">
                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
@@ -822,7 +822,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             <div className="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-center min-w-[90px]">
               <div className="flex items-center justify-center space-x-1.5 mb-1.5">
                 <CreditCardIcon className="w-3.5 h-3.5 text-amber-300" />
-                <span className="text-[9px] font-bold text-amber-300 uppercase tracking-widest">Credits</span>
+                <span className="text-[9px] font-bold text-amber-300 uppercase tracking-widest">AI Actions</span>
               </div>
               <p className="text-2xl font-bold font-heading">{creditsRemaining}</p>
             </div>

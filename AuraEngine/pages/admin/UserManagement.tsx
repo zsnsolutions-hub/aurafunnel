@@ -138,22 +138,25 @@ const UserManagement: React.FC = () => {
   const planAnalytics = useMemo(() => {
     const plans: Record<string, { count: number; price: number; color: string }> = {
       Free: { count: 0, price: 0, color: 'bg-slate-400' },
-      Starter: { count: 0, price: 49, color: 'bg-emerald-500' },
-      Professional: { count: 0, price: 149, color: 'bg-indigo-500' },
+      Starter: { count: 0, price: 59, color: 'bg-emerald-500' },
+      Growth: { count: 0, price: 149, color: 'bg-indigo-500' },
+      Business: { count: 0, price: 349, color: 'bg-violet-500' },
     };
     users.forEach(u => {
-      const planName = u.subscription?.plan_name || u.plan || 'Free';
+      let planName = u.subscription?.plan_name || u.plan || 'Free';
+      if (planName === 'Professional') planName = 'Growth';
+      if (planName === 'Enterprise') planName = 'Business';
       if (plans[planName]) plans[planName].count++;
       else plans.Free.count++;
     });
 
-    const totalPaid = plans.Starter.count + plans.Professional.count;
-    const mrr = plans.Starter.count * 49 + plans.Professional.count * 149;
+    const totalPaid = plans.Starter.count + plans.Growth.count + plans.Business.count;
+    const mrr = plans.Starter.count * 59 + plans.Growth.count * 149 + plans.Business.count * 349;
     const arpu = totalPaid > 0 ? Math.round(mrr / totalPaid) : 0;
     const conversionRate = users.length > 0 ? Math.round((totalPaid / users.length) * 100) : 0;
     const projectedAnnual = mrr * 12;
     const upgradePool = plans.Free.count;
-    const potentialRevenue = upgradePool * 49;
+    const potentialRevenue = upgradePool * 59;
 
     const distribution = Object.entries(plans).map(([name, data]) => ({
       name,
@@ -713,7 +716,7 @@ const UserManagement: React.FC = () => {
                             <span className="text-xs font-bold text-indigo-300">${rev.toLocaleString()}/mo</span>
                           </div>
                           <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full bg-gradient-to-r ${p.name === 'Starter' ? 'from-emerald-600 to-emerald-400' : 'from-indigo-600 to-indigo-400'}`} style={{ width: `${Math.max(pct, 5)}%` }} />
+                            <div className={`h-full rounded-full bg-gradient-to-r ${p.name === 'Starter' ? 'from-emerald-600 to-emerald-400' : p.name === 'Business' ? 'from-violet-600 to-violet-400' : 'from-indigo-600 to-indigo-400'}`} style={{ width: `${Math.max(pct, 5)}%` }} />
                           </div>
                         </div>
                       );

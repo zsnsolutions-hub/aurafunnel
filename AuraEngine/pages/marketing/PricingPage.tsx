@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Reveal from '../../components/marketing/Reveal';
 import { track } from '../../lib/analytics';
-import { PLANS } from '../../lib/credits';
-
-const highlighted = 'Professional';
+import { PLANS, ANNUAL_DISCOUNT } from '../../lib/credits';
 
 const PricingPage: React.FC = () => {
+  const [isAnnual, setIsAnnual] = useState(false);
+
   React.useEffect(() => { track('pricing_view'); }, []);
 
   return (
@@ -21,17 +21,39 @@ const PricingPage: React.FC = () => {
             <h1 className="text-4xl lg:text-5xl font-black tracking-tight font-heading mb-4">
               Simple pricing. Powerful results.
             </h1>
-            <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+            <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
               Every plan includes a 14-day free trial. No credit card required.
               Upgrade, downgrade, or cancel anytime.
             </p>
+
+            {/* Billing toggle */}
+            <div className="inline-flex items-center gap-3 bg-[#0F1D32] border border-slate-700 rounded-full px-1.5 py-1.5">
+              <button
+                onClick={() => setIsAnnual(false)}
+                className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${
+                  !isAnnual ? 'bg-teal-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setIsAnnual(true)}
+                className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${
+                  isAnnual ? 'bg-teal-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Annual
+                <span className="ml-1.5 text-xs font-black text-teal-300">-{Math.round(ANNUAL_DISCOUNT * 100)}%</span>
+              </button>
+            </div>
           </div>
         </Reveal>
 
         <Reveal delay={200}>
           <div className="grid max-w-5xl mx-auto grid-cols-1 md:grid-cols-3 gap-6">
             {PLANS.map((plan) => {
-              const isHighlighted = plan.name === highlighted;
+              const isHighlighted = !!plan.popular;
+              const displayPrice = isAnnual ? plan.annualPrice : plan.price;
               return (
                 <div
                   key={plan.name}
@@ -51,27 +73,36 @@ const PricingPage: React.FC = () => {
                   <p className="text-sm text-slate-500 mt-1 mb-5">{plan.desc}</p>
 
                   <div className="flex items-baseline gap-1 mb-4">
-                    <span className="text-4xl font-black font-heading">${plan.price}</span>
+                    <span className="text-4xl font-black font-heading">${displayPrice}</span>
                     <span className="text-sm text-slate-500 font-semibold">/month</span>
                   </div>
+                  {isAnnual && (
+                    <p className="text-xs text-teal-400 font-bold -mt-3 mb-4">
+                      ${(plan.annualPrice * 12).toLocaleString()}/year — save ${((plan.price - plan.annualPrice) * 12).toLocaleString()}
+                    </p>
+                  )}
 
                   {/* Limits grid */}
                   <div className="grid grid-cols-2 gap-2 mb-6">
                     <div className="bg-white/5 border border-slate-700/50 rounded-lg px-2.5 py-2">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">AI Credits</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">AI Actions</p>
                       <p className="text-xs font-bold text-white">{plan.credits.toLocaleString()}/mo</p>
                     </div>
                     <div className="bg-white/5 border border-slate-700/50 rounded-lg px-2.5 py-2">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Leads</p>
-                      <p className="text-xs font-bold text-white">{plan.leads >= 100000 ? 'Unlimited' : plan.leads.toLocaleString()}</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Contacts</p>
+                      <p className="text-xs font-bold text-white">{plan.contacts.toLocaleString()}</p>
                     </div>
                     <div className="bg-white/5 border border-slate-700/50 rounded-lg px-2.5 py-2">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Email Credits</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Emails/mo</p>
                       <p className="text-xs font-bold text-white">{plan.emails.toLocaleString()}</p>
                     </div>
                     <div className="bg-white/5 border border-slate-700/50 rounded-lg px-2.5 py-2">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Seats</p>
+                      <p className="text-xs font-bold text-white">{plan.seats}</p>
+                    </div>
+                    <div className="bg-white/5 border border-slate-700/50 rounded-lg px-2.5 py-2 col-span-2">
                       <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Storage</p>
-                      <p className="text-xs font-bold text-white">{plan.storage >= 100000 ? '100 GB' : `${(plan.storage / 1000).toFixed(0)} GB`}</p>
+                      <p className="text-xs font-bold text-white">{plan.storage >= 1000 ? `${(plan.storage / 1000).toFixed(0)} GB` : `${plan.storage} MB`}</p>
                     </div>
                   </div>
 
@@ -84,7 +115,7 @@ const PricingPage: React.FC = () => {
                         : 'bg-white/5 border border-slate-700 text-white hover:border-teal-500/40 hover:bg-teal-500/5'
                     }`}
                   >
-                    Start Free Trial
+                    {plan.cta}
                   </Link>
 
                   <ul className="space-y-3 flex-1">

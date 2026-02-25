@@ -8,7 +8,7 @@ import {
 } from '../../components/Icons';
 import { User, Plan, UsageMetrics } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { TIER_LIMITS, CREDIT_COSTS, PLANS } from '../../lib/credits';
+import { TIER_LIMITS, CREDIT_COSTS, PLANS, resolvePlanName } from '../../lib/credits';
 import StripeCheckoutModal from '../../components/portal/StripeCheckoutModal';
 
 const COLOR_CLASSES: Record<string, { bg50: string; text600: string; bg500: string }> = {
@@ -32,7 +32,7 @@ const BillingPage: React.FC = () => {
 
   const creditsTotal = user.credits_total ?? 500;
   const creditsUsed = user.credits_used ?? 0;
-  const currentPlanName = user.subscription?.plan_name || user.plan || 'Starter';
+  const currentPlanName = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
 
   const fetchPlans = async (isManual = false) => {
     if (isManual) setLoadingPlans(true);
@@ -56,8 +56,7 @@ const BillingPage: React.FC = () => {
 
   const tierLimitsForPlan = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Starter;
   const [usage, setUsage] = useState<UsageMetrics>({
-    aiTokensUsed: 0, aiTokensLimit: tierLimitsForPlan.tokens,
-    leadsProcessed: 0, leadsLimit: tierLimitsForPlan.leads,
+    contactsUsed: 0, contactsLimit: tierLimitsForPlan.contacts,
     storageUsedMb: 0, storageLimitMb: tierLimitsForPlan.storage,
     emailCreditsUsed: 0, emailCreditsLimit: tierLimitsForPlan.emails
   });
@@ -69,30 +68,25 @@ const BillingPage: React.FC = () => {
 
   const fetchUsage = useCallback(async () => {
     try {
-      const [tokensRes, leadsRes, emailRes] = await Promise.all([
-        supabase.from('ai_usage_logs').select('tokens_used').eq('user_id', user.id),
+      const [contactsRes, emailRes] = await Promise.all([
         supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', user.id),
         supabase.from('audit_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('action', 'AI_CONTENT_GENERATED'),
       ]);
 
-      const totalTokens = tokensRes.data?.reduce((acc: number, r: any) => acc + (r.tokens_used || 0), 0) || 0;
       const limits = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Starter;
-      const tierLimits = { leads: limits.leads, tokens: limits.tokens, email: limits.emails };
 
       setUsage({
-        aiTokensUsed: totalTokens,
-        aiTokensLimit: tierLimits.tokens,
-        leadsProcessed: leadsRes.count || 0,
-        leadsLimit: tierLimits.leads,
-        storageUsedMb: Math.round((totalTokens / 1000) * 0.5 + (leadsRes.count || 0) * 0.02),
-        storageLimitMb: 5000,
+        contactsUsed: contactsRes.count || 0,
+        contactsLimit: limits.contacts,
+        storageUsedMb: Math.round((contactsRes.count || 0) * 0.02 + creditsUsed * 0.01),
+        storageLimitMb: limits.storage,
         emailCreditsUsed: emailRes.count || 0,
-        emailCreditsLimit: tierLimits.email
+        emailCreditsLimit: limits.emails
       });
     } catch (err) {
       console.error("Usage fetch error:", err);
     }
-  }, [user.id, currentPlanName]);
+  }, [user.id, currentPlanName, creditsUsed]);
 
   const invoices = useMemo(() => {
     const history = [];
@@ -107,7 +101,7 @@ const BillingPage: React.FC = () => {
       history.push({
         id: `INV-${invoiceDate.getFullYear()}-${(invoiceDate.getMonth() + 1).toString().padStart(2, '0')}`,
         date: invoiceDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        amount: currentPlanName === 'Starter' ? '$49.00' : currentPlanName === 'Professional' ? '$149.00' : '$0.00',
+        amount: `$${(PLANS.find(p => p.name === currentPlanName)?.price ?? 0).toFixed(2)}`,
         status: 'Paid',
         cycle: `${invoiceDate.getMonth() + 1}/${invoiceDate.getFullYear().toString().slice(-2)}`
       });
@@ -129,25 +123,25 @@ const BillingPage: React.FC = () => {
   const kpiStats = useMemo(() => {
     const creditsRemaining = creditsTotal - creditsUsed;
     const usagePct = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
-    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
+    const monthlyPrice = (PLANS.find(p => p.name === currentPlanName)?.price ?? 59);
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     const dayOfMonth = new Date().getDate();
     const daysRemaining = daysInMonth - dayOfMonth;
-    const costPerLead = usage.leadsProcessed > 0 ? (monthlyPrice / usage.leadsProcessed).toFixed(2) : '—';
+    const costPerLead = usage.contactsUsed > 0 ? (monthlyPrice / usage.contactsUsed).toFixed(2) : '—';
     const costPerGeneration = creditsUsed > 0 ? (monthlyPrice / creditsUsed).toFixed(2) : '—';
 
     return [
       { label: 'Current Plan', value: currentPlanName, icon: <LayersIcon className="w-5 h-5" />, color: 'indigo', trend: `$${monthlyPrice}/mo`, up: null },
       { label: 'Credits Used', value: `${usagePct}%`, icon: <BoltIcon className="w-5 h-5" />, color: 'emerald', trend: `${creditsRemaining.toLocaleString()} remaining`, up: usagePct < 80 },
       { label: 'Monthly Cost', value: `$${monthlyPrice}`, icon: <CreditCardIcon className="w-5 h-5" />, color: 'blue', trend: `$${(monthlyPrice / daysInMonth).toFixed(2)}/day`, up: true },
-      { label: 'Cost per Lead', value: `$${costPerLead}`, icon: <UsersIcon className="w-5 h-5" />, color: 'violet', trend: `${usage.leadsProcessed} leads processed`, up: true },
+      { label: 'Cost per Contact', value: `$${costPerLead}`, icon: <UsersIcon className="w-5 h-5" />, color: 'violet', trend: `${usage.contactsUsed} contacts`, up: true },
       { label: 'Days Left', value: daysRemaining.toString(), icon: <ClockIcon className="w-5 h-5" />, color: 'fuchsia', trend: `of ${daysInMonth} day cycle`, up: daysRemaining > 7 },
     ];
   }, [creditsTotal, creditsUsed, currentPlanName, usage]);
 
   // ─── Cost Breakdown ───
   const costBreakdown = useMemo(() => {
-    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
+    const monthlyPrice = (PLANS.find(p => p.name === currentPlanName)?.price ?? 59);
     return {
       monthlyPrice,
       aiCompute: Math.round(monthlyPrice * 0.45),
@@ -161,9 +155,9 @@ const BillingPage: React.FC = () => {
 
   // ─── ROI Metrics ───
   const roiMetrics = useMemo(() => {
-    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
-    const leadsValue = usage.leadsProcessed * 42; // avg $42 per lead
-    const timeSavedHrs = Math.round(usage.leadsProcessed * 0.15 + creditsUsed * 0.02);
+    const monthlyPrice = (PLANS.find(p => p.name === currentPlanName)?.price ?? 59);
+    const leadsValue = usage.contactsUsed * 42; // avg $42 per contact
+    const timeSavedHrs = Math.round(usage.contactsUsed * 0.15 + creditsUsed * 0.02);
     const timeSavedValue = timeSavedHrs * 50; // $50/hr
     const totalValue = leadsValue + timeSavedValue;
     const roi = monthlyPrice > 0 ? Math.round(((totalValue - monthlyPrice) / monthlyPrice) * 100) : 0;
@@ -181,7 +175,7 @@ const BillingPage: React.FC = () => {
 
   // ─── Spend Forecast ───
   const spendForecast = useMemo(() => {
-    const monthlyPrice = currentPlanName === 'Professional' ? 149 : currentPlanName === 'Enterprise' ? 499 : 49;
+    const monthlyPrice = (PLANS.find(p => p.name === currentPlanName)?.price ?? 59);
     const dayOfMonth = new Date().getDate();
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     const dailyBurnRate = monthlyPrice / daysInMonth;
@@ -265,7 +259,7 @@ const BillingPage: React.FC = () => {
     const nextTier = PLANS[PLANS.indexOf(currentTier) + 1] || null;
     const upgradeValue = nextTier ? {
       additionalCredits: nextTier.credits - currentTier.credits,
-      additionalLeads: nextTier.leads - currentTier.leads,
+      additionalContacts: nextTier.contacts - currentTier.contacts,
       priceDiff: nextTier.price - currentTier.price,
       costPerExtraCredit: ((nextTier.price - currentTier.price) / (nextTier.credits - currentTier.credits) * 1000).toFixed(3),
       newFeatures: nextTier.features.filter(f => !currentTier.features.includes(f)),
@@ -314,7 +308,7 @@ const BillingPage: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-heading">Billing & Subscription</h1>
-          <p className="text-slate-500 mt-1">Manage your enterprise compute allocation and payment methods.</p>
+          <p className="text-slate-500 mt-1">Manage your subscription, AI Actions allocation, and payment methods.</p>
         </div>
         <div className="flex items-center space-x-2">
           <div className="relative">
@@ -369,7 +363,7 @@ const BillingPage: React.FC = () => {
           </div>
           <div className="bg-indigo-600 px-4 py-2 rounded-xl text-white flex items-center space-x-2 shadow-xl shadow-indigo-100">
             <BoltIcon className="w-3.5 h-3.5" />
-            <span className="text-xs font-bold">{(creditsTotal - creditsUsed).toLocaleString()} Gen</span>
+            <span className="text-xs font-bold">{(creditsTotal - creditsUsed).toLocaleString()} AI Actions</span>
           </div>
         </div>
       </div>
@@ -455,7 +449,7 @@ const BillingPage: React.FC = () => {
                       : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-xl shadow-indigo-100'
                   }`}
                 >
-                  {isCurrent ? 'Active Plan' : plan.price === 'Custom' ? 'Contact Enterprise' : `Upgrade to ${plan.name}`}
+                  {isCurrent ? 'Active Plan' : plan.price === 'Custom' ? 'Contact Sales' : `Upgrade to ${plan.name}`}
                 </button>
               </div>
             );
@@ -473,7 +467,7 @@ const BillingPage: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
-            { label: 'Leads Processed', used: usage.leadsProcessed, limit: usage.leadsLimit, icon: <TargetIcon className="w-5 h-5" />, color: 'emerald' },
+            { label: 'Contacts', used: usage.contactsUsed, limit: usage.contactsLimit, icon: <TargetIcon className="w-5 h-5" />, color: 'emerald' },
             { label: 'Storage Used', used: usage.storageUsedMb, limit: usage.storageLimitMb, icon: <DatabaseIcon className="w-5 h-5" />, color: 'purple', unit: 'MB' },
             { label: 'Email Credits', used: usage.emailCreditsUsed, limit: usage.emailCreditsLimit, icon: <MailIcon className="w-5 h-5" />, color: 'amber' },
           ].map((metric) => {
@@ -511,23 +505,21 @@ const BillingPage: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-100">
                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tier</th>
-                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Leads/Mo</th>
-                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">AI Credits</th>
+                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contacts</th>
+                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">AI Actions</th>
+                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Seats</th>
                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {[
-                { name: 'Starter', leads: '1,000', credits: '10,000' },
-                { name: 'Professional', leads: '5,000', credits: '50,000' },
-                { name: 'Enterprise', leads: 'Unlimited', credits: 'Unlimited' },
-              ].map(tier => (
+              {PLANS.map(tier => (
                 <tr key={tier.name} className={`${currentPlanName === tier.name ? 'bg-indigo-50/50' : ''}`}>
                   <td className="px-4 py-3">
                     <span className="text-sm font-bold text-slate-800">{tier.name}</span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{tier.leads}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{tier.credits}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{tier.contacts.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{tier.credits.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{tier.seats}</td>
                   <td className="px-4 py-3">
                     {currentPlanName === tier.name ? (
                       <span className="text-[9px] font-black uppercase tracking-widest bg-indigo-600 text-white px-2.5 py-1 rounded-full">Current</span>
@@ -772,7 +764,7 @@ const BillingPage: React.FC = () => {
               <div>
                 <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Resource Utilization</p>
                 {[
-                  { label: 'Leads Processed', used: usage.leadsProcessed, limit: usage.leadsLimit, color: 'emerald', icon: <UsersIcon className="w-4 h-4" /> },
+                  { label: 'Contacts', used: usage.contactsUsed, limit: usage.contactsLimit, color: 'emerald', icon: <UsersIcon className="w-4 h-4" /> },
                   { label: 'Storage', used: usage.storageUsedMb, limit: usage.storageLimitMb, color: 'violet', icon: <DatabaseIcon className="w-4 h-4" />, unit: 'MB' },
                   { label: 'Email Credits', used: usage.emailCreditsUsed, limit: usage.emailCreditsLimit, color: 'amber', icon: <MailIcon className="w-4 h-4" /> },
                 ].map((resource, i) => {
@@ -874,8 +866,8 @@ const BillingPage: React.FC = () => {
                     <div className="flex items-center space-x-2">
                       <UsersIcon className="w-4 h-4 text-indigo-600" />
                       <div>
-                        <p className="text-xs font-bold text-slate-700">Lead Pipeline Value</p>
-                        <p className="text-[10px] text-slate-400">{usage.leadsProcessed} leads @ $42 avg value</p>
+                        <p className="text-xs font-bold text-slate-700">Contact Pipeline Value</p>
+                        <p className="text-[10px] text-slate-400">{usage.contactsUsed} contacts @ $42 avg value</p>
                       </div>
                     </div>
                     <span className="text-sm font-black text-emerald-600">${roiMetrics.leadsValue.toLocaleString()}</span>
@@ -923,7 +915,7 @@ const BillingPage: React.FC = () => {
                     <p className="text-xs font-black text-indigo-700 uppercase tracking-wider">Upgrade Opportunity</p>
                   </div>
                   <p className="text-xs text-indigo-700 leading-relaxed">
-                    Upgrading to Professional could increase your ROI by 3-5x with higher lead limits and credit capacity.
+                    Upgrading to Growth could increase your ROI by 3-5x with higher contact limits and AI Action capacity.
                   </p>
                 </div>
               )}
@@ -1269,16 +1261,20 @@ const BillingPage: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-4 gap-2 text-center">
                           <div>
-                            <p className="text-xs font-bold text-indigo-600">{tier.credits >= 999999 ? 'Unlimited' : `${(tier.credits / 1000).toFixed(0)}K`}</p>
-                            <p className="text-[9px] text-slate-400">Credits</p>
+                            <p className="text-xs font-bold text-indigo-600">{`${(tier.credits / 1000).toFixed(0)}K`}</p>
+                            <p className="text-[9px] text-slate-400">AI Actions</p>
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-emerald-600">{tier.leads >= 999999 ? 'Unlimited' : `${(tier.leads / 1000).toFixed(0)}K`}</p>
-                            <p className="text-[9px] text-slate-400">Leads</p>
+                            <p className="text-xs font-bold text-emerald-600">{`${(tier.contacts / 1000).toFixed(0)}K`}</p>
+                            <p className="text-[9px] text-slate-400">Contacts</p>
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-amber-600">{tier.emails >= 99999 ? 'Unlimited' : tier.emails.toLocaleString()}</p>
+                            <p className="text-xs font-bold text-amber-600">{tier.emails.toLocaleString()}</p>
                             <p className="text-[9px] text-slate-400">Emails</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-violet-600">{tier.seats}</p>
+                            <p className="text-[9px] text-slate-400">Seats</p>
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-2">
@@ -1302,8 +1298,8 @@ const BillingPage: React.FC = () => {
                       <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalCredits.toLocaleString()}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-emerald-700">Additional Leads</span>
-                      <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalLeads.toLocaleString()}</span>
+                      <span className="text-xs font-semibold text-emerald-700">Additional Contacts</span>
+                      <span className="text-xs font-black text-emerald-700">+{planComparison.upgradeValue.additionalContacts.toLocaleString()}</span>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
                       <span className="text-xs font-bold text-emerald-800">Price Difference</span>

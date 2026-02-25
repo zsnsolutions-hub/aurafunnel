@@ -10,6 +10,7 @@ interface StripeCheckoutModalProps {
   user: User;
   onClose: () => void;
   onSuccess: () => void;
+  billingInterval?: 'monthly' | 'annual';
 }
 
 const CARD_ELEMENT_OPTIONS = {
@@ -32,7 +33,8 @@ const CheckoutForm: React.FC<{
   user: User;
   onClose: () => void;
   onSuccess: () => void;
-}> = ({ plan, user, onClose, onSuccess }) => {
+  billingInterval?: 'monthly' | 'annual';
+}> = ({ plan, user, onClose, onSuccess, billingInterval = 'monthly' }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [step, setStep] = useState<'checkout' | 'processing' | 'success'>('checkout');
@@ -73,6 +75,7 @@ const CheckoutForm: React.FC<{
       credits: plan.credits,
       userId: user.id,
       paymentMethodId: paymentMethod.id,
+      billingInterval,
     });
 
     if (success) {
@@ -116,10 +119,10 @@ const CheckoutForm: React.FC<{
               </div>
               <div className="flex justify-between items-center text-sm">
                 <div className="flex flex-col">
-                  <span className="text-slate-500 font-medium">Compute Credits</span>
+                  <span className="text-slate-500 font-medium">AI Actions</span>
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Monthly reset</span>
                 </div>
-                <span className="text-indigo-600 font-bold">+{plan.credits.toLocaleString()} Gen</span>
+                <span className="text-indigo-600 font-bold">+{plan.credits.toLocaleString()} /mo</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500 font-medium">Neural Insights</span>

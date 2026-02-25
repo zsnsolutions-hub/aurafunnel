@@ -6,7 +6,7 @@ import { track } from '../../lib/analytics';
 const faqs = [
   {
     q: 'How much does Scaliyo cost?',
-    a: 'We offer a generous free tier for small teams. Paid plans start at $49/month per seat with volume discounts. All plans include a 14-day free trial.',
+    a: 'Paid plans start at $59/month (Starter) with Growth at $149/month and Business at $349/month. All plans include a 14-day free trial, and annual billing saves 15%.',
   },
   {
     q: 'Do I need a credit card to start?',

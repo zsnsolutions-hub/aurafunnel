@@ -13,7 +13,7 @@ import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import GlobalInviteBanner from './GlobalInviteBanner';
 import { useIntegrations } from '../../lib/integrations';
-import { TIER_LIMITS } from '../../lib/credits';
+import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
 
 interface ClientLayoutProps {
   user: User;
@@ -62,7 +62,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     ]},
   ];
 
-  const currentPlan = user.subscription?.plan_name || user.plan || 'Starter';
+  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
   const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
   const creditsUsed = user.credits_used || 0;
   const usagePercentage = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
@@ -218,7 +218,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
                     <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mb-2">
                       <div className="bg-indigo-400 h-full rounded-full transition-all duration-1000" style={{ width: `${usagePercentage}%` }}></div>
                     </div>
-                    <p className="text-[10px] font-bold text-gray-400">{(creditsTotal - creditsUsed).toLocaleString()} Gen Available</p>
+                    <p className="text-[10px] font-bold text-gray-400">{(creditsTotal - creditsUsed).toLocaleString()} AI Actions Left</p>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">

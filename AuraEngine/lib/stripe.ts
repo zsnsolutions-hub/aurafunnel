@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { resolvePlanName } from './credits';
 
 export interface CheckoutSessionParams {
   planName: string;
@@ -6,6 +7,7 @@ export interface CheckoutSessionParams {
   credits: number;
   userId: string;
   paymentMethodId?: string;
+  billingInterval?: 'monthly' | 'annual';
 }
 
 export const getStripeConfig = async () => {
@@ -25,28 +27,33 @@ export const getStripeConfig = async () => {
 export const processStripePayment = async (params: CheckoutSessionParams): Promise<boolean> => {
   // Simulate Stripe API Latency and Handshake
   await new Promise(resolve => setTimeout(resolve, 2500));
-  
+
+  const resolvedPlan = resolvePlanName(params.planName);
+  const periodMs = params.billingInterval === 'annual'
+    ? 365 * 24 * 60 * 60 * 1000
+    : 30 * 24 * 60 * 60 * 1000;
+
   try {
     // 1. Update Profile Plan & Credits
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ 
-        plan: params.planName,
+      .update({
+        plan: resolvedPlan,
         credits_total: params.credits,
         credits_used: 0 // Reset usage on upgrade
       })
       .eq('id', params.userId);
-    
+
     if (profileError) throw profileError;
 
     // 2. Update Subscription Record
     const { error: subError } = await supabase
       .from('subscriptions')
-      .update({ 
-        plan_name: params.planName,
+      .update({
+        plan_name: resolvedPlan,
         status: 'active',
-        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        current_period_end: new Date(Date.now() + periodMs).toISOString(),
+        expires_at: new Date(Date.now() + periodMs).toISOString()
       })
       .eq('user_id', params.userId);
 
@@ -56,7 +63,7 @@ export const processStripePayment = async (params: CheckoutSessionParams): Promi
     await supabase.from('audit_logs').insert({
       user_id: params.userId,
       action: 'PAYMENT_SUCCESS',
-      details: `Stripe transaction verified for ${params.planName} plan (${params.amount})`
+      details: `Stripe transaction verified for ${resolvedPlan} plan (${params.amount})`
     });
 
     return true;
