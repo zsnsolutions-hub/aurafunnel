@@ -33,7 +33,7 @@ jobs:
           VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
         run: npm run build
 
-      - name: Deploy to server
+      - name: Deploy (zero-downtime symlink swap)
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HOST: ${{ secrets.DEPLOY_HOST }}
@@ -43,4 +43,10 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
-          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key" dist/ $USER@$HOST:/var/www/aurafunnel/
+          RELEASE="release-$(date +%s)"
+          SSH_CMD="ssh -i ~/.ssh/deploy_key"
+          $SSH_CMD $USER@$HOST "mkdir -p /var/www/scaliyo/releases/$RELEASE"
+          rsync -azq --delete -e "$SSH_CMD" dist/ $USER@$HOST:/var/www/scaliyo/releases/$RELEASE/
+          $SSH_CMD $USER@$HOST "ln -sfn /var/www/scaliyo/releases/$RELEASE /var/www/scaliyo/current"
+          # Keep only last 5 releases for rollback
+          $SSH_CMD $USER@$HOST "cd /var/www/scaliyo/releases && ls -1dt release-* | tail -n +6 | xargs rm -rf 2>/dev/null || true"
