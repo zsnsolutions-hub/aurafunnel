@@ -1101,56 +1101,6 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
             </div>
           </div>
 
-          {/* AI Performance Trends - 30 Day Chart */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                  <TrendUpIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 font-heading">AI Performance Trends</h3>
-                  <p className="text-xs text-slate-400">Last 30 days</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4 text-[10px] font-bold uppercase tracking-widest">
-                <span className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span><span className="text-slate-500">Accuracy</span></span>
-                <span className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span><span className="text-slate-500">Conversion</span></span>
-                <span className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span><span className="text-slate-500">Engagement</span></span>
-              </div>
-            </div>
-            <div className="p-6">
-              <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={trendData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="gradAccuracy" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gradConversion" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gradEngagement" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.10} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} interval={4} />
-                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} domain={[0, 100]} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '12px' }}
-                    labelStyle={{ fontWeight: 700, marginBottom: 4 }}
-                  />
-                  <Area type="monotone" dataKey="accuracy" stroke="#6366f1" strokeWidth={2.5} fill="url(#gradAccuracy)" name="AI Accuracy" />
-                  <Area type="monotone" dataKey="conversion" stroke="#10b981" strokeWidth={2} fill="url(#gradConversion)" name="Conversion %" />
-                  <Area type="monotone" dataKey="engagement" stroke="#f59e0b" strokeWidth={1.5} fill="url(#gradEngagement)" name="Engagement" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
           {/* Team Activity Feed */}
           <LiveActivityFeed userId={user.id} />
         </div>
