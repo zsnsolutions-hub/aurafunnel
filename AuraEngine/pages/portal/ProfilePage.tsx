@@ -305,13 +305,25 @@ const ProfilePage: React.FC = () => {
       { stage: 'structuring', progress: 85, delay: 7500 },
     ];
 
+    const timers: ReturnType<typeof setTimeout>[] = [];
     stages.forEach(({ stage, progress, delay }) => {
       const timer = setTimeout(() => {
         setAnalysisStage(stage);
         setAnalysisProgress(progress);
       }, delay);
-      if (delay === 0) stageTimerRef.current = timer;
+      timers.push(timer);
     });
+
+    // After reaching 85%, slowly crawl toward 98% so it never looks stuck
+    const crawlInterval = setInterval(() => {
+      setAnalysisProgress(prev => {
+        if (prev >= 98) { clearInterval(crawlInterval); return prev; }
+        if (prev >= 85) return prev + 0.5;
+        return prev;
+      });
+    }, 500);
+    timers.push(crawlInterval as unknown as ReturnType<typeof setTimeout>);
+    stageTimerRef.current = timers as any;
 
     try {
       const creditResult = await consumeCredits(supabase, CREDIT_COSTS['business_analysis']);
@@ -323,8 +335,12 @@ const ProfilePage: React.FC = () => {
       const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
       const result = await analyzeBusinessFromWeb(fullUrl, socialUrls);
 
-      // Clear animation timers
-      if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
+      // Clear all animation timers
+      if (Array.isArray(stageTimerRef.current)) {
+        (stageTimerRef.current as any[]).forEach(t => { clearTimeout(t); clearInterval(t); });
+      } else if (stageTimerRef.current) {
+        clearTimeout(stageTimerRef.current);
+      }
       setAnalysisStage('complete');
       setAnalysisProgress(100);
 
@@ -416,6 +432,12 @@ const ProfilePage: React.FC = () => {
         setTimeout(() => setWizardPhase('manual'), 1500);
       }
     } catch (err: unknown) {
+      // Clear all animation timers on error
+      if (Array.isArray(stageTimerRef.current)) {
+        (stageTimerRef.current as any[]).forEach(t => { clearTimeout(t); clearInterval(t); });
+      } else if (stageTimerRef.current) {
+        clearTimeout(stageTimerRef.current);
+      }
       setAnalysisError(err instanceof Error ? err.message : 'Analysis failed');
       setTimeout(() => setWizardPhase('manual'), 1500);
     }
