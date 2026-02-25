@@ -6,37 +6,48 @@ import { track } from '../../lib/analytics';
 const tiers = [
   {
     name: 'Starter',
-    price: '$0',
+    price: '$49',
     period: '/month',
     desc: 'For solo founders testing the waters.',
-    features: ['500 AI credits/mo', 'Lead scoring', 'Email outreach', 'Basic analytics'],
+    features: [
+      '500 AI credits/mo',
+      '1,000 leads',
+      '500 email credits',
+      'Basic AI scoring',
+      'Email templates',
+      '5 integrations',
+    ],
     highlighted: false,
   },
   {
     name: 'Professional',
-    price: '$49',
-    period: '/seat/month',
+    price: '$149',
+    period: '/month',
     desc: 'For growing teams that need scale.',
     features: [
       '5,000 AI credits/mo',
-      'Multi-channel outreach',
-      'Intent detection',
-      'Advanced analytics',
+      '5,000 leads',
+      '2,500 email credits',
+      'Advanced AI models',
+      'Analytics dashboard',
+      '15 integrations',
       'Team collaboration',
     ],
     highlighted: true,
   },
   {
     name: 'Enterprise',
-    price: 'Custom',
-    period: '',
+    price: '$499',
+    period: '/month',
     desc: 'For large orgs needing dedicated support.',
     features: [
-      'Unlimited credits',
-      'Custom AI models',
-      'SSO & audit logs',
-      'Dedicated CSM',
-      'SLA guarantee',
+      '100,000 AI credits/mo',
+      'Unlimited leads',
+      '50,000 email credits',
+      'Custom AI training',
+      'White-label',
+      'Unlimited integrations',
+      'Dedicated CSM & SLA',
     ],
     highlighted: false,
   },
@@ -51,10 +62,10 @@ const PricingTeaser: React.FC = () => (
             Pricing
           </p>
           <h2 className="text-4xl lg:text-5xl font-bold tracking-tight font-heading mb-4">
-            Start free. Scale when you're ready.
+            Simple pricing. Powerful results.
           </h2>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-            Every plan starts with a 14-day free trial. No credit card required.
+            Every plan includes a 14-day free trial. No credit card required.
           </p>
         </div>
       </Reveal>
@@ -97,7 +108,7 @@ const PricingTeaser: React.FC = () => (
               </ul>
 
               <Link
-                to={tier.name === 'Enterprise' ? '/contact' : '/signup'}
+                to="/signup"
                 onClick={() => track('cta_click', { location: 'pricing_teaser', tier: tier.name })}
                 className={`block text-center px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 ${
                   tier.highlighted
@@ -105,7 +116,7 @@ const PricingTeaser: React.FC = () => (
                     : 'bg-white/5 border border-slate-700 text-white hover:border-teal-500/40 hover:bg-teal-500/5'
                 }`}
               >
-                {tier.name === 'Enterprise' ? 'Contact Sales' : 'Start Free Trial'}
+                Start Free Trial
               </Link>
             </div>
           </Reveal>
