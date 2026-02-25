@@ -957,46 +957,20 @@ Guidelines:
 
   const systemInstruction = resolved.systemInstruction;
 
-  // Try with Google Search grounding first
+  // Direct inference (grounding consistently returns empty for business analysis)
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: resolved.temperature,
+          topP: resolved.topP,
+        }
+      });
 
-      let response;
-      try {
-        response = await ai.models.generateContent({
-          model: MODEL_NAME,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            temperature: resolved.temperature,
-            topP: resolved.topP,
-            tools: [{ googleSearch: {} }],
-          }
-        });
-      } catch (groundingError: unknown) {
-        // Google Search grounding threw an error, fall back to inference-only
-        console.warn('Google Search grounding failed, falling back to inference:', groundingError instanceof Error ? groundingError.message : 'Unknown error');
-        response = null;
-      }
-
-      // If grounding returned empty (no candidates/text), fall back to inference-only
-      if (!response?.text) {
-        console.warn('Google Search grounding returned empty response, falling back to inference-only.');
-        response = await ai.models.generateContent({
-          model: MODEL_NAME,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            temperature: resolved.temperature,
-            topP: resolved.topP,
-          }
-        });
-      }
-
-      clearTimeout(timeoutId);
       const text = response.text;
       if (!text) throw new Error("Empty response from business analysis.");
 
