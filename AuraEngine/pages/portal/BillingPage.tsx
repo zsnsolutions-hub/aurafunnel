@@ -266,7 +266,6 @@ const BillingPage: React.FC = () => {
     const upgradeValue = nextTier ? {
       additionalCredits: nextTier.credits - currentTier.credits,
       additionalLeads: nextTier.leads - currentTier.leads,
-      additionalTokens: nextTier.tokens - currentTier.tokens,
       priceDiff: nextTier.price - currentTier.price,
       costPerExtraCredit: ((nextTier.price - currentTier.price) / (nextTier.credits - currentTier.credits) * 1000).toFixed(3),
       newFeatures: nextTier.features.filter(f => !currentTier.features.includes(f)),
