@@ -13,6 +13,42 @@ import StageColorSettings from '../../components/leads/StageColorSettings';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
 
+/** Safely extract a string from any value (handles {value,confidence} objects, nulls, etc.) */
+const safeStr = (v: unknown): string => {
+  if (typeof v === 'string') return v;
+  if (v != null && typeof v === 'object' && 'value' in (v as any)) {
+    const inner = (v as any).value;
+    return typeof inner === 'string' ? inner : String(inner ?? '');
+  }
+  return v != null ? String(v) : '';
+};
+
+/** Safely clean a profile object for DB storage */
+const cleanProfileForSave = (profile: Record<string, unknown>): Record<string, unknown> => {
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(profile)) {
+    if (v == null) continue;
+    if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
+      const filteredSocials: Record<string, string> = {};
+      for (const [sk, sv] of Object.entries(v as Record<string, unknown>)) {
+        const s = safeStr(sv);
+        if (s) filteredSocials[sk] = s;
+      }
+      if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
+    } else if (Array.isArray(v)) {
+      if (v.length > 0) cleaned[k] = v;
+    } else if (typeof v === 'string') {
+      if (v.trim()) cleaned[k] = v.trim();
+    } else if (typeof v === 'number' || typeof v === 'boolean') {
+      cleaned[k] = v;
+    } else if (typeof v === 'object') {
+      const s = safeStr(v);
+      if (s) cleaned[k] = s;
+    }
+  }
+  return cleaned;
+};
+
 const PREFS_STORAGE_KEY = 'scaliyo_dashboard_prefs';
 const NOTIF_STORAGE_KEY = 'scaliyo_notification_prefs';
 const APIKEYS_STORAGE_KEY = 'scaliyo_api_keys';
@@ -162,27 +198,7 @@ const ProfilePage: React.FC = () => {
       // Update local state and auto-save to DB
       const updatedProfile = { ...businessProfile, logoUrl: publicUrl, logoAssetId: path };
       setBusinessProfile(updatedProfile);
-      const cleaned: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(updatedProfile)) {
-        if (v == null) continue;
-        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
-          const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
-          );
-          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
-        } else if (Array.isArray(v)) {
-          if (v.length > 0) cleaned[k] = v;
-        } else if (typeof v === 'string' && v.trim()) {
-          cleaned[k] = v.trim();
-        } else if (typeof v === 'number' || typeof v === 'boolean') {
-          cleaned[k] = v;
-        } else if (typeof v === 'object') {
-          const obj = v as Record<string, unknown>;
-          if ('value' in obj && obj.value != null) {
-            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
-          }
-        }
-      }
+      const cleaned = cleanProfileForSave(updatedProfile as Record<string, unknown>);
       await supabase.from('profiles').update({ businessProfile: cleaned }).eq('id', user.id);
       if (refreshProfile) await refreshProfile();
     } catch (err: unknown) {
@@ -200,27 +216,7 @@ const ProfilePage: React.FC = () => {
     setBusinessProfile(next);
     // Auto-save to DB
     try {
-      const cleaned: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(next)) {
-        if (v == null) continue;
-        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
-          const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
-          );
-          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
-        } else if (Array.isArray(v)) {
-          if (v.length > 0) cleaned[k] = v;
-        } else if (typeof v === 'string' && v.trim()) {
-          cleaned[k] = v.trim();
-        } else if (typeof v === 'number' || typeof v === 'boolean') {
-          cleaned[k] = v;
-        } else if (typeof v === 'object') {
-          const obj = v as Record<string, unknown>;
-          if ('value' in obj && obj.value != null) {
-            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
-          }
-        }
-      }
+      const cleaned = cleanProfileForSave(next as Record<string, unknown>);
       await supabase.from('profiles').update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null }).eq('id', user.id);
       if (refreshProfile) await refreshProfile();
     } catch { /* silent */ }
@@ -282,27 +278,7 @@ const ProfilePage: React.FC = () => {
     setError('');
     setSuccess(false);
     try {
-      const cleaned: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(businessProfile)) {
-        if (v == null) continue;
-        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
-          const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
-          );
-          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
-        } else if (Array.isArray(v)) {
-          if (v.length > 0) cleaned[k] = v;
-        } else if (typeof v === 'string' && v.trim()) {
-          cleaned[k] = v.trim();
-        } else if (typeof v === 'number' || typeof v === 'boolean') {
-          cleaned[k] = v;
-        } else if (typeof v === 'object') {
-          const obj = v as Record<string, unknown>;
-          if ('value' in obj && obj.value != null) {
-            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
-          }
-        }
-      }
+      const cleaned = cleanProfileForSave(businessProfile as Record<string, unknown>);
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null })
@@ -501,36 +477,15 @@ const ProfilePage: React.FC = () => {
     try {
       // Merge discovered social URLs into profile
       const mergedProfile = { ...businessProfile };
-      const hasSocials = Object.values(socialUrls).some(v => v?.trim());
+      const hasSocials = Object.values(socialUrls).some(v => safeStr(v).length > 0);
       if (hasSocials) {
         mergedProfile.socialLinks = {
           ...(mergedProfile.socialLinks || {}),
-          ...Object.fromEntries(Object.entries(socialUrls).filter(([_, v]) => v?.trim()))
+          ...Object.fromEntries(Object.entries(socialUrls).filter(([_, v]) => safeStr(v).length > 0))
         };
       }
 
-      const cleaned: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(mergedProfile)) {
-        if (v == null) continue;
-        if (k === 'socialLinks' && typeof v === 'object' && !Array.isArray(v)) {
-          const filteredSocials = Object.fromEntries(
-            Object.entries(v as Record<string, string>).filter(([_, sv]) => typeof sv === 'string' && sv.trim())
-          );
-          if (Object.keys(filteredSocials).length > 0) cleaned[k] = filteredSocials;
-        } else if (Array.isArray(v)) {
-          if (v.length > 0) cleaned[k] = v;
-        } else if (typeof v === 'string' && v.trim()) {
-          cleaned[k] = v.trim();
-        } else if (typeof v === 'number' || typeof v === 'boolean') {
-          cleaned[k] = v;
-        } else if (typeof v === 'object') {
-          // Handle { value, confidence } objects — extract the value
-          const obj = v as Record<string, unknown>;
-          if ('value' in obj && obj.value != null) {
-            cleaned[k] = typeof obj.value === 'string' ? obj.value.trim() : obj.value;
-          }
-        }
-      }
+      const cleaned = cleanProfileForSave(mergedProfile as Record<string, unknown>);
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null })
