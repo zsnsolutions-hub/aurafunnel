@@ -74,8 +74,34 @@ const ProfilePage: React.FC = () => {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [showQRCode, setShowQRCode] = useState(false);
 
-  // Business Profile
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(user?.businessProfile || {});
+  // Business Profile — sanitize on load to unwrap any { value, confidence } objects from DB
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(() => {
+    const raw = user?.businessProfile || {};
+    const sanitized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (v == null) continue;
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' || Array.isArray(v)) {
+        sanitized[k] = v;
+      } else if (typeof v === 'object') {
+        // Unwrap { value, confidence } objects into plain values
+        const obj = v as Record<string, unknown>;
+        if ('value' in obj && obj.value != null) {
+          sanitized[k] = obj.value;
+        } else if (k === 'socialLinks') {
+          // Sanitize social links — ensure all values are strings
+          const links: Record<string, string> = {};
+          for (const [sk, sv] of Object.entries(obj)) {
+            if (typeof sv === 'string') links[sk] = sv;
+            else if (sv && typeof sv === 'object' && 'value' in (sv as any)) links[sk] = String((sv as any).value || '');
+          }
+          sanitized[k] = links;
+        } else {
+          sanitized[k] = v;
+        }
+      }
+    }
+    return sanitized as BusinessProfile;
+  });
   const [isSavingBusiness, setIsSavingBusiness] = useState(false);
 
   // Business Profile Wizard
