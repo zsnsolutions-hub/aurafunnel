@@ -51,3 +51,18 @@ jobs:
           $SSH_CMD $USER@$HOST "ln -sfn /var/www/scaliyo/releases/$RELEASE /var/www/scaliyo/current"
           # Keep only last 5 releases for rollback
           $SSH_CMD $USER@$HOST "cd /var/www/scaliyo/releases && ls -1dt release-* | tail -n +6 | xargs rm -rf 2>/dev/null || true"
+
+      - name: Sync Nginx config & reload
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        working-directory: .
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
+          SSH_CMD="ssh -i ~/.ssh/deploy_key"
+          $SSH_CMD $USER@$HOST "sudo tee /etc/nginx/sites-available/aurafunnel.conf > /dev/null" < nginx/aurafunnel.conf
+          $SSH_CMD $USER@$HOST "sudo nginx -t && sudo systemctl reload nginx"
