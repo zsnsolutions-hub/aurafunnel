@@ -46,7 +46,7 @@ const ConfirmEmailPage: React.FC = () => {
       <div className="max-w-[420px] w-full">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center mb-8 group">
-            <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-9 w-auto group-hover:scale-105 transition-transform duration-300" />
+            <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" />
           </Link>
         </div>
 
