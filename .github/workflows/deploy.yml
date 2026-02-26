@@ -64,5 +64,5 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
           SSH_CMD="ssh -i ~/.ssh/deploy_key"
-          $SSH_CMD $USER@$HOST "sudo tee /etc/nginx/sites-available/aurafunnel.conf > /dev/null" < nginx/aurafunnel.conf
-          $SSH_CMD $USER@$HOST "sudo nginx -t && sudo systemctl reload nginx"
+          rsync -azq -e "$SSH_CMD" nginx/aurafunnel.conf $USER@$HOST:/var/www/scaliyo/nginx-staged.conf
+          $SSH_CMD $USER@$HOST "sudo cp /var/www/scaliyo/nginx-staged.conf /etc/nginx/sites-available/aurafunnel.conf && sudo nginx -t && sudo systemctl reload nginx"
