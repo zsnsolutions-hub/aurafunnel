@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { GuideProvider } from './components/guide/GuideProvider';
 import { SupportProvider } from './components/support/SupportProvider';
 import { SupportBanner } from './components/support/SupportBanner';
+import { UIModeProvider } from './components/ui-mode';
 import { useIdlePrefetch } from './hooks/useIdlePrefetch';
 
 // Layouts — kept eager since they wrap all child routes
@@ -201,6 +202,7 @@ const App: React.FC = () => {
 
   return (
     <GuideProvider>
+    <UIModeProvider>
     <SupportProvider user={user}>
     <ErrorBoundary>
       <SupportBanner />
@@ -327,6 +329,7 @@ const App: React.FC = () => {
       </Suspense>
     </ErrorBoundary>
     </SupportProvider>
+    </UIModeProvider>
     </GuideProvider>
   );
 };

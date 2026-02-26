@@ -1,4 +1,7 @@
 
+// ── UI Mode ──
+export type UIMode = 'simplified' | 'advanced';
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   CLIENT = 'CLIENT',

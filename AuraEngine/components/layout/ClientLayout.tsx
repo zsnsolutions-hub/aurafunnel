@@ -1,19 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import {
-  Target, Users, Brain, MessageSquare, Sparkles, PenSquare, Zap,
-  PieChart, GitBranch, SlidersHorizontal, Plug, CreditCard,
-  HelpCircle, BookOpen, Settings, LogOut, Search, Bell, Compass, FileText, Send, LayoutGrid
-} from 'lucide-react';
+import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
 import DailyBriefing from '../dashboard/DailyBriefing';
 import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
-import { Sidebar } from './Sidebar';
+import { Sidebar, SidebarNavItem } from './Sidebar';
 import GlobalInviteBanner from './GlobalInviteBanner';
 import { useIntegrations } from '../../lib/integrations';
 import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
+import { NAV_CONFIG, NavConfigItem } from '../../lib/navConfig';
+import { UIModeSwitcher } from '../ui-mode';
 
 interface ClientLayoutProps {
   user: User;
@@ -33,46 +31,26 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const { integrations: integrationStatuses } = useIntegrations();
   const activeIntegrationCount = integrationStatuses.filter(i => i.status === 'connected').length;
 
-  const navItems = [
-    // ── Primary ──
-    { label: 'Home', path: '/portal', icon: <Target size={20} /> },
-    { label: 'Leads', path: '/portal/leads', icon: <Users size={20} />, children: [
-      { label: 'Find Prospects', path: '/portal/leads/apollo', icon: <Compass size={20} /> },
-      { label: 'Lead Insights', path: '/portal/intelligence', icon: <Brain size={20} /> },
-    ]},
-    { label: 'Campaigns', path: '/portal/content', icon: <Sparkles size={20} />, children: [
-      { label: 'Content Studio', path: '/portal/content-studio', icon: <PenSquare size={20} /> },
-      { label: 'Automations', path: '/portal/automation', icon: <GitBranch size={20} /> },
-    ]},
-    { label: 'Social', path: '/portal/social-scheduler', icon: <Send size={20} />, children: [
-      { label: 'Blog Posts', path: '/portal/blog', icon: <PenSquare size={20} /> },
-    ]},
-    { label: 'Reports', path: '/portal/analytics', icon: <PieChart size={20} /> },
-
-    // ── Tools ──
-    { label: 'AI Assistant', path: '/portal/ai', icon: <MessageSquare size={20} />, divider: true },
-    { label: 'Tasks', path: '/portal/strategy', icon: <Zap size={20} />, children: [
-      { label: 'Board View', path: '/portal/team-hub', icon: <LayoutGrid size={20} /> },
-    ]},
-
-    // ── Workspace (group label) ──
-    { label: 'Workspace', path: '', icon: <Plug size={20} />, isGroup: true, divider: true, children: [
-      { label: 'Integrations', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },
-      { label: 'AI Settings', path: '/portal/model-training', icon: <SlidersHorizontal size={20} /> },
-    ]},
-
-    // ── Billing (group label) ──
-    { label: 'Billing', path: '', icon: <CreditCard size={20} />, isGroup: true, children: [
-      { label: 'Subscription', path: '/portal/billing', icon: <CreditCard size={20} /> },
-      { label: 'Billing History', path: '/portal/invoices', icon: <FileText size={20} /> },
-    ]},
-
-    // ── Settings ──
-    { label: 'Settings', path: '/portal/settings', icon: <Settings size={20} />, children: [
-      { label: 'User Manual', path: '/portal/manual', icon: <BookOpen size={20} /> },
-      { label: 'Help Center', path: '/portal/help', icon: <HelpCircle size={20} /> },
-    ]},
-  ];
+  const navItems = useMemo(() => {
+    function toSidebarItem(cfg: NavConfigItem): SidebarNavItem {
+      const Icon = cfg.icon;
+      const item: SidebarNavItem = {
+        label: cfg.navLabel,
+        path: cfg.route,
+        icon: <Icon size={20} />,
+        divider: cfg.divider,
+        isGroup: cfg.isGroup,
+        badge: cfg.route === '/portal/integrations' && activeIntegrationCount > 0
+          ? `${activeIntegrationCount} active`
+          : undefined,
+      };
+      if (cfg.children) {
+        item.children = cfg.children.map(toSidebarItem);
+      }
+      return item;
+    }
+    return NAV_CONFIG.map(toSidebarItem);
+  }, [activeIntegrationCount]);
 
   const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
   const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
@@ -216,6 +194,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
             footer={
               sidebarCollapsed ? (
                 <div className="flex flex-col items-center gap-3">
+                  <UIModeSwitcher collapsed />
                   <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
                     {user.name?.charAt(0) || 'U'}
                   </div>
@@ -225,7 +204,8 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
                 </div>
               ) : (
                 <>
-                  <div className="p-4 bg-gray-900 rounded-2xl text-white mb-4">
+                  <UIModeSwitcher />
+                  <div className="p-4 bg-gray-900 rounded-2xl text-white mb-4 mt-3">
                     <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">AI Credits</p>
                     <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mb-2">
                       <div className="bg-indigo-400 h-full rounded-full transition-all duration-1000" style={{ width: `${usagePercentage}%` }}></div>
