@@ -34,28 +34,40 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const activeIntegrationCount = integrationStatuses.filter(i => i.status === 'connected').length;
 
   const navItems = [
-    { label: 'Dashboard', path: '/portal', icon: <Target size={20} /> },
-    { label: 'Lead Management', path: '/portal/leads', icon: <Users size={20} />, children: [
-      { label: 'People Search', path: '/portal/leads/apollo', icon: <Compass size={20} /> },
-      { label: 'Lead Intelligence', path: '/portal/intelligence', icon: <Brain size={20} /> },
+    // ── Primary ──
+    { label: 'Home', path: '/portal', icon: <Target size={20} /> },
+    { label: 'Leads', path: '/portal/leads', icon: <Users size={20} />, children: [
+      { label: 'Find Prospects', path: '/portal/leads/apollo', icon: <Compass size={20} /> },
+      { label: 'Lead Insights', path: '/portal/intelligence', icon: <Brain size={20} /> },
     ]},
-    { label: 'AI Command Center', path: '/portal/ai', icon: <MessageSquare size={20} />, children: [
-      { label: 'AI Prompt Studio', path: '/portal/model-training', icon: <SlidersHorizontal size={20} /> },
-    ]},
-    { label: 'Neural Studio', path: '/portal/content', icon: <Sparkles size={20} />, children: [
+    { label: 'Campaigns', path: '/portal/content', icon: <Sparkles size={20} />, children: [
       { label: 'Content Studio', path: '/portal/content-studio', icon: <PenSquare size={20} /> },
-      { label: 'Automation Engine', path: '/portal/automation', icon: <GitBranch size={20} /> },
+      { label: 'Automations', path: '/portal/automation', icon: <GitBranch size={20} /> },
     ]},
-    { label: 'Team Hub', path: '/portal/strategy', icon: <Zap size={20} />, children: [
-      { label: 'Team Boards', path: '/portal/team-hub', icon: <LayoutGrid size={20} /> },
+    { label: 'Social', path: '/portal/social-scheduler', icon: <Send size={20} />, children: [
+      { label: 'Blog Posts', path: '/portal/blog', icon: <PenSquare size={20} /> },
     ]},
-    { label: 'Social Scheduler', path: '/portal/social-scheduler', icon: <Send size={20} />, children: [
-      { label: 'Guest Posts', path: '/portal/blog', icon: <PenSquare size={20} /> },
+    { label: 'Reports', path: '/portal/analytics', icon: <PieChart size={20} /> },
+
+    // ── Tools ──
+    { label: 'AI Assistant', path: '/portal/ai', icon: <MessageSquare size={20} />, divider: true },
+    { label: 'Tasks', path: '/portal/strategy', icon: <Zap size={20} />, children: [
+      { label: 'Board View', path: '/portal/team-hub', icon: <LayoutGrid size={20} /> },
     ]},
-    { label: 'Analytics Hub', path: '/portal/analytics', icon: <PieChart size={20} /> },
-    { label: 'Integration Hub', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },
-    { label: 'Invoices', path: '/portal/invoices', icon: <FileText size={20} /> },
-    { label: 'Billing & Tiers', path: '/portal/billing', icon: <CreditCard size={20} /> },
+
+    // ── Workspace (group label) ──
+    { label: 'Workspace', path: '', icon: <Plug size={20} />, isGroup: true, divider: true, children: [
+      { label: 'Integrations', path: '/portal/integrations', icon: <Plug size={20} />, badge: activeIntegrationCount > 0 ? `${activeIntegrationCount} active` : undefined },
+      { label: 'AI Settings', path: '/portal/model-training', icon: <SlidersHorizontal size={20} /> },
+    ]},
+
+    // ── Billing (group label) ──
+    { label: 'Billing', path: '', icon: <CreditCard size={20} />, isGroup: true, children: [
+      { label: 'Subscription', path: '/portal/billing', icon: <CreditCard size={20} /> },
+      { label: 'Billing History', path: '/portal/invoices', icon: <FileText size={20} /> },
+    ]},
+
+    // ── Settings ──
     { label: 'Settings', path: '/portal/settings', icon: <Settings size={20} />, children: [
       { label: 'User Manual', path: '/portal/manual', icon: <BookOpen size={20} /> },
       { label: 'Help Center', path: '/portal/help', icon: <HelpCircle size={20} /> },
@@ -214,7 +226,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
               ) : (
                 <>
                   <div className="p-4 bg-gray-900 rounded-2xl text-white mb-4">
-                    <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">Compute Allocation</p>
+                    <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">AI Credits</p>
                     <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mb-2">
                       <div className="bg-indigo-400 h-full rounded-full transition-all duration-1000" style={{ width: `${usagePercentage}%` }}></div>
                     </div>

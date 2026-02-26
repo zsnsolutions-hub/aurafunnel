@@ -8,6 +8,10 @@ export interface SidebarNavItem {
   icon: React.ReactNode;
   badge?: string;
   children?: SidebarNavItem[];
+  /** Render a visual separator line above this item */
+  divider?: boolean;
+  /** Non-clickable section label with always-visible children */
+  isGroup?: boolean;
 }
 
 interface SidebarProps {
@@ -51,12 +55,75 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation */}
       <nav className="flex-grow py-3 px-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
+          const dividerEl = item.divider ? (
+            <div className={`my-2 mx-2 border-t ${isLight ? 'border-gray-100' : 'border-slate-800'}`} />
+          ) : null;
+
+          // ── Group label (non-clickable section header, children always visible) ──
+          if (item.isGroup) {
+            const isAnyChildActive = item.children?.some(c => activePath === c.path);
+            return (
+              <div key={item.label}>
+                {dividerEl}
+                {!collapsed && (
+                  <p className={`px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${isAnyChildActive ? (isLight ? 'text-indigo-500' : 'text-indigo-400') : (isLight ? 'text-gray-400' : 'text-slate-500')}`}>
+                    {item.label}
+                  </p>
+                )}
+                {collapsed && (
+                  <div className={`my-1.5 mx-2 border-t ${isLight ? 'border-gray-100' : 'border-slate-800'}`} />
+                )}
+                <div className={collapsed ? 'space-y-0.5' : 'space-y-0.5'}>
+                  {item.children?.map((child) => {
+                    const isChildActive = activePath === child.path;
+                    return (
+                      <PrefetchLink
+                        key={child.path}
+                        to={child.path}
+                        title={collapsed ? child.label : undefined}
+                        aria-current={isChildActive ? 'page' : undefined}
+                        className={`flex items-center rounded-xl transition-all duration-150 ease-out group relative ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5 gap-3'} ${isChildActive
+                          ? isLight
+                            ? 'bg-indigo-50/80 text-indigo-700 font-medium'
+                            : 'bg-indigo-500/15 text-indigo-400 font-medium'
+                          : isLight
+                            ? 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                            : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                        }`}
+                      >
+                        {isChildActive && (
+                          <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full ${isLight ? 'bg-indigo-600' : 'bg-indigo-400'}`} />
+                        )}
+                        <span className={`shrink-0 [&>svg]:w-5 [&>svg]:h-5 transition-colors duration-150 ${isChildActive ? '' : isLight ? 'text-gray-400 group-hover:text-gray-600' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                          {child.icon}
+                        </span>
+                        {!collapsed && <span className="text-[13px] truncate">{child.label}</span>}
+                        {!collapsed && child.badge && (
+                          <span className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full border ${isChildActive ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                            {child.badge}
+                          </span>
+                        )}
+                        {collapsed && (
+                          <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 ease-out whitespace-nowrap z-50 pointer-events-none shadow-lg">
+                            {child.label}
+                          </div>
+                        )}
+                      </PrefetchLink>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+
+          // ── Regular nav item ──
           const isActive = activePath === item.path;
           const hasChildren = item.children && item.children.length > 0;
           const isChildActive = hasChildren && item.children!.some(child => activePath === child.path);
           const isExpanded = hasChildren && (isActive || isChildActive);
           return (
             <div key={item.path}>
+              {dividerEl}
               <PrefetchLink
                 to={item.path}
                 title={collapsed ? item.label : undefined}
