@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import PrefetchLink from '../PrefetchLink';
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 export interface SidebarNavItem {
@@ -57,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isExpanded = hasChildren && (isActive || isChildActive);
           return (
             <div key={item.path}>
-              <Link
+              <PrefetchLink
                 to={item.path}
                 title={collapsed ? item.label : undefined}
                 aria-current={isActive ? 'page' : undefined}
@@ -89,14 +89,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {item.label}
                   </div>
                 )}
-              </Link>
+              </PrefetchLink>
               {/* Children sub-links */}
               {hasChildren && isExpanded && !collapsed && (
                 <div className="ml-4 mt-0.5 space-y-0.5">
                   {item.children!.map((child) => {
                     const isChildItemActive = activePath === child.path;
                     return (
-                      <Link
+                      <PrefetchLink
                         key={child.path}
                         to={child.path}
                         aria-current={isChildItemActive ? 'page' : undefined}
@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           {child.icon}
                         </span>
                         <span className="text-[12px] truncate">{child.label}</span>
-                      </Link>
+                      </PrefetchLink>
                     );
                   })}
                 </div>

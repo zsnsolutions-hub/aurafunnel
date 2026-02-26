@@ -4,6 +4,7 @@ import { UserRole, User } from './types';
 import { supabase } from './lib/supabase';
 import ErrorBoundary from './components/ErrorBoundary';
 import { GuideProvider } from './components/guide/GuideProvider';
+import { useIdlePrefetch } from './hooks/useIdlePrefetch';
 
 // Layouts — kept eager since they wrap all child routes
 import MarketingLayout from './components/layout/MarketingLayout';
@@ -66,11 +67,29 @@ const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const BlogManager = lazy(() => import('./pages/admin/BlogManager'));
 const PricingManagement = lazy(() => import('./pages/admin/PricingManagement'));
 
-const PageFallback = () => (
-  <div className="flex items-center justify-center h-64">
-    <div className="w-8 h-8 border-3 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-  </div>
-);
+const PageFallback = () => {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setShow(true), 150);
+    return () => clearTimeout(id);
+  }, []);
+  if (!show) return null;
+  return (
+    <div className="animate-fadeIn px-6 py-10 max-w-4xl mx-auto space-y-6">
+      <div className="h-8 w-48 bg-slate-200 rounded-lg animate-pulse" />
+      <div className="space-y-3">
+        <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
+        <div className="h-4 w-5/6 bg-slate-100 rounded animate-pulse" />
+        <div className="h-4 w-2/3 bg-slate-100 rounded animate-pulse" />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="h-24 bg-slate-100 rounded-xl animate-pulse" />
+        <div className="h-24 bg-slate-100 rounded-xl animate-pulse" />
+        <div className="h-24 bg-slate-100 rounded-xl animate-pulse" />
+      </div>
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -80,6 +99,8 @@ const App: React.FC = () => {
   const loggingOutRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  useIdlePrefetch();
 
   const fetchProfile = useCallback(async (userId: string): Promise<User | null> => {
     try {

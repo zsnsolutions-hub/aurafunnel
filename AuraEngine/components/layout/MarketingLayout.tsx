@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
+import PrefetchLink from '../PrefetchLink';
 import { track } from '../../lib/analytics';
 
 /** Pages that have a white/light background at the top. */
@@ -41,13 +42,13 @@ const MarketingLayout: React.FC = () => {
                 ? 'h-16 bg-white/80 backdrop-blur-md border-slate-200'
                 : 'h-16 bg-white/5 backdrop-blur-md border-white/10'
           }`}>
-            <Link to="/" className="flex items-center group" aria-label="Scaliyo home">
+            <PrefetchLink to="/" className="flex items-center group" aria-label="Scaliyo home">
               <img src={logoSrc} alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
-            </Link>
+            </PrefetchLink>
 
             <div className="hidden lg:flex items-center space-x-8">
               {['Features', 'Pricing', 'Blog', 'About', 'Contact'].map((item) => (
-                <Link
+                <PrefetchLink
                   key={item}
                   to={`/${item.toLowerCase()}`}
                   className={`relative text-sm font-semibold transition-colors duration-300 group ${
@@ -58,21 +59,21 @@ const MarketingLayout: React.FC = () => {
                 >
                   {item}
                   <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-teal-500 transition-all duration-300 group-hover:w-full" />
-                </Link>
+                </PrefetchLink>
               ))}
             </div>
 
             <div className="flex items-center space-x-3">
-              <Link to="/auth" className={`hidden sm:block text-sm font-semibold px-4 py-2 transition-colors duration-300 ${
+              <PrefetchLink to="/auth" className={`hidden sm:block text-sm font-semibold px-4 py-2 transition-colors duration-300 ${
                 isLightPage && !scrolled ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-              }`}>Log in</Link>
-              <Link
+              }`}>Log in</PrefetchLink>
+              <PrefetchLink
                 to="/signup"
                 onClick={() => track('cta_click', { location: 'navbar', label: 'start_free_trial' })}
                 className="bg-teal-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-teal-400 hover:scale-105 transition-all duration-300 shadow-lg shadow-teal-500/20 active:scale-95"
               >
                 Start Free Trial
-              </Link>
+              </PrefetchLink>
               {/* Mobile hamburger */}
               <button
                 onClick={() => setMobileOpen(!mobileOpen)}
@@ -95,24 +96,24 @@ const MarketingLayout: React.FC = () => {
             <div className="lg:hidden mt-2 bg-[#0F1D32]/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
               <div className="space-y-4">
                 {['Features', 'Pricing', 'Blog', 'About', 'Contact'].map((item) => (
-                  <Link
+                  <PrefetchLink
                     key={item}
                     to={`/${item.toLowerCase()}`}
                     onClick={() => setMobileOpen(false)}
                     className="block text-lg font-semibold text-slate-300 hover:text-teal-400 transition-colors"
                   >
                     {item}
-                  </Link>
+                  </PrefetchLink>
                 ))}
                 <hr className="border-slate-700/50" />
-                <Link to="/auth" onClick={() => setMobileOpen(false)} className="block text-lg font-semibold text-slate-400">Log in</Link>
-                <Link
+                <PrefetchLink to="/auth" onClick={() => setMobileOpen(false)} className="block text-lg font-semibold text-slate-400">Log in</PrefetchLink>
+                <PrefetchLink
                   to="/signup"
                   onClick={() => { setMobileOpen(false); track('cta_click', { location: 'navbar_mobile', label: 'start_free_trial' }); }}
                   className="block text-center bg-teal-500 text-white px-5 py-3 rounded-xl text-base font-bold hover:bg-teal-400 transition-all"
                 >
                   Start Free Trial
-                </Link>
+                </PrefetchLink>
               </div>
             </div>
           )}
@@ -137,9 +138,9 @@ const MarketingLayout: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-12 lg:gap-16">
             {/* Brand + Contact */}
             <div className="md:col-span-4">
-              <Link to="/" className="flex items-center mb-6 group">
+              <PrefetchLink to="/" className="flex items-center mb-6 group">
                 <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-8 w-auto group-hover:scale-105 transition-transform duration-300" />
-              </Link>
+              </PrefetchLink>
               <p className="text-slate-500 leading-relaxed max-w-sm mb-6 text-sm">
                 The AI-powered outbound growth platform that finds leads, enriches your pipeline, and closes deals automatically.
               </p>
@@ -174,31 +175,31 @@ const MarketingLayout: React.FC = () => {
               <div>
                 <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-6">Platform</h4>
                 <ul className="space-y-4 text-sm font-medium text-slate-500">
-                  <li><Link to="/features" className="hover:text-teal-400 transition-colors duration-300">Intelligence</Link></li>
-                  <li><Link to="/features" className="hover:text-teal-400 transition-colors duration-300">Lead Scoring</Link></li>
-                  <li><Link to="/features" className="hover:text-teal-400 transition-colors duration-300">Automations</Link></li>
-                  <li><Link to="/features" className="hover:text-teal-400 transition-colors duration-300">Content Studio</Link></li>
-                  <li><Link to="/pricing" className="hover:text-teal-400 transition-colors duration-300">Pricing</Link></li>
+                  <li><PrefetchLink to="/features" className="hover:text-teal-400 transition-colors duration-300">Intelligence</PrefetchLink></li>
+                  <li><PrefetchLink to="/features" className="hover:text-teal-400 transition-colors duration-300">Lead Scoring</PrefetchLink></li>
+                  <li><PrefetchLink to="/features" className="hover:text-teal-400 transition-colors duration-300">Automations</PrefetchLink></li>
+                  <li><PrefetchLink to="/features" className="hover:text-teal-400 transition-colors duration-300">Content Studio</PrefetchLink></li>
+                  <li><PrefetchLink to="/pricing" className="hover:text-teal-400 transition-colors duration-300">Pricing</PrefetchLink></li>
                 </ul>
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-6">Resources</h4>
                 <ul className="space-y-4 text-sm font-medium text-slate-500">
-                  <li><Link to="/blog" className="hover:text-teal-400 transition-colors duration-300">Blog</Link></li>
-                  <li><Link to="/features" className="hover:text-teal-400 transition-colors duration-300">Documentation</Link></li>
-                  <li><Link to="/features" className="hover:text-teal-400 transition-colors duration-300">API Reference</Link></li>
-                  <li><Link to="/contact" className="hover:text-teal-400 transition-colors duration-300">Help Center</Link></li>
+                  <li><PrefetchLink to="/blog" className="hover:text-teal-400 transition-colors duration-300">Blog</PrefetchLink></li>
+                  <li><PrefetchLink to="/features" className="hover:text-teal-400 transition-colors duration-300">Documentation</PrefetchLink></li>
+                  <li><PrefetchLink to="/features" className="hover:text-teal-400 transition-colors duration-300">API Reference</PrefetchLink></li>
+                  <li><PrefetchLink to="/contact" className="hover:text-teal-400 transition-colors duration-300">Help Center</PrefetchLink></li>
                 </ul>
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-6">Company</h4>
                 <ul className="space-y-4 text-sm font-medium text-slate-500">
-                  <li><Link to="/about" className="hover:text-teal-400 transition-colors duration-300">About Us</Link></li>
-                  <li><Link to="/about" className="hover:text-teal-400 transition-colors duration-300">Our Vision</Link></li>
-                  <li><Link to="/contact" className="hover:text-teal-400 transition-colors duration-300">Careers</Link></li>
-                  <li><Link to="/contact" className="hover:text-teal-400 transition-colors duration-300">Contact</Link></li>
+                  <li><PrefetchLink to="/about" className="hover:text-teal-400 transition-colors duration-300">About Us</PrefetchLink></li>
+                  <li><PrefetchLink to="/about" className="hover:text-teal-400 transition-colors duration-300">Our Vision</PrefetchLink></li>
+                  <li><PrefetchLink to="/contact" className="hover:text-teal-400 transition-colors duration-300">Careers</PrefetchLink></li>
+                  <li><PrefetchLink to="/contact" className="hover:text-teal-400 transition-colors duration-300">Contact</PrefetchLink></li>
                   {/* Book a demo — secondary, footer-only */}
-                  <li><Link to="/contact" className="hover:text-teal-400 transition-colors duration-300">Book a Demo</Link></li>
+                  <li><PrefetchLink to="/contact" className="hover:text-teal-400 transition-colors duration-300">Book a Demo</PrefetchLink></li>
                 </ul>
               </div>
               <div>

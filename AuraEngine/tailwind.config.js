@@ -32,12 +32,17 @@ export default {
           '0%, 100%': { opacity: '0.4' },
           '50%': { opacity: '1' },
         },
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
       },
       animation: {
         marquee: 'marquee 30s linear infinite',
         float: 'float 6s ease-in-out infinite',
         'progress-indefinite': 'progress-indefinite 2s ease-in-out infinite',
         'glow-pulse': 'glow-pulse 3s ease-in-out infinite',
+        fadeIn: 'fadeIn 0.3s ease-out',
       },
     },
   },
