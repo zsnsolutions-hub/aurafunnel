@@ -4,6 +4,7 @@ import {
   AreaChart, Area
 } from 'recharts';
 import { BoltIcon, RefreshIcon, UsersIcon, CreditCardIcon, ShieldIcon, TrendUpIcon, TrendDownIcon, TargetIcon, ActivityIcon, SparklesIcon, RocketIcon, KeyboardIcon, XIcon, LayersIcon, BrainIcon, PieChartIcon, AlertTriangleIcon, ClockIcon, CheckIcon, ArrowRightIcon, DatabaseIcon, GlobeIcon } from '../../components/Icons';
+import { Headphones } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { DashboardQuickStats, AIInsight, FunnelStage, Lead } from '../../types';
 import { generateProgrammaticInsights } from '../../lib/insights';
@@ -46,6 +47,11 @@ const AdminDashboard: React.FC = () => {
   const [totalLeadsCount, setTotalLeadsCount] = useState(0);
   const [activeSubs, setActiveSubs] = useState(0);
   const [estimatedRevenue, setEstimatedRevenue] = useState(0);
+
+  // Super admin support state
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [supportStats, setSupportStats] = useState({ activeSessions: 0, sessionsToday: 0, totalAuditActions: 0 });
+  const [recentSupportLogs, setRecentSupportLogs] = useState<any[]>([]);
 
   // Sidebar & shortcut state
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -263,6 +269,27 @@ const AdminDashboard: React.FC = () => {
 
       if (sessionData?.session?.user?.id) {
         setAdminUserId(sessionData.session.user.id);
+
+        // Super admin support data
+        try {
+          const { data: profile } = await supabase.from('profiles').select('is_super_admin').eq('id', sessionData.session.user.id).single();
+          if (profile?.is_super_admin) {
+            setIsSuperAdmin(true);
+            const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+            const [activeRes, todayRes, auditCountRes, logsRes] = await Promise.all([
+              supabase.from('support_sessions').select('id', { count: 'exact', head: true }).eq('is_active', true),
+              supabase.from('support_sessions').select('id', { count: 'exact', head: true }).gte('started_at', todayStart.toISOString()),
+              supabase.from('support_audit_logs').select('id', { count: 'exact', head: true }),
+              supabase.from('support_audit_logs').select('*').order('created_at', { ascending: false }).limit(10),
+            ]);
+            setSupportStats({
+              activeSessions: activeRes.count || 0,
+              sessionsToday: todayRes.count || 0,
+              totalAuditActions: auditCountRes.count || 0,
+            });
+            setRecentSupportLogs(logsRes.data || []);
+          }
+        } catch { /* support tables may not exist yet */ }
       }
       if (adminProfile?.name) {
         setAdminName(adminProfile.name);
@@ -667,6 +694,82 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/*  SUPPORT OPERATIONS (super admin only)                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {isSuperAdmin && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                <Headphones size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800 font-heading">Support Operations</h3>
+                <p className="text-xs text-slate-400">Session & audit overview</p>
+              </div>
+            </div>
+            <a
+              href="#/admin/support"
+              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 transition-colors shadow-sm"
+            >
+              <Headphones size={14} />
+              <span>Open Console</span>
+            </a>
+          </div>
+
+          {/* KPI cards */}
+          <div className="grid grid-cols-3 gap-4 p-6 pb-4">
+            {[
+              { label: 'Active Sessions', value: supportStats.activeSessions.toString(), color: 'bg-emerald-50 text-emerald-600' },
+              { label: 'Sessions Today', value: supportStats.sessionsToday.toString(), color: 'bg-blue-50 text-blue-600' },
+              { label: 'Audit Actions', value: supportStats.totalAuditActions.toString(), color: 'bg-purple-50 text-purple-600' },
+            ].map((card, i) => (
+              <div key={i} className="bg-slate-50 rounded-xl p-4">
+                <div className="flex items-center space-x-2 mb-1">
+                  <div className={`w-2 h-2 rounded-full ${card.color.split(' ')[0].replace('50', '500')}`} />
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{card.label}</span>
+                </div>
+                <p className="text-2xl font-bold text-slate-900 font-heading">{card.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Recent support activity */}
+          <div className="px-6 pb-6">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Recent Support Activity</h4>
+            {recentSupportLogs.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">No support activity yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentSupportLogs.map((log: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl">
+                    <div className="flex items-center space-x-3">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        log.action?.includes('start') ? 'bg-emerald-100 text-emerald-700' :
+                        log.action?.includes('end') ? 'bg-red-100 text-red-700' :
+                        log.action?.includes('debug') ? 'bg-amber-100 text-amber-700' :
+                        log.action?.includes('export') ? 'bg-indigo-100 text-indigo-700' :
+                        log.action?.includes('impersonat') ? 'bg-orange-100 text-orange-700' :
+                        'bg-slate-100 text-slate-600'
+                      }`}>
+                        {log.action}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Target: {log.target_user_id?.slice(0, 8)}...
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      {formatRelativeTime(log.created_at)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  ACTIVITY FEED + RECENT USERS                                 */}

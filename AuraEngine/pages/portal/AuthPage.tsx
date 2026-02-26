@@ -271,13 +271,24 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
 
   useEffect(() => {
     if (currentUser && !isSubmitting) {
-      const from = (location.state as any)?.from?.pathname || (currentUser.role === UserRole.ADMIN ? '/admin' : '/portal');
-      navigate(from, { replace: true });
+      const roleHome = currentUser.role === UserRole.ADMIN ? '/admin' : '/portal';
+      const from = (location.state as any)?.from?.pathname;
+      // Only honour the "from" redirect if it matches the user's role area;
+      // otherwise a CLIENT sent from /admin would loop back endlessly.
+      const target =
+        from && (
+          (currentUser.role === UserRole.ADMIN && from.startsWith('/admin')) ||
+          (currentUser.role !== UserRole.ADMIN && from.startsWith('/portal'))
+        )
+          ? from
+          : roleHome;
+      navigate(target, { replace: true });
     }
     return () => {
       if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
     };
-  }, [currentUser, navigate, location, isSubmitting]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, navigate, isSubmitting]);
 
   const pollForProfile = async (userId: string, retries = 10): Promise<User | null> => {
     for (let i = 0; i < retries; i++) {

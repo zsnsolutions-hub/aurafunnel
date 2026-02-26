@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, Shield, User, CreditCard, Eye, EyeOff } from 'lucide-react';
+import { Clock, Shield, User, CreditCard, Eye, EyeOff, Plug, Target } from 'lucide-react';
 import { useSupport } from '../../../components/support/SupportProvider';
-import { getTargetSubscription } from '../../../lib/support';
+import { getTargetSubscription, getTargetIntegrations, getTargetEmailConfigs, getTargetLeads } from '../../../lib/support';
 
 function formatTimeLeft(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
@@ -13,10 +13,24 @@ function formatTimeLeft(expiresAt: string): string {
   return `${mins}m`;
 }
 
+interface IntegrationSummary {
+  total: number;
+  connected: number;
+  disconnected: number;
+}
+
+interface LeadSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  avgScore: number;
+}
+
 const ActiveSessionTab: React.FC = () => {
   const { activeSession, viewingAsUser, isImpersonating, impersonateUser, stopImpersonation, endSession } = useSupport();
   const [subscription, setSubscription] = useState<Record<string, unknown> | null>(null);
   const [timeLeft, setTimeLeft] = useState('');
+  const [integrationSummary, setIntegrationSummary] = useState<IntegrationSummary>({ total: 0, connected: 0, disconnected: 0 });
+  const [leadSummary, setLeadSummary] = useState<LeadSummary>({ total: 0, byStatus: {}, avgScore: 0 });
 
   useEffect(() => {
     if (!activeSession) return;
@@ -27,9 +41,36 @@ const ActiveSessionTab: React.FC = () => {
   }, [activeSession]);
 
   useEffect(() => {
-    if (activeSession?.target_user_id) {
-      getTargetSubscription(activeSession.target_user_id).then(setSubscription);
-    }
+    if (!activeSession?.target_user_id) return;
+    const uid = activeSession.target_user_id;
+
+    getTargetSubscription(uid).then(setSubscription);
+
+    // Fetch integration summary
+    Promise.all([
+      getTargetIntegrations(uid),
+      getTargetEmailConfigs(uid),
+    ]).then(([integrations, emailConfigs]) => {
+      const connected = integrations.filter((i: Record<string, unknown>) => i.is_connected === true).length + emailConfigs.length;
+      const disconnected = integrations.filter((i: Record<string, unknown>) => i.is_connected === false).length;
+      setIntegrationSummary({ total: integrations.length + emailConfigs.length, connected, disconnected });
+    });
+
+    // Fetch lead summary
+    getTargetLeads(uid).then((leads) => {
+      const byStatus: Record<string, number> = {};
+      let totalScore = 0;
+      leads.forEach((l: Record<string, unknown>) => {
+        const status = (l.status as string) || 'Unknown';
+        byStatus[status] = (byStatus[status] || 0) + 1;
+        totalScore += (l.score as number) || 0;
+      });
+      setLeadSummary({
+        total: leads.length,
+        byStatus,
+        avgScore: leads.length > 0 ? Math.round(totalScore / leads.length) : 0,
+      });
+    });
   }, [activeSession?.target_user_id]);
 
   if (!activeSession || !viewingAsUser) {
@@ -46,6 +87,12 @@ const ActiveSessionTab: React.FC = () => {
     { label: 'Credits', value: `${viewingAsUser.credits_used} / ${viewingAsUser.credits_total}`, icon: <User size={16} /> },
     { label: 'Session Timer', value: timeLeft, icon: <Clock size={16} /> },
   ];
+
+  const creditsPct = viewingAsUser.credits_total > 0
+    ? Math.min(100, Math.round((viewingAsUser.credits_used / viewingAsUser.credits_total) * 100))
+    : 0;
+  const circumference = 2 * Math.PI * 36;
+  const strokeDasharray = `${(creditsPct / 100) * circumference} ${circumference}`;
 
   return (
     <div className="space-y-6">
@@ -81,6 +128,74 @@ const ActiveSessionTab: React.FC = () => {
               <p className="text-sm font-black text-slate-900">{card.value}</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Integration Status + Lead Stats + Credit Gauge */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Integration Status Grid */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 text-slate-400 mb-3">
+            <Plug size={16} />
+            <span className="text-[10px] font-black uppercase tracking-wider">Integration Status</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-900 mb-2">{integrationSummary.total}</p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-xs text-slate-600">{integrationSummary.connected} connected</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+              <span className="text-xs text-slate-600">{integrationSummary.disconnected} disconnected</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Lead Stats Summary */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 text-slate-400 mb-3">
+            <Target size={16} />
+            <span className="text-[10px] font-black uppercase tracking-wider">Lead Stats</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-slate-400 font-bold">Total</p>
+              <p className="text-lg font-bold text-slate-900">{leadSummary.total}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-bold">Avg Score</p>
+              <p className="text-lg font-bold text-slate-900">{leadSummary.avgScore}</p>
+            </div>
+          </div>
+          {Object.keys(leadSummary.byStatus).length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {Object.entries(leadSummary.byStatus).map(([status, count]) => (
+                <span key={status} className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                  {status}: {count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Credit Usage Gauge */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col items-center justify-center">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Credit Usage</span>
+          <svg viewBox="0 0 96 96" className="w-24 h-24">
+            <circle cx="48" cy="48" r="36" fill="none" stroke="#f1f5f9" strokeWidth="7" />
+            <circle cx="48" cy="48" r="36" fill="none"
+              stroke={creditsPct >= 90 ? '#ef4444' : creditsPct >= 70 ? '#f59e0b' : '#6366f1'}
+              strokeWidth="7" strokeLinecap="round"
+              strokeDasharray={strokeDasharray}
+              transform="rotate(-90 48 48)" />
+            <text x="48" y="45" textAnchor="middle" className="fill-slate-900" style={{ fontSize: '18px', fontWeight: 700 }}>
+              {creditsPct}%
+            </text>
+            <text x="48" y="58" textAnchor="middle" className="fill-slate-400" style={{ fontSize: '8px' }}>
+              {viewingAsUser.credits_used}/{viewingAsUser.credits_total}
+            </text>
+          </svg>
         </div>
       </div>
 

@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
-import { Search, UserCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, UserCircle, ArrowRight, Users, CreditCard, Shield } from 'lucide-react';
 import { searchUsers, TargetProfile } from '../../../lib/support';
 import { useSupport } from '../../../components/support/SupportProvider';
+import { supabase } from '../../../lib/supabase';
 
 interface Props {
   onSessionStarted: () => void;
+}
+
+interface WorkspaceStats {
+  total: number;
+  plans: Record<string, number>;
+  active: number;
+  disabled: number;
 }
 
 const WorkspaceBrowserTab: React.FC<Props> = ({ onSessionStarted }) => {
@@ -15,6 +23,31 @@ const WorkspaceBrowserTab: React.FC<Props> = ({ onSessionStarted }) => {
   const [reason, setReason] = useState('');
   const [selectedUser, setSelectedUser] = useState<TargetProfile | null>(null);
   const [starting, setStarting] = useState(false);
+  const [stats, setStats] = useState<WorkspaceStats>({ total: 0, plans: {}, active: 0, disabled: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      setStatsLoading(true);
+      try {
+        const { data } = await supabase.from('profiles').select('plan, status');
+        if (data) {
+          const plans: Record<string, number> = {};
+          let active = 0;
+          let disabled = 0;
+          data.forEach((p: { plan: string; status: string }) => {
+            plans[p.plan || 'Free'] = (plans[p.plan || 'Free'] || 0) + 1;
+            if (p.status === 'active') active++;
+            else disabled++;
+          });
+          setStats({ total: data.length, plans, active, disabled });
+        }
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -38,8 +71,63 @@ const WorkspaceBrowserTab: React.FC<Props> = ({ onSessionStarted }) => {
     }
   };
 
+  const creditsPct = (used: number, total: number) => total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+
   return (
     <div className="space-y-6">
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <Users size={16} />
+            <span className="text-[10px] font-black uppercase tracking-wider">Total Users</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-900">
+            {statsLoading ? '...' : stats.total.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <CreditCard size={16} />
+            <span className="text-[10px] font-black uppercase tracking-wider">Plan Breakdown</span>
+          </div>
+          {statsLoading ? (
+            <p className="text-sm text-slate-400">...</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(stats.plans).map(([plan, count]) => (
+                <span key={plan} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  plan === 'Growth' || plan === 'Professional' ? 'bg-indigo-100 text-indigo-700' :
+                  plan === 'Business' || plan === 'Enterprise' ? 'bg-violet-100 text-violet-700' :
+                  plan === 'Starter' ? 'bg-emerald-100 text-emerald-700' :
+                  'bg-slate-100 text-slate-600'
+                }`}>
+                  {plan}: {count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <Shield size={16} />
+            <span className="text-[10px] font-black uppercase tracking-wider">Status Breakdown</span>
+          </div>
+          {statsLoading ? (
+            <p className="text-sm text-slate-400">...</p>
+          ) : (
+            <div className="flex gap-3">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                Active: {stats.active}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                Disabled: {stats.disabled}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Search */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6">
         <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4">Search Users</h2>
@@ -75,34 +163,53 @@ const WorkspaceBrowserTab: React.FC<Props> = ({ onSessionStarted }) => {
             {results.map((user) => (
               <div
                 key={user.id}
-                className={`flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors cursor-pointer ${
+                className={`px-6 py-4 hover:bg-slate-50 transition-colors cursor-pointer ${
                   selectedUser?.id === user.id ? 'bg-indigo-50 ring-1 ring-indigo-200' : ''
                 }`}
                 onClick={() => setSelectedUser(user)}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
-                    <UserCircle size={24} className="text-slate-400" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+                      <UserCircle size={24} className="text-slate-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{user.name || 'Unnamed'}</p>
+                      <p className="text-xs text-slate-500">{user.email}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">{user.name || 'Unnamed'}</p>
-                    <p className="text-xs text-slate-500">{user.email}</p>
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className={`px-2.5 py-1 rounded-full font-bold ${
+                      user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
+                      user.role === 'CLIENT' ? 'bg-blue-100 text-blue-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {user.role}
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-full font-bold ${
+                      user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {user.status}
+                    </span>
+                    <span className="text-slate-400 font-bold">{user.plan}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 text-xs">
-                  <span className={`px-2.5 py-1 rounded-full font-bold ${
-                    user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
-                    user.role === 'CLIENT' ? 'bg-blue-100 text-blue-700' :
-                    'bg-slate-100 text-slate-600'
-                  }`}>
-                    {user.role}
-                  </span>
-                  <span className={`px-2.5 py-1 rounded-full font-bold ${
-                    user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {user.status}
-                  </span>
-                  <span className="text-slate-400 font-bold">{user.plan}</span>
+                {/* Credits Progress Bar */}
+                <div className="mt-3 ml-14">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                    <span className="font-bold">Credits</span>
+                    <span>{user.credits_used} / {user.credits_total}</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        creditsPct(user.credits_used, user.credits_total) >= 90 ? 'bg-red-500' :
+                        creditsPct(user.credits_used, user.credits_total) >= 70 ? 'bg-amber-500' :
+                        'bg-indigo-500'
+                      }`}
+                      style={{ width: `${creditsPct(user.credits_used, user.credits_total)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             ))}

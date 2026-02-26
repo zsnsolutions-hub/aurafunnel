@@ -1,23 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { ChevronDown, ChevronRight, Clock, Users, Hash } from 'lucide-react';
 import { useSupport } from '../../../components/support/SupportProvider';
 import { getSessionHistory, getAuditLogs, SupportSession } from '../../../lib/support';
 
+type DateRange = '7d' | '30d' | 'all';
+
 const SupportHistoryTab: React.FC = () => {
-  const { activeSession } = useSupport();
-  const adminId = activeSession?.admin_id;
+  const { adminId } = useSupport();
   const [sessions, setSessions] = useState<SupportSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sessionLogs, setSessionLogs] = useState<Record<string, Record<string, unknown>[]>>({});
+  const [dateRange, setDateRange] = useState<DateRange>('all');
 
   useEffect(() => {
-    // We need an admin ID — use from the active session or fall back
-    // If no active session, this tab still works for history browsing
     const fetchSessions = async () => {
       setLoading(true);
       try {
-        // getSessionHistory requires admin ID; we'll get all sessions the current admin created
         if (adminId) {
           const data = await getSessionHistory(adminId, 100);
           setSessions(data);
@@ -35,7 +34,6 @@ const SupportHistoryTab: React.FC = () => {
       next.delete(sessionId);
     } else {
       next.add(sessionId);
-      // Fetch logs for this session if not already loaded
       if (!sessionLogs[sessionId]) {
         const logs = await getAuditLogs(undefined, 200);
         const filtered = logs.filter((l: Record<string, unknown>) => l.session_id === sessionId);
@@ -45,8 +43,106 @@ const SupportHistoryTab: React.FC = () => {
     setExpanded(next);
   };
 
+  // Filtered sessions by date range
+  const filteredSessions = useMemo(() => {
+    if (dateRange === 'all') return sessions;
+    const now = Date.now();
+    const cutoff = dateRange === '7d' ? now - 7 * 24 * 60 * 60 * 1000 : now - 30 * 24 * 60 * 60 * 1000;
+    return sessions.filter(s => new Date(s.started_at).getTime() >= cutoff);
+  }, [sessions, dateRange]);
+
+  // Summary stats
+  const stats = useMemo(() => {
+    const total = filteredSessions.length;
+
+    // Average duration (only for ended sessions)
+    const endedSessions = filteredSessions.filter(s => s.ended_at);
+    let avgDuration = 0;
+    if (endedSessions.length > 0) {
+      const totalMs = endedSessions.reduce((acc, s) => {
+        return acc + (new Date(s.ended_at!).getTime() - new Date(s.started_at).getTime());
+      }, 0);
+      avgDuration = Math.round(totalMs / endedSessions.length / 60_000); // in minutes
+    }
+
+    // Most accessed user
+    const userCounts: Record<string, number> = {};
+    filteredSessions.forEach(s => {
+      userCounts[s.target_user_id] = (userCounts[s.target_user_id] || 0) + 1;
+    });
+    let mostAccessed = '';
+    let maxCount = 0;
+    Object.entries(userCounts).forEach(([uid, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostAccessed = uid;
+      }
+    });
+
+    return { total, avgDuration, mostAccessed, mostAccessedCount: maxCount };
+  }, [filteredSessions]);
+
+  const dateRangeOptions: { id: DateRange; label: string }[] = [
+    { id: '7d', label: 'Last 7 days' },
+    { id: '30d', label: 'Last 30 days' },
+    { id: 'all', label: 'All time' },
+  ];
+
   return (
     <div className="space-y-4">
+      {/* Summary Stats */}
+      {!loading && sessions.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-center gap-2 text-slate-400 mb-2">
+              <Hash size={16} />
+              <span className="text-[10px] font-black uppercase tracking-wider">Total Sessions</span>
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-center gap-2 text-slate-400 mb-2">
+              <Clock size={16} />
+              <span className="text-[10px] font-black uppercase tracking-wider">Avg Duration</span>
+            </div>
+            <p className="text-2xl font-bold text-slate-900">
+              {stats.avgDuration > 0 ? `${stats.avgDuration}m` : 'N/A'}
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-center gap-2 text-slate-400 mb-2">
+              <Users size={16} />
+              <span className="text-[10px] font-black uppercase tracking-wider">Most Accessed User</span>
+            </div>
+            {stats.mostAccessed ? (
+              <div>
+                <p className="text-sm font-bold text-slate-900">{stats.mostAccessed.slice(0, 8)}...</p>
+                <p className="text-[10px] text-slate-400">{stats.mostAccessedCount} sessions</p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">N/A</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Date Filter */}
+      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+        {dateRangeOptions.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => setDateRange(opt.id)}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+              dateRange === opt.id
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Past Support Sessions</h2>
@@ -54,11 +150,13 @@ const SupportHistoryTab: React.FC = () => {
 
         {loading ? (
           <div className="p-12 text-center text-slate-400 text-sm">Loading...</div>
-        ) : sessions.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-sm">No session history found.</div>
+        ) : filteredSessions.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 text-sm">
+            {sessions.length === 0 ? 'No session history found.' : 'No sessions in this date range.'}
+          </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {sessions.map((session) => (
+            {filteredSessions.map((session) => (
               <div key={session.id}>
                 <button
                   onClick={() => toggleExpand(session.id)}

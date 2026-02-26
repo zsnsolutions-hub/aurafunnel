@@ -11,6 +11,8 @@ import {
 import { logSupportAction } from '../../lib/supportAudit';
 
 interface SupportContextValue {
+  /** The logged-in admin's user ID (available even without an active session) */
+  adminId: string | null;
   /** Currently active support session (null if none) */
   activeSession: SupportSession | null;
   /** Profile of the user being viewed/impersonated */
@@ -71,15 +73,19 @@ export const SupportProvider: React.FC<Props> = ({ user, children }) => {
   // Restore active session on mount
   useEffect(() => {
     if (!isSuperAdmin || !supportEnabled || !user) return;
-    getActiveSession(user.id).then((session) => {
-      if (session) {
-        setActiveSession(session);
-        scheduleExpiry(session);
-        getTargetProfile(session.target_user_id).then((p) => {
-          if (p) setViewingAsUser(p);
-        });
-      }
-    });
+    getActiveSession(user.id)
+      .then((session) => {
+        if (session) {
+          setActiveSession(session);
+          scheduleExpiry(session);
+          getTargetProfile(session.target_user_id).then((p) => {
+            if (p) setViewingAsUser(p);
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {
+        // Table may not exist yet or RLS blocks — ignore silently
+      });
     return () => {
       if (expiryTimer.current) clearTimeout(expiryTimer.current);
     };
@@ -149,6 +155,7 @@ export const SupportProvider: React.FC<Props> = ({ user, children }) => {
   }, [user, activeSession]);
 
   const value: SupportContextValue = {
+    adminId: user?.id ?? null,
     activeSession,
     viewingAsUser,
     isImpersonating,

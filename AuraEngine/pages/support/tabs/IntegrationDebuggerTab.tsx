@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Plug, Mail, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { useSupport } from '../../../components/support/SupportProvider';
 import { getTargetIntegrations, getTargetEmailConfigs, debugIntegration } from '../../../lib/support';
@@ -17,6 +17,12 @@ const IntegrationDebuggerTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, Record<string, unknown>>>({});
+
+  const summary = useMemo(() => {
+    const connected = rows.filter(r => r.is_connected === true).length;
+    const disconnected = rows.filter(r => r.is_connected === false).length;
+    return { total: rows.length, connected, disconnected };
+  }, [rows]);
 
   useEffect(() => {
     if (!activeSession) return;
@@ -83,6 +89,21 @@ const IntegrationDebuggerTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Summary Header */}
+      {!loading && rows.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
+            Total: {summary.total}
+          </span>
+          <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+            Connected: {summary.connected}
+          </span>
+          <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
+            Disconnected: {summary.disconnected}
+          </span>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Integrations & Email Configs</h2>
@@ -99,6 +120,12 @@ const IntegrationDebuggerTab: React.FC = () => {
               <div key={row.id} className="px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
+                    {/* Health dot */}
+                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                      row.is_connected === true ? 'bg-emerald-500' :
+                      row.is_connected === false ? 'bg-red-500' :
+                      'bg-slate-300'
+                    }`} />
                     {row.source === 'email_config' ? (
                       <Mail size={18} className="text-blue-500" />
                     ) : (
