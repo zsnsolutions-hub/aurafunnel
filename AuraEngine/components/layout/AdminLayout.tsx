@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
-  Shield, Lock, Settings, LogOut, DollarSign
+  Shield, Lock, Settings, LogOut, DollarSign, Headphones
 } from 'lucide-react';
 import { User } from '../../types';
 import { AppShell } from './AppShell';
@@ -30,6 +30,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
     { label: 'Pricing Management', path: '/admin/pricing', icon: <DollarSign size={20} /> },
     { label: 'Platform Settings', path: '/admin/settings', icon: <Settings size={20} /> },
   ];
+
+  if (user?.is_super_admin) {
+    navItems.push({ label: 'Support Console', path: '/admin/support', icon: <Headphones size={20} /> });
+  }
 
   return (
     <AppShell

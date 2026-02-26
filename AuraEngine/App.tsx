@@ -4,6 +4,8 @@ import { UserRole, User } from './types';
 import { supabase } from './lib/supabase';
 import ErrorBoundary from './components/ErrorBoundary';
 import { GuideProvider } from './components/guide/GuideProvider';
+import { SupportProvider } from './components/support/SupportProvider';
+import { SupportBanner } from './components/support/SupportBanner';
 import { useIdlePrefetch } from './hooks/useIdlePrefetch';
 
 // Layouts — kept eager since they wrap all child routes
@@ -57,6 +59,7 @@ const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
 
 // Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const SupportConsole = lazy(() => import('./pages/support/SupportConsole'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
 const LeadsManagement = lazy(() => import('./pages/admin/LeadsManagement'));
@@ -198,7 +201,9 @@ const App: React.FC = () => {
 
   return (
     <GuideProvider>
+    <SupportProvider user={user}>
     <ErrorBoundary>
+      <SupportBanner />
       {/* Logout Confirmation Modal */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -312,12 +317,16 @@ const App: React.FC = () => {
             <Route path="audit" element={<ErrorBoundary><AuditLogs /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><AdminSettings /></ErrorBoundary>} />
             <Route path="pricing" element={<ErrorBoundary><PricingManagement /></ErrorBoundary>} />
+            {user?.is_super_admin && (
+              <Route path="support" element={<ErrorBoundary><SupportConsole /></ErrorBoundary>} />
+            )}
           </Route>
 
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Suspense>
     </ErrorBoundary>
+    </SupportProvider>
     </GuideProvider>
   );
 };

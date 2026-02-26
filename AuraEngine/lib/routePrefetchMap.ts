@@ -56,6 +56,7 @@ const routeImportMap: Record<string, () => Promise<unknown>> = {
   '/admin/audit':    () => import('../pages/admin/AuditLogs'),
   '/admin/settings': () => import('../pages/admin/AdminSettings'),
   '/admin/pricing':  () => import('../pages/admin/PricingManagement'),
+  '/admin/support':  () => import('../pages/support/SupportConsole'),
 };
 
 const prefetched = new Set<string>();

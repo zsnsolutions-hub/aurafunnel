@@ -26,6 +26,7 @@ export interface User {
   createdAt: string;
   subscription?: Subscription;
   businessProfile?: BusinessProfile;
+  is_super_admin?: boolean;
 }
 
 export interface BusinessService {
