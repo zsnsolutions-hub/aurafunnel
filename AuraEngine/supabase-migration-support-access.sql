@@ -114,22 +114,22 @@ CREATE POLICY "Super admins can view audit logs"
 -- integrations
 CREATE POLICY "Support session: view target integrations"
   ON integrations FOR SELECT
-  USING (public.has_active_support_session(user_id));
+  USING (public.has_active_support_session(owner_id));
 
 -- email_provider_configs
 CREATE POLICY "Support session: view target email configs"
   ON email_provider_configs FOR SELECT
-  USING (public.has_active_support_session(user_id));
+  USING (public.has_active_support_session(owner_id));
 
 -- webhooks
 CREATE POLICY "Support session: view target webhooks"
   ON webhooks FOR SELECT
-  USING (public.has_active_support_session(user_id));
+  USING (public.has_active_support_session(owner_id));
 
 -- email_messages
 CREATE POLICY "Support session: view target email messages"
   ON email_messages FOR SELECT
-  USING (public.has_active_support_session(user_id));
+  USING (public.has_active_support_session(owner_id));
 
 -- subscriptions
 CREATE POLICY "Support session: view target subscriptions"

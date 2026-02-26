@@ -129,7 +129,7 @@ export async function getTargetIntegrations(userId: string) {
   const { data } = await supabase
     .from('integrations')
     .select('*')
-    .eq('user_id', userId);
+    .eq('owner_id', userId);
   return data ?? [];
 }
 
@@ -137,7 +137,7 @@ export async function getTargetEmailConfigs(userId: string) {
   const { data } = await supabase
     .from('email_provider_configs')
     .select('*')
-    .eq('user_id', userId);
+    .eq('owner_id', userId);
   return data ?? [];
 }
 
@@ -145,7 +145,7 @@ export async function getTargetWebhooks(userId: string) {
   const { data } = await supabase
     .from('webhooks')
     .select('*')
-    .eq('user_id', userId);
+    .eq('owner_id', userId);
   return data ?? [];
 }
 
@@ -174,7 +174,7 @@ export async function getTargetEmailMessages(userId: string, limit = 50) {
   const { data } = await supabase
     .from('email_messages')
     .select('*')
-    .eq('user_id', userId)
+    .eq('owner_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
   return data ?? [];
