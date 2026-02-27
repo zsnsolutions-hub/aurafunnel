@@ -148,7 +148,7 @@ const PricingPage: React.FC = () => {
 
         {/* ── Plan cards ──────────────────────────────────────────── */}
         <Reveal delay={200}>
-          <div className="grid max-w-5xl mx-auto grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid max-w-5xl mx-auto grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
             {PLANS.map((plan) => {
               const isHighlighted = !!plan.popular;
               const displayPrice = isAnnual ? plan.annualPrice : plan.price;
@@ -159,7 +159,7 @@ const PricingPage: React.FC = () => {
               return (
                 <div
                   key={plan.name}
-                  className={`rounded-2xl p-8 flex flex-col transition-all duration-500 hover:-translate-y-1 ${
+                  className={`h-full rounded-2xl p-8 flex flex-col transition-all duration-500 hover:-translate-y-1 ${
                     isHighlighted
                       ? 'bg-gradient-to-b from-teal-500/10 to-[#0F1D32] border-2 border-teal-500/30 shadow-xl shadow-teal-500/10 relative'
                       : 'bg-[#0F1D32] border border-slate-800 hover:border-slate-700'
@@ -171,91 +171,96 @@ const PricingPage: React.FC = () => {
                     </span>
                   )}
 
-                  {/* Plan name + tagline */}
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-bold font-heading">{plan.name}</h3>
-                    <span className="text-[9px] font-black text-teal-400 uppercase tracking-widest">{meta.tagline}</span>
-                  </div>
-                  <p className="text-sm text-slate-400 mt-1 mb-5 leading-relaxed">{plan.desc}</p>
-
-                  {/* Price */}
-                  <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-4xl font-black font-heading">${displayPrice}</span>
-                    <span className="text-sm text-slate-500 font-semibold">/mo</span>
-                  </div>
-                  {isAnnual && (
-                    <p className="text-xs text-teal-400 font-bold mb-4">
-                      ${(plan.annualPrice * 12).toLocaleString()}/yr &mdash; save ${((plan.price - plan.annualPrice) * 12).toLocaleString()}
-                    </p>
-                  )}
-                  {!isAnnual && <div className="mb-4" />}
-
-                  {/* ── Engine specs ───────────────────────── */}
-                  <div className="mb-4">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Workspace</p>
-                    <div className="space-y-1.5 text-sm">
-                      <div className="flex justify-between"><span className="text-slate-400">Contacts</span><span className="text-white font-semibold">{plan.contacts.toLocaleString()}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400">Storage</span><span className="text-white font-semibold">{plan.storage >= 1000 ? `${(plan.storage / 1000).toFixed(0)} GB` : `${plan.storage} MB`}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400">Team</span><span className="text-white font-semibold">{plan.seats} <span className="text-slate-500 text-xs">({meta.extraSeat}, {meta.maxUsers})</span></span></div>
+                  {/* Content wrapper */}
+                  <div>
+                    {/* Plan name + tagline */}
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-lg font-bold font-heading">{plan.name}</h3>
+                      <span className="text-[9px] font-black text-teal-400 uppercase tracking-widest">{meta.tagline}</span>
                     </div>
-                  </div>
+                    <p className="text-sm text-slate-400 mt-1 mb-5 leading-relaxed">{plan.desc}</p>
 
-                  <div className="mb-4">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Outbound Engine</p>
-                    <div className="space-y-1.5 text-sm">
-                      <div className="flex justify-between"><span className="text-slate-400">Inboxes</span><span className="text-white font-semibold">{outbound.maxInboxes === 1 ? '1' : `Up to ${outbound.maxInboxes}`}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400">Email / day</span><span className="text-white font-semibold">{outbound.emailsPerDayPerInbox}{outbound.maxInboxes > 1 ? '/inbox' : ''}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400">Email / month</span><span className="text-white font-semibold">{outbound.emailsPerMonth.toLocaleString()}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400">LinkedIn / day</span><span className="text-white font-semibold">{outbound.linkedInPerDay}</span></div>
+                    {/* Price */}
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-4xl font-black font-heading">${displayPrice}</span>
+                      <span className="text-sm text-slate-500 font-semibold">/mo</span>
                     </div>
-                  </div>
+                    {isAnnual && (
+                      <p className="text-xs text-teal-400 font-bold mb-4">
+                        ${(plan.annualPrice * 12).toLocaleString()}/yr &mdash; save ${((plan.price - plan.annualPrice) * 12).toLocaleString()}
+                      </p>
+                    )}
+                    {!isAnnual && <div className="mb-4" />}
 
-                  {/* AI + warm-up */}
-                  <div className="mb-4">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">AI + Deliverability</p>
-                    <div className="space-y-1.5 text-sm">
-                      {aiCfg?.hasAI ? (
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">AI credits</span>
-                          <span className="text-white font-semibold group relative cursor-help">
-                            {aiCfg.aiCreditsMonthly.toLocaleString()}/mo
-                            <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-44 rounded-lg bg-slate-800 px-3 py-2 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10">
-                              1 credit = {CREDIT_CONVERSION_RATE.toLocaleString()} tokens. Hard stop. No overages.
+                    {/* ── Engine specs ───────────────────────── */}
+                    <div className="mb-4">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Workspace</p>
+                      <div className="space-y-1.5 text-sm">
+                        <div className="flex justify-between"><span className="text-slate-400">Contacts</span><span className="text-white font-semibold">{plan.contacts.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Storage</span><span className="text-white font-semibold">{plan.storage >= 1000 ? `${(plan.storage / 1000).toFixed(0)} GB` : `${plan.storage} MB`}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Team</span><span className="text-white font-semibold">{plan.seats} <span className="text-slate-500 text-xs">({meta.extraSeat}, {meta.maxUsers})</span></span></div>
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Outbound Engine</p>
+                      <div className="space-y-1.5 text-sm">
+                        <div className="flex justify-between"><span className="text-slate-400">Inboxes</span><span className="text-white font-semibold">{outbound.maxInboxes === 1 ? '1' : `Up to ${outbound.maxInboxes}`}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Email / day</span><span className="text-white font-semibold">{outbound.emailsPerDayPerInbox}{outbound.maxInboxes > 1 ? '/inbox' : ''}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Email / month</span><span className="text-white font-semibold">{outbound.emailsPerMonth.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">LinkedIn / day</span><span className="text-white font-semibold">{outbound.linkedInPerDay}</span></div>
+                      </div>
+                    </div>
+
+                    {/* AI + warm-up */}
+                    <div className="mb-4">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">AI + Deliverability</p>
+                      <div className="space-y-1.5 text-sm">
+                        {aiCfg?.hasAI ? (
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">AI credits</span>
+                            <span className="text-white font-semibold group relative cursor-help">
+                              {aiCfg.aiCreditsMonthly.toLocaleString()}/mo
+                              <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-44 rounded-lg bg-slate-800 px-3 py-2 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10">
+                                1 credit = {CREDIT_CONVERSION_RATE.toLocaleString()} tokens. Hard stop. No overages.
+                              </span>
                             </span>
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between"><span className="text-slate-500">AI</span><span className="text-slate-600 text-xs">&mdash;</span></div>
-                      )}
-                      <div className="flex justify-between"><span className="text-slate-400">Warm-up</span><span className="text-white font-semibold text-xs">{meta.warmup}</span></div>
+                          </div>
+                        ) : (
+                          <div className="flex justify-between"><span className="text-slate-500">AI</span><span className="text-slate-600 text-xs">&mdash;</span></div>
+                        )}
+                        <div className="flex justify-between"><span className="text-slate-400">Warm-up</span><span className="text-white font-semibold text-xs">{meta.warmup}</span></div>
+                      </div>
                     </div>
+
+                    {/* Feature list */}
+                    <ul className="space-y-2.5">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-400">
+                          <svg className="w-4 h-4 text-teal-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
 
-                  {/* CTA */}
-                  <Link
-                    to="/signup"
-                    onClick={() => track('cta_click', { location: 'pricing', tier: plan.name })}
-                    className={`block text-center px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 mb-1.5 ${
-                      isHighlighted
-                        ? 'bg-teal-500 text-white hover:bg-teal-400 shadow-lg shadow-teal-500/25 hover:scale-105 active:scale-95'
-                        : 'bg-white/5 border border-slate-700 text-white hover:border-teal-500/40 hover:bg-teal-500/5'
-                    }`}
-                  >
-                    {plan.cta}
-                  </Link>
-                  <p className="text-[11px] text-slate-500 text-center mb-6">14 days free. No card. Cancel anytime.</p>
-
-                  {/* Feature list */}
-                  <ul className="space-y-2.5 flex-1">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-400">
-                        <svg className="w-4 h-4 text-teal-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
+                  {/* CTA — pinned to bottom */}
+                  <div className="mt-auto pt-6">
+                    <Link
+                      to="/signup"
+                      onClick={() => track('cta_click', { location: 'pricing', tier: plan.name })}
+                      className={`block text-center px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${
+                        isHighlighted
+                          ? 'bg-teal-500 text-white hover:bg-teal-400 shadow-lg shadow-teal-500/25 hover:scale-105 active:scale-95'
+                          : 'bg-white/5 border border-slate-700 text-white hover:border-teal-500/40 hover:bg-teal-500/5'
+                      }`}
+                    >
+                      {plan.cta}
+                    </Link>
+                    <p className="text-[11px] text-slate-500 text-center mt-1.5">14 days free. No card. Cancel anytime.</p>
+                  </div>
                 </div>
               );
             })}
