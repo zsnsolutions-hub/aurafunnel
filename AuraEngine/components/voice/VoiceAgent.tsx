@@ -162,7 +162,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
     try {
       await conversation.startSession({
         agentId: AGENT_ID,
-        connectionType: 'webrtc',
+        connectionType: 'websocket',
       } as Parameters<typeof conversation.startSession>[0]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
