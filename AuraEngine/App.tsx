@@ -202,7 +202,7 @@ const App: React.FC = () => {
 
   return (
     <GuideProvider>
-    <UIModeProvider>
+    <UIModeProvider userId={user?.id}>
     <SupportProvider user={user}>
     <ErrorBoundary>
       <SupportBanner />

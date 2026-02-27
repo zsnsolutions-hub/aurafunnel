@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { UIMode } from '../../types';
+import { supabase } from '../../lib/supabase';
 
 const STORAGE_KEY = 'scaliyo_ui_mode';
 const DEFAULT_MODE: UIMode = 'simplified';
@@ -14,10 +15,14 @@ interface UIModeContextValue {
 
 const UIModeContext = createContext<UIModeContextValue | null>(null);
 
+function isValidMode(v: unknown): v is UIMode {
+  return v === 'simplified' || v === 'advanced';
+}
+
 function readStoredMode(): UIMode {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'simplified' || stored === 'advanced') return stored;
+    if (isValidMode(stored)) return stored;
   } catch {
     // localStorage unavailable — fall through
   }
@@ -32,13 +37,66 @@ function writeStoredMode(mode: UIMode) {
   }
 }
 
-export const UIModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+async function writeSupabaseMode(userId: string, mode: UIMode) {
+  try {
+    await supabase
+      .from('profiles')
+      .update({ ui_preferences: { ui_mode: mode } })
+      .eq('id', userId);
+  } catch {
+    // Non-critical — localStorage is the fallback
+  }
+}
+
+interface UIModeProviderProps {
+  userId?: string;
+  children: React.ReactNode;
+}
+
+export const UIModeProvider: React.FC<UIModeProviderProps> = ({ userId, children }) => {
   const [mode, setModeState] = useState<UIMode>(readStoredMode);
+  const syncedRef = useRef(false);
+
+  // Sync from Supabase when user logs in
+  useEffect(() => {
+    if (!userId) {
+      syncedRef.current = false;
+      return;
+    }
+    if (syncedRef.current) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('ui_preferences')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (cancelled) return;
+        const serverMode = data?.ui_preferences?.ui_mode;
+        if (isValidMode(serverMode)) {
+          setModeState(serverMode);
+          writeStoredMode(serverMode);
+        } else {
+          // First login or column empty — seed server with current localStorage value
+          writeSupabaseMode(userId, readStoredMode());
+        }
+        syncedRef.current = true;
+      } catch {
+        // Supabase unavailable — continue with localStorage
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const setMode = useCallback((next: UIMode) => {
     setModeState(next);
     writeStoredMode(next);
-  }, []);
+    if (userId) writeSupabaseMode(userId, next);
+  }, [userId]);
 
   const toggle = useCallback(() => {
     setMode(mode === 'simplified' ? 'advanced' : 'simplified');
@@ -47,7 +105,7 @@ export const UIModeProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Cross-tab sync
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && (e.newValue === 'simplified' || e.newValue === 'advanced')) {
+      if (e.key === STORAGE_KEY && isValidMode(e.newValue)) {
         setModeState(e.newValue);
       }
     };

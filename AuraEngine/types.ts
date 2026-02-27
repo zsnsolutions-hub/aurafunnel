@@ -30,6 +30,7 @@ export interface User {
   subscription?: Subscription;
   businessProfile?: BusinessProfile;
   is_super_admin?: boolean;
+  ui_preferences?: Record<string, unknown>;
 }
 
 export interface BusinessService {
