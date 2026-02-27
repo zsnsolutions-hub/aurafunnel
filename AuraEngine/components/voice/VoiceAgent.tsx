@@ -54,6 +54,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
 
         setToast({ label, path });
         navigate(path);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         track('nav_executed', { routeKey: route_key });
         return `Navigated to ${label}.`;
       },
