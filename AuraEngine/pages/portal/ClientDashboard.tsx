@@ -379,11 +379,12 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       .order('score', { ascending: false });
 
     if (data) {
-      setLeads(data);
-      setFilteredLeads(data);
+      const normalized = normalizeLeads(data);
+      setLeads(normalized);
+      setFilteredLeads(normalized);
       setActiveSegmentId(null);
       setInsightsLoading(true);
-      const programmaticInsights = generateProgrammaticInsights(data);
+      const programmaticInsights = generateProgrammaticInsights(normalized);
       setInsights(programmaticInsights);
       setInsightsLoading(false);
 

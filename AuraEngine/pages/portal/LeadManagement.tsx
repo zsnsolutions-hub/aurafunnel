@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchBatchEmailSummary } from '../../lib/emailTracking';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
@@ -266,7 +267,7 @@ const LeadManagement: React.FC = () => {
     if (error) {
       console.error('LeadManagement fetch error:', error.message);
     } else if (data) {
-      setAllLeads(data);
+      setAllLeads(normalizeLeads(data));
     }
     setLoading(false);
   };
