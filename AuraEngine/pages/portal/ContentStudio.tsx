@@ -19,6 +19,8 @@ import {
 } from '../../components/Icons';
 import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
 import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 import { useIntegrations } from '../../lib/integrations';
 
 interface LayoutContext {
@@ -1374,172 +1376,154 @@ const ContentStudio: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* HEADER                                                       */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-200">
-            <EditIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-              AI Content Studio <span className="text-slate-300 mx-1">&rsaquo;</span>
-              <span className="text-indigo-600">
-                {contentMode === 'email' ? 'Email Sequence' : contentMode === 'linkedin' ? 'LinkedIn Post' : 'Sales Proposal'}
-              </span>
-            </h1>
-            <p className="text-slate-400 text-xs mt-0.5 flex items-center space-x-2">
-              <span>
-                {contentMode === 'email' && <>Multi-variant editor &middot; {steps.length} steps &middot; {activeStep?.variants.length || 0} variants</>}
-                {contentMode === 'linkedin' && <>Social media content &middot; {linkedinPost.split(/\s+/).filter(Boolean).length} words &middot; {(linkedinPost.match(/#\w+/g) || []).length} hashtags</>}
-                {contentMode === 'proposal' && <>Full proposal generator &middot; {Object.keys(proposalSections).length} sections</>}
-              </span>
-              {user.businessProfile?.companyName && (
-                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[9px] font-bold border border-emerald-200">
-                  {user.businessProfile.companyName}
-                </span>
-              )}
-              {integrationStatuses.filter(i => i.status === 'connected').map(i => (
-                <span key={i.provider} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-bold border border-indigo-200 capitalize">
-                  {i.provider}
-                </span>
-              ))}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-1.5">
-          <div className="relative">
-            <button
-              onClick={() => setShowMoreMenu(prev => !prev)}
-              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
-                showNotes || showSendHistory ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <span>More</span>
-              <ChevronDownIcon className="w-3.5 h-3.5" />
-            </button>
-            {showMoreMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)} />
-                <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-44 py-1">
-                  <button onClick={() => { setShowNotes(!showNotes); setShowMoreMenu(false); }} className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold transition-colors ${showNotes ? 'text-amber-600 bg-amber-50' : 'text-slate-700 hover:bg-slate-50'}`}>
-                    <MessageIcon className="w-3.5 h-3.5" />
-                    <span>Notes</span>
-                    {contentNotes.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black">{contentNotes.length}</span>}
-                  </button>
-                  <button onClick={() => { setShowSendHistory(!showSendHistory); setShowMoreMenu(false); }} className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold transition-colors ${showSendHistory ? 'text-violet-600 bg-violet-50' : 'text-slate-700 hover:bg-slate-50'}`}>
-                    <ClockIcon className="w-3.5 h-3.5" />
-                    <span>History</span>
-                  </button>
-                  <button onClick={() => { setShowRecycleModal(true); setShowMoreMenu(false); }} className="w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-                    <RecycleIcon className="w-3.5 h-3.5" />
-                    <span>Recycle</span>
-                  </button>
-                  <button onClick={() => { setShowBatchModal(true); setShowMoreMenu(false); }} className="w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-                    <LayersIcon className="w-3.5 h-3.5" />
-                    <span>Batch</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-          <div className="relative">
-            <button onClick={() => setShowExportMenu(prev => !prev)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-              <DownloadIcon className="w-3.5 h-3.5" />
-            </button>
-            {showExportMenu && (
-              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-40 py-1">
-                <button onClick={() => handleExport('txt')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as TXT</button>
-                <button onClick={() => handleExport('pdf')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as PDF</button>
-              </div>
-            )}
-          </div>
-          <div className="relative" data-guide="content-image-gen">
-            <button
-              onClick={() => setShowGenerateMenu(prev => !prev)}
-              disabled={aiGenerating}
-              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {aiGenerating ? (
-                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <SparklesIcon className="w-3.5 h-3.5" />
-              )}
-              <span>{aiGenerating ? 'Generating...' : 'Generate'}</span>
-              {!aiGenerating && <ChevronDownIcon className="w-3 h-3 ml-0.5" />}
-            </button>
-            {showGenerateMenu && !aiGenerating && (
-              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-48 py-1">
-                <button
-                  onClick={() => { setShowGenerateMenu(false); handleGenerateWithAI(); }}
-                  disabled={leads.length === 0}
-                  className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <SparklesIcon className="w-4 h-4 text-violet-500" />
-                  <span>Content</span>
-                  <span className="ml-auto px-1.5 py-0.5 text-[9px] font-black bg-violet-50 text-violet-600 rounded">{CREDIT_COSTS[contentMode === 'email' ? 'email_sequence' : 'content_generation']} cr</span>
-                </button>
-                <button
-                  onClick={() => { setShowGenerateMenu(false); setShowImageGen(true); }}
-                  className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2"
-                >
-                  <CameraIcon className="w-4 h-4 text-indigo-500" />
-                  <span>Image</span>
-                  <span className="ml-auto px-1.5 py-0.5 text-[9px] font-black bg-indigo-50 text-indigo-600 rounded">{CREDIT_COSTS.image_generation} cr</span>
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowSendPostMenu(prev => !prev)}
-              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
-            >
-              <SendIcon className="w-4 h-4" />
-              <span>Send / Post</span>
-              <ChevronDownIcon className="w-3.5 h-3.5 ml-0.5" />
-            </button>
-            {showSendPostMenu && (
-              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-48 py-1">
-                {contentMode === 'email' && (
+      <PageHeader
+        title="Content Studio"
+        description={
+          contentMode === 'email' ? `Multi-variant editor · ${steps.length} steps · ${activeStep?.variants.length || 0} variants` :
+          contentMode === 'linkedin' ? `Social media content · ${linkedinPost.split(/\s+/).filter(Boolean).length} words` :
+          `Full proposal generator · ${Object.keys(proposalSections).length} sections`
+        }
+        actions={
+          <>
+            <div className="relative" data-guide="content-image-gen">
+              <button
+                onClick={() => setShowGenerateMenu(prev => !prev)}
+                disabled={aiGenerating}
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {aiGenerating ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                )}
+                <span>{aiGenerating ? 'Generating...' : 'Generate'}</span>
+                {!aiGenerating && <ChevronDownIcon className="w-3 h-3 ml-0.5" />}
+              </button>
+              {showGenerateMenu && !aiGenerating && (
+                <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-48 py-1">
                   <button
-                    onClick={() => { setShowSendPostMenu(false); setSendResult(null); setShowSendModal(true); }}
-                    disabled={!connectedProvider}
+                    onClick={() => { setShowGenerateMenu(false); handleGenerateWithAI(); }}
+                    disabled={leads.length === 0}
                     className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <MailIcon className="w-4 h-4 text-emerald-500" />
-                    <span>Send Email</span>
+                    <SparklesIcon className="w-4 h-4 text-violet-500" />
+                    <span>Content</span>
+                    <span className="ml-auto px-1.5 py-0.5 text-[9px] font-black bg-violet-50 text-violet-600 rounded">{CREDIT_COSTS[contentMode === 'email' ? 'email_sequence' : 'content_generation']} cr</span>
                   </button>
-                )}
-                <button
-                  onClick={() => {
-                    setShowSendPostMenu(false);
-                    let content = '';
-                    if (contentMode === 'email' && activeVariant) {
-                      content = activeVariant.body;
-                    } else if (contentMode === 'linkedin') {
-                      content = resolvePersonalizationTags(
-                        linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
-                        leads[0] || {},
-                        user.businessProfile
-                      );
-                    } else if (contentMode === 'proposal') {
-                      content = Object.values(proposalSections).filter(Boolean).join('\n\n');
-                    }
-                    if (content) navigate('/portal/social-scheduler', { state: { content } });
-                  }}
-                  className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2"
-                >
-                  <LinkedInIcon className="w-4 h-4 text-indigo-500" />
-                  <span>Post to Social</span>
-                </button>
-              </div>
-            )}
-          </div>
-          <button onClick={handleSave} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
-            {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
-            <span>{saved ? 'Saved!' : 'Save'}</span>
-          </button>
-        </div>
-      </div>
+                  <button
+                    onClick={() => { setShowGenerateMenu(false); setShowImageGen(true); }}
+                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2"
+                  >
+                    <CameraIcon className="w-4 h-4 text-indigo-500" />
+                    <span>Image</span>
+                    <span className="ml-auto px-1.5 py-0.5 text-[9px] font-black bg-indigo-50 text-indigo-600 rounded">{CREDIT_COSTS.image_generation} cr</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setShowSendPostMenu(prev => !prev)}
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
+              >
+                <SendIcon className="w-4 h-4" />
+                <span>Send / Post</span>
+                <ChevronDownIcon className="w-3.5 h-3.5 ml-0.5" />
+              </button>
+              {showSendPostMenu && (
+                <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-48 py-1">
+                  {contentMode === 'email' && (
+                    <button
+                      onClick={() => { setShowSendPostMenu(false); setSendResult(null); setShowSendModal(true); }}
+                      disabled={!connectedProvider}
+                      className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <MailIcon className="w-4 h-4 text-emerald-500" />
+                      <span>Send Email</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setShowSendPostMenu(false);
+                      let content = '';
+                      if (contentMode === 'email' && activeVariant) {
+                        content = activeVariant.body;
+                      } else if (contentMode === 'linkedin') {
+                        content = resolvePersonalizationTags(
+                          linkedinPost.replace(/\{\{your_name\}\}/gi, user.name || ''),
+                          leads[0] || {},
+                          user.businessProfile
+                        );
+                      } else if (contentMode === 'proposal') {
+                        content = Object.values(proposalSections).filter(Boolean).join('\n\n');
+                      }
+                      if (content) navigate('/portal/social-scheduler', { state: { content } });
+                    }}
+                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2"
+                  >
+                    <LinkedInIcon className="w-4 h-4 text-indigo-500" />
+                    <span>Post to Social</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button onClick={handleSave} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${saved ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}>
+              {saved ? <CheckIcon className="w-4 h-4" /> : <MailIcon className="w-4 h-4" />}
+              <span>{saved ? 'Saved!' : 'Save'}</span>
+            </button>
+          </>
+        }
+        advancedActions={
+          <>
+            <div className="relative">
+              <button
+                onClick={() => setShowMoreMenu(prev => !prev)}
+                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
+                  showNotes || showSendHistory ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span>More</span>
+                <ChevronDownIcon className="w-3.5 h-3.5" />
+              </button>
+              {showMoreMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)} />
+                  <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-44 py-1">
+                    <button onClick={() => { setShowNotes(!showNotes); setShowMoreMenu(false); }} className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold transition-colors ${showNotes ? 'text-amber-600 bg-amber-50' : 'text-slate-700 hover:bg-slate-50'}`}>
+                      <MessageIcon className="w-3.5 h-3.5" />
+                      <span>Notes</span>
+                      {contentNotes.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black">{contentNotes.length}</span>}
+                    </button>
+                    <button onClick={() => { setShowSendHistory(!showSendHistory); setShowMoreMenu(false); }} className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold transition-colors ${showSendHistory ? 'text-violet-600 bg-violet-50' : 'text-slate-700 hover:bg-slate-50'}`}>
+                      <ClockIcon className="w-3.5 h-3.5" />
+                      <span>History</span>
+                    </button>
+                    <button onClick={() => { setShowRecycleModal(true); setShowMoreMenu(false); }} className="w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                      <RecycleIcon className="w-3.5 h-3.5" />
+                      <span>Recycle</span>
+                    </button>
+                    <button onClick={() => { setShowBatchModal(true); setShowMoreMenu(false); }} className="w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                      <LayersIcon className="w-3.5 h-3.5" />
+                      <span>Batch</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="relative">
+              <button onClick={() => setShowExportMenu(prev => !prev)} className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+                <DownloadIcon className="w-3.5 h-3.5" />
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-40 py-1">
+                  <button onClick={() => handleExport('txt')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as TXT</button>
+                  <button onClick={() => handleExport('pdf')} className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export as PDF</button>
+                </div>
+              )}
+            </div>
+          </>
+        }
+      />
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* CONTENT TYPE SELECTOR                                        */}
@@ -1619,6 +1603,7 @@ const ContentStudio: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* CONTENT HEALTH SCORE                                         */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       {contentHealth && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
@@ -1772,6 +1757,7 @@ const ContentStudio: React.FC = () => {
           )}
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* VARIANT MANAGER / TOP BAR                                    */}
@@ -1901,6 +1887,7 @@ const ContentStudio: React.FC = () => {
       </div>
 
       {/* A/B Test Configuration Panel */}
+      <AdvancedOnly>
       {showABConfig && contentMode === 'email' && (
         <div className="bg-white rounded-2xl border border-violet-200 shadow-sm p-5">
           <div className="flex items-center space-x-2 mb-4">
@@ -2093,6 +2080,7 @@ const ContentStudio: React.FC = () => {
           )}
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* MAIN LAYOUT                                                  */}
@@ -2101,7 +2089,7 @@ const ContentStudio: React.FC = () => {
         <div className="flex flex-col lg:flex-row gap-5">
 
           {/* ─── Editor / Preview Area (65%) ─── */}
-          <div className="lg:w-[65%] space-y-5" data-guide="content-editor">
+          <div className="lg:flex-1 space-y-5" data-guide="content-editor">
 
             {/* ═══ EMAIL EDITOR ═══ */}
             {viewTab === 'editor' && contentMode === 'email' && activeVariant && (
@@ -2971,6 +2959,7 @@ const ContentStudio: React.FC = () => {
           </div>
 
           {/* ─── Right Sidebar (35%) ─── */}
+          <AdvancedOnly>
           <div className="lg:w-[35%] space-y-5">
 
             {/* AI Suggestions — Color-coded */}
@@ -3308,6 +3297,7 @@ const ContentStudio: React.FC = () => {
               )}
             </div>
           </div>
+          </AdvancedOnly>
         </div>
       )}
 
