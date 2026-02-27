@@ -101,9 +101,9 @@ const AdminDashboard: React.FC = () => {
   const revenueAnalytics = useMemo(() => {
     const planDistribution = [
       { plan: 'Free', count: Math.max(totalUsers - activeSubs, 0), color: '#94a3b8', price: 0 },
-      { plan: 'Starter', count: Math.round(activeSubs * 0.45), color: '#10b981', price: 59 },
-      { plan: 'Growth', count: Math.round(activeSubs * 0.35), color: '#6366f1', price: 149 },
-      { plan: 'Business', count: Math.round(activeSubs * 0.2), color: '#8b5cf6', price: 349 },
+      { plan: 'Starter', count: Math.round(activeSubs * 0.45), color: '#10b981', price: 29 },
+      { plan: 'Growth', count: Math.round(activeSubs * 0.35), color: '#6366f1', price: 79 },
+      { plan: 'Scale', count: Math.round(activeSubs * 0.2), color: '#8b5cf6', price: 199 },
     ];
     const arpu = activeSubs > 0 ? Math.round(estimatedRevenue / activeSubs) : 0;
     const conversionRate = totalUsers > 0 ? Math.round((activeSubs / totalUsers) * 100) : 0;
@@ -122,7 +122,7 @@ const AdminDashboard: React.FC = () => {
       free: Math.max(totalUsers - activeSubs, 0),
       starter: Math.round(activeSubs * 0.45),
       growth: Math.round(activeSubs * 0.35),
-      business: Math.round(activeSubs * 0.2)
+      scale: Math.round(activeSubs * 0.2)
     };
     const weeklyGrowth = [
       { day: 'Mon', signups: Math.floor(Math.random() * 3) + 1 },
@@ -313,9 +313,9 @@ const AdminDashboard: React.FC = () => {
       setActiveSubs(activeSubCount);
 
       const revenue = (subs || []).reduce((acc: number, sub: any) => {
-        if (sub.plan_name === 'Starter') return acc + 59;
-        if (sub.plan_name === 'Growth' || sub.plan_name === 'Professional') return acc + 149;
-        if (sub.plan_name === 'Business' || sub.plan_name === 'Enterprise') return acc + 349;
+        if (sub.plan_name === 'Starter') return acc + 29;
+        if (sub.plan_name === 'Growth' || sub.plan_name === 'Professional') return acc + 79;
+        if (sub.plan_name === 'Scale' || sub.plan_name === 'Business' || sub.plan_name === 'Enterprise') return acc + 199;
         return acc;
       }, 0);
       setEstimatedRevenue(revenue);
@@ -381,7 +381,7 @@ const AdminDashboard: React.FC = () => {
         const dateStr = u.createdAt.split('T')[0];
         if (trendMap[dateStr]) {
           trendMap[dateStr].users += 1;
-          const price = (u.plan === 'Growth' || u.plan === 'Professional') ? 149 : (u.plan === 'Business' || u.plan === 'Enterprise') ? 349 : u.plan === 'Starter' ? 59 : 0;
+          const price = (u.plan === 'Growth' || u.plan === 'Professional') ? 79 : (u.plan === 'Scale' || u.plan === 'Business' || u.plan === 'Enterprise') ? 199 : u.plan === 'Starter' ? 29 : 0;
           trendMap[dateStr].revenue += price;
         }
       });
@@ -822,7 +822,7 @@ const AdminDashboard: React.FC = () => {
                   <div className="text-right flex-shrink-0">
                     <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
                       u.plan === 'Growth' || u.plan === 'Professional' ? 'bg-indigo-50 text-indigo-600' :
-                      u.plan === 'Business' || u.plan === 'Enterprise' ? 'bg-violet-50 text-violet-600' :
+                      u.plan === 'Scale' || u.plan === 'Business' || u.plan === 'Enterprise' ? 'bg-violet-50 text-violet-600' :
                       u.plan === 'Starter' ? 'bg-emerald-50 text-emerald-600' :
                       'bg-slate-50 text-slate-500'
                     }`}>
@@ -1135,7 +1135,7 @@ const AdminDashboard: React.FC = () => {
                   { plan: 'Free', count: userGrowthMetrics.planBreakdown.free, color: 'bg-slate-400', textColor: 'text-slate-600' },
                   { plan: 'Starter', count: userGrowthMetrics.planBreakdown.starter, color: 'bg-emerald-500', textColor: 'text-emerald-600' },
                   { plan: 'Growth', count: userGrowthMetrics.planBreakdown.growth, color: 'bg-indigo-500', textColor: 'text-indigo-600' },
-                  { plan: 'Business', count: userGrowthMetrics.planBreakdown.business, color: 'bg-violet-500', textColor: 'text-violet-600' },
+                  { plan: 'Scale', count: userGrowthMetrics.planBreakdown.scale, color: 'bg-violet-500', textColor: 'text-violet-600' },
                 ].map((p, i) => {
                   const pct = totalUsers > 0 ? Math.round((p.count / totalUsers) * 100) : 0;
                   return (

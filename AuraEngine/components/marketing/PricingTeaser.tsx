@@ -4,9 +4,9 @@ import Reveal from './Reveal';
 import { track } from '../../lib/analytics';
 
 const plans = [
-  { name: 'Launch', price: 59, popular: false },
-  { name: 'Scale', price: 149, popular: true },
-  { name: 'Accelerate', price: 349, popular: false },
+  { name: 'Starter', price: 29, popular: false },
+  { name: 'Growth', price: 79, popular: true },
+  { name: 'Scale', price: 199, popular: false },
 ];
 
 const PricingTeaser: React.FC = () => (

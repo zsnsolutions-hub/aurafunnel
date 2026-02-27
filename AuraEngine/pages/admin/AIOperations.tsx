@@ -32,13 +32,13 @@ const AIOperations: React.FC = () => {
       if (promptData) setPrompts(promptData);
 
       const userMap: Record<string, any> = {};
-      const planMap: Record<string, any> = { 'Starter': 0, 'Growth': 0, 'Business': 0 };
+      const planMap: Record<string, any> = { 'Starter': 0, 'Growth': 0, 'Scale': 0 };
 
       logs?.forEach(log => {
         const email = log.profiles?.email || 'Unknown';
         let plan = log.profiles?.plan || 'Starter';
         if (plan === 'Professional') plan = 'Growth';
-        if (plan === 'Enterprise') plan = 'Business';
+        if (plan === 'Enterprise' || plan === 'Business') plan = 'Scale';
         const cost = parseFloat(log.estimated_cost || 0);
 
         if (!userMap[email]) {

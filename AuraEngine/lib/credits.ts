@@ -23,14 +23,14 @@ export const CREDIT_COSTS: Record<string, number> = {
 // ── Tier limits (single source of truth) ───────────────────────────────────
 export const TIER_LIMITS: Record<string, { credits: number; contacts: number; seats: number; emails: number; storage: number }> = {
   Starter:  { credits: 1000,  contacts: 1000,  seats: 1,  emails: 2000,  storage: 1000  },
-  Growth:   { credits: 6000,  contacts: 12000, seats: 3,  emails: 15000, storage: 10000 },
-  Business: { credits: 20000, contacts: 50000, seats: 10, emails: 40000, storage: 50000 },
+  Growth:   { credits: 6000,  contacts: 10000, seats: 3,  emails: 15000, storage: 10000 },
+  Scale:    { credits: 20000, contacts: 50000, seats: 10, emails: 40000, storage: 50000 },
 };
 
 // ── Backward-compat plan name resolver ─────────────────────────────────────
 export function resolvePlanName(name: string): string {
   if (name === 'Professional') return 'Growth';
-  if (name === 'Enterprise') return 'Business';
+  if (name === 'Enterprise' || name === 'Business') return 'Scale';
   return name;
 }
 
@@ -55,39 +55,51 @@ export interface PlanPackage {
   popular?: boolean;
   cta: string;
   overage: { credits: number; contacts: number; emails: number };
+  maxUsers?: number;
+  extraSeatPrice?: number;
+  warmup?: string;
 }
 
 export const PLANS: PlanPackage[] = [
   {
     name: 'Starter',
-    price: 59,
-    annualPrice: Math.round(59 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
+    price: 29,
+    annualPrice: Math.round(29 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
     ...TIER_LIMITS.Starter,
-    desc: 'Perfect for solo founders and small sales teams getting started.',
+    desc: 'For solo founders validating outbound.',
     cta: 'Start Free Trial',
     overage: { credits: 0.08, contacts: 0.05, emails: 0.02 },
-    features: ['Basic AI scoring', 'Email templates', 'Email outreach', 'Basic analytics', '5 integrations', 'Standard support'],
+    features: ['Multi-channel sequences', 'Basic automation', 'Warm-up guidance (manual)', 'Standard support'],
+    maxUsers: 3,
+    extraSeatPrice: 15,
+    warmup: 'Guidance',
   },
   {
     name: 'Growth',
-    price: 149,
-    annualPrice: Math.round(149 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
+    price: 79,
+    annualPrice: Math.round(79 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
     ...TIER_LIMITS.Growth,
-    desc: 'For growing teams that need scale, precision, and multi-channel outreach.',
+    desc: 'For teams building predictable pipeline.',
     popular: true,
-    cta: 'Start Scaling',
+    cta: 'Start Growing Today',
     overage: { credits: 0.06, contacts: 0.03, emails: 0.015 },
-    features: ['Advanced AI models', 'Custom templates', 'Multi-channel outreach', 'Intent detection', 'Advanced analytics', '15 integrations', 'Team collaboration', 'Priority support'],
+    features: ['Multi-channel sequences', 'AI content (Gemini)', 'Enrichment', 'Advanced automation', 'Analytics', 'Automated warm-up + ramp-up'],
+    maxUsers: 10,
+    extraSeatPrice: 12,
+    warmup: 'Automated',
   },
   {
-    name: 'Business',
-    price: 349,
-    annualPrice: Math.round(349 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
-    ...TIER_LIMITS.Business,
-    desc: 'Dedicated support, custom AI models, and infrastructure for large companies.',
-    cta: 'Upgrade to Business',
+    name: 'Scale',
+    price: 199,
+    annualPrice: Math.round(199 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
+    ...TIER_LIMITS.Scale,
+    desc: 'For high-volume outbound teams.',
+    cta: 'Upgrade to Scale',
     overage: { credits: 0.04, contacts: 0.02, emails: 0.01 },
-    features: ['Custom AI training', 'White-label', 'Unlimited integrations', 'Dedicated CSM', 'SLA guarantee', 'API access', 'Custom workflows', 'SSO & audit logs'],
+    features: ['Multi-channel sequences', 'AI content (Gemini)', 'Enrichment', 'Advanced automation', 'Advanced analytics', 'API & Webhooks', 'Advanced warm-up + inbox health'],
+    maxUsers: undefined,
+    extraSeatPrice: 8,
+    warmup: 'Advanced + Health',
   },
 ];
 

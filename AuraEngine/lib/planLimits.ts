@@ -23,7 +23,7 @@ export const OUTBOUND_LIMITS: Record<string, OutboundLimits> = {
     linkedInPerDay: 40,
     linkedInPerMonth: 1_200,
   },
-  Business: {
+  Scale: {
     maxInboxes: 15,
     emailsPerDayPerInbox: 80,
     emailsPerMonth: 50_000,

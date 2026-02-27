@@ -98,7 +98,7 @@ const WorkspaceBrowserTab: React.FC<Props> = ({ onSessionStarted }) => {
               {Object.entries(stats.plans).map(([plan, count]) => (
                 <span key={plan} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                   plan === 'Growth' || plan === 'Professional' ? 'bg-indigo-100 text-indigo-700' :
-                  plan === 'Business' || plan === 'Enterprise' ? 'bg-violet-100 text-violet-700' :
+                  plan === 'Scale' || plan === 'Business' || plan === 'Enterprise' ? 'bg-violet-100 text-violet-700' :
                   plan === 'Starter' ? 'bg-emerald-100 text-emerald-700' :
                   'bg-slate-100 text-slate-600'
                 }`}>
