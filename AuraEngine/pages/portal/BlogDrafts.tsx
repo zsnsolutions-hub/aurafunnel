@@ -16,6 +16,8 @@ import {
 } from '../../components/Icons';
 import OutreachPanel from '../../components/blog/OutreachPanel';
 import ContributorsPanel from '../../components/blog/ContributorsPanel';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
 
 // ─── Types ───
 interface ContentTemplate {
@@ -55,6 +57,7 @@ const AI_MODES: { id: BlogContentMode; label: string; desc: string }[] = [
 
 const BlogDrafts: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const { isAdvanced: isAdvancedMode } = useUIMode();
   const [drafts, setDrafts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -476,50 +479,53 @@ const BlogDrafts: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* HEADER                                                        */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">Guest Posts</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Draft insights for the community. Posts are reviewed before publishing. <Link to="/blog" className="text-indigo-500 hover:text-indigo-700 font-semibold transition-colors">View Blog →</Link></p>
-        </div>
-        <div className="flex items-center space-x-2">
+      <PageHeader
+        title="Blog Posts"
+        description="Draft insights for the community. Posts are reviewed before publishing."
+        actions={
           <div className="bg-indigo-50 px-3 py-2 rounded-xl border border-indigo-100 flex items-center space-x-2 shadow-sm">
             <SparklesIcon className="w-3.5 h-3.5 text-indigo-600" />
             <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest hidden sm:inline">Contributor Verified</span>
           </div>
-          <button
-            onClick={() => setShowAiPanel(prev => !prev)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showAiPanel ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-            <BrainIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">AI Assist</span>
-          </button>
-          <button
-            onClick={() => setShowTemplates(prev => !prev)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTemplates ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-            <LayersIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Templates</span>
-          </button>
-          <button
-            onClick={() => setShowSeoPanel(prev => !prev)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSeoPanel ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-            <TargetIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">SEO</span>
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
-          >
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
-          </button>
-        </div>
-      </div>
+        }
+        advancedActions={
+          <>
+            <button
+              onClick={() => setShowAiPanel(prev => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showAiPanel ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <BrainIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">AI Assist</span>
+            </button>
+            <button
+              onClick={() => setShowTemplates(prev => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTemplates ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <LayersIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Templates</span>
+            </button>
+            <button
+              onClick={() => setShowSeoPanel(prev => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSeoPanel ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <TargetIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">SEO</span>
+            </button>
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+            >
+              <KeyboardIcon className="w-3.5 h-3.5" />
+              <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
+            </button>
+          </>
+        }
+      />
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* KPI STATS                                                     */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpiStats.map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-all">
@@ -540,9 +546,12 @@ const BlogDrafts: React.FC = () => {
         ))}
       </div>
 
+      </AdvancedOnly>
+
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* AI ASSIST PANEL                                               */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       {showAiPanel && (
         <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border border-purple-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-purple-100 flex items-center justify-between">
@@ -627,6 +636,7 @@ const BlogDrafts: React.FC = () => {
           </div>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* VIEW TABS                                                     */}
@@ -635,8 +645,10 @@ const BlogDrafts: React.FC = () => {
         {([
           { id: 'compose' as const, label: editingPostId ? 'Edit Draft' : 'Compose', icon: <EditIcon className="w-4 h-4" /> },
           { id: 'posts' as const, label: 'My Posts', icon: <LayersIcon className="w-4 h-4" />, badge: drafts.length },
-          { id: 'outreach' as const, label: 'Outreach', icon: <GlobeIcon className="w-4 h-4" /> },
-          { id: 'contributors' as const, label: 'Contributors', icon: <UsersIcon className="w-4 h-4" /> },
+          ...(isAdvancedMode ? [
+            { id: 'outreach' as const, label: 'Outreach', icon: <GlobeIcon className="w-4 h-4" /> },
+            { id: 'contributors' as const, label: 'Contributors', icon: <UsersIcon className="w-4 h-4" /> },
+          ] : []),
         ]).map(tab => (
           <button
             key={tab.id}

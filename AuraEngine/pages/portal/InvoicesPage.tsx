@@ -7,6 +7,8 @@ import InvoicePreviewPanel from '../../components/invoices/InvoicePreviewPanel';
 import CreateInvoiceDrawer from '../../components/invoices/CreateInvoiceDrawer';
 import PackageManagerDrawer from '../../components/invoices/PackageManagerDrawer';
 import { PlusIcon, EditIcon, XIcon, ChevronDownIcon } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
 
 const formatCents = (cents: number, currency = 'usd'): string =>
   new Intl.NumberFormat('en-US', {
@@ -187,78 +189,84 @@ const InvoicesPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 font-heading">Invoices</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Create and manage invoices powered by Stripe</p>
-        </div>
-        <button
-          onClick={pageTab === 'invoices' ? () => setDrawerOpen(true) : handleNewPackage}
-          className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors text-sm"
-        >
-          <PlusIcon className="w-4 h-4" />
-          <span>{pageTab === 'invoices' ? 'New Invoice' : 'New Package'}</span>
-        </button>
-      </div>
+      <PageHeader
+        title="Billing History"
+        description="Create and manage invoices powered by Stripe"
+        actions={
+          <button
+            onClick={pageTab === 'invoices' ? () => setDrawerOpen(true) : handleNewPackage}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors text-sm"
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span>{pageTab === 'invoices' ? 'New Invoice' : 'New Package'}</span>
+          </button>
+        }
+      />
 
       {/* Page-level Tab Toggle */}
-      <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl w-fit">
-        <button
-          onClick={() => setPageTab('invoices')}
-          className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-colors ${
-            pageTab === 'invoices'
-              ? 'bg-white text-slate-800 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Invoices
-        </button>
-        <button
-          onClick={() => setPageTab('packages')}
-          className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-colors ${
-            pageTab === 'packages'
-              ? 'bg-white text-slate-800 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Packages
-        </button>
-      </div>
+      <AdvancedOnly>
+        <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setPageTab('invoices')}
+            className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-colors ${
+              pageTab === 'invoices'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Invoices
+          </button>
+          <button
+            onClick={() => setPageTab('packages')}
+            className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-colors ${
+              pageTab === 'packages'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Packages
+          </button>
+        </div>
+      </AdvancedOnly>
 
       {pageTab === 'invoices' ? (
         <>
           {/* Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding</p>
-              <p className="text-2xl font-bold text-blue-600 mt-1">{formatCents(totalOutstanding)}</p>
+          <AdvancedOnly>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding</p>
+                <p className="text-2xl font-bold text-blue-600 mt-1">{formatCents(totalOutstanding)}</p>
+              </div>
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Collected</p>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">{formatCents(totalCollected)}</p>
+              </div>
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Invoices</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{invoices.length}</p>
+              </div>
             </div>
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Collected</p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">{formatCents(totalCollected)}</p>
-            </div>
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Invoices</p>
-              <p className="text-2xl font-bold text-slate-800 mt-1">{invoices.length}</p>
-            </div>
-          </div>
+          </AdvancedOnly>
 
           {/* Filter Tabs */}
-          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl w-fit">
-            {filterTabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setStatusFilter(tab.key)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  statusFilter === tab.key
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <AdvancedOnly>
+            <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl w-fit">
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setStatusFilter(tab.key)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    statusFilter === tab.key
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </AdvancedOnly>
 
           {/* Invoice Table */}
           {loading ? (

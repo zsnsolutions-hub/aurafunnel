@@ -6,6 +6,8 @@ import {
   SendIcon, KeyboardIcon, XIcon, CopyIcon,
   ActivityIcon, ShieldIcon, PieChartIcon, TrendUpIcon, BoltIcon, MailIcon,
 } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 import { useAutomationWorkflow } from '../../hooks/useAutomationWorkflow';
 import { HEADER_PANEL_BUTTONS, WORKFLOW_STATUS_STYLES } from '../../components/automation/constants';
 
@@ -57,131 +59,134 @@ export default function AutomationPage() {
     <div className="space-y-5">
 
       {/* ═══ HEADER BAR ═══ */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">Automation Engine</h1>
-          {h.wizardActive && (
-            <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-black uppercase tracking-wider">
-              Wizard Mode
-            </span>
-          )}
-        </div>
-        <div className="flex items-center space-x-2">
-          {/* Panels dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPanelsMenu(prev => !prev)}
-              className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-            >
-              <ActivityIcon className="w-3.5 h-3.5" />
-              <span>Panels</span>
-              <svg className="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-            </button>
-            {showPanelsMenu && (
-              <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-30 w-52 py-1">
-                {HEADER_PANEL_BUTTONS.map(btn => {
-                  const isActive = h.panelVisibility[btn.panel];
-                  const Icon = PANEL_ICONS[btn.iconName];
-                  return (
-                    <button
-                      key={btn.panel}
-                      onClick={() => { h.togglePanel(btn.panel); setShowPanelsMenu(false); }}
-                      className={`w-full text-left px-3 py-2.5 text-xs font-bold transition-colors flex items-center space-x-2.5 ${
-                        isActive ? `${btn.activeColor} ${btn.activeBg}` : 'text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      {Icon && <Icon className="w-4 h-4" />}
-                      <span>{btn.label}</span>
-                      {isActive && <CheckIcon className="w-3.5 h-3.5 ml-auto" />}
-                    </button>
-                  );
-                })}
-                <div className="border-t border-slate-100 mt-1 pt-1">
-                  <button
-                    onClick={() => { h.togglePanel('shortcuts'); setShowPanelsMenu(false); }}
-                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2.5"
-                  >
-                    <KeyboardIcon className="w-4 h-4" />
-                    <span>Shortcuts</span>
-                  </button>
-                </div>
-              </div>
+      <PageHeader
+        title="Automations"
+        actions={
+          <>
+            {h.wizardActive && (
+              <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                Wizard Mode
+              </span>
             )}
-          </div>
-
-          {/* Workflow Switcher */}
-          <div className="relative">
-            <button
-              onClick={() => h.setShowWorkflowList(!h.showWorkflowList)}
-              className="flex items-center space-x-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-            >
-              <GitBranchIcon className="w-3.5 h-3.5" />
-              <span>{h.workflows.length} Workflows</span>
-            </button>
-            {h.showWorkflowList && (
-              <div className="absolute right-0 top-12 bg-white border border-slate-200 rounded-xl shadow-xl z-30 w-72 py-2">
-                {h.workflows.map(wf => (
-                  <div
-                    key={wf.id}
-                    className={`flex items-center px-4 py-2.5 hover:bg-slate-50 transition-colors ${
-                      wf.id === h.workflow.id ? 'bg-indigo-50' : ''
-                    }`}
-                  >
-                    <button
-                      onClick={() => h.loadWorkflow(wf)}
-                      className={`flex-1 text-left text-sm ${
-                        wf.id === h.workflow.id ? 'text-indigo-700 font-bold' : 'text-slate-600'
-                      }`}
-                    >
-                      <span className="font-semibold">{wf.name}</span>
-                      <span className={`ml-2 text-[10px] font-bold uppercase ${wf.status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {wf.status}
-                      </span>
-                    </button>
-                    <div className="flex items-center space-x-1 shrink-0 ml-2">
+            {!h.wizardActive && (
+              <button
+                onClick={h.startWizard}
+                className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+              >
+                <PlusIcon className="w-4 h-4" />
+                <span>Create New</span>
+              </button>
+            )}
+          </>
+        }
+        advancedActions={
+          <>
+            {/* Panels dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPanelsMenu(prev => !prev)}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                <ActivityIcon className="w-3.5 h-3.5" />
+                <span>Panels</span>
+                <svg className="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+              </button>
+              {showPanelsMenu && (
+                <div className="absolute right-0 top-10 bg-white border border-slate-200 rounded-xl shadow-xl z-30 w-52 py-1">
+                  {HEADER_PANEL_BUTTONS.map(btn => {
+                    const isActive = h.panelVisibility[btn.panel];
+                    const Icon = PANEL_ICONS[btn.iconName];
+                    return (
                       <button
-                        onClick={e => { e.stopPropagation(); h.handleDuplicateWorkflow(wf); }}
-                        className="p-1 text-slate-400 hover:text-indigo-600 rounded transition-colors"
-                        title="Duplicate"
+                        key={btn.panel}
+                        onClick={() => { h.togglePanel(btn.panel); setShowPanelsMenu(false); }}
+                        className={`w-full text-left px-3 py-2.5 text-xs font-bold transition-colors flex items-center space-x-2.5 ${
+                          isActive ? `${btn.activeColor} ${btn.activeBg}` : 'text-slate-700 hover:bg-slate-50'
+                        }`}
                       >
-                        <CopyIcon className="w-3.5 h-3.5" />
+                        {Icon && <Icon className="w-4 h-4" />}
+                        <span>{btn.label}</span>
+                        {isActive && <CheckIcon className="w-3.5 h-3.5 ml-auto" />}
                       </button>
-                      {wf.id !== h.workflow.id && (
-                        <button
-                          onClick={e => { e.stopPropagation(); if (confirm(`Delete "${wf.name}"?`)) h.handleDeleteWorkflow(wf.id); }}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                          title="Delete"
-                        >
-                          <XIcon className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                    );
+                  })}
+                  <div className="border-t border-slate-100 mt-1 pt-1">
+                    <button
+                      onClick={() => { h.togglePanel('shortcuts'); setShowPanelsMenu(false); }}
+                      className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-2.5"
+                    >
+                      <KeyboardIcon className="w-4 h-4" />
+                      <span>Shortcuts</span>
+                    </button>
                   </div>
-                ))}
-                <div className="border-t border-slate-100 mt-1 pt-1">
-                  <button
-                    onClick={h.startWizard}
-                    className="w-full text-left px-4 py-2.5 text-sm text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center space-x-2"
-                  >
-                    <PlusIcon className="w-3.5 h-3.5" />
-                    <span>Create New</span>
-                  </button>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {!h.wizardActive && (
-            <button
-              onClick={h.startWizard}
-              className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-            >
-              <PlusIcon className="w-4 h-4" />
-              <span>Create New</span>
-            </button>
-          )}
-        </div>
-      </div>
+            {/* Workflow Switcher */}
+            <div className="relative">
+              <button
+                onClick={() => h.setShowWorkflowList(!h.showWorkflowList)}
+                className="flex items-center space-x-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                <GitBranchIcon className="w-3.5 h-3.5" />
+                <span>{h.workflows.length} Workflows</span>
+              </button>
+              {h.showWorkflowList && (
+                <div className="absolute right-0 top-12 bg-white border border-slate-200 rounded-xl shadow-xl z-30 w-72 py-2">
+                  {h.workflows.map(wf => (
+                    <div
+                      key={wf.id}
+                      className={`flex items-center px-4 py-2.5 hover:bg-slate-50 transition-colors ${
+                        wf.id === h.workflow.id ? 'bg-indigo-50' : ''
+                      }`}
+                    >
+                      <button
+                        onClick={() => h.loadWorkflow(wf)}
+                        className={`flex-1 text-left text-sm ${
+                          wf.id === h.workflow.id ? 'text-indigo-700 font-bold' : 'text-slate-600'
+                        }`}
+                      >
+                        <span className="font-semibold">{wf.name}</span>
+                        <span className={`ml-2 text-[10px] font-bold uppercase ${wf.status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {wf.status}
+                        </span>
+                      </button>
+                      <div className="flex items-center space-x-1 shrink-0 ml-2">
+                        <button
+                          onClick={e => { e.stopPropagation(); h.handleDuplicateWorkflow(wf); }}
+                          className="p-1 text-slate-400 hover:text-indigo-600 rounded transition-colors"
+                          title="Duplicate"
+                        >
+                          <CopyIcon className="w-3.5 h-3.5" />
+                        </button>
+                        {wf.id !== h.workflow.id && (
+                          <button
+                            onClick={e => { e.stopPropagation(); if (confirm(`Delete "${wf.name}"?`)) h.handleDeleteWorkflow(wf.id); }}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <XIcon className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="border-t border-slate-100 mt-1 pt-1">
+                    <button
+                      onClick={h.startWizard}
+                      className="w-full text-left px-4 py-2.5 text-sm text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center space-x-2"
+                    >
+                      <PlusIcon className="w-3.5 h-3.5" />
+                      <span>Create New</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        }
+      />
 
       {/* ═══ KPI STATS ═══ */}
       <KpiStatsBar stats={h.kpiStats} />
@@ -368,14 +373,16 @@ export default function AutomationPage() {
       )}
 
       {/* ═══ WORKFLOW ANALYTICS BAR ═══ */}
-      {(!h.wizardActive || h.wizardStep === 2) && (
-        <div data-guide="automation-analytics">
-          <WorkflowAnalyticsBar
-            workflow={h.workflow}
-            executionLog={h.executionLog}
-          />
-        </div>
-      )}
+      <AdvancedOnly>
+        {(!h.wizardActive || h.wizardStep === 2) && (
+          <div data-guide="automation-analytics">
+            <WorkflowAnalyticsBar
+              workflow={h.workflow}
+              executionLog={h.executionLog}
+            />
+          </div>
+        )}
+      </AdvancedOnly>
 
       {/* ═══ DRAWERS & MODAL ═══ */}
       <ExecutionLogDrawer

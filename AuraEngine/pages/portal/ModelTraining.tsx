@@ -9,6 +9,8 @@ import {
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { PROMPT_REGISTRY, CATEGORY_META, type PromptCategory, type PromptRegistryEntry } from '../../lib/promptResolver';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 
 interface LayoutContext {
   user: User;
@@ -492,19 +494,19 @@ const ModelTraining: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">AI Prompt Studio</h1>
-          <p className="text-sm text-gray-500 mt-1">Customize the AI prompts that power every feature across Scaliyo</p>
-        </div>
-        <button
-          onClick={loadPrompts}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors text-sm font-medium"
-        >
-          <RefreshIcon className="w-4 h-4" />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="AI Settings"
+        description="Customize the AI prompts that power every feature across Scaliyo"
+        actions={
+          <button
+            onClick={loadPrompts}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors text-sm font-medium"
+          >
+            <RefreshIcon className="w-4 h-4" />
+            Refresh
+          </button>
+        }
+      />
 
       {/* KPI Stats */}
       <div className="grid grid-cols-4 gap-4">
@@ -847,19 +849,21 @@ const ModelTraining: React.FC = () => {
                 Test Output
               </div>
             </button>
-            <button
-              onClick={() => setRightTab('history')}
-              className={`flex-1 px-4 py-3 text-xs font-semibold transition-colors ${
-                rightTab === 'history'
-                  ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1.5">
-                <ClockIcon className="w-3.5 h-3.5" />
-                Version History
-              </div>
-            </button>
+            <AdvancedOnly>
+              <button
+                onClick={() => setRightTab('history')}
+                className={`flex-1 px-4 py-3 text-xs font-semibold transition-colors ${
+                  rightTab === 'history'
+                    ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <ClockIcon className="w-3.5 h-3.5" />
+                  Version History
+                </div>
+              </button>
+            </AdvancedOnly>
           </div>
 
           {/* Tab Content */}

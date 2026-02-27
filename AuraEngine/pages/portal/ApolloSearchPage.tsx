@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ApolloContact, ApolloSearchParams } from '../../types';
+import { AdvancedOnly } from '../../components/ui-mode';
 import { searchApollo, importApolloContacts, ApolloSearchResult, ApolloImportResult } from '../../lib/apollo';
 
 // ── Constants ──
@@ -495,7 +496,7 @@ const ApolloSearchPage: React.FC = () => {
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-slate-200 bg-white shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-base font-bold text-slate-900">Find People</h1>
+          <h1 className="text-base font-bold text-slate-900">Find Prospects</h1>
           <button
             onClick={() => setShowFilters(prev => !prev)}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
@@ -573,21 +574,23 @@ const ApolloSearchPage: React.FC = () => {
               </div>
             </FilterSection>
 
-            <FilterSection icon={Icons.hierarchy} label="Seniority" count={seniorityTags.length}>
-              <MultiToggleList
-                options={SENIORITY_OPTIONS}
-                selected={seniorityTags}
-                onChange={setSeniorityTags}
-              />
-            </FilterSection>
+            <AdvancedOnly>
+              <FilterSection icon={Icons.hierarchy} label="Seniority" count={seniorityTags.length}>
+                <MultiToggleList
+                  options={SENIORITY_OPTIONS}
+                  selected={seniorityTags}
+                  onChange={setSeniorityTags}
+                />
+              </FilterSection>
 
-            <FilterSection icon={Icons.users} label="Departments" count={departmentTags.length}>
-              <MultiToggleList
-                options={DEPARTMENT_OPTIONS.map(d => ({ label: d, value: d }))}
-                selected={departmentTags}
-                onChange={setDepartmentTags}
-              />
-            </FilterSection>
+              <FilterSection icon={Icons.users} label="Departments" count={departmentTags.length}>
+                <MultiToggleList
+                  options={DEPARTMENT_OPTIONS.map(d => ({ label: d, value: d }))}
+                  selected={departmentTags}
+                  onChange={setDepartmentTags}
+                />
+              </FilterSection>
+            </AdvancedOnly>
 
             <FilterSection icon={Icons.mapPin} label="Location" count={locationTags.length} defaultOpen>
               <SidebarTagInput value={locationInput} onChange={setLocationInput} placeholder="Add location..." tags={locationTags} onTagsChange={setLocationTags} />
@@ -598,38 +601,39 @@ const ApolloSearchPage: React.FC = () => {
               </div>
             </FilterSection>
 
-            <FilterSection icon={Icons.phone} label="Contact Info" count={(hasEmail ? 1 : 0) + (hasPhone ? 1 : 0)}>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-[11px] font-medium text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={hasEmail}
-                    onChange={e => setHasEmail(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                  />
-                  Has email address
-                </label>
-                <label className="flex items-center gap-2 text-[11px] font-medium text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={hasPhone}
-                    onChange={e => setHasPhone(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                  />
-                  Has phone number
-                </label>
-              </div>
-            </FilterSection>
+            <AdvancedOnly>
+              <FilterSection icon={Icons.phone} label="Contact Info" count={(hasEmail ? 1 : 0) + (hasPhone ? 1 : 0)}>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-[11px] font-medium text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hasEmail}
+                      onChange={e => setHasEmail(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                    />
+                    Has email address
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-medium text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hasPhone}
+                      onChange={e => setHasPhone(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                    />
+                    Has phone number
+                  </label>
+                </div>
+              </FilterSection>
 
-            <FilterSection icon={Icons.building} label="Company" count={domainTags.length}>
-              <SidebarTagInput value={domainInput} onChange={setDomainInput} placeholder="e.g. stripe.com" tags={domainTags} onTagsChange={setDomainTags} />
-            </FilterSection>
+              <FilterSection icon={Icons.building} label="Company" count={domainTags.length}>
+                <SidebarTagInput value={domainInput} onChange={setDomainInput} placeholder="e.g. stripe.com" tags={domainTags} onTagsChange={setDomainTags} />
+              </FilterSection>
 
-            <FilterSection icon={Icons.globe} label="Org Locations" count={orgLocationTags.length}>
-              <SidebarTagInput value={orgLocationInput} onChange={setOrgLocationInput} placeholder="Add org location..." tags={orgLocationTags} onTagsChange={setOrgLocationTags} />
-            </FilterSection>
+              <FilterSection icon={Icons.globe} label="Org Locations" count={orgLocationTags.length}>
+                <SidebarTagInput value={orgLocationInput} onChange={setOrgLocationInput} placeholder="Add org location..." tags={orgLocationTags} onTagsChange={setOrgLocationTags} />
+              </FilterSection>
 
-            <FilterSection icon={Icons.users} label="# Employees" count={employeeRange ? 1 : 0}>
+              <FilterSection icon={Icons.users} label="# Employees" count={employeeRange ? 1 : 0}>
               <div className="space-y-1">
                 {EMPLOYEE_RANGES.map(r => (
                   <button
@@ -689,6 +693,7 @@ const ApolloSearchPage: React.FC = () => {
               </div>
               <p className="text-[10px] text-slate-400 mt-1.5 italic">Available with Apollo paid plan</p>
             </FilterSection>
+            </AdvancedOnly>
 
             {/* Search button in sidebar */}
             <div className="px-4 py-4 border-t border-slate-100">

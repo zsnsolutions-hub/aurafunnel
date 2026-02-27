@@ -13,6 +13,8 @@ import {
   DownloadIcon, CopyIcon, MicIcon, SendIcon, EditIcon, SlidersIcon,
   GlobeIcon, PhoneIcon, BookOpenIcon, TagIcon
 } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
 
 interface LayoutContext {
   user: User;
@@ -770,76 +772,74 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* HEADER                                                       */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-            <SparklesIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-              AI Command Center
-            </h1>
-            <p className="text-slate-400 text-xs mt-0.5">
-              Conversational AI assistant &middot; {leads.length} leads &middot; Real-time analysis
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setShowContext(!showContext)}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <EyeIcon className="w-3.5 h-3.5" />
-            <span>Context</span>
-          </button>
-          <button
-            onClick={handleExportChat}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <DownloadIcon className="w-3.5 h-3.5" />
-            <span>Export</span>
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-400">?</kbd>
-          </button>
-          <button
-            onClick={clearChat}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <RefreshIcon className="w-3.5 h-3.5" />
-            <span>Clear</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="AI Assistant"
+        description={`Conversational AI assistant \u00b7 ${leads.length} leads \u00b7 Real-time analysis`}
+        actions={
+          <>
+            <button
+              onClick={handleExportChat}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <DownloadIcon className="w-3.5 h-3.5" />
+              <span>Export</span>
+            </button>
+            <button
+              onClick={clearChat}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <RefreshIcon className="w-3.5 h-3.5" />
+              <span>Clear</span>
+            </button>
+          </>
+        }
+        advancedActions={
+          <>
+            <button
+              onClick={() => setShowContext(!showContext)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <EyeIcon className="w-3.5 h-3.5" />
+              <span>Context</span>
+            </button>
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <KeyboardIcon className="w-3.5 h-3.5" />
+              <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-400">?</kbd>
+            </button>
+          </>
+        }
+      />
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* AI MODE SELECTOR                                             */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center space-x-1 p-1 bg-white border border-slate-200 rounded-2xl shadow-sm">
-        {AI_MODES.map(mode => (
-          <button
-            key={mode.key}
-            onClick={() => setAiMode(mode.key)}
-            className={`flex-1 flex items-center justify-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-              aiMode === mode.key
-                ? `bg-${mode.color}-600 text-white shadow-sm`
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {mode.icon}
-            <span>{mode.label}</span>
-            {aiMode === mode.key && <span className="text-[9px] opacity-70 hidden md:inline">({mode.description})</span>}
-          </button>
-        ))}
-      </div>
+      <AdvancedOnly>
+        <div className="flex items-center space-x-1 p-1 bg-white border border-slate-200 rounded-2xl shadow-sm">
+          {AI_MODES.map(mode => (
+            <button
+              key={mode.key}
+              onClick={() => setAiMode(mode.key)}
+              className={`flex-1 flex items-center justify-center space-x-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                aiMode === mode.key
+                  ? `bg-${mode.color}-600 text-white shadow-sm`
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {mode.icon}
+              <span>{mode.label}</span>
+              {aiMode === mode.key && <span className="text-[9px] opacity-70 hidden md:inline">({mode.description})</span>}
+            </button>
+          ))}
+        </div>
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* CONTEXT PANEL (collapsible)                                  */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       {showContext && (
         <div className="bg-gradient-to-r from-slate-50 via-white to-indigo-50 rounded-2xl border border-slate-200 p-5 animate-in fade-in duration-300">
           <div className="flex items-center justify-between mb-3">
@@ -874,6 +874,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
           </p>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* MAIN LAYOUT: Sidebar + Chat                                  */}
@@ -881,6 +882,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       <div className="flex flex-col lg:flex-row gap-6">
 
         {/* ─── Left Sidebar (25%) ─── */}
+        <AdvancedOnly>
         <div className="lg:w-[25%] space-y-4">
 
           {/* Quick Stats */}
@@ -1027,9 +1029,10 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
             </div>
           </div>
         </div>
+        </AdvancedOnly>
 
-        {/* ─── Chat Area (75%) ─── */}
-        <div className="lg:w-[75%] flex flex-col">
+        {/* ─── Chat Area (75% in advanced, full in simplified) ─── */}
+        <div className="lg:flex-1 flex flex-col">
 
           {/* Suggestion Chips */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-4">

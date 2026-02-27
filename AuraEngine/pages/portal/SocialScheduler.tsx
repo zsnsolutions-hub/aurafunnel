@@ -16,6 +16,8 @@ import {
   EditIcon, ActivityIcon, PlugIcon, KeyboardIcon, XIcon,
   FacebookIcon, LinkedInIcon, InstagramIcon,
 } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
 
 const DRAFT_KEY = 'scaliyo_social_draft';
 
@@ -214,28 +216,29 @@ const SocialScheduler: React.FC = () => {
   const error = publishError || scheduleError;
   const isSubmitting = publishing || scheduling;
 
-  const tabs = [
+  const { isAdvanced } = useUIMode();
+
+  const allTabs = [
     { id: 'compose' as const, label: 'Compose', icon: <EditIcon className="w-4 h-4" /> },
     { id: 'history' as const, label: 'Post History', icon: <ActivityIcon className="w-4 h-4" /> },
     { id: 'accounts' as const, label: 'Accounts', icon: <PlugIcon className="w-4 h-4" /> },
   ];
+  const tabs = isAdvanced ? allTabs : allTabs.filter(t => t.id === 'compose');
 
   return (
     <div className="space-y-6">
       {/* ─── Page Header ─── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Social Scheduler</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Compose, schedule, and publish to Facebook, Instagram & LinkedIn
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          {draftSaved && (
+      <PageHeader
+        title="Social"
+        description="Compose, schedule, and publish to Facebook, Instagram & LinkedIn"
+        actions={
+          draftSaved ? (
             <span className="text-[10px] font-bold text-emerald-500 animate-in fade-in duration-300">
               Draft saved
             </span>
-          )}
+          ) : undefined
+        }
+        advancedActions={
           <button
             onClick={() => setShowShortcuts(true)}
             className="p-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
@@ -243,8 +246,8 @@ const SocialScheduler: React.FC = () => {
           >
             <KeyboardIcon className="w-4 h-4" />
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* ─── Success toast ─── */}
       {successMsg && (
