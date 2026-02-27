@@ -69,7 +69,7 @@ const Testimonials: React.FC = () => {
   const stat4 = useCountUp(50, 'M+');
 
   return (
-    <section className="py-24 lg:py-32 border-y border-slate-800/60">
+    <section id="testimonials" className="py-24 lg:py-32 border-y border-slate-800/60">
       <div className="max-w-[1200px] mx-auto px-6">
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10 text-center mb-24">

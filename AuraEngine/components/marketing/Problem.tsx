@@ -22,7 +22,7 @@ const painPoints = [
 ];
 
 const Problem: React.FC = () => (
-  <section className="py-24 lg:py-32 border-y border-slate-800/60">
+  <section id="problem" className="py-24 lg:py-32 border-y border-slate-800/60">
     <div className="max-w-[1200px] mx-auto px-6">
       <Reveal>
         <div className="text-center mb-16">

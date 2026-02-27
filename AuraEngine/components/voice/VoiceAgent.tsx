@@ -7,10 +7,13 @@ import { useUIMode } from '../ui-mode/UIModeProvider';
 import { track } from '../../lib/analytics';
 import { getPageTitle } from '../../lib/navConfig';
 import {
-  isValidRouteKey,
-  resolveRoute,
+  isValidMarketingRouteKey,
+  resolveMarketingRoute,
+  isValidSectionKey,
+  resolveSectionAnchor,
   canNavigate,
-  VOICE_ROUTE_LABELS,
+  MARKETING_ROUTE_LABELS,
+  SECTION_LABELS,
 } from '../../lib/voiceActions';
 import VoiceToast from './VoiceToast';
 import type { User } from '../../types';
@@ -24,67 +27,72 @@ const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
 const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { mode, isSimplified, toggle } = useUIMode();
+  const { mode } = useUIMode();
 
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ label: string; path: string } | null>(null);
 
-  // Keep a ref to latest location so client tool handlers see fresh values
+  // Keep refs so client tool handlers see fresh values
   const locationRef = useRef(location);
-  useEffect(() => {
-    locationRef.current = location;
-  }, [location]);
+  useEffect(() => { locationRef.current = location; }, [location]);
 
   const modeRef = useRef(mode);
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
-
-  const isSimplifiedRef = useRef(isSimplified);
-  useEffect(() => {
-    isSimplifiedRef.current = isSimplified;
-  }, [isSimplified]);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   const conversation = useConversation({
     clientTools: {
       navigate: async (params: { route_key: string }) => {
         const { route_key } = params;
-        if (!isValidRouteKey(route_key)) {
-          return 'Unknown page. Please try again.';
+        if (!isValidMarketingRouteKey(route_key)) {
+          return 'Unknown page. Available pages: home, features, pricing, blog, about, contact, signup, login.';
         }
         if (!canNavigate()) {
           return 'Please wait a moment before navigating again.';
         }
-        const path = resolveRoute(route_key)!;
-        const label = VOICE_ROUTE_LABELS[route_key] ?? route_key;
+        const path = resolveMarketingRoute(route_key)!;
+        const label = MARKETING_ROUTE_LABELS[route_key] ?? route_key;
 
-        // Show toast and navigate
         setToast({ label, path });
         navigate(path);
         track('nav_executed', { routeKey: route_key });
         return `Navigated to ${label}.`;
       },
 
-      toggle_ui_mode: async () => {
-        const wasSimplified = isSimplifiedRef.current;
-        toggle();
-        const newMode = wasSimplified ? 'advanced' : 'simplified';
-        track('simplified_toggled', { newMode });
-        return `Switched to ${newMode} mode.`;
-      },
+      scroll_to_section: async (params: { section_key: string }) => {
+        const { section_key } = params;
+        if (!isValidSectionKey(section_key)) {
+          return 'Unknown section. Available sections: hero, logos, problem, features_section, how_it_works, testimonials, pricing_section, faq, cta.';
+        }
+        if (!canNavigate()) {
+          return 'Please wait a moment.';
+        }
+        const anchorId = resolveSectionAnchor(section_key)!;
+        const label = SECTION_LABELS[section_key] ?? section_key;
 
-      open_command_palette: async () => {
-        window.dispatchEvent(new CustomEvent('scaliyo:openCommandPalette'));
-        return 'Command palette opened.';
+        // If not on home page, navigate there first
+        if (locationRef.current.pathname !== '/') {
+          navigate('/');
+          // Wait for route change and DOM update
+          await new Promise((r) => setTimeout(r, 400));
+        }
+
+        const el = document.getElementById(anchorId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setToast({ label, path: `/#${anchorId}` });
+          track('nav_executed', { routeKey: `section:${section_key}` });
+          return `Scrolled to ${label} section.`;
+        }
+        return `Could not find the ${label} section on this page.`;
       },
 
       get_page_context: async () => {
         return JSON.stringify({
           currentRoute: locationRef.current.pathname,
-          currentSearch: locationRef.current.search,
-          uiMode: modeRef.current,
+          currentHash: locationRef.current.hash,
           pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
-          isAuthenticated: true,
+          uiMode: modeRef.current,
+          isAuthenticated: !!user,
           userName: user?.name || 'Visitor',
         });
       },
@@ -93,10 +101,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
     onConnect: () => {
       setError(null);
       track('voice_opened');
-      // Send initial context
       const ctx = JSON.stringify({
         currentRoute: locationRef.current.pathname,
-        uiMode: modeRef.current,
         pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
         userName: user?.name || 'Visitor',
       });
@@ -123,14 +129,13 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
     if (status !== 'connected') return;
     const ctx = JSON.stringify({
       currentRoute: location.pathname,
-      currentSearch: location.search,
-      uiMode: mode,
+      currentHash: location.hash,
       pageTitle: getPageTitle(location.pathname) || document.title,
     });
     conversation.sendContextualUpdate(ctx);
-  }, [location.pathname, location.search, status, mode]);
+  }, [location.pathname, location.hash, status]);
 
-  // Auto-dismiss toast after navigation completes
+  // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3000);
@@ -151,7 +156,6 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
     setError(null);
 
     try {
-      // Request mic permission
       await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       setError('Microphone access denied');
@@ -172,21 +176,13 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
     }
   }, [status, conversation]);
 
-  const handleToastConfirm = useCallback(() => {
-    // Navigation already happened; just dismiss
-    setToast(null);
-  }, []);
+  const handleToastConfirm = useCallback(() => setToast(null), []);
+  const handleToastCancel = useCallback(() => setToast(null), []);
 
-  const handleToastCancel = useCallback(() => {
-    setToast(null);
-  }, []);
-
-  // Don't render if no agent ID configured
   if (!AGENT_ID) return null;
 
   return (
     <>
-      {/* Navigation toast */}
       {toast && (
         <VoiceToast
           label={toast.label}
@@ -195,7 +191,6 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
         />
       )}
 
-      {/* FAB */}
       <button
         onClick={handleToggle}
         className={`
@@ -218,14 +213,11 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
         }
       >
         {fabIcon(status, isSpeaking, error)}
-
-        {/* Pulsing ring when connected and listening */}
         {status === 'connected' && !isSpeaking && (
           <span className="absolute inset-0 rounded-full animate-ping bg-green-400 opacity-20" />
         )}
       </button>
 
-      {/* Error indicator */}
       {error && status === 'disconnected' && (
         <div className="fixed bottom-[5.5rem] right-6 z-[60] text-xs text-red-500 bg-white border border-red-200 rounded-lg px-3 py-1.5 shadow-sm max-w-[320px] text-center break-words">
           {error}

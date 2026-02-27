@@ -8,7 +8,7 @@ const PricingTeaser: React.FC = () => {
   const [isAnnual, setIsAnnual] = useState(false);
 
   return (
-    <section className="py-24 lg:py-32">
+    <section id="pricing" className="py-24 lg:py-32">
       <div className="max-w-[1200px] mx-auto px-6">
         <Reveal>
           <div className="text-center mb-16">

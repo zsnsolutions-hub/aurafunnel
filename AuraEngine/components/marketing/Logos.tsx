@@ -4,7 +4,7 @@ import Reveal from './Reveal';
 const companies = ['Stackline', 'Nuvio', 'Meridian', 'DataSync', 'TechFlow', 'Cloudshift'];
 
 const Logos: React.FC = () => (
-  <section className="py-12 lg:py-16">
+  <section id="logos" className="py-12 lg:py-16">
     <div className="max-w-[1200px] mx-auto px-6">
       <Reveal>
         <div className="flex flex-col items-center">

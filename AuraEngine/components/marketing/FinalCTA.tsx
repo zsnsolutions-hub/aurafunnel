@@ -4,7 +4,7 @@ import Reveal from './Reveal';
 import { track } from '../../lib/analytics';
 
 const FinalCTA: React.FC = () => (
-  <section className="py-28 lg:py-36 relative overflow-hidden">
+  <section id="cta" className="py-28 lg:py-36 relative overflow-hidden">
     <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_50%_at_50%_50%,rgba(13,148,136,0.12),transparent)]" />
     <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent via-teal-500/3 to-transparent" />
 

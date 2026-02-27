@@ -34,7 +34,7 @@ const FAQ: React.FC = () => {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
   return (
-    <section className="py-24 lg:py-32 border-t border-slate-800/60">
+    <section id="faq" className="py-24 lg:py-32 border-t border-slate-800/60">
       <div className="max-w-3xl mx-auto px-6">
         <Reveal>
           <div className="text-center mb-16">

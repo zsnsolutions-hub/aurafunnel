@@ -1,4 +1,6 @@
-// ── Route Allowlist ──
+// ══════════════════════════════════════════════════════════════════════════════
+// Portal Route Allowlist (authenticated users)
+// ══════════════════════════════════════════════════════════════════════════════
 export const VOICE_ROUTE_MAP: Record<string, string> = {
   dashboard: '/portal',
   leads: '/portal/leads',
@@ -24,7 +26,6 @@ export const VOICE_ROUTE_MAP: Record<string, string> = {
   manual: '/portal/manual',
 };
 
-// ── Human-readable labels for each route key ──
 export const VOICE_ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   leads: 'Leads',
@@ -50,9 +51,62 @@ export const VOICE_ROUTE_LABELS: Record<string, string> = {
   manual: 'User Manual',
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Marketing Route Allowlist (public visitors)
+// ══════════════════════════════════════════════════════════════════════════════
+export const MARKETING_ROUTE_MAP: Record<string, string> = {
+  home: '/',
+  features: '/features',
+  pricing: '/pricing',
+  blog: '/blog',
+  about: '/about',
+  contact: '/contact',
+  signup: '/signup',
+  login: '/auth',
+};
+
+export const MARKETING_ROUTE_LABELS: Record<string, string> = {
+  home: 'Home',
+  features: 'Features',
+  pricing: 'Pricing',
+  blog: 'Blog',
+  about: 'About Us',
+  contact: 'Contact',
+  signup: 'Start Free Trial',
+  login: 'Log In',
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Landing Page Section Anchors (scroll targets on "/")
+// ══════════════════════════════════════════════════════════════════════════════
+export const SECTION_ANCHOR_MAP: Record<string, string> = {
+  hero: 'hero',
+  logos: 'logos',
+  problem: 'problem',
+  features_section: 'features',
+  how_it_works: 'how-it-works',
+  testimonials: 'testimonials',
+  pricing_section: 'pricing',
+  faq: 'faq',
+  cta: 'cta',
+};
+
+export const SECTION_LABELS: Record<string, string> = {
+  hero: 'Hero',
+  logos: 'Trusted By',
+  problem: 'The Problem',
+  features_section: 'Features',
+  how_it_works: 'How It Works',
+  testimonials: 'Testimonials',
+  pricing_section: 'Pricing',
+  faq: 'FAQ',
+  cta: 'Get Started',
+};
+
 // ── Action Types ──
 export type VoiceAction =
   | { type: 'NAVIGATE'; routeKey: string }
+  | { type: 'SCROLL_TO_SECTION'; sectionKey: string }
   | { type: 'OPEN_COMMAND_PALETTE' }
   | { type: 'TOGGLE_SIMPLIFIED_MODE' }
   | { type: 'NONE' };
@@ -62,8 +116,24 @@ export function isValidRouteKey(key: string): key is keyof typeof VOICE_ROUTE_MA
   return key in VOICE_ROUTE_MAP;
 }
 
+export function isValidMarketingRouteKey(key: string): key is keyof typeof MARKETING_ROUTE_MAP {
+  return key in MARKETING_ROUTE_MAP;
+}
+
+export function isValidSectionKey(key: string): key is keyof typeof SECTION_ANCHOR_MAP {
+  return key in SECTION_ANCHOR_MAP;
+}
+
 export function resolveRoute(routeKey: string): string | null {
   return VOICE_ROUTE_MAP[routeKey] ?? null;
+}
+
+export function resolveMarketingRoute(routeKey: string): string | null {
+  return MARKETING_ROUTE_MAP[routeKey] ?? null;
+}
+
+export function resolveSectionAnchor(sectionKey: string): string | null {
+  return SECTION_ANCHOR_MAP[sectionKey] ?? null;
 }
 
 // ── Debounce guard ──

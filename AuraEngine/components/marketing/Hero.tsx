@@ -4,7 +4,7 @@ import Reveal from './Reveal';
 import { track } from '../../lib/analytics';
 
 const Hero: React.FC = () => (
-  <section className="relative pt-36 pb-24 lg:pt-52 lg:pb-36 overflow-hidden">
+  <section id="hero" className="relative pt-36 pb-24 lg:pt-52 lg:pb-36 overflow-hidden">
     {/* Background effects */}
     <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,rgba(13,148,136,0.18),transparent)]" />
     <div
