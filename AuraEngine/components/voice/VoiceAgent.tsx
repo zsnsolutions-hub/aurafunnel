@@ -31,6 +31,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
 
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ label: string; path: string } | null>(null);
+  const [pendingContextUpdate, setPendingContextUpdate] = useState(false);
 
   // Keep refs so client tool handlers see fresh values
   const locationRef = useRef(location);
@@ -102,12 +103,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
     onConnect: () => {
       setError(null);
       track('voice_opened');
-      const ctx = JSON.stringify({
-        currentRoute: locationRef.current.pathname,
-        pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
-        userName: user?.name || 'Visitor',
-      });
-      conversation.sendContextualUpdate(ctx);
+      // Defer contextual update to useEffect so `conversation` is available
+      setPendingContextUpdate(true);
     },
 
     onDisconnect: () => {
@@ -115,15 +112,35 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
       setToast(null);
     },
 
-    onError: (message, context) => {
-      console.error('[VoiceAgent] onError:', message, context);
-      const errStr = typeof message === 'string' ? message : String(message || 'Connection error');
+    onMessage: (message) => {
+      console.log('[VoiceAgent] message:', message);
+    },
+
+    onError: (error) => {
+      console.error('[VoiceAgent] onError:', error);
+      const errStr = typeof error === 'string' ? error : String(error || 'Connection error');
       setError(errStr);
       track('voice_error', { message: errStr });
+    },
+
+    onModeChange: (mode) => {
+      console.log('[VoiceAgent] mode:', mode);
     },
   });
 
   const { status, isSpeaking } = conversation;
+
+  // Send initial context after connection (deferred from onConnect to avoid circular ref)
+  useEffect(() => {
+    if (!pendingContextUpdate || status !== 'connected') return;
+    setPendingContextUpdate(false);
+    const ctx = JSON.stringify({
+      currentRoute: locationRef.current.pathname,
+      pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
+      userName: user?.name || 'Visitor',
+    });
+    conversation.sendContextualUpdate(ctx);
+  }, [pendingContextUpdate, status, conversation, user?.name]);
 
   // Send contextual update when route changes (only while connected)
   useEffect(() => {
@@ -167,7 +184,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
     try {
       await conversation.startSession({
         agentId: AGENT_ID,
-        connectionType: 'websocket',
+        connectionType: 'webrtc',
       } as Parameters<typeof conversation.startSession>[0]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
