@@ -12,6 +12,7 @@ import { useIntegrations } from '../../lib/integrations';
 import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
 import { NAV_CONFIG, NavConfigItem } from '../../lib/navConfig';
 import { UIModeSwitcher } from '../ui-mode';
+import { useUIMode } from '../ui-mode/UIModeProvider';
 
 interface ClientLayoutProps {
   user: User;
@@ -30,6 +31,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { integrations: integrationStatuses } = useIntegrations();
   const activeIntegrationCount = integrationStatuses.filter(i => i.status === 'connected').length;
+  const { isSimplified } = useUIMode();
 
   const navItems = useMemo(() => {
     function toSidebarItem(cfg: NavConfigItem): SidebarNavItem {
@@ -45,12 +47,42 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
           : undefined,
       };
       if (cfg.children) {
-        item.children = cfg.children.map(toSidebarItem);
+        const children = isSimplified
+          ? cfg.children.filter(c => c.simplifiedVisible !== false)
+          : cfg.children;
+        item.children = children.map(toSidebarItem);
       }
       return item;
     }
-    return NAV_CONFIG.map(toSidebarItem);
-  }, [activeIntegrationCount]);
+
+    if (!isSimplified) return NAV_CONFIG.map(toSidebarItem);
+
+    // Simplified mode: merge Workspace + Billing children into Settings
+    const mergedChildren: NavConfigItem[] = [];
+    const simplified = NAV_CONFIG.filter(cfg => {
+      if (cfg.section === 'workspace' && cfg.isGroup) {
+        const visible = (cfg.children || []).filter(c => c.simplifiedVisible !== false);
+        mergedChildren.push(...visible);
+        return false;
+      }
+      if (cfg.section === 'billing' && cfg.isGroup) {
+        mergedChildren.push(...(cfg.children || []));
+        return false;
+      }
+      return true;
+    });
+
+    return simplified.map(cfg => {
+      if (cfg.section === 'settings' && cfg.route === '/portal/settings') {
+        const merged: NavConfigItem = {
+          ...cfg,
+          children: [...(cfg.children || []), ...mergedChildren],
+        };
+        return toSidebarItem(merged);
+      }
+      return toSidebarItem(cfg);
+    });
+  }, [activeIntegrationCount, isSimplified]);
 
   const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
   const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
