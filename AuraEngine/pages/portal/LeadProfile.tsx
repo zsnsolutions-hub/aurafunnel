@@ -10,6 +10,7 @@ import {
   SendIcon, EyeIcon, CursorClickIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
@@ -265,8 +266,9 @@ const LeadProfile: React.FC = () => {
     if (error) {
       console.error('LeadProfile fetch error:', error.message);
     } else if (data) {
-      setLead(data);
-      fetchLeadEmailEngagement(data.id).then(setEmailEngagement);
+      const [normalized] = normalizeLeads([data]);
+      setLead(normalized);
+      fetchLeadEmailEngagement(normalized.id).then(setEmailEngagement);
     }
     setLoading(false);
   };

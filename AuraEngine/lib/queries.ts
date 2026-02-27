@@ -6,7 +6,7 @@ import { Lead } from '../types';
 const LEAD_COLUMNS = 'id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase,first_name,last_name,primary_email,primary_phone,linkedin_url,location,title,source,import_batch_id,imported_at,custom_fields' as const;
 
 /** Coerce nullable legacy columns so downstream code never sees null for name/company/email */
-function normalizeLeads(rows: Record<string, unknown>[]): Lead[] {
+export function normalizeLeads(rows: Record<string, unknown>[]): Lead[] {
   return rows.map(r => ({
     ...r,
     name: (r.name as string) || '',

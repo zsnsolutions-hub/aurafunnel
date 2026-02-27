@@ -12,6 +12,7 @@ import { fetchBatchEmailSummary, type BatchEmailSummary } from '../../lib/emailT
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS, resolvePlanName } from '../../lib/credits';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
@@ -413,7 +414,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
       ]);
 
-      const lds = allLeads || [];
+      const lds = normalizeLeads(allLeads || []);
       const hotLeads = lds.filter(l => l.score > 80).length;
       const hotLeadsYesterdayCount = lds.filter(l => {
         if (!l.created_at) return false;

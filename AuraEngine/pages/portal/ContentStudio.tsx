@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead, ToneType, ContentCategory, EmailSequenceConfig, EmailProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { fetchOwnerEmailPerformance, sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { ConnectedEmailProvider } from '../../lib/emailTracking';
@@ -22,6 +23,8 @@ import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal'
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
 import { useIntegrations } from '../../lib/integrations';
+import { useUsageLimits } from '../../hooks/useUsageLimits';
+import UpgradeModal from '../../components/portal/UpgradeModal';
 
 interface LayoutContext {
   user: User;
@@ -273,6 +276,7 @@ const ContentStudio: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const { integrations: integrationStatuses } = useIntegrations();
+  const { warnings: usageWarnings, checkEmail: checkEmailLimit, limitError, clearError: clearLimitError } = useUsageLimits(user.id, user.plan);
 
   // ─── Content Mode ───
   const [contentMode, setContentMode] = useState<ContentMode>('email');
@@ -394,7 +398,7 @@ const ContentStudio: React.FC = () => {
     try {
       const { data, error } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
       if (error) throw error;
-      setLeads((data || []) as Lead[]);
+      setLeads(normalizeLeads(data || []));
     } catch (err: unknown) {
       console.error('Studio fetch error:', err instanceof Error ? err.message : err);
     } finally {
@@ -1209,6 +1213,12 @@ const ContentStudio: React.FC = () => {
 
   const handleSendEmails = async () => {
     if (selectedLeadIds.size === 0 || sendingEmails) return;
+
+    // Pre-flight limit check
+    const inboxId = connectedProvider?.from_email ?? 'default';
+    const allowed = await checkEmailLimit(inboxId);
+    if (!allowed) return;
+
     setSendingEmails(true);
     setSendResult(null);
 
@@ -3809,6 +3819,18 @@ const ContentStudio: React.FC = () => {
                   </p>
                 </div>
 
+                {/* Usage warnings */}
+                {usageWarnings.length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                    {usageWarnings.filter(w => w.type === 'MONTHLY_EMAIL' || w.type === 'DAILY_EMAIL').map(w => (
+                      <p key={w.type} className="text-xs font-semibold text-amber-700">
+                        <AlertTriangleIcon className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                        {w.type === 'DAILY_EMAIL' ? 'Daily' : 'Monthly'} email usage at {w.percent}% ({w.current}/{w.limit})
+                      </p>
+                    ))}
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="flex items-center space-x-3">
                   <button
@@ -3881,6 +3903,15 @@ const ContentStudio: React.FC = () => {
           }
         }}
       />
+
+      {/* Upgrade Modal — shown when email send limit is reached */}
+      {limitError && (
+        <UpgradeModal
+          limitType={limitError.type}
+          currentPlan={user.plan}
+          onClose={clearLimitError}
+        />
+      )}
     </div>
   );
 };

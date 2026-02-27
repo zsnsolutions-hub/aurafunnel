@@ -15,10 +15,13 @@ import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal'
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance, fetchCampaignHistory, fetchCampaignRecipients, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { EmailPerformanceEntry, CampaignSummary, CampaignRecipient, ConnectedEmailProvider } from '../../lib/emailTracking';
 import { generateEmailSequencePdf } from '../../lib/pdfExport';
+import { useUsageLimits } from '../../hooks/useUsageLimits';
+import UpgradeModal from '../../components/portal/UpgradeModal';
 
 // ═══════════════════════════════════════════════
 // TYPES
@@ -327,6 +330,7 @@ const ContentGen: React.FC = () => {
   const navigate = useNavigate();
   const query = new URLSearchParams(useLocation().search);
   const initialLeadId = query.get('leadId');
+  const { warnings: usageWarnings, checkEmail: checkEmailLimit, limitError, clearError: clearLimitError } = useUsageLimits(user.id, user.plan);
 
   // ── State ──
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -415,7 +419,7 @@ const ContentGen: React.FC = () => {
     const fetchLeads = async () => {
       setLoadingLeads(true);
       const { data } = await supabase.from('leads').select('*').eq('client_id', user.id).order('score', { ascending: false });
-      if (data) setLeads(data);
+      if (data) setLeads(normalizeLeads(data));
       setLoadingLeads(false);
     };
     if (user) fetchLeads();
@@ -896,6 +900,13 @@ const ContentGen: React.FC = () => {
   };
 
   const handleDeliver = async () => {
+    // Pre-flight limit check for email sends
+    if (contentType === ContentCategory.EMAIL_SEQUENCE && selectedLeads.length > 0 && schedule.mode === 'now') {
+      const inboxId = connectedProvider?.from_email ?? 'default';
+      const allowed = await checkEmailLimit(inboxId);
+      if (!allowed) return;
+    }
+
     setDeliveryConfirmed(true);
 
     if (contentType === ContentCategory.EMAIL_SEQUENCE && selectedLeads.length > 0 && blocks.length > 0) {
@@ -2812,6 +2823,18 @@ const ContentGen: React.FC = () => {
               </div>
             )}
 
+            {/* Usage warnings */}
+            {usageWarnings.length > 0 && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                {usageWarnings.filter(w => w.type === 'MONTHLY_EMAIL' || w.type === 'DAILY_EMAIL').map(w => (
+                  <p key={w.type} className="text-xs font-semibold text-amber-700">
+                    <AlertTriangleIcon className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                    {w.type === 'DAILY_EMAIL' ? 'Daily' : 'Monthly'} email usage at {w.percent}% ({w.current}/{w.limit})
+                  </p>
+                ))}
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex items-center justify-between">
               <button
@@ -3525,6 +3548,15 @@ const ContentGen: React.FC = () => {
         onInsertImage={(url) => setEmailImages(prev => [...prev, url])}
         businessProfile={user.businessProfile}
       />
+
+      {/* Upgrade Modal — shown when email send limit is reached */}
+      {limitError && (
+        <UpgradeModal
+          limitType={limitError.type}
+          currentPlan={user.plan}
+          onClose={clearLimitError}
+        />
+      )}
     </div>
   );
 };

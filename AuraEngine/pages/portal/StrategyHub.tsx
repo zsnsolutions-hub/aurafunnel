@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User, Lead, Team, TeamInvite } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { generatePipelineStrategy, parsePipelineStrategyResponse, PipelineStrategyResponse } from '../../lib/gemini';
 import {
@@ -381,7 +382,7 @@ const StrategyHub: React.FC = () => {
           emailCount = 0;
         }
 
-        const loadedLeads: Lead[] = leadsRes.data || [];
+        const loadedLeads: Lead[] = normalizeLeads(leadsRes.data || []);
 
         // Build a name lookup from team members
         const memberNameMap: Record<string, string> = {};

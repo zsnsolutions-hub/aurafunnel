@@ -6,6 +6,7 @@ import {
 import { BoltIcon, RefreshIcon, UsersIcon, CreditCardIcon, ShieldIcon, TrendUpIcon, TrendDownIcon, TargetIcon, ActivityIcon, SparklesIcon, RocketIcon, KeyboardIcon, XIcon, LayersIcon, BrainIcon, PieChartIcon, AlertTriangleIcon, ClockIcon, CheckIcon, ArrowRightIcon, DatabaseIcon, GlobeIcon } from '../../components/Icons';
 import { Headphones } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { DashboardQuickStats, AIInsight, FunnelStage, Lead } from '../../types';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import QuickStatsRow from '../../components/dashboard/QuickStatsRow';
@@ -320,7 +321,7 @@ const AdminDashboard: React.FC = () => {
       }, 0);
       setEstimatedRevenue(revenue);
 
-      const leads: Lead[] = allLeads || [];
+      const leads: Lead[] = normalizeLeads(allLeads || []);
       const hotLeads = leads.filter(l => l.score > 80).length;
       const hotLeadsYesterdayCount = leads.filter(l => {
         if (!l.created_at) return false;
@@ -403,7 +404,7 @@ const AdminDashboard: React.FC = () => {
     try {
       const { data: allLeads, error } = await supabase.from('leads').select('*').order('score', { ascending: false }).limit(50);
       if (error) throw error;
-      const result = await generateDashboardInsights(allLeads || []);
+      const result = await generateDashboardInsights(normalizeLeads(allLeads || []));
       setDeepAnalysisResult(result);
     } catch (err: unknown) {
       setDeepAnalysisResult(`Deep analysis unavailable: ${err instanceof Error ? err.message : 'Unknown error'}`);
