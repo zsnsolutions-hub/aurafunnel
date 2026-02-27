@@ -4,6 +4,8 @@ import { User, Lead, ReportType, ExportFormat, AlertRule, AlertType, AlertNotify
 import { supabase } from '../../lib/supabase';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import { useAnalyticsData, computeTrend } from '../../hooks/useAnalyticsData';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 import {
   ChartIcon, TrendUpIcon, TrendDownIcon, TargetIcon, SparklesIcon, CreditCardIcon,
   PieChartIcon, DownloadIcon, FilterIcon, AlertTriangleIcon, BellIcon, RefreshIcon,
@@ -771,105 +773,95 @@ const AnalyticsPage: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* HEADER BAR                                                    */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-            Analytics <span className="text-slate-300 mx-1">&rsaquo;</span> Performance Overview
-          </h1>
-          <p className="text-slate-400 text-xs mt-0.5">Real-time intelligence across your entire pipeline</p>
-        </div>
-
-        <div data-guide="analytics-reports" className="flex items-center space-x-2">
-          {/* Data Freshness */}
-          <div className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-bold text-slate-400">
-              Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-            </span>
-            <button onClick={handleRefreshAll} className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors">
-              <RefreshIcon className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
-          {/* Comparison Toggle */}
-          <button
-            onClick={() => setComparisonMode(!comparisonMode)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${comparisonMode ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-            <ActivityIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Compare</span>
-          </button>
-
-          {/* Analysis Panels */}
-          <button
-            onClick={() => setShowCohortAnalysis(prev => !prev)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCohortAnalysis ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-            <UsersIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Cohorts</span>
-          </button>
-          <button
-            onClick={() => setShowPredictiveForecast(prev => !prev)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPredictiveForecast ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-            <SparklesIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Forecast</span>
-          </button>
-          <button
-            onClick={() => setShowChannelAttribution(prev => !prev)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showChannelAttribution ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-            <LinkIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Attribution</span>
-          </button>
-
-          {/* Shortcuts */}
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
-          >
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
-          </button>
-
-          {/* Date Range Dropdown */}
-          <div className="relative">
+      <PageHeader
+        title="Reports"
+        description="Real-time intelligence across your entire pipeline"
+        actions={
+          <div data-guide="analytics-reports" className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-bold text-slate-400">
+                Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </span>
+              <button onClick={handleRefreshAll} className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors">
+                <RefreshIcon className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setDateDropdownOpen(!dateDropdownOpen)}
+                className="flex items-center space-x-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                <ClockIcon className="w-3.5 h-3.5 text-slate-400" />
+                <span>{DATE_RANGE_LABELS[dateRange]}</span>
+                <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {dateDropdownOpen && (
+                <div className="absolute right-0 top-11 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-44 py-1">
+                  {(Object.entries(DATE_RANGE_LABELS) as [DateRangePreset, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => { setDateRange(key); setDateDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                        dateRange === key ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
-              onClick={() => setDateDropdownOpen(!dateDropdownOpen)}
-              className="flex items-center space-x-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              data-guide="analytics-export"
+              onClick={openReportBuilder}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
             >
-              <ClockIcon className="w-3.5 h-3.5 text-slate-400" />
-              <span>{DATE_RANGE_LABELS[dateRange]}</span>
-              <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <FilterIcon className="w-4 h-4" />
+              <span>Report</span>
             </button>
-            {dateDropdownOpen && (
-              <div className="absolute right-0 top-11 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-44 py-1">
-                {(Object.entries(DATE_RANGE_LABELS) as [DateRangePreset, string][]).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => { setDateRange(key); setDateDropdownOpen(false); }}
-                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                      dateRange === key ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
-
-          {/* Generate Report Button */}
-          <button
-            data-guide="analytics-export"
-            onClick={openReportBuilder}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-          >
-            <FilterIcon className="w-4 h-4" />
-            <span>Report</span>
-          </button>
-        </div>
-      </div>
+        }
+        advancedActions={
+          <>
+            <button
+              onClick={() => setComparisonMode(!comparisonMode)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${comparisonMode ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <ActivityIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Compare</span>
+            </button>
+            <button
+              onClick={() => setShowCohortAnalysis(prev => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCohortAnalysis ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <UsersIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cohorts</span>
+            </button>
+            <button
+              onClick={() => setShowPredictiveForecast(prev => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPredictiveForecast ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <SparklesIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Forecast</span>
+            </button>
+            <button
+              onClick={() => setShowChannelAttribution(prev => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showChannelAttribution ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <LinkIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Attribution</span>
+            </button>
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+            >
+              <KeyboardIcon className="w-3.5 h-3.5" />
+              <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
+            </button>
+          </>
+        }
+      />
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* KEY METRICS ROW                                               */}
@@ -910,7 +902,7 @@ const AnalyticsPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6">
 
         {/* ─── Main Content (75%) ─── */}
-        <div className="lg:w-[75%] space-y-6">
+        <div className="lg:flex-1 space-y-6">
 
           {/* CHART AREA */}
           <div data-guide="analytics-charts" className="space-y-6">
@@ -1218,6 +1210,7 @@ const AnalyticsPage: React.FC = () => {
         </div>
 
         {/* ─── AI Insights Sidebar (25%) ─── */}
+        <AdvancedOnly>
         <div className="lg:w-[25%] space-y-5">
           {/* Top Insights */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
@@ -1384,6 +1377,7 @@ const AnalyticsPage: React.FC = () => {
             </button>
           </div>
         </div>
+        </AdvancedOnly>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
@@ -2054,6 +2048,7 @@ const AnalyticsPage: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* COHORT ANALYSIS SIDEBAR                                       */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       {showCohortAnalysis && (
         <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowCohortAnalysis(false)}>
           <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm" />
@@ -2402,6 +2397,7 @@ const AnalyticsPage: React.FC = () => {
           </div>
         </div>
       )}
+      </AdvancedOnly>
     </div>
   );
 };

@@ -12,6 +12,8 @@ import { supabase } from '../../lib/supabase';
 import StageColorSettings from '../../components/leads/StageColorSettings';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
 
 /** Safely extract a string from any value (handles {value,confidence} objects, nulls, etc.) */
 const safeStr = (v: unknown): string => {
@@ -57,6 +59,7 @@ type SettingsTab = 'profile' | 'business_profile' | 'notifications' | 'preferenc
 
 const ProfilePage: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const { isAdvanced: isAdvancedMode } = useUIMode();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const tab = searchParams.get('tab');
@@ -236,7 +239,7 @@ const ProfilePage: React.FC = () => {
     setBusinessProfile(p => ({ ...p, pricingModel: summary || p.pricingModel, pricingTiers: updated }));
   };
 
-  const tabs = [
+  const allTabs = [
     { id: 'profile' as SettingsTab, label: 'Profile', icon: <CogIcon className="w-4 h-4" /> },
     { id: 'business_profile' as SettingsTab, label: 'Business Profile', icon: <BriefcaseIcon className="w-4 h-4" /> },
     { id: 'notifications' as SettingsTab, label: 'Notifications', icon: <BellIcon className="w-4 h-4" /> },
@@ -245,6 +248,8 @@ const ProfilePage: React.FC = () => {
     { id: 'security' as SettingsTab, label: 'Security', icon: <LockIcon className="w-4 h-4" /> },
     { id: 'pipeline_colors' as SettingsTab, label: 'Pipeline Colors', icon: <TagIcon className="w-4 h-4" /> },
   ];
+  const simplifiedTabIds: SettingsTab[] = ['profile', 'notifications', 'preferences', 'security'];
+  const tabs = isAdvancedMode ? allTabs : allTabs.filter(t => simplifiedTabIds.includes(t.id));
 
   // Profile handlers
   const handleUpdate = async (e: React.FormEvent) => {
@@ -753,42 +758,42 @@ const ProfilePage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight font-heading">Account Architecture</h1>
-          <p className="text-slate-500 mt-1 text-sm">Manage your profile, preferences, security, and API access</p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button onClick={() => setShowAccountHealth(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
-            <ShieldIcon className="w-3.5 h-3.5" />
-            <span>Health</span>
-          </button>
-          <button onClick={() => setShowSessionActivity(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
-            <ActivityIcon className="w-3.5 h-3.5" />
-            <span>Activity</span>
-          </button>
-          <button onClick={() => setShowDataExport(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
-            <DownloadIcon className="w-3.5 h-3.5" />
-            <span>Export</span>
-          </button>
-<button onClick={() => setShowUsageAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showUsageAnalytics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
-            <TrendUpIcon className="w-3.5 h-3.5" />
-            <span>Usage</span>
-          </button>
-          <button onClick={() => setShowPrivacyAudit(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showPrivacyAudit ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
-            <LockIcon className="w-3.5 h-3.5" />
-            <span>Privacy</span>
-          </button>
-          <button onClick={() => setShowQuotaTracker(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showQuotaTracker ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
-            <LayersIcon className="w-3.5 h-3.5" />
-            <span>Quotas</span>
-          </button>
-          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <span>?</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Manage your profile, preferences, security, and API access"
+        advancedActions={
+          <>
+            <button onClick={() => setShowAccountHealth(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
+              <ShieldIcon className="w-3.5 h-3.5" />
+              <span>Health</span>
+            </button>
+            <button onClick={() => setShowSessionActivity(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
+              <ActivityIcon className="w-3.5 h-3.5" />
+              <span>Activity</span>
+            </button>
+            <button onClick={() => setShowDataExport(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
+              <DownloadIcon className="w-3.5 h-3.5" />
+              <span>Export</span>
+            </button>
+            <button onClick={() => setShowUsageAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showUsageAnalytics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+              <TrendUpIcon className="w-3.5 h-3.5" />
+              <span>Usage</span>
+            </button>
+            <button onClick={() => setShowPrivacyAudit(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showPrivacyAudit ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
+              <LockIcon className="w-3.5 h-3.5" />
+              <span>Privacy</span>
+            </button>
+            <button onClick={() => setShowQuotaTracker(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showQuotaTracker ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+              <LayersIcon className="w-3.5 h-3.5" />
+              <span>Quotas</span>
+            </button>
+            <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+              <KeyboardIcon className="w-3.5 h-3.5" />
+              <span>?</span>
+            </button>
+          </>
+        }
+      />
 
       {/* ─── KPI Stats Banner ─── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -881,6 +886,7 @@ const ProfilePage: React.FC = () => {
             </form>
           </div>
 
+          <AdvancedOnly>
           <div className="p-10 bg-white rounded-[2.5rem] border border-red-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-8 border-l-8 border-l-red-500">
             <div>
               <h4 className="text-slate-900 font-black font-heading text-lg">Decommission Account</h4>
@@ -891,6 +897,7 @@ const ProfilePage: React.FC = () => {
               Destroy Instance
             </button>
           </div>
+          </AdvancedOnly>
         </div>
       )}
 
@@ -2003,6 +2010,7 @@ const ProfilePage: React.FC = () => {
         </div>
       )}
 
+      <AdvancedOnly>
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ─── Account Health Dashboard Sidebar ─── */}
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -2705,6 +2713,7 @@ const ProfilePage: React.FC = () => {
           </div>
         </div>
       )}
+      </AdvancedOnly>
     </div>
   );
 };

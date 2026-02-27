@@ -13,6 +13,8 @@ import CSVImportModal from '../../components/dashboard/CSVImportModal';
 import LeadColorDot from '../../components/leads/LeadColorDot';
 import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, resolveLeadColor, getColorClasses, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 
 // ── Helpers ──
 const formatRelativeTime = (dateStr: string): string => {
@@ -943,91 +945,91 @@ const LeadManagement: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
       {/* ── Header ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-2 text-sm text-slate-400">
-          <span className="font-bold text-slate-800 text-2xl font-heading">Leads</span>
-          <span className="text-slate-300">/</span>
-          <span>All Leads</span>
-          <span className="ml-2 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[10px] font-bold uppercase tracking-widest">
-            {filteredLeads.length.toLocaleString()} total
-          </span>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => navigate('/portal/leads/apollo')}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
-          >
-            <GlobeIcon className="w-4 h-4" />
-            <span>Apollo</span>
-          </button>
-          <button
-            onClick={() => setIsCSVOpen(true)}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
-          >
-            <DownloadIcon className="w-4 h-4" />
-            <span>Import</span>
-          </button>
-          <button
-            onClick={handleExportSelected}
-            disabled={selectedIds.size === 0}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <DownloadIcon className="w-4 h-4" />
-            <span>Export</span>
-          </button>
-          <button
-            data-guide="leads-add"
-            onClick={() => { setIsAddLeadOpen(true); setAddLeadError(''); }}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
-          >
-            <PlusIcon className="w-4 h-4" />
-            <span>Add Lead</span>
-          </button>
-          <div className="w-px h-6 bg-slate-200" />
-          <button
-            onClick={() => setShowPipelineAnalytics(prev => !prev)}
-            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-              showPipelineAnalytics
-                ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200'
-                : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'
-            }`}
-          >
-            <TrendUpIcon className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Pipeline</span>
-          </button>
-          <button
-            onClick={() => setShowEngagementMetrics(prev => !prev)}
-            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-              showEngagementMetrics
-                ? 'bg-rose-600 text-white shadow-lg shadow-rose-200'
-                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-            }`}
-          >
-            <BoltIcon className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Engagement</span>
-          </button>
-          <button
-            onClick={() => setShowScoreIntelligence(prev => !prev)}
-            className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-              showScoreIntelligence
-                ? 'bg-amber-600 text-white shadow-lg shadow-amber-200'
-                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-            }`}
-          >
-            <BrainIcon className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Scores</span>
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all shadow-sm"
-            title="Keyboard Shortcuts (?)"
-          >
-            <KeyboardIcon className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Leads"
+        description={`${filteredLeads.length.toLocaleString()} total`}
+        actions={
+          <>
+            <button
+              onClick={() => navigate('/portal/leads/apollo')}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
+            >
+              <GlobeIcon className="w-4 h-4" />
+              <span>Apollo</span>
+            </button>
+            <button
+              onClick={() => setIsCSVOpen(true)}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
+            >
+              <DownloadIcon className="w-4 h-4" />
+              <span>Import</span>
+            </button>
+            <button
+              data-guide="leads-add"
+              onClick={() => { setIsAddLeadOpen(true); setAddLeadError(''); }}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
+            >
+              <PlusIcon className="w-4 h-4" />
+              <span>Add Lead</span>
+            </button>
+          </>
+        }
+        advancedActions={
+          <>
+            <button
+              onClick={handleExportSelected}
+              disabled={selectedIds.size === 0}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <DownloadIcon className="w-4 h-4" />
+              <span>Export</span>
+            </button>
+            <button
+              onClick={() => setShowPipelineAnalytics(prev => !prev)}
+              className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                showPipelineAnalytics
+                  ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200'
+                  : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'
+              }`}
+            >
+              <TrendUpIcon className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Pipeline</span>
+            </button>
+            <button
+              onClick={() => setShowEngagementMetrics(prev => !prev)}
+              className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                showEngagementMetrics
+                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-200'
+                  : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+              }`}
+            >
+              <BoltIcon className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Engagement</span>
+            </button>
+            <button
+              onClick={() => setShowScoreIntelligence(prev => !prev)}
+              className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                showScoreIntelligence
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-200'
+                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+              }`}
+            >
+              <BrainIcon className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Scores</span>
+            </button>
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all shadow-sm"
+              title="Keyboard Shortcuts (?)"
+            >
+              <KeyboardIcon className="w-4 h-4" />
+            </button>
+          </>
+        }
+      />
 
       {/* ── KPI Stats Banner ── */}
+      <AdvancedOnly>
       {!loading && allLeads.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
@@ -1052,7 +1054,10 @@ const LeadManagement: React.FC = () => {
         </div>
       )}
 
+      </AdvancedOnly>
+
       {/* ── AI Lead Health Summary ── */}
+      <AdvancedOnly>
       {!loading && allLeads.length >= 5 && (
         <div className="bg-gradient-to-r from-indigo-50 via-white to-violet-50 rounded-2xl border border-indigo-100 p-5">
           <div className="flex items-center space-x-2 mb-3">
@@ -1099,6 +1104,7 @@ const LeadManagement: React.FC = () => {
           </div>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ── Quick Insight Panel (after adding lead) ── */}
       {quickInsightLead && (
@@ -1242,6 +1248,7 @@ const LeadManagement: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6">
 
         {/* ── FILTER PANEL ── */}
+        <AdvancedOnly>
         <div className={`w-full shrink-0 space-y-5 transition-all duration-200 ${filtersCollapsed ? 'lg:w-auto' : 'lg:w-[25%]'}`} data-guide="leads-filters">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
             <div className="flex items-center justify-between mb-5">
@@ -1450,6 +1457,7 @@ const LeadManagement: React.FC = () => {
           </div>
 
         </div>
+        </AdvancedOnly>
 
         {/* ── LEAD LIST ── */}
         <div className="flex-1 min-w-0 space-y-4">
@@ -2387,6 +2395,7 @@ const LeadManagement: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* ANALYTICS PANELS                                             */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
 
       {/* Pipeline Analytics Panel */}
       {showPipelineAnalytics && (
@@ -2823,6 +2832,7 @@ const LeadManagement: React.FC = () => {
           </div>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* Portal: Inline Status Dropdown */}
       {inlineStatusId && inlineStatusPos && createPortal(

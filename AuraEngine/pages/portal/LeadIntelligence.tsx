@@ -7,6 +7,8 @@ import type { BatchEmailSummary } from '../../lib/emailTracking';
 import type { EmailEngagement, AIInsight } from '../../types';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import { getWorkflowStats } from '../../lib/automationEngine';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 import {
   BrainIcon, TargetIcon, FlameIcon, SparklesIcon, TrendUpIcon, TrendDownIcon,
   RefreshIcon, FilterIcon, DownloadIcon, SlidersIcon, MailIcon, GlobeIcon,
@@ -492,51 +494,45 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* HEADER                                                       */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
-            <BrainIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-              Lead Intelligence Dashboard
-            </h1>
-            <p className="text-slate-400 text-xs mt-0.5">
-              AI-powered lead scoring, analysis &amp; predictions &middot; {leads.length} leads tracked
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          {compareMode && (
-            <span className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-xl text-xs font-bold">
-              <UsersIcon className="w-3.5 h-3.5" />
-              <span>Compare Mode</span>
-            </span>
-          )}
-          <button
-            onClick={() => setFilterBucket(filterBucket === 'all' ? 'hot' : 'all')}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <FilterIcon className="w-4 h-4 text-slate-400" />
-            <span>{filterBucket === 'all' ? 'All Leads' : `${filterBucket.charAt(0).toUpperCase() + filterBucket.slice(1)} Only`}</span>
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="flex items-center space-x-1.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <KeyboardIcon className="w-4 h-4 text-slate-400" />
-            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-400">?</kbd>
-          </button>
-          <button
-            onClick={handleExportAnalysis}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-          >
-            <DownloadIcon className="w-4 h-4" />
-            <span>Export</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Lead Insights"
+        description={`AI-powered lead scoring, analysis & predictions \u00b7 ${leads.length} leads tracked`}
+        actions={
+          <>
+            <button
+              onClick={() => setFilterBucket(filterBucket === 'all' ? 'hot' : 'all')}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <FilterIcon className="w-4 h-4 text-slate-400" />
+              <span>{filterBucket === 'all' ? 'All Leads' : `${filterBucket.charAt(0).toUpperCase() + filterBucket.slice(1)} Only`}</span>
+            </button>
+            <button
+              onClick={handleExportAnalysis}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+            >
+              <DownloadIcon className="w-4 h-4" />
+              <span>Export</span>
+            </button>
+          </>
+        }
+        advancedActions={
+          <>
+            {compareMode && (
+              <span className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-xl text-xs font-bold">
+                <UsersIcon className="w-3.5 h-3.5" />
+                <span>Compare Mode</span>
+              </span>
+            )}
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="flex items-center space-x-1.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <KeyboardIcon className="w-4 h-4 text-slate-400" />
+              <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-bold text-slate-400">?</kbd>
+            </button>
+          </>
+        }
+      />
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* KPI STATS ROW                                                */}
@@ -575,6 +571,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
       })()}
 
       {/* ── Workflow Stats Bar ── */}
+      <AdvancedOnly>
       {workflowStats && workflowStats.totalWorkflows > 0 && (
         <div className="flex items-center space-x-6 px-5 py-3 bg-slate-50 rounded-xl border border-slate-100">
           <div className="flex items-center space-x-1.5 text-xs text-slate-600">
@@ -594,6 +591,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
           </div>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* AI RECOMMENDATIONS                                           */}
@@ -644,6 +642,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* PORTFOLIO SCORE TREND                                        */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       {leads.length > 0 && (
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -678,6 +677,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
           </ResponsiveContainer>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* SCORE DISTRIBUTION                                           */}
@@ -766,6 +766,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* SCORING FACTORS TABLE                                        */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
           <h3 className="font-bold text-slate-800 font-heading flex items-center space-x-2">
@@ -853,6 +854,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
           </table>
         </div>
       </div>
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* SCORE LEADERBOARD (Top Movers)                               */}
@@ -1466,6 +1468,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
         </div>
       </div>
 
+      <AdvancedOnly>
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* MODEL ADJUSTMENT PANEL (Slide-down)                          */}
       {/* ══════════════════════════════════════════════════════════════ */}
@@ -1577,6 +1580,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
           </div>
         </div>
       )}
+      </AdvancedOnly>
     </div>
   );
 };

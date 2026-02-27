@@ -26,6 +26,7 @@ import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import LeadSegmentation from '../../components/dashboard/LeadSegmentation';
 import EmailPerformanceCard from '../../components/dashboard/EmailPerformanceCard';
 import ActivationChecklist from '../../components/dashboard/ActivationChecklist';
+import { AdvancedOnly } from '../../components/ui-mode';
 
 const LISTS_STORAGE_KEY = 'scaliyo_manual_lists';
 
@@ -826,6 +827,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  DASHBOARD ACTION BAR                                         */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       <div data-guide="dashboard-actions" className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <button onClick={() => setShowPipelineHealth(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
@@ -866,6 +868,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
           </button>
         </div>
       </div>
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/*  QUICK ACTIONS ROW                                            */}
@@ -1286,6 +1289,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         onImportComplete={handleImportComplete}
       />
 
+      <AdvancedOnly>
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ─── Pipeline Health Dashboard Sidebar ─── */}
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -2224,6 +2228,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
           </div>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* Activation Checklist (post-onboarding) */}
       <ActivationChecklist user={user} />

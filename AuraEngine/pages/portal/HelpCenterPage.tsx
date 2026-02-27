@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User } from '../../types';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 import {
   HelpCircleIcon, BookOpenIcon, KeyboardIcon, LightBulbIcon, AcademicCapIcon,
   ShieldIcon, SparklesIcon, CheckIcon, ClockIcon, MailIcon, PhoneIcon,
@@ -533,42 +535,42 @@ const HelpCenterPage: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">Help Center</h1>
-          <p className="text-slate-500 mt-1 text-sm">Troubleshooting, guides, shortcuts, and expert tips to maximize your Scaliyo experience</p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button onClick={() => setShowSystemStatus(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
-            <ActivityIcon className="w-3.5 h-3.5" />
-            <span>System Status</span>
-          </button>
-          <button onClick={() => setShowKnowledgeBase(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
-            <BookOpenIcon className="w-3.5 h-3.5" />
-            <span>Knowledge Base</span>
-          </button>
-          <button onClick={() => setShowChangelog(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
-            <LayersIcon className="w-3.5 h-3.5" />
-            <span>Updates</span>
-          </button>
-          <button onClick={() => setShowSupportMetrics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showSupportMetrics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
-            <ChartIcon className="w-3.5 h-3.5" />
-            <span>Support Metrics</span>
-          </button>
-          <button onClick={() => setShowLearningPath(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showLearningPath ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
-            <AcademicCapIcon className="w-3.5 h-3.5" />
-            <span>Learning Path</span>
-          </button>
-          <button onClick={() => setShowFAQAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showFAQAnalytics ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
-            <FilterIcon className="w-3.5 h-3.5" />
-            <span>FAQ Analytics</span>
-          </button>
-          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <span>?</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Help Center"
+        description="Troubleshooting, guides, shortcuts, and expert tips to maximize your Scaliyo experience"
+        advancedActions={
+          <>
+            <button onClick={() => setShowSystemStatus(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all">
+              <ActivityIcon className="w-3.5 h-3.5" />
+              <span>System Status</span>
+            </button>
+            <button onClick={() => setShowKnowledgeBase(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
+              <BookOpenIcon className="w-3.5 h-3.5" />
+              <span>Knowledge Base</span>
+            </button>
+            <button onClick={() => setShowChangelog(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition-all">
+              <LayersIcon className="w-3.5 h-3.5" />
+              <span>Updates</span>
+            </button>
+            <button onClick={() => setShowSupportMetrics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showSupportMetrics ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+              <ChartIcon className="w-3.5 h-3.5" />
+              <span>Support Metrics</span>
+            </button>
+            <button onClick={() => setShowLearningPath(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showLearningPath ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
+              <AcademicCapIcon className="w-3.5 h-3.5" />
+              <span>Learning Path</span>
+            </button>
+            <button onClick={() => setShowFAQAnalytics(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showFAQAnalytics ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+              <FilterIcon className="w-3.5 h-3.5" />
+              <span>FAQ Analytics</span>
+            </button>
+            <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+              <KeyboardIcon className="w-3.5 h-3.5" />
+              <span>?</span>
+            </button>
+          </>
+        }
+      />
 
       {/* ─── KPI Stats Banner ─── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
