@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import PrefetchLink from '../PrefetchLink';
 import { track } from '../../lib/analytics';
+import { VoiceAgent } from '../voice';
 
 /** Pages that have a white/light background at the top. */
 const LIGHT_BG_PAGES = ['/features', '/blog', '/about', '/contact'];
@@ -226,6 +227,8 @@ const MarketingLayout: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      <VoiceAgent />
     </div>
   );
 };

@@ -13,7 +13,6 @@ import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
 import { NAV_CONFIG, NavConfigItem } from '../../lib/navConfig';
 import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
-import { VoiceAgent } from '../voice';
 
 interface ClientLayoutProps {
   user: User;
@@ -287,7 +286,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       {/* Global Overlays */}
       <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
       <DailyBriefing user={user} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
-      <VoiceAgent user={user} />
     </>
   );
 };

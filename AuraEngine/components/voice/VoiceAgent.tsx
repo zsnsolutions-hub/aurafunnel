@@ -16,7 +16,7 @@ import VoiceToast from './VoiceToast';
 import type { User } from '../../types';
 
 interface VoiceAgentProps {
-  user: User;
+  user?: User | null;
 }
 
 const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
@@ -85,7 +85,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
           uiMode: modeRef.current,
           pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
           isAuthenticated: true,
-          userName: user.name || 'User',
+          userName: user?.name || 'Visitor',
         });
       },
     },
@@ -98,7 +98,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
         currentRoute: locationRef.current.pathname,
         uiMode: modeRef.current,
         pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
-        userName: user.name || 'User',
+        userName: user?.name || 'Visitor',
       });
       conversation.sendContextualUpdate(ctx);
     },
