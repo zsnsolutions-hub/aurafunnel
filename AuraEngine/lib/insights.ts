@@ -35,6 +35,7 @@ export const generateProgrammaticInsights = (leads: Lead[]): AIInsight[] => {
   // 2. Company Pattern Analysis
   const companyMap: Record<string, Lead[]> = {};
   leads.forEach(l => {
+    if (!l.company) return;
     const key = l.company.toLowerCase().trim();
     if (!companyMap[key]) companyMap[key] = [];
     companyMap[key].push(l);
@@ -165,7 +166,7 @@ export const generateLeadInsights = (lead: Lead, allLeads: Lead[]): AIInsight[] 
   }
 
   // 2. Company analysis
-  const sameCompany = allLeads.filter(l => l.company.toLowerCase() === lead.company.toLowerCase() && l.id !== lead.id);
+  const sameCompany = lead.company ? allLeads.filter(l => l.company && l.company.toLowerCase() === lead.company.toLowerCase() && l.id !== lead.id) : [];
   if (sameCompany.length > 0) {
     insights.push({
       id: `${lead.id}-company`,

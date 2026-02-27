@@ -63,17 +63,23 @@ const TAG_BADGE: Record<string, string> = {
 };
 
 // ── Derived / simulated data from lead fields ──
-const deriveCompanyDetails = (lead: Lead) => ({
-  industry: lead.industry || (lead.company.length > 10 ? 'SaaS / Technology' : 'Technology'),
-  size: lead.company_size || `${Math.max(50, Math.round(lead.score * 3))} employees`,
-  location: lead.location || (lead.score > 70 ? 'San Francisco, CA' : 'New York, NY'),
-  website: `${lead.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
-});
+const deriveCompanyDetails = (lead: Lead) => {
+  const company = lead.company || '';
+  return {
+    industry: lead.industry || (company.length > 10 ? 'SaaS / Technology' : 'Technology'),
+    size: lead.company_size || `${Math.max(50, Math.round(lead.score * 3))} employees`,
+    location: lead.location || (lead.score > 70 ? 'San Francisco, CA' : 'New York, NY'),
+    website: company ? `${company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'N/A',
+  };
+};
 
-const deriveContactInfo = (lead: Lead) => ({
-  phone: lead.primary_phone || `(555) ${String(Math.abs(lead.name.charCodeAt(0) * 7 + 100)).slice(0, 3)}-${String(Math.abs(lead.name.charCodeAt(1) * 13 + 1000)).slice(0, 4)}`,
-  linkedin: lead.linkedin_url || `linkedin.com/in/${lead.name.toLowerCase().replace(/\s+/g, '')}`,
-});
+const deriveContactInfo = (lead: Lead) => {
+  const name = lead.name || 'Unknown';
+  return {
+    phone: lead.primary_phone || `(555) ${String(Math.abs(name.charCodeAt(0) * 7 + 100)).slice(0, 3)}-${String(Math.abs((name.charCodeAt(1) || 0) * 13 + 1000)).slice(0, 4)}`,
+    linkedin: lead.linkedin_url || `linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '')}`,
+  };
+};
 
 const derivePredictiveAnalysis = (lead: Lead) => ({
   conversionProb: Math.min(99, lead.score + Math.floor(Math.random() * 8)),
