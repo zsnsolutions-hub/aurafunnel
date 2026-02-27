@@ -55,7 +55,7 @@ const colorMap: Record<string, { icon: string; border: string; glow: string }> =
 
 const Features: React.FC = () => (
   <section id="features" className="py-24 lg:py-32">
-    <div className="max-w-[1200px] mx-auto px-6">
+    <div className="max-w-[1400px] mx-auto px-6">
       <Reveal>
         <div className="text-center mb-16">
           <p className="text-xs font-bold text-teal-400 uppercase tracking-[0.25em] mb-4">

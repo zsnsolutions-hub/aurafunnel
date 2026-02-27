@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => {
       build: {
         target: 'es2020',
         minify: 'esbuild',
+        sourcemap: false,
         cssCodeSplit: true,
         rollupOptions: {
           output: {
@@ -36,6 +37,7 @@ export default defineConfig(({ mode }) => {
               'vendor-ai': ['@google/genai'],
               'vendor-markdown': ['react-markdown', 'remark-gfm'],
               'vendor-dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+              'vendor-voice': ['@elevenlabs/react'],
             },
           },
         },

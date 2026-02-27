@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import PrefetchLink from '../PrefetchLink';
 import { track } from '../../lib/analytics';
-import { VoiceAgent } from '../voice';
+import AnnouncementBar from '../marketing/AnnouncementBar';
+import VoiceAgentLauncher from '../voice/VoiceAgentLauncher';
 
 /** Pages that have a white/light background at the top. */
 const LIGHT_BG_PAGES = ['/features', '/blog', '/about', '/contact'];
@@ -30,12 +31,14 @@ const MarketingLayout: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-[#0A1628]">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:bg-teal-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-bold">Skip to main content</a>
 
+      <AnnouncementBar />
+
       {/* ── Sticky Nav ── */}
       <nav
-        className={`fixed top-0 left-0 right-0 z-50 px-6 transition-all duration-300 ${scrolled ? 'py-2' : 'py-4'}`}
+        className={`fixed top-0 left-0 right-0 z-50 px-6 transition-all duration-300 ${scrolled ? 'py-2 mt-0' : 'py-4 mt-10'}`}
         aria-label="Main navigation"
       >
-        <div className="max-w-[1200px] mx-auto">
+        <div className="max-w-[1400px] mx-auto">
           <div className={`border rounded-2xl px-6 flex items-center justify-between transition-all duration-300 ${
             scrolled
               ? 'h-14 bg-[#0A1628]/90 backdrop-blur-xl border-slate-700/50 shadow-lg shadow-black/20'
@@ -62,6 +65,12 @@ const MarketingLayout: React.FC = () => {
                   <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-teal-500 transition-all duration-300 group-hover:w-full" />
                 </PrefetchLink>
               ))}
+              <span className={`hidden xl:inline-flex items-center gap-1.5 text-xs font-medium ${
+                isLightPage && !scrolled ? 'text-slate-500' : 'text-slate-500'
+              }`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Trusted by 2,400+ teams
+              </span>
             </div>
 
             <div className="flex items-center space-x-3">
@@ -127,7 +136,7 @@ const MarketingLayout: React.FC = () => {
 
       {/* ── Footer (Dark) ── */}
       <footer className="bg-[#070E1A] border-t border-slate-800/60 py-20" role="contentinfo">
-        <div className="max-w-[1200px] mx-auto px-6">
+        <div className="max-w-[1400px] mx-auto px-6">
           {/* Tagline */}
           <div className="text-center mb-16">
             <p className="text-2xl md:text-3xl font-black text-white font-heading tracking-tight">
@@ -228,7 +237,7 @@ const MarketingLayout: React.FC = () => {
         </div>
       </footer>
 
-      <VoiceAgent />
+      <VoiceAgentLauncher />
     </div>
   );
 };

@@ -11,7 +11,7 @@
       "routes": {
         "home":     { "path": "/",         "label": "Home",             "description": "Landing page with hero, features, pricing, testimonials, FAQ" },
         "features": { "path": "/features", "label": "Features",         "description": "Detailed breakdown of all platform capabilities" },
-        "pricing":  { "path": "/pricing",  "label": "Pricing",          "description": "Full pricing comparison — Starter $59, Growth $149, Business $349" },
+        "pricing":  { "path": "/pricing",  "label": "Pricing",          "description": "Full pricing comparison — Launch $59, Scale $149, Accelerate $349" },
         "blog":     { "path": "/blog",     "label": "Blog",             "description": "Company blog with articles on B2B sales and AI" },
         "about":    { "path": "/about",    "label": "About Us",         "description": "Company mission, vision, and team" },
         "contact":  { "path": "/contact",  "label": "Contact",          "description": "Contact form to reach the team" },
@@ -26,15 +26,16 @@
         "section_key": "string — one of the keys below"
       },
       "sections": {
-        "hero":             { "anchor": "hero",         "label": "Hero",          "heading": "Find, Engage & Close Your Best Leads 10x Faster with AI" },
-        "logos":            { "anchor": "logos",         "label": "Trusted By",    "heading": "Trusted by 2,400+ revenue teams worldwide" },
-        "problem":          { "anchor": "problem",       "label": "The Problem",   "heading": "Your pipeline is leaking revenue" },
-        "features_section": { "anchor": "features",      "label": "Features",      "heading": "Everything you need to close more deals" },
-        "how_it_works":     { "anchor": "how-it-works",  "label": "How It Works",  "heading": "Three steps to predictable revenue" },
-        "testimonials":     { "anchor": "testimonials",  "label": "Testimonials",  "heading": "Loved by revenue teams" },
-        "pricing_section":  { "anchor": "pricing",       "label": "Pricing",       "heading": "Simple pricing. Powerful results." },
-        "faq":              { "anchor": "faq",            "label": "FAQ",           "heading": "Frequently asked questions" },
-        "cta":              { "anchor": "cta",            "label": "Get Started",   "heading": "Stop losing deals you should be winning" }
+        "hero":             { "anchor": "hero",           "label": "Hero",          "heading": "Stop Guessing Who Will Buy. Let AI Tell You." },
+        "logos":            { "anchor": "logos",           "label": "Trusted By",    "heading": "Trusted by 2,400+ revenue teams" },
+        "problem":          { "anchor": "problem",        "label": "The Problem",   "heading": "Your pipeline isn't broken. Your visibility is." },
+        "how_it_works":     { "anchor": "how-it-works",   "label": "How It Works",  "heading": "From zero to pipeline in three moves" },
+        "platform":         { "anchor": "platform",       "label": "Platform",      "heading": "One AI Engine. Find. Engage. Close." },
+        "ai_assistant":     { "anchor": "ai-assistant",   "label": "AI Assistant",  "heading": "Your AI Revenue Strategist" },
+        "testimonials":     { "anchor": "testimonials",   "label": "Results",       "heading": "Revenue Teams Move Faster With Scaliyo" },
+        "pricing_section":  { "anchor": "pricing",        "label": "Pricing",       "heading": "Invest in Revenue, Not Overhead" },
+        "faq":              { "anchor": "faq",            "label": "FAQ",           "heading": "Frequently Asked Questions" },
+        "cta":              { "anchor": "cta",            "label": "Get Started",   "heading": "Your competitors already use AI. Will you?" }
       }
     },
 
@@ -45,21 +46,21 @@
   },
 
   "example_intents": [
-    { "user_says": "Show me pricing",              "tool": "navigate",          "params": { "route_key": "pricing" } },
-    { "user_says": "How much does it cost?",        "tool": "scroll_to_section", "params": { "section_key": "pricing_section" } },
-    { "user_says": "What features do you offer?",   "tool": "navigate",          "params": { "route_key": "features" } },
-    { "user_says": "How does it work?",             "tool": "scroll_to_section", "params": { "section_key": "how_it_works" } },
-    { "user_says": "Start a free trial",            "tool": "navigate",          "params": { "route_key": "signup" } },
-    { "user_says": "I want to sign up",             "tool": "navigate",          "params": { "route_key": "signup" } },
-    { "user_says": "Contact sales",                 "tool": "navigate",          "params": { "route_key": "contact" } },
-    { "user_says": "Read the blog",                 "tool": "navigate",          "params": { "route_key": "blog" } },
-    { "user_says": "Tell me about your company",    "tool": "navigate",          "params": { "route_key": "about" } },
-    { "user_says": "Show customer reviews",         "tool": "scroll_to_section", "params": { "section_key": "testimonials" } },
-    { "user_says": "Do you have a FAQ?",            "tool": "scroll_to_section", "params": { "section_key": "faq" } },
-    { "user_says": "Go back to the top",            "tool": "scroll_to_section", "params": { "section_key": "hero" } },
-    { "user_says": "Take me home",                  "tool": "navigate",          "params": { "route_key": "home" } },
-    { "user_says": "I already have an account",     "tool": "navigate",          "params": { "route_key": "login" } },
-    { "user_says": "What problem does Scaliyo solve?", "tool": "scroll_to_section", "params": { "section_key": "problem" } },
-    { "user_says": "Who uses Scaliyo?",             "tool": "scroll_to_section", "params": { "section_key": "logos" } }
+    { "user_says": "Show me pricing",                    "tool": "navigate",          "params": { "route_key": "pricing" } },
+    { "user_says": "How much does it cost?",              "tool": "scroll_to_section", "params": { "section_key": "pricing_section" } },
+    { "user_says": "What features do you offer?",         "tool": "navigate",          "params": { "route_key": "features" } },
+    { "user_says": "How does it work?",                   "tool": "scroll_to_section", "params": { "section_key": "how_it_works" } },
+    { "user_says": "Start a free trial",                  "tool": "navigate",          "params": { "route_key": "signup" } },
+    { "user_says": "Contact sales",                       "tool": "navigate",          "params": { "route_key": "contact" } },
+    { "user_says": "Read the blog",                       "tool": "navigate",          "params": { "route_key": "blog" } },
+    { "user_says": "Tell me about your company",          "tool": "navigate",          "params": { "route_key": "about" } },
+    { "user_says": "Show customer results",               "tool": "scroll_to_section", "params": { "section_key": "testimonials" } },
+    { "user_says": "Do you have a FAQ?",                  "tool": "scroll_to_section", "params": { "section_key": "faq" } },
+    { "user_says": "Go back to the top",                  "tool": "scroll_to_section", "params": { "section_key": "hero" } },
+    { "user_says": "Take me home",                        "tool": "navigate",          "params": { "route_key": "home" } },
+    { "user_says": "I already have an account",           "tool": "navigate",          "params": { "route_key": "login" } },
+    { "user_says": "What problem does Scaliyo solve?",    "tool": "scroll_to_section", "params": { "section_key": "problem" } },
+    { "user_says": "Show me the AI assistant",            "tool": "scroll_to_section", "params": { "section_key": "ai_assistant" } },
+    { "user_says": "What does the platform do?",          "tool": "scroll_to_section", "params": { "section_key": "platform" } }
   ]
 }

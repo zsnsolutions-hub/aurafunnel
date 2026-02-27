@@ -9,10 +9,10 @@ import { SupportBanner } from './components/support/SupportBanner';
 import { UIModeProvider } from './components/ui-mode';
 import { useIdlePrefetch } from './hooks/useIdlePrefetch';
 
-// Layouts — kept eager since they wrap all child routes
-import MarketingLayout from './components/layout/MarketingLayout';
-import AdminLayout from './components/layout/AdminLayout';
-import ClientLayout from './components/layout/ClientLayout';
+// Layouts — lazy-loaded to keep main bundle lean
+const MarketingLayout = lazy(() => import('./components/layout/MarketingLayout'));
+const AdminLayout = lazy(() => import('./components/layout/AdminLayout'));
+const ClientLayout = lazy(() => import('./components/layout/ClientLayout'));
 
 // ─── Lazy-loaded pages ───
 
