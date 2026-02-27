@@ -11,6 +11,8 @@ import {
   CogIcon, EyeIcon, TrendUpIcon, TrendDownIcon, ActivityIcon, AlertTriangleIcon, BrainIcon,
   KeyboardIcon, StarIcon, FilterIcon, LayersIcon, PieChartIcon, RocketIcon, DocumentIcon
 } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 
 interface LayoutContext {
   user: User;
@@ -1004,59 +1006,10 @@ const StrategyHub: React.FC = () => {
           {/* ══════════════════════════════════════════════════════════════ */}
           {/* HEADER                                                        */}
           {/* ══════════════════════════════════════════════════════════════ */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-                Strategy Hub
-                {isTeamMode && (
-                  <span className="ml-2 px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold align-middle">{team!.name}</span>
-                )}
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">{isTeamMode ? 'Team pipeline strategy and collaboration' : 'AI-powered pipeline strategy and personal action management'}</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setShowPerformance(prev => !prev)}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPerformance ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-              >
-                <StarIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Top Leads</span>
-              </button>
-              <button
-                onClick={() => setShowWorkload(prev => !prev)}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showWorkload ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-              >
-                <LayersIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Pipeline</span>
-              </button>
-              <button
-                onClick={() => setShowTeamVelocity(prev => !prev)}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTeamVelocity ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-              >
-                <RocketIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Velocity</span>
-              </button>
-              <button
-                onClick={() => setShowCommunicationHub(prev => !prev)}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCommunicationHub ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-              >
-                <MailIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Activity</span>
-              </button>
-              <button
-                onClick={() => setShowRiskAssessment(prev => !prev)}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showRiskAssessment ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-              >
-                <ShieldIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Risk</span>
-              </button>
-              <button
-                onClick={() => setShowShortcuts(true)}
-                className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
-              >
-                <KeyboardIcon className="w-3.5 h-3.5" />
-                <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
-              </button>
+          <PageHeader
+            title="Tasks"
+            description={isTeamMode ? 'Team pipeline strategy and collaboration' : 'AI-powered pipeline strategy and personal action management'}
+            actions={
               <button
                 onClick={() => setShowNewTask(true)}
                 className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
@@ -1064,8 +1017,54 @@ const StrategyHub: React.FC = () => {
                 <PlusIcon className="w-4 h-4" />
                 <span>New Task</span>
               </button>
-            </div>
-          </div>
+            }
+            advancedActions={
+              <>
+                <button
+                  onClick={() => setShowPerformance(prev => !prev)}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPerformance ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  <StarIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Top Leads</span>
+                </button>
+                <button
+                  onClick={() => setShowWorkload(prev => !prev)}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showWorkload ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  <LayersIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Pipeline</span>
+                </button>
+                <button
+                  onClick={() => setShowTeamVelocity(prev => !prev)}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showTeamVelocity ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  <RocketIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Velocity</span>
+                </button>
+                <button
+                  onClick={() => setShowCommunicationHub(prev => !prev)}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCommunicationHub ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  <MailIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Activity</span>
+                </button>
+                <button
+                  onClick={() => setShowRiskAssessment(prev => !prev)}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showRiskAssessment ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  <ShieldIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Risk</span>
+                </button>
+                <button
+                  onClick={() => setShowShortcuts(true)}
+                  className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+                >
+                  <KeyboardIcon className="w-3.5 h-3.5" />
+                  <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
+                </button>
+              </>
+            }
+          />
 
           {/* ══════════════════════════════════════════════════════════════ */}
           {/* KPI STATS                                                     */}
@@ -1930,6 +1929,7 @@ const StrategyHub: React.FC = () => {
           {/* ══════════════════════════════════════════════════════════════ */}
           {/* TOP LEADS BY SCORE SIDEBAR                                   */}
           {/* ══════════════════════════════════════════════════════════════ */}
+          <AdvancedOnly>
           {showPerformance && (
             <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowPerformance(false)}>
               <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm" />
@@ -2432,6 +2432,7 @@ const StrategyHub: React.FC = () => {
               </div>
             </div>
           )}
+          </AdvancedOnly>
         </>
       )}
     </div>

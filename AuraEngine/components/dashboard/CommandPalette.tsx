@@ -7,6 +7,7 @@ import {
   BrainIcon, MessageIcon, SlidersIcon, PlugIcon, PlusIcon, ChartIcon,
   MailIcon, DownloadIcon, RefreshIcon, KeyIcon, FilterIcon, SendIcon, CalendarIcon
 } from '../Icons';
+import { useUIMode } from '../ui-mode/UIModeProvider';
 
 interface CommandPaletteProps {
   user: User;
@@ -18,7 +19,7 @@ interface CommandItem {
   id: string;
   label: string;
   description: string;
-  category: 'navigation' | 'action' | 'shortcut';
+  category: 'navigation' | 'action' | 'settings' | 'shortcut';
   icon: React.ReactNode;
   shortcut?: string;
   action: () => void;
@@ -26,6 +27,7 @@ interface CommandItem {
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) => {
   const navigate = useNavigate();
+  const { isSimplified, toggle: toggleUIMode } = useUIMode();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +61,9 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
     { id: 'act-social-post', label: 'Schedule Social Post', description: 'Compose and schedule a social media post', category: 'action', icon: <CalendarIcon className="w-4 h-4" />, action: () => navigate('/portal/social-scheduler') },
     { id: 'act-import', label: 'Import Leads (CSV)', description: 'Bulk import leads from file', category: 'action', icon: <DownloadIcon className="w-4 h-4" />, action: () => navigate('/portal/leads') },
     { id: 'act-train', label: 'Open Prompt Studio', description: 'Customize AI prompts and templates', category: 'action', icon: <RefreshIcon className="w-4 h-4" />, action: () => navigate('/portal/model-training') },
-  ], [navigate]);
+    // Settings
+    { id: 'set-toggle-mode', label: `Switch to ${isSimplified ? 'Advanced' : 'Simplified'} Mode`, description: `Currently in ${isSimplified ? 'simplified' : 'advanced'} mode`, category: 'settings', icon: <SlidersIcon className="w-4 h-4" />, shortcut: 'Ctrl+Shift+S', action: () => { toggleUIMode(); onClose(); } },
+  ], [navigate, isSimplified, toggleUIMode, onClose]);
 
   const filteredCommands = useMemo(() => {
     if (!query.trim()) return commands;
@@ -125,6 +129,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ user, open, onClose }) 
   const categoryLabels: Record<string, string> = {
     navigation: 'Navigate To',
     action: 'Quick Actions',
+    settings: 'Settings',
     shortcut: 'Shortcuts',
   };
 

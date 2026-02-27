@@ -31,7 +31,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { integrations: integrationStatuses } = useIntegrations();
   const activeIntegrationCount = integrationStatuses.filter(i => i.status === 'connected').length;
-  const { isSimplified } = useUIMode();
+  const { isSimplified, toggle: toggleUIMode } = useUIMode();
 
   const navItems = useMemo(() => {
     function toSidebarItem(cfg: NavConfigItem): SidebarNavItem {
@@ -119,6 +119,13 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
         return;
       }
 
+      // Ctrl+Shift+S → Toggle UI Mode
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        toggleUIMode();
+        return;
+      }
+
       // / → Search (open command palette) - only when not in input
       if (e.key === '/' && !isInput && !commandPaletteOpen) {
         e.preventDefault();
@@ -180,7 +187,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       window.removeEventListener('keydown', handleKeyDown);
       if (gTimerRef.current) clearTimeout(gTimerRef.current);
     };
-  }, [navigate, commandPaletteOpen]);
+  }, [navigate, commandPaletteOpen, toggleUIMode]);
 
   return (
     <>

@@ -9,6 +9,7 @@ import {
   KeyboardIcon, PieChartIcon, UsersIcon, EditIcon, HelpCircleIcon, GlobeIcon,
   TrendDownIcon, ActivityIcon, FilterIcon, LayersIcon, StarIcon, BrainIcon, ArrowRightIcon
 } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
 
 interface LayoutContext {
   user: User;
@@ -1432,35 +1433,30 @@ const UserManualPage: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
-            <BookOpenIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tight">User Manual</h1>
-            <p className="text-slate-500 text-sm">Scaliyo AI Platform \u2014 Complete Reference Guide</p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button onClick={() => setShowContentCoverage(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showContentCoverage ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
-            <PieChartIcon className="w-3.5 h-3.5" />
-            <span>Coverage</span>
-          </button>
-          <button onClick={() => setShowReadingProgress(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showReadingProgress ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
-            <ActivityIcon className="w-3.5 h-3.5" />
-            <span>Progress</span>
-          </button>
-          <button onClick={() => setShowPlatformIndex(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showPlatformIndex ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
-            <LayersIcon className="w-3.5 h-3.5" />
-            <span>Feature Index</span>
-          </button>
-          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <span>?</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="User Manual"
+        description="Scaliyo AI Platform — Complete Reference Guide"
+        advancedActions={
+          <>
+            <button onClick={() => setShowContentCoverage(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showContentCoverage ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-200' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+              <PieChartIcon className="w-3.5 h-3.5" />
+              <span>Coverage</span>
+            </button>
+            <button onClick={() => setShowReadingProgress(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showReadingProgress ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
+              <ActivityIcon className="w-3.5 h-3.5" />
+              <span>Progress</span>
+            </button>
+            <button onClick={() => setShowPlatformIndex(s => !s)} className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showPlatformIndex ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+              <LayersIcon className="w-3.5 h-3.5" />
+              <span>Feature Index</span>
+            </button>
+            <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+              <KeyboardIcon className="w-3.5 h-3.5" />
+              <span>?</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Section Navigation */}
       <div className="flex flex-wrap gap-1 bg-white rounded-2xl p-1.5 shadow-sm border border-slate-100">

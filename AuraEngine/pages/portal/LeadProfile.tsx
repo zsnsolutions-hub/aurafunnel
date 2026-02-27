@@ -18,6 +18,7 @@ import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow 
 import type { EmailEngagement } from '../../types';
 import EmailEngagementCard from '../../components/dashboard/EmailEngagementCard';
 import LeadInvoicesTab from '../../components/invoices/LeadInvoicesTab';
+import { AdvancedOnly } from '../../components/ui-mode';
 import CreateInvoiceDrawer from '../../components/invoices/CreateInvoiceDrawer';
 import LeadColorDot from '../../components/leads/LeadColorDot';
 import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
@@ -727,6 +728,7 @@ const LeadProfile: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <AdvancedOnly>
           <button
             onClick={() => setShowLeadHealth(prev => !prev)}
             className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
@@ -754,6 +756,7 @@ const LeadProfile: React.FC = () => {
             <BrainIcon className="w-3.5 h-3.5" />
             <span className="hidden lg:inline">Engagement</span>
           </button>
+          </AdvancedOnly>
           <button
             onClick={openEditDrawer}
             className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
@@ -1575,6 +1578,7 @@ const LeadProfile: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* ANALYTICS PANELS                                             */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
 
       {/* Lead Health Panel */}
       {showLeadHealth && (
@@ -1943,6 +1947,7 @@ const LeadProfile: React.FC = () => {
           </div>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* Keyboard Shortcuts Modal */}
       {showShortcuts && (

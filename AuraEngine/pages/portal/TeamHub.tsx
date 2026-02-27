@@ -7,6 +7,7 @@ import {
   ClockIcon, PlusIcon, XIcon, MessageIcon,
   KeyboardIcon, DocumentIcon, EditIcon
 } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
 import { Filter, ArrowUpDown, BarChart3, X as LucideX, Palette, Trash2, UserPlus, ArrowRight, Signal, Search } from 'lucide-react';
 import { fetchBatchEmailSummary, BatchEmailSummary } from '../../lib/emailTracking';
 import KanbanBoard from '../../components/teamhub/KanbanBoard';
@@ -1230,24 +1231,10 @@ const TeamHub: React.FC = () => {
       {!loading && (
         <>
           {/* HEADER */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-                Team Hub
-                {isTeamMode && (
-                  <span className="ml-2 px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold align-middle">{team!.name}</span>
-                )}
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">{isTeamMode ? 'Collaborate on tasks with your team' : 'Manage your tasks and collaborate with teammates'}</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setShowShortcuts(true)}
-                className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
-              >
-                <KeyboardIcon className="w-3.5 h-3.5" />
-                <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
-              </button>
+          <PageHeader
+            title="Board View"
+            description={isTeamMode ? 'Collaborate on tasks with your team' : 'Manage your tasks and collaborate with teammates'}
+            actions={
               <button
                 onClick={() => setShowNewTask(true)}
                 className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
@@ -1255,8 +1242,17 @@ const TeamHub: React.FC = () => {
                 <PlusIcon className="w-4 h-4" />
                 <span>New Task</span>
               </button>
-            </div>
-          </div>
+            }
+            advancedActions={
+              <button
+                onClick={() => setShowShortcuts(true)}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+              >
+                <KeyboardIcon className="w-3.5 h-3.5" />
+                <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px]">?</kbd>
+              </button>
+            }
+          />
 
           {/* TAB NAVIGATION */}
           <div className="flex items-center space-x-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1">

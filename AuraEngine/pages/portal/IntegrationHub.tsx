@@ -21,6 +21,8 @@ import {
   TrendDownIcon, LayersIcon, TargetIcon, StarIcon, ArrowRightIcon,
   SparklesIcon
 } from '../../components/Icons';
+import { PageHeader } from '../../components/layout/PageHeader';
+import { AdvancedOnly } from '../../components/ui-mode';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell
@@ -1016,67 +1018,10 @@ const IntegrationHub: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* HEADER                                                       */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-violet-200">
-            <PlugIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 font-heading tracking-tight">
-              Integration Hub
-            </h1>
-            <p className="text-slate-400 text-xs mt-0.5">
-              Connected systems, APIs &amp; webhooks &middot; {integrations.filter(i => i.status === 'connected').length} active
-            </p>
-          </div>
-          <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
-            <KeyboardIcon className="w-3.5 h-3.5" />
-            <span>?</span>
-          </button>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setShowHealthDashboard(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showHealthDashboard ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <ActivityIcon className="w-3.5 h-3.5" />
-            <span>Health</span>
-          </button>
-          <button
-            onClick={() => setShowSyncHistory(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSyncHistory ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <ClockIcon className="w-3.5 h-3.5" />
-            <span>Sync History</span>
-          </button>
-          <button
-            onClick={() => setShowSecurityPanel(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSecurityPanel ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <ShieldIcon className="w-3.5 h-3.5" />
-            <span>Security</span>
-          </button>
-          <button
-            onClick={() => setShowPipelineAnalytics(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPipelineAnalytics ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <BoltIcon className="w-3.5 h-3.5" />
-            <span>Pipeline</span>
-          </button>
-          <button
-            onClick={() => setShowErrorDiagnostics(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showErrorDiagnostics ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <AlertTriangleIcon className="w-3.5 h-3.5" />
-            <span>Errors</span>
-          </button>
-          <button
-            onClick={() => setShowCostOptimization(s => !s)}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCostOptimization ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
-          >
-            <TargetIcon className="w-3.5 h-3.5" />
-            <span>Costs</span>
-          </button>
+      <PageHeader
+        title="Integrations"
+        description={`Connected systems, APIs & webhooks · ${integrations.filter(i => i.status === 'connected').length} active`}
+        actions={
           <button
             onClick={() => setShowAddIntegration(!showAddIntegration)}
             className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
@@ -1084,8 +1029,58 @@ const IntegrationHub: React.FC = () => {
             <PlusIcon className="w-4 h-4" />
             <span>Add New</span>
           </button>
-        </div>
-      </div>
+        }
+        advancedActions={
+          <>
+            <button
+              onClick={() => setShowHealthDashboard(s => !s)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showHealthDashboard ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+            >
+              <ActivityIcon className="w-3.5 h-3.5" />
+              <span>Health</span>
+            </button>
+            <button
+              onClick={() => setShowSyncHistory(s => !s)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSyncHistory ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+            >
+              <ClockIcon className="w-3.5 h-3.5" />
+              <span>Sync History</span>
+            </button>
+            <button
+              onClick={() => setShowSecurityPanel(s => !s)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showSecurityPanel ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+            >
+              <ShieldIcon className="w-3.5 h-3.5" />
+              <span>Security</span>
+            </button>
+            <button
+              onClick={() => setShowPipelineAnalytics(s => !s)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showPipelineAnalytics ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+            >
+              <BoltIcon className="w-3.5 h-3.5" />
+              <span>Pipeline</span>
+            </button>
+            <button
+              onClick={() => setShowErrorDiagnostics(s => !s)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showErrorDiagnostics ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+            >
+              <AlertTriangleIcon className="w-3.5 h-3.5" />
+              <span>Errors</span>
+            </button>
+            <button
+              onClick={() => setShowCostOptimization(s => !s)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${showCostOptimization ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} shadow-sm`}
+            >
+              <TargetIcon className="w-3.5 h-3.5" />
+              <span>Costs</span>
+            </button>
+            <button onClick={() => setShowShortcuts(true)} className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all">
+              <KeyboardIcon className="w-3.5 h-3.5" />
+              <span>?</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Add Integration Quick Panel */}
       {showAddIntegration && (
@@ -1698,6 +1693,7 @@ const IntegrationHub: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* INTEGRATION HEALTH DASHBOARD SIDEBAR                          */}
       {/* ══════════════════════════════════════════════════════════════ */}
+      <AdvancedOnly>
       {showHealthDashboard && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowHealthDashboard(false)} />
@@ -2625,6 +2621,7 @@ const IntegrationHub: React.FC = () => {
           </div>
         </div>
       )}
+      </AdvancedOnly>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* EMAIL PROVIDER SETUP MODAL                                    */}
