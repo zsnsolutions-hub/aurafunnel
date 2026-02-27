@@ -21,7 +21,7 @@ import { StatCard } from '../../components/dashboard/QuickStatsRow';
 import QuickActionsBar from '../../components/dashboard/QuickActionsBar';
 import AIInsightsPanel from '../../components/dashboard/AIInsightsPanel';
 import LiveActivityFeed from '../../components/dashboard/LiveActivityFeed';
-import CSVImportModal from '../../components/dashboard/CSVImportModal';
+import ImportLeadsWizard from '../../components/portal/ImportLeadsWizard';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import LeadSegmentation from '../../components/dashboard/LeadSegmentation';
 import EmailPerformanceCard from '../../components/dashboard/EmailPerformanceCard';
@@ -1281,11 +1281,12 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         </div>
       )}
 
-      {/* CSV Import Modal */}
-      <CSVImportModal
+      {/* Lead Import Wizard */}
+      <ImportLeadsWizard
         isOpen={isCSVOpen}
         onClose={() => setIsCSVOpen(false)}
         userId={user.id}
+        planName={resolvePlanName(user.plan || 'Starter')}
         onImportComplete={handleImportComplete}
       />
 

@@ -13,7 +13,7 @@ import AIInsightsPanel from '../../components/dashboard/AIInsightsPanel';
 import QuickActionsBar from '../../components/dashboard/QuickActionsBar';
 import LiveActivityFeed from '../../components/dashboard/LiveActivityFeed';
 import ConversionFunnel from '../../components/dashboard/ConversionFunnel';
-import CSVImportModal from '../../components/dashboard/CSVImportModal';
+import ImportLeadsWizard from '../../components/portal/ImportLeadsWizard';
 import { generateDashboardInsights } from '../../lib/gemini';
 
 interface RecentUser {
@@ -1619,11 +1619,12 @@ const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* CSV Import Modal */}
-      <CSVImportModal
+      {/* Lead Import Wizard */}
+      <ImportLeadsWizard
         isOpen={isCSVOpen}
         onClose={() => setIsCSVOpen(false)}
         userId={adminUserId}
+        planName="Scale"
         onImportComplete={fetchDashboardData}
       />
     </div>

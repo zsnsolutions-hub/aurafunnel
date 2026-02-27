@@ -160,6 +160,21 @@ export interface Lead {
   source?: string;
   created_at?: string;
   knowledgeBase?: KnowledgeBase;
+  first_name?: string;
+  last_name?: string;
+  primary_email?: string;
+  emails?: string[];
+  primary_phone?: string;
+  phones?: string[];
+  linkedin_url?: string;
+  location?: string;
+  title?: string;
+  industry?: string;
+  company_size?: string;
+  import_batch_id?: string;
+  imported_at?: string;
+  custom_fields?: Record<string, string>;
+  updated_at?: string;
 }
 
 export interface Plan {

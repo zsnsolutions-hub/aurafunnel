@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import { Lead } from '../types';
 
 // Columns actually used by the app — avoids SELECT *
-const LEAD_COLUMNS = 'id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase' as const;
+const LEAD_COLUMNS = 'id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase,first_name,last_name,primary_email,primary_phone,linkedin_url,location,title,source,import_batch_id,imported_at,custom_fields' as const;
 
 /** Fetches all leads for a client with only the columns used by the UI */
 export function useLeads(userId: string | undefined) {

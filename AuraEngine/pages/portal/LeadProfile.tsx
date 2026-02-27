@@ -64,15 +64,15 @@ const TAG_BADGE: Record<string, string> = {
 
 // ── Derived / simulated data from lead fields ──
 const deriveCompanyDetails = (lead: Lead) => ({
-  industry: lead.company.length > 10 ? 'SaaS / Technology' : 'Technology',
-  size: `${Math.max(50, Math.round(lead.score * 3))} employees`,
-  location: lead.score > 70 ? 'San Francisco, CA' : 'New York, NY',
+  industry: lead.industry || (lead.company.length > 10 ? 'SaaS / Technology' : 'Technology'),
+  size: lead.company_size || `${Math.max(50, Math.round(lead.score * 3))} employees`,
+  location: lead.location || (lead.score > 70 ? 'San Francisco, CA' : 'New York, NY'),
   website: `${lead.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
 });
 
 const deriveContactInfo = (lead: Lead) => ({
-  phone: `(555) ${String(Math.abs(lead.name.charCodeAt(0) * 7 + 100)).slice(0, 3)}-${String(Math.abs(lead.name.charCodeAt(1) * 13 + 1000)).slice(0, 4)}`,
-  linkedin: `linkedin.com/in/${lead.name.toLowerCase().replace(/\s+/g, '')}`,
+  phone: lead.primary_phone || `(555) ${String(Math.abs(lead.name.charCodeAt(0) * 7 + 100)).slice(0, 3)}-${String(Math.abs(lead.name.charCodeAt(1) * 13 + 1000)).slice(0, 4)}`,
+  linkedin: lead.linkedin_url || `linkedin.com/in/${lead.name.toLowerCase().replace(/\s+/g, '')}`,
 });
 
 const derivePredictiveAnalysis = (lead: Lead) => ({
@@ -253,7 +253,7 @@ const LeadProfile: React.FC = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('leads')
-      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase')
+      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase,first_name,last_name,primary_email,primary_phone,linkedin_url,location,title,source,industry,company_size,import_batch_id,imported_at,custom_fields,updated_at')
       .eq('id', leadId)
       .single();
     if (error) {
@@ -943,6 +943,16 @@ const LeadProfile: React.FC = () => {
                 <span className={`px-3 py-1 rounded-lg text-xs font-bold ${TAG_BADGE[tag] || 'bg-slate-100 text-slate-600'}`}>
                   {tag}
                 </span>
+                {lead.import_batch_id && (
+                  <span className="px-3 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-600">
+                    File Import
+                  </span>
+                )}
+                {lead.custom_fields?.needs_enrichment && (
+                  <span className="px-3 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-600">
+                    Needs Enrichment
+                  </span>
+                )}
               </div>
 
               {/* Details Grid */}
@@ -970,7 +980,7 @@ const LeadProfile: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Source</span>
-                      <span className="text-xs font-medium text-slate-700">Website Form</span>
+                      <span className="text-xs font-medium text-slate-700">{lead.source || 'Manual'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Added</span>
@@ -1024,6 +1034,26 @@ const LeadProfile: React.FC = () => {
                     ))}
                   </div>
                 </div>
+
+                {/* Custom Fields */}
+                {lead.custom_fields && Object.keys(lead.custom_fields).filter(k => k !== 'needs_enrichment').length > 0 && (
+                  <div className="md:col-span-2">
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center space-x-1.5">
+                      <TagIcon className="w-3.5 h-3.5" />
+                      <span>Custom Fields</span>
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {Object.entries(lead.custom_fields)
+                        .filter(([k]) => k !== 'needs_enrichment')
+                        .map(([key, value]) => (
+                          <div key={key}>
+                            <p className="text-[10px] text-slate-400 font-bold">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-xs font-medium text-slate-800 mt-0.5 truncate">{String(value)}</p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

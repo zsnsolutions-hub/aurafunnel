@@ -9,7 +9,8 @@ import type { BatchEmailSummary } from '../../lib/emailTracking';
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
-import CSVImportModal from '../../components/dashboard/CSVImportModal';
+import ImportLeadsWizard from '../../components/portal/ImportLeadsWizard';
+import { resolvePlanName } from '../../lib/credits';
 import LeadColorDot from '../../components/leads/LeadColorDot';
 import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, resolveLeadColor, getColorClasses, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
@@ -2037,11 +2038,12 @@ const LeadManagement: React.FC = () => {
         />
       )}
 
-      {/* CSV Import Modal */}
-      <CSVImportModal
+      {/* Lead Import Wizard */}
+      <ImportLeadsWizard
         isOpen={isCSVOpen}
         onClose={() => setIsCSVOpen(false)}
         userId={user.id}
+        planName={resolvePlanName(user.plan || 'Starter')}
         onImportComplete={fetchLeads}
       />
 
