@@ -108,8 +108,9 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
       setToast(null);
     },
 
-    onError: (message) => {
-      const errStr = typeof message === 'string' ? message : 'Connection error';
+    onError: (message, context) => {
+      console.error('[VoiceAgent] onError:', message, context);
+      const errStr = typeof message === 'string' ? message : String(message || 'Connection error');
       setError(errStr);
       track('voice_error', { message: errStr });
     },
@@ -163,9 +164,11 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
         agentId: AGENT_ID,
         connectionType: 'webrtc',
       } as Parameters<typeof conversation.startSession>[0]);
-    } catch (err) {
-      setError('Failed to connect');
-      track('voice_error', { message: 'session_start_failed' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[VoiceAgent] startSession failed:', err);
+      setError(msg || 'Failed to connect');
+      track('voice_error', { message: msg || 'session_start_failed' });
     }
   }, [status, conversation]);
 
@@ -224,7 +227,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
 
       {/* Error indicator */}
       {error && status === 'disconnected' && (
-        <div className="fixed bottom-[5.5rem] right-6 z-[60] text-xs text-red-500 bg-white border border-red-200 rounded-lg px-3 py-1.5 shadow-sm max-w-[200px] text-center">
+        <div className="fixed bottom-[5.5rem] right-6 z-[60] text-xs text-red-500 bg-white border border-red-200 rounded-lg px-3 py-1.5 shadow-sm max-w-[320px] text-center break-words">
           {error}
         </div>
       )}
