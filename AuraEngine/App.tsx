@@ -57,6 +57,7 @@ const ApolloSearchPage = lazy(() => import('./pages/portal/ApolloSearchPage'));
 const InvoicesPage = lazy(() => import('./pages/portal/InvoicesPage'));
 const SocialScheduler = lazy(() => import('./pages/portal/SocialScheduler'));
 const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
+const SenderAccountsPage = lazy(() => import('./pages/portal/SenderAccountsPage'));
 
 // Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -299,6 +300,7 @@ const App: React.FC = () => {
             <Route path="invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
             <Route path="social-scheduler" element={<ErrorBoundary><SocialScheduler /></ErrorBoundary>} />
             <Route path="team-hub" element={<ErrorBoundary><TeamHubBoards /></ErrorBoundary>} />
+            <Route path="sender-accounts" element={<ErrorBoundary><SenderAccountsPage /></ErrorBoundary>} />
           </Route>
 
           <Route

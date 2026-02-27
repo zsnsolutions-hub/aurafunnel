@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Target, Users, Brain, Compass, Sparkles, PenSquare, GitBranch,
-  Send, PieChart, MessageSquare, Zap, LayoutGrid, Plug,
+  Send, PieChart, MessageSquare, Zap, LayoutGrid, Plug, Mail,
   SlidersHorizontal, CreditCard, FileText, Settings, BookOpen,
   HelpCircle,
 } from 'lucide-react';
@@ -180,12 +180,20 @@ export const NAV_CONFIG: NavConfigItem[] = [
         order: 0,
       },
       {
+        route: '/portal/sender-accounts',
+        navLabel: 'Sender Accounts',
+        pageTitle: 'Sender Accounts',
+        icon: Mail,
+        section: 'workspace',
+        order: 1,
+      },
+      {
         route: '/portal/model-training',
         navLabel: 'AI Settings',
         pageTitle: 'AI Settings',
         icon: SlidersHorizontal,
         section: 'workspace',
-        order: 1,
+        order: 2,
         simplifiedVisible: false,
       },
     ],

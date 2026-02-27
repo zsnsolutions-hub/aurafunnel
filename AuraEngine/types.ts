@@ -728,3 +728,39 @@ export interface WebhookConfig {
   fire_count: number;
   fail_count: number;
 }
+
+// ── Sender Accounts ─────────────────────────────────────────────────────────
+
+export type SenderProvider = 'gmail' | 'smtp' | 'sendgrid' | 'mailchimp';
+export type SenderStatus = 'connected' | 'needs_reauth' | 'disabled';
+
+export interface SenderAccount {
+  id: string;
+  workspace_id: string;
+  provider: SenderProvider;
+  display_name: string;
+  from_email: string;
+  from_name: string;
+  status: SenderStatus;
+  is_default: boolean;
+  use_for_outreach: boolean;
+  metadata: Record<string, unknown>;
+  daily_sent_today: number;
+  daily_sent_date: string;
+  warmup_enabled: boolean;
+  warmup_daily_sent: number;
+  last_health_check_at: string | null;
+  health_score: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceUsageCounters {
+  workspace_id: string;
+  date_key: string;
+  month_key: string;
+  emails_sent: number;
+  linkedin_actions: number;
+  ai_credits_used: number;
+  warmup_emails_sent: number;
+}
