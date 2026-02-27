@@ -18,8 +18,8 @@ const MarketingLayout: React.FC = () => {
   // On light pages: use coloured logo until user scrolls (nav turns dark)
   // On dark pages: always use the dark-bg logo
   const logoSrc = isLightPage && !scrolled
-    ? '/scaliyo-logo-light.png'
-    : '/scaliyo-logo-dark.png';
+    ? '/scaliyo-logo-light.webp'
+    : '/scaliyo-logo-dark.webp';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -47,7 +47,7 @@ const MarketingLayout: React.FC = () => {
                 : 'h-16 bg-white/5 backdrop-blur-md border-white/10'
           }`}>
             <PrefetchLink to="/" className="flex items-center group" aria-label="Scaliyo home">
-              <img src={logoSrc} alt="Scaliyo" className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" />
+              <img src={logoSrc} alt="Scaliyo" width={106} height={40} className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" fetchPriority="high" />
             </PrefetchLink>
 
             <div className="hidden lg:flex items-center space-x-8">
@@ -149,7 +149,7 @@ const MarketingLayout: React.FC = () => {
             {/* Brand + Contact */}
             <div className="md:col-span-4">
               <PrefetchLink to="/" className="flex items-center mb-6 group">
-                <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" />
+                <img src="/scaliyo-logo-dark.webp" alt="Scaliyo" width={106} height={40} loading="lazy" className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" />
               </PrefetchLink>
               <p className="text-slate-500 leading-relaxed max-w-sm mb-6 text-sm">
                 The AI-powered outbound growth platform that finds leads, enriches your pipeline, and closes deals automatically.

@@ -325,7 +325,7 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
       {/* Header */}
       <header className="flex items-center justify-between px-6 md:px-10 py-6">
         <div className="flex items-center">
-          <img src="/scaliyo-logo-dark.png" alt="Scaliyo" className="h-10 w-auto" />
+          <img src="/scaliyo-logo-dark.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto" />
         </div>
         {step < 3 && (
           <button

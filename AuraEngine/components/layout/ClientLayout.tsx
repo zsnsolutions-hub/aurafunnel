@@ -208,12 +208,12 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
             activePath={location.pathname}
             header={
               <Link to="/" className="flex items-center">
-                <img src="/scaliyo-logo-light.png" alt="Scaliyo" className="h-10 w-auto" />
+                <img src="/scaliyo-logo-light.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto" />
               </Link>
             }
             headerCollapsed={
               <Link to="/">
-                <img src="/scaliyo-logo-light.png" alt="Scaliyo" className="h-10 w-auto" />
+                <img src="/scaliyo-logo-light.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto" />
               </Link>
             }
             topSlot={
