@@ -13,6 +13,7 @@ import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
 import { NAV_CONFIG, NavConfigItem } from '../../lib/navConfig';
 import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
+import { VoiceAgent } from '../voice';
 
 interface ClientLayoutProps {
   user: User;
@@ -105,6 +106,13 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     }, 800);
     return () => clearTimeout(timer);
   }, [notificationsAutoShown]);
+
+  // ─── Custom event: open command palette from voice agent ───
+  useEffect(() => {
+    const handleOpenPalette = () => setCommandPaletteOpen(true);
+    window.addEventListener('scaliyo:openCommandPalette', handleOpenPalette);
+    return () => window.removeEventListener('scaliyo:openCommandPalette', handleOpenPalette);
+  }, []);
 
   // ─── Global keyboard shortcuts ───
   useEffect(() => {
@@ -279,6 +287,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       {/* Global Overlays */}
       <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
       <DailyBriefing user={user} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+      <VoiceAgent user={user} />
     </>
   );
 };

@@ -6,7 +6,13 @@ type EventName =
   | 'signup_success'
   | 'signup_error'
   | 'page_view'
-  | 'pricing_view';
+  | 'pricing_view'
+  | 'voice_opened'
+  | 'voice_closed'
+  | 'voice_error'
+  | 'nav_executed'
+  | 'simplified_toggled'
+  | 'mic_permission_denied';
 
 export function track(event: EventName, props?: Record<string, unknown>) {
   if (import.meta.env.DEV) {
