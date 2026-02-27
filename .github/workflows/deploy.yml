@@ -53,7 +53,19 @@ jobs:
           # Keep only last 5 releases for rollback
           $SSH_CMD $USER@$HOST "cd /var/www/scaliyo/releases && ls -1dt release-* | tail -n +6 | xargs rm -rf 2>/dev/null || true"
 
+      - name: Check if Nginx config changed
+        id: nginx-check
+        working-directory: .
+        run: |
+          if git diff HEAD~1 --name-only 2>/dev/null | grep -q '^nginx/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Sync Nginx config & reload
+        if: steps.nginx-check.outputs.changed == 'true'
+        continue-on-error: true
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HOST: ${{ secrets.DEPLOY_HOST }}
@@ -66,4 +78,4 @@ jobs:
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
           SSH_CMD="ssh -i ~/.ssh/deploy_key"
           rsync -azq -e "$SSH_CMD" nginx/aurafunnel.conf $USER@$HOST:/var/www/scaliyo/nginx-staged.conf
-          $SSH_CMD $USER@$HOST "sudo cp /var/www/scaliyo/nginx-staged.conf /etc/nginx/sites-available/aurafunnel.conf && sudo nginx -t && sudo systemctl reload nginx"
+          $SSH_CMD $USER@$HOST "sudo -n cp /var/www/scaliyo/nginx-staged.conf /etc/nginx/sites-available/aurafunnel.conf && sudo -n nginx -t && sudo -n systemctl reload nginx"
