@@ -264,7 +264,13 @@ const LeadProfile: React.FC = () => {
       .eq('id', leadId)
       .single();
     if (error) {
-      console.error('LeadProfile fetch error:', error.message);
+      // Column may not exist — fall back to SELECT *
+      const fallback = await supabase.from('leads').select('*').eq('id', leadId).single();
+      if (!fallback.error && fallback.data) {
+        const [normalized] = normalizeLeads([fallback.data]);
+        setLead(normalized);
+        fetchLeadEmailEngagement(normalized.id).then(setEmailEngagement);
+      }
     } else if (data) {
       const [normalized] = normalizeLeads([data]);
       setLead(normalized);
