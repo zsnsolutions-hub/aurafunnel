@@ -4,7 +4,7 @@ import Reveal from '../../components/marketing/Reveal';
 import { track } from '../../lib/analytics';
 import { PLANS, ANNUAL_DISCOUNT } from '../../lib/credits';
 import { OUTBOUND_LIMITS } from '../../lib/planLimits';
-import { AI_PLAN_CONFIG, CREDIT_CONVERSION_RATE } from '../../lib/pricing.config';
+import { CREDIT_CONVERSION_RATE } from '../../lib/pricing.config';
 
 /* ── Comparison table data ────────────────────────────────────────────────── */
 type CellValue = string | boolean;
@@ -61,11 +61,11 @@ function renderCell(v: CellValue) {
 
 /* ── Plan card meta ───────────────────────────────────────────────────────── */
 const PLAN_CARD_META: Record<string, {
-  maxUsers: string; extraSeat: string; warmup: string; tagline: string;
+  maxUsers: string; extraSeat: string; warmup: string; tagline: string; aiCreditsDisplay: string;
 }> = {
-  Starter: { maxUsers: 'max 3', extraSeat: '+$15/seat', warmup: 'Manual warm-up guidance', tagline: 'Validate' },
-  Growth:  { maxUsers: 'max 10', extraSeat: '+$12/seat', warmup: 'Automated warm-up + ramp schedule', tagline: 'Compound' },
-  Scale:   { maxUsers: 'flexible', extraSeat: '+$8/seat', warmup: 'Advanced warm-up + inbox health monitoring', tagline: 'Dominate' },
+  Starter: { maxUsers: 'max 3', extraSeat: '+$15/seat', warmup: 'Manual warm-up guidance', tagline: 'Validate', aiCreditsDisplay: '1,000' },
+  Growth:  { maxUsers: 'max 10', extraSeat: '+$12/seat', warmup: 'Automated warm-up + ramp schedule', tagline: 'Compound', aiCreditsDisplay: '2,000' },
+  Scale:   { maxUsers: 'flexible', extraSeat: '+$8/seat', warmup: 'Advanced warm-up + inbox health monitoring', tagline: 'Dominate', aiCreditsDisplay: '8,000' },
 };
 
 /* ── FAQ data ─────────────────────────────────────────────────────────────── */
@@ -114,13 +114,10 @@ const PricingPage: React.FC = () => {
               Pricing
             </p>
             <h1 className="text-4xl lg:text-6xl font-black tracking-tight font-heading mb-5">
-              Your outbound engine.<br className="hidden sm:block" />
-              Pick the gear.
+              Choose Your AI Volume
             </h1>
             <p className="text-lg lg:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Email + LinkedIn + AI personalization in one machine.
-              Built-in deliverability protection. Hard limits that keep your domains alive.
-              Start free. Scale when the pipeline demands it.
+              Start small. Scale fast. One closed deal can cover months.
             </p>
 
             {/* Billing toggle */}
@@ -154,7 +151,6 @@ const PricingPage: React.FC = () => {
               const displayPrice = isAnnual ? plan.annualPrice : plan.price;
               const outbound = OUTBOUND_LIMITS[plan.name] ?? OUTBOUND_LIMITS.Starter;
               const meta = PLAN_CARD_META[plan.name] ?? PLAN_CARD_META.Starter;
-              const aiCfg = AI_PLAN_CONFIG[plan.name];
 
               return (
                 <div
@@ -167,7 +163,7 @@ const PricingPage: React.FC = () => {
                 >
                   {isHighlighted && (
                     <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold bg-teal-500 text-white px-4 py-1 rounded-full shadow-lg">
-                      Most teams pick this
+                      Most Popular
                     </span>
                   )}
 
@@ -186,64 +182,54 @@ const PricingPage: React.FC = () => {
                       <span className="text-sm text-slate-500 font-semibold">/mo</span>
                     </div>
                     {isAnnual && (
-                      <p className="text-xs text-teal-400 font-bold mb-4">
+                      <p className="text-xs text-teal-400 font-bold mb-5">
                         ${(plan.annualPrice * 12).toLocaleString()}/yr &mdash; save ${((plan.price - plan.annualPrice) * 12).toLocaleString()}
                       </p>
                     )}
-                    {!isAnnual && <div className="mb-4" />}
+                    {!isAnnual && <div className="mb-5" />}
 
-                    {/* ── Engine specs ───────────────────────── */}
+                    {/* ── AI Credits — Primary Highlight ──── */}
+                    <div className={`rounded-xl p-4 mb-5 ${isHighlighted ? 'bg-teal-500/10 border border-teal-500/20' : 'bg-white/[0.03] border border-slate-700/60'}`}>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">AI Credits</p>
+                      <p className="text-2xl font-black font-heading">
+                        {meta.aiCreditsDisplay}<span className="text-sm text-slate-400 font-semibold ml-1">/ month</span>
+                      </p>
+                    </div>
+
+                    {/* ── Core Capacity ──────────────────── */}
                     <div className="mb-4">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Workspace</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Core Capacity</p>
                       <div className="space-y-1.5 text-sm">
+                        <div className="flex justify-between"><span className="text-slate-400">Inboxes</span><span className="text-white font-semibold">{outbound.maxInboxes === 1 ? '1' : `Up to ${outbound.maxInboxes}`}</span></div>
                         <div className="flex justify-between"><span className="text-slate-400">Contacts</span><span className="text-white font-semibold">{plan.contacts.toLocaleString()}</span></div>
                         <div className="flex justify-between"><span className="text-slate-400">Storage</span><span className="text-white font-semibold">{plan.storage >= 1000 ? `${(plan.storage / 1000).toFixed(0)} GB` : `${plan.storage} MB`}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-400">Team</span><span className="text-white font-semibold">{plan.seats} <span className="text-slate-500 text-xs">({meta.extraSeat}, {meta.maxUsers})</span></span></div>
                       </div>
                     </div>
 
+                    {/* ── Outbound Limits ────────────────── */}
                     <div className="mb-4">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Outbound Engine</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Outbound</p>
                       <div className="space-y-1.5 text-sm">
-                        <div className="flex justify-between"><span className="text-slate-400">Inboxes</span><span className="text-white font-semibold">{outbound.maxInboxes === 1 ? '1' : `Up to ${outbound.maxInboxes}`}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-400">Email / day</span><span className="text-white font-semibold">{outbound.emailsPerDayPerInbox}{outbound.maxInboxes > 1 ? '/inbox' : ''}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-400">Email / month</span><span className="text-white font-semibold">{outbound.emailsPerMonth.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Emails / day</span><span className="text-white font-semibold">{outbound.emailsPerDayPerInbox}{outbound.maxInboxes > 1 ? ' per inbox' : ''}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Emails / month</span><span className="text-white font-semibold">{outbound.emailsPerMonth.toLocaleString()}</span></div>
                         <div className="flex justify-between"><span className="text-slate-400">LinkedIn / day</span><span className="text-white font-semibold">{outbound.linkedInPerDay}</span></div>
                       </div>
                     </div>
 
-                    {/* AI + warm-up */}
-                    <div className="mb-4">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">AI + Deliverability</p>
-                      <div className="space-y-1.5 text-sm">
-                        {aiCfg?.hasAI ? (
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">AI credits</span>
-                            <span className="text-white font-semibold group relative cursor-help">
-                              {aiCfg.aiCreditsMonthly.toLocaleString()}/mo
-                              <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-44 rounded-lg bg-slate-800 px-3 py-2 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10">
-                                1 credit = {CREDIT_CONVERSION_RATE.toLocaleString()} tokens. Hard stop. No overages.
-                              </span>
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex justify-between"><span className="text-slate-500">AI</span><span className="text-slate-600 text-xs">&mdash;</span></div>
-                        )}
-                        <div className="flex justify-between"><span className="text-slate-400">Warm-up</span><span className="text-white font-semibold text-xs">{meta.warmup}</span></div>
-                      </div>
+                    {/* ── AI + Automation ────────────────── */}
+                    <div className="mb-2">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">AI + Automation</p>
+                      <ul className="space-y-2">
+                        {plan.features.map((feature) => (
+                          <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-400">
+                            <svg className="w-4 h-4 text-teal-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-
-                    {/* Feature list */}
-                    <ul className="space-y-2.5">
-                      {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-400">
-                          <svg className="w-4 h-4 text-teal-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
                   </div>
 
                   {/* CTA — pinned to bottom */}
@@ -251,7 +237,7 @@ const PricingPage: React.FC = () => {
                     <Link
                       to="/signup"
                       onClick={() => track('cta_click', { location: 'pricing', tier: plan.name })}
-                      className={`block text-center px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${
+                      className={`block w-full text-center px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${
                         isHighlighted
                           ? 'bg-teal-500 text-white hover:bg-teal-400 shadow-lg shadow-teal-500/25 hover:scale-105 active:scale-95'
                           : 'bg-white/5 border border-slate-700 text-white hover:border-teal-500/40 hover:bg-teal-500/5'
@@ -259,7 +245,7 @@ const PricingPage: React.FC = () => {
                     >
                       {plan.cta}
                     </Link>
-                    <p className="text-[11px] text-slate-500 text-center mt-1.5">14 days free. No card. Cancel anytime.</p>
+                    <p className="text-[11px] text-slate-500 text-center mt-2">14-day free trial. No card. Cancel anytime.</p>
                   </div>
                 </div>
               );
@@ -379,7 +365,7 @@ const PricingPage: React.FC = () => {
                     {PLANS.map((p) => (
                       <th key={p.name} className={`py-4 px-4 text-sm font-bold text-center ${p.popular ? 'text-teal-400' : 'text-white'}`}>
                         {p.name}
-                        {p.popular && <span className="block text-[9px] font-black uppercase tracking-widest mt-0.5">Most Popular</span>}
+                        {p.popular && <span className="block text-[9px] font-black uppercase tracking-widest mt-0.5">most popular</span>}
                       </th>
                     ))}
                   </tr>
