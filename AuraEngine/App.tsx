@@ -28,6 +28,7 @@ const TrialSignupPage = lazy(() => import('./pages/marketing/TrialSignupPage'));
 
 // Auth
 const AuthPage = lazy(() => import('./pages/portal/AuthPage'));
+const VoiceAgentLauncher = lazy(() => import('./components/voice/VoiceAgentLauncher'));
 const ResetPasswordPage = lazy(() => import('./pages/portal/ResetPasswordPage'));
 const ConfirmEmailPage = lazy(() => import('./pages/portal/ConfirmEmailPage'));
 
@@ -254,7 +255,7 @@ const App: React.FC = () => {
           </Route>
 
           <Route path="/signup" element={<ErrorBoundary><TrialSignupPage /></ErrorBoundary>} />
-          <Route path="/auth" element={<AuthPage user={user} onLogin={(u) => setUser(u)} />} />
+          <Route path="/auth" element={<><AuthPage user={user} onLogin={(u) => setUser(u)} /><Suspense fallback={null}><VoiceAgentLauncher /></Suspense></>} />
           <Route path="/reset-password" element={<ErrorBoundary><ResetPasswordPage /></ErrorBoundary>} />
           <Route path="/auth/confirm" element={<ErrorBoundary><ConfirmEmailPage /></ErrorBoundary>} />
 
