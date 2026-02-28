@@ -130,7 +130,7 @@ const ACTIVITY_OPTIONS = ['Today', 'This Week', 'This Month', 'All Time'] as con
 const COMPANY_SIZES = ['1-10', '11-50', '51-200', '201-500', '500+'] as const;
 const CAMPAIGNS = ['Q4 Tech Nurture', 'Enterprise Outreach', 'Product Launch', 'Re-engagement', 'Cold Outreach'] as const;
 const TEAM_MEMBERS = ['Sarah Johnson', 'Mike Chen', 'Emma Davis', 'Alex Kim', 'Chris Park'] as const;
-const PER_PAGE = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 const LeadManagement: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
@@ -159,6 +159,7 @@ const LeadManagement: React.FC = () => {
 
   // ── Pagination ──
   const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState<number>(25);
 
   // ── Modals ──
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -471,13 +472,13 @@ const LeadManagement: React.FC = () => {
   }, [filteredLeads]);
 
   // ── Pagination ──
-  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / perPage));
   const paginatedLeads = useMemo(() => {
-    const start = (currentPage - 1) * PER_PAGE;
-    return filteredLeads.slice(start, start + PER_PAGE);
-  }, [filteredLeads, currentPage]);
+    const start = (currentPage - 1) * perPage;
+    return filteredLeads.slice(start, start + perPage);
+  }, [filteredLeads, currentPage, perPage]);
 
-  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery, perPage]);
 
   // ── Selection Helpers ──
   const allOnPageSelected = paginatedLeads.length > 0 && paginatedLeads.every(l => selectedIds.has(l.id));
@@ -958,8 +959,8 @@ const LeadManagement: React.FC = () => {
     companySizeFilter.size > 0, tagFilter.size > 0, emailEngagementFilter.size > 0, followUpFilter,
   ].filter(Boolean).length;
 
-  const rangeStart = (currentPage - 1) * PER_PAGE + 1;
-  const rangeEnd = Math.min(currentPage * PER_PAGE, filteredLeads.length);
+  const rangeStart = (currentPage - 1) * perPage + 1;
+  const rangeEnd = Math.min(currentPage * perPage, filteredLeads.length);
 
   const ACTIVITY_ICONS: Record<ActivityType, React.ReactNode> = {
     call: <PhoneIcon className="w-4 h-4" />,
@@ -1997,9 +1998,20 @@ const LeadManagement: React.FC = () => {
             {/* Pagination */}
             {filteredLeads.length > 0 && (
               <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <p className="text-xs text-slate-500 font-medium">
-                  {rangeStart}-{rangeEnd} of {filteredLeads.length.toLocaleString()} leads
-                </p>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-slate-500 font-medium">
+                    {rangeStart}-{rangeEnd} of {filteredLeads.length.toLocaleString()} leads
+                  </p>
+                  <select
+                    value={perPage}
+                    onChange={e => setPerPage(Number(e.target.value))}
+                    className="text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1.5 hover:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 transition-all cursor-pointer"
+                  >
+                    {PAGE_SIZE_OPTIONS.map(n => (
+                      <option key={n} value={n}>{n} / page</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="flex items-center space-x-1">
                   <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
