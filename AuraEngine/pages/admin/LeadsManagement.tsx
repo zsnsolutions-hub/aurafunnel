@@ -179,7 +179,7 @@ const LeadsManagement: React.FC = () => {
                         <td className="px-8 py-7">
                           <button onClick={() => openActionsModal(lead)} className="flex items-center space-x-4 text-left">
                             <div className="w-11 h-11 rounded-[1.25rem] bg-slate-100 flex items-center justify-center text-slate-400 font-black group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
-                              {lead.name[0]}
+                              {(lead.name || '?')[0]}
                             </div>
                             <div>
                               <div className="flex items-center space-x-2">

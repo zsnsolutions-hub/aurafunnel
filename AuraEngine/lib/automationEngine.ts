@@ -542,8 +542,8 @@ async function executeAction(
             body: JSON.stringify({
               properties: {
                 email: lead.email,
-                firstname: lead.name.split(' ')[0] || lead.name,
-                lastname: lead.name.split(' ').slice(1).join(' ') || '',
+                firstname: (lead.name || '').split(' ')[0] || lead.name || '',
+                lastname: (lead.name || '').split(' ').slice(1).join(' ') || '',
                 company: lead.company,
                 hs_lead_status: lead.status === 'Qualified' ? 'QUALIFIED' : 'NEW',
               },
@@ -570,8 +570,8 @@ async function executeAction(
             },
             body: JSON.stringify({
               Email: lead.email,
-              FirstName: lead.name.split(' ')[0] || lead.name,
-              LastName: lead.name.split(' ').slice(1).join(' ') || lead.name,
+              FirstName: (lead.name || '').split(' ')[0] || lead.name || '',
+              LastName: (lead.name || '').split(' ').slice(1).join(' ') || lead.name || '',
               Company: lead.company || 'Unknown',
               Status: lead.status === 'Qualified' ? 'Qualified' : 'Open - Not Contacted',
             }),

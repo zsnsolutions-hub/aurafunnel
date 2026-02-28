@@ -515,7 +515,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       if (aiMode === 'creative' && (lowerPrompt.includes('email') || lowerPrompt.includes('outreach') || lowerPrompt.includes('template'))) {
         const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
         const templates = topLeads.map((l, i) =>
-          `**${i + 1}. Email for ${l.name} (${l.company}) — Score ${l.score}**\n\nSubject: Quick question about ${l.company}'s growth\n\nHi ${l.name.split(' ')[0]},\n\nI noticed ${l.company} is ${l.score > 80 ? 'scaling rapidly' : 'making great strides'} in your space. I work with similar companies to help them ${l.score > 70 ? 'accelerate pipeline and close deals faster' : 'build a more predictable revenue engine'}.\n\nWould you be open to a quick 15-min chat this week?\n\nBest,\n[Your Name]`
+          `**${i + 1}. Email for ${l.name || 'Unknown'} (${l.company || 'Unknown'}) — Score ${l.score}**\n\nSubject: Quick question about ${l.company || 'your company'}'s growth\n\nHi ${(l.name || '').split(' ')[0] || 'there'},\n\nI noticed ${l.company || 'your company'} is ${l.score > 80 ? 'scaling rapidly' : 'making great strides'} in your space. I work with similar companies to help them ${l.score > 70 ? 'accelerate pipeline and close deals faster' : 'build a more predictable revenue engine'}.\n\nWould you be open to a quick 15-min chat this week?\n\nBest,\n[Your Name]`
         );
         return topLeads.length > 0
           ? `**✉️ Cold Outreach Templates**\n\nHere are personalized emails for your top leads:\n\n${templates.join('\n\n---\n\n')}`
@@ -525,7 +525,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       if (aiMode === 'creative' && (lowerPrompt.includes('linkedin') || lowerPrompt.includes('connection'))) {
         const topLeads = leads.filter(l => l.score > 60).slice(0, 3);
         const msgs = topLeads.map((l, i) =>
-          `**${i + 1}. LinkedIn for ${l.name} (${l.company})**\n\nHi ${l.name.split(' ')[0]}, I came across your work at ${l.company} — really impressive what you're building. I work with ${l.score > 80 ? 'high-growth' : 'ambitious'} teams in the ${l.company} space and thought it'd be great to connect. No pitch, just genuine interest in swapping notes. Cheers!`
+          `**${i + 1}. LinkedIn for ${l.name || 'Unknown'} (${l.company || 'Unknown'})**\n\nHi ${(l.name || '').split(' ')[0] || 'there'}, I came across your work at ${l.company || 'your company'} — really impressive what you're building. I work with ${l.score > 80 ? 'high-growth' : 'ambitious'} teams in the ${l.company || 'your'} space and thought it'd be great to connect. No pitch, just genuine interest in swapping notes. Cheers!`
         );
         return `**💼 LinkedIn Connection Messages**\n\n${msgs.length > 0 ? msgs.join('\n\n---\n\n') : 'Add some leads first so I can personalize messages for you.'}`;
       }
@@ -560,10 +560,10 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       // ─── Call Prep: Lead-specific call preparation sheet ───
       if ((lowerPrompt.includes('call prep') || (lowerPrompt.includes('prep') && lowerPrompt.includes('call')) || (lowerPrompt.includes('prepare') && lowerPrompt.includes('call')) || lowerPrompt.includes('call script')) && leads.length > 0) {
         // Try to find a specific lead mentioned in the prompt
-        const matchedLead = leads.find(l => lowerPrompt.includes(l.name.toLowerCase()));
+        const matchedLead = leads.find(l => l.name && lowerPrompt.includes(l.name.toLowerCase()));
         if (matchedLead) {
           const kb = (matchedLead as any).knowledgeBase || {};
-          const firstName = matchedLead.name.split(' ')[0];
+          const firstName = (matchedLead.name || '').split(' ')[0] || 'there';
           const talkingPoints = kb.talkingPoints ? `\n${(Array.isArray(kb.talkingPoints) ? kb.talkingPoints : [kb.talkingPoints]).map((tp: string) => `- ${tp}`).join('\n')}` : '\n- Ask about their current priorities and challenges\n- Discuss how your solution addresses their pain points\n- Share a relevant success story from a similar company';
           const outreachAngle = kb.outreachAngle || `Value-first approach — lead with how you help companies like ${matchedLead.company}`;
           const riskFactors = kb.riskFactors ? `\n${(Array.isArray(kb.riskFactors) ? kb.riskFactors : [kb.riskFactors]).map((rf: string) => `⚠️ ${rf}`).join('\n')}` : '\n⚠️ No specific risk factors identified — proceed with standard discovery';

@@ -466,12 +466,12 @@ export const generateContentByCategory = async (
   });
 
   const finalCategoryPrompt = resolved.promptTemplate
-    .replace(/\{\{lead_name\}\}/g, lead.name)
-    .replace(/\{\{company\}\}/g, lead.company)
+    .replace(/\{\{lead_name\}\}/g, lead.name || '')
+    .replace(/\{\{company\}\}/g, lead.company || '')
     .replace(/\{\{score\}\}/g, lead.score.toString())
-    .replace(/\{\{insights\}\}/g, lead.insights)
+    .replace(/\{\{insights\}\}/g, lead.insights || '')
     .replace(/\{\{tone\}\}/g, tone)
-    .replace(/\{\{first_name\}\}/g, lead.name.split(' ')[0])
+    .replace(/\{\{first_name\}\}/g, (lead.name || '').split(' ')[0] || '')
     + (additionalContext ? ` ${additionalContext}` : '')
     + buildBusinessContext(businessProfile);
 

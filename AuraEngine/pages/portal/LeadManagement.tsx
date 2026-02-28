@@ -580,8 +580,8 @@ const LeadManagement: React.FC = () => {
           body: JSON.stringify({
             properties: {
               email: lead.email,
-              firstname: lead.name.split(' ')[0] || lead.name,
-              lastname: lead.name.split(' ').slice(1).join(' ') || '',
+              firstname: (lead.name || '').split(' ')[0] || lead.name || '',
+              lastname: (lead.name || '').split(' ').slice(1).join(' ') || '',
               company: lead.company,
             },
           }),
@@ -593,8 +593,8 @@ const LeadManagement: React.FC = () => {
           headers: { Authorization: `Bearer ${integration.credentials.accessToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             Email: lead.email,
-            FirstName: lead.name.split(' ')[0] || lead.name,
-            LastName: lead.name.split(' ').slice(1).join(' ') || lead.name,
+            FirstName: (lead.name || '').split(' ')[0] || lead.name || '',
+            LastName: (lead.name || '').split(' ').slice(1).join(' ') || lead.name || '',
             Company: lead.company || 'Unknown',
           }),
         });
@@ -1740,7 +1740,7 @@ const LeadManagement: React.FC = () => {
                             >
                               <div className="flex items-center space-x-2 mb-1.5">
                                 <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-[9px] text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors flex-shrink-0">
-                                  {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                  {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2) || '?'}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <p className="text-[11px] font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
@@ -1869,7 +1869,7 @@ const LeadManagement: React.FC = () => {
                             className="flex items-center space-x-3 text-left"
                           >
                             <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-[11px] text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors flex-shrink-0">
-                              {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                              {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2) || '?'}
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>

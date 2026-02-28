@@ -182,7 +182,7 @@ const EmailSequenceBuilder: React.FC<EmailSequenceBuilderProps> = ({
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${
                     selectedLeadIds.includes(lead.id) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
                   }`}>
-                    {selectedLeadIds.includes(lead.id) ? <CheckIcon className="w-4 h-4" /> : lead.name[0]}
+                    {selectedLeadIds.includes(lead.id) ? <CheckIcon className="w-4 h-4" /> : (lead.name || '?')[0]}
                   </div>
                   <div>
                     <p className="text-sm font-bold text-slate-800">{lead.name}</p>

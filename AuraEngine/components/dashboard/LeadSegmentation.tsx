@@ -66,7 +66,7 @@ const LeadSegmentation: React.FC<LeadSegmentationProps> = ({
       icon: <UsersIcon className="w-4 h-4" />,
       color: 'bg-purple-50 text-purple-600',
       filter: (l) => {
-        const companyCount = leads.filter(other => other.company.toLowerCase() === l.company.toLowerCase()).length;
+        const companyCount = l.company ? leads.filter(other => other.company && other.company.toLowerCase() === l.company.toLowerCase()).length : 0;
         return companyCount > 1;
       }
     },

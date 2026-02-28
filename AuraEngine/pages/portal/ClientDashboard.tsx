@@ -988,7 +988,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                       <td className="px-6 py-4">
                         <button onClick={() => openActionsModal(lead)} className="flex items-center space-x-3 text-left">
                           <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                            {lead.name.split(' ').map(n => n[0]).join('')}
+                            {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2) || '?'}
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-bold text-slate-900 truncate hover:text-indigo-600 transition-colors">{lead.name}</p>

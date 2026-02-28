@@ -955,8 +955,8 @@ const ContentGen: React.FC = () => {
             lead_id: lead.id,
             to_email: lead.email,
             subject: firstBlock.subject
-              .replace(/\{\{first_name\}\}/gi, lead.name.split(' ')[0] || '')
-              .replace(/\{\{name\}\}/gi, lead.name)
+              .replace(/\{\{first_name\}\}/gi, (lead.name || '').split(' ')[0] || '')
+              .replace(/\{\{name\}\}/gi, lead.name || '')
               .replace(/\{\{company\}\}/gi, lead.company || '')
               .replace(/\{\{ai_insight\}\}/gi, lead.insights || '')
               .replace(/\{\{insights\}\}/gi, lead.insights || '')

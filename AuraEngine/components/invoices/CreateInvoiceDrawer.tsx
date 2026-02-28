@@ -100,8 +100,8 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
   const filteredLeads = leadSearch
     ? leads.filter(
         (l) =>
-          l.name.toLowerCase().includes(leadSearch.toLowerCase()) ||
-          l.email.toLowerCase().includes(leadSearch.toLowerCase())
+          (l.name || '').toLowerCase().includes(leadSearch.toLowerCase()) ||
+          (l.email || '').toLowerCase().includes(leadSearch.toLowerCase())
       )
     : leads;
 

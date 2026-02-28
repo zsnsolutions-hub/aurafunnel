@@ -111,7 +111,7 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-4">
               <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg">
-                {lead.name.split(' ').map(n => n[0]).join('')}
+                {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('') || '?'}
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-900 font-heading">{lead.name}</h2>

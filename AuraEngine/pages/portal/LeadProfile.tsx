@@ -938,7 +938,7 @@ const LeadProfile: React.FC = () => {
               {/* Avatar + Score */}
               <div className="flex flex-col items-center space-y-4">
                 <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-indigo-100">
-                  {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2) || '?'}
                 </div>
                 <div className="text-center">
                   <div className="flex items-center space-x-1 mb-1">
@@ -2272,7 +2272,7 @@ const LeadProfile: React.FC = () => {
                       toEmail: lead.email,
                       subject: `Check out: ${post.title}`,
                       htmlBody: `<div style="font-family:Arial,sans-serif;max-width:600px">
-                        <p>Hi ${lead.name.split(' ')[0]},</p>
+                        <p>Hi ${(lead.name || '').split(' ')[0] || 'there'},</p>
                         <h2 style="color:#1e293b">${post.title}</h2>
                         <p style="color:#64748b;line-height:1.6">${post.excerpt || post.content.substring(0, 200)}...</p>
                         <a href="${postUrl}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Read Full Post</a>

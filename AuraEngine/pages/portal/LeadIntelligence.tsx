@@ -901,7 +901,7 @@ ${scoreEvents.map(e => `${e.date}: ${e.event} (${(e.delta || 0) > 0 ? '+' : ''}$
                     i === 2 ? 'bg-orange-100 text-orange-700' :
                     'bg-slate-100 text-slate-500'
                   }`}>
-                    {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2) || '?'}
                   </div>
                 </div>
                 <p className="text-xs font-bold text-slate-800 truncate">{lead.name}</p>

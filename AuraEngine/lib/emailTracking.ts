@@ -8,6 +8,8 @@ import type {
   KnowledgeBase,
 } from '../types';
 import { personalizeForSend } from './personalization';
+import { checkEmailAllowed, trackEmailSend } from './usageTracker';
+import type { LimitType } from './usageTracker';
 
 const TRACKING_BASE_URL = import.meta.env.VITE_TRACKING_DOMAIN ?? '';
 
@@ -316,6 +318,7 @@ export interface SendEmailResult {
   messageId?: string;
   providerMessageId?: string;
   error?: string;
+  limitType?: LimitType;
 }
 
 export async function sendTrackedEmail(
@@ -324,6 +327,26 @@ export async function sendTrackedEmail(
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     return { success: false, error: 'Not authenticated' };
+  }
+
+  // ── Limit enforcement ──
+  const userId = session.user.id;
+  const inboxId = params.fromEmail ?? 'default';
+
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('plan')
+      .eq('id', userId)
+      .single();
+
+    const planName = profile?.plan ?? 'Starter';
+    const limitErr = await checkEmailAllowed(userId, inboxId, planName);
+    if (limitErr) {
+      return { success: false, error: limitErr.type, limitType: limitErr.type };
+    }
+  } catch {
+    // If profile fetch fails, allow the send (don't block on infra issues)
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -353,6 +376,16 @@ export async function sendTrackedEmail(
 
     clearTimeout(timeoutId);
     const data = await res.json();
+
+    // ── Track successful send ──
+    if (data.success) {
+      try {
+        await trackEmailSend(userId, inboxId);
+      } catch {
+        // Don't fail the send if tracking fails
+      }
+    }
+
     return {
       success: data.success ?? false,
       messageId: data.message_id ?? undefined,
@@ -400,8 +433,28 @@ export async function sendTrackedEmailBatch(
     trackOpens?: boolean;
     trackClicks?: boolean;
   }
-): Promise<{ sent: number; failed: number; errors: string[] }> {
-  const results = { sent: 0, failed: 0, errors: [] as string[] };
+): Promise<{ sent: number; failed: number; errors: string[]; limitType?: LimitType }> {
+  const results: { sent: number; failed: number; errors: string[]; limitType?: LimitType } = { sent: 0, failed: 0, errors: [] };
+
+  // ── Pre-flight limit check ──
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const inboxId = options?.fromEmail ?? 'default';
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('plan')
+        .eq('id', session.user.id)
+        .single();
+      const planName = profile?.plan ?? 'Starter';
+      const limitErr = await checkEmailAllowed(session.user.id, inboxId, planName);
+      if (limitErr) {
+        return { sent: 0, failed: leads.length, errors: ['Send limit reached'], limitType: limitErr.type };
+      }
+    }
+  } catch {
+    // Don't block batch on infra issues
+  }
 
   for (const lead of leads) {
     // Personalize per lead
@@ -424,6 +477,11 @@ export async function sendTrackedEmailBatch(
     } else {
       results.failed++;
       results.errors.push(`${lead.email}: ${result.error}`);
+      // Stop early on mid-batch limit hit
+      if (result.limitType) {
+        results.limitType = result.limitType;
+        break;
+      }
     }
   }
 
