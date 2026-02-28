@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Lead, User, ContentType } from '../../types';
-import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon } from '../../components/Icons';
+import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon, TrashIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { normalizeLeads } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
@@ -58,7 +58,7 @@ const StarRating = ({ score }: { score: number }) => {
 
 type LeadTag = 'Hot Lead' | 'Cold' | 'Nurturing' | 'Enterprise' | 'Critical' | 'Warm';
 type ActivityType = 'call' | 'email' | 'meeting' | 'note';
-type BulkAction = 'campaign' | 'assign' | 'status' | 'tag' | 'export' | 'email' | 'workflow';
+type BulkAction = 'campaign' | 'assign' | 'status' | 'tag' | 'export' | 'email' | 'workflow' | 'delete';
 
 interface ActivityLog {
   type: ActivityType;
@@ -192,6 +192,11 @@ const LeadManagement: React.FC = () => {
   // ── Workflow Enrollment ──
   const [bulkWorkflows, setBulkWorkflows] = useState<DbWorkflow[]>([]);
   const [bulkSelectedWorkflowId, setBulkSelectedWorkflowId] = useState<string | null>(null);
+
+  // ── Delete ──
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetIds, setDeleteTargetIds] = useState<string[]>([]);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // ── Email Summary Map ──
   const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
@@ -865,6 +870,25 @@ const LeadManagement: React.FC = () => {
     }
     setSelectedIds(new Set());
   }, [bulkSelectedWorkflowId, bulkWorkflows, selectedIds, allLeads]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (deleteTargetIds.length === 0) return;
+    setDeleteLoading(true);
+    const { error } = await supabase.from('leads').delete().in('id', deleteTargetIds);
+    if (error) {
+      console.error('Delete leads error:', error.message);
+    } else {
+      setAllLeads(prev => prev.filter(l => !deleteTargetIds.includes(l.id)));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        deleteTargetIds.forEach(id => next.delete(id));
+        return next;
+      });
+    }
+    setDeleteLoading(false);
+    setDeleteConfirmOpen(false);
+    setDeleteTargetIds([]);
+  }, [deleteTargetIds]);
 
   // ── Activity Log ──
   const handleLogActivity = () => {
@@ -1639,6 +1663,15 @@ const LeadManagement: React.FC = () => {
                   <span>Send Email</span>
                 </button>
 
+                {/* Delete Selected */}
+                <button
+                  onClick={() => { setDeleteTargetIds(Array.from(selectedIds)); setDeleteConfirmOpen(true); }}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-bold hover:bg-red-50 transition-all"
+                >
+                  <TrashIcon className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+
                 {/* Enroll in Workflow */}
                 <div className="relative">
                   <button
@@ -2036,6 +2069,10 @@ const LeadManagement: React.FC = () => {
           onSendEmail={() => navigate('/portal/content')}
           manualLists={[]}
           onAddToManualList={() => {}}
+          onLeadDeleted={() => {
+            setAllLeads(prev => prev.filter(l => l.id !== selectedLead.id));
+            setSelectedIds(prev => { const next = new Set(prev); next.delete(selectedLead.id); return next; });
+          }}
         />
       )}
 
@@ -2862,6 +2899,46 @@ const LeadManagement: React.FC = () => {
       )}
 
       {/* Portal: Actions Dropdown */}
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmOpen && createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { if (!deleteLoading) { setDeleteConfirmOpen(false); setDeleteTargetIds([]); } }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 w-full max-w-sm mx-4">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                <AlertTriangleIcon className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Delete {deleteTargetIds.length === 1 ? 'Lead' : `${deleteTargetIds.length} Leads`}?</h3>
+              <p className="text-sm text-slate-500 mb-6">
+                {deleteTargetIds.length === 1
+                  ? 'This lead and all associated data will be permanently removed.'
+                  : `${deleteTargetIds.length} leads and all associated data will be permanently removed.`}
+              </p>
+              <div className="flex items-center gap-3 w-full">
+                <button
+                  onClick={() => { setDeleteConfirmOpen(false); setDeleteTargetIds([]); }}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deleteLoading && (
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="opacity-75" /></svg>
+                  )}
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {actionsDropdownId && actionsDropdownPos && createPortal(
         <>
           <div className="fixed inset-0 z-[9998]" onClick={() => setActionsDropdownId(null)} />
@@ -2887,6 +2964,10 @@ const LeadManagement: React.FC = () => {
                   )}
                   <button onClick={() => { setActivityLogLead(lead); setActivityLogOpen(true); setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
                     <EditIcon className="w-3.5 h-3.5 text-violet-500" /> Log Activity
+                  </button>
+                  <div className="border-t border-slate-100 my-1" />
+                  <button onClick={() => { setDeleteTargetIds([lead.id]); setDeleteConfirmOpen(true); setActionsDropdownId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50">
+                    <TrashIcon className="w-3.5 h-3.5" /> Delete
                   </button>
                 </>
               );

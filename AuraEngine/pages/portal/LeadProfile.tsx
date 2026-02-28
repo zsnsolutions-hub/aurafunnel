@@ -7,7 +7,7 @@ import {
   BrainIcon, AlertTriangleIcon, TrendDownIcon,
   LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon,
   StickyNoteIcon, PencilIcon, PlusIcon,
-  SendIcon, EyeIcon, CursorClickIcon
+  SendIcon, EyeIcon, CursorClickIcon, TrashIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { normalizeLeads } from '../../lib/queries';
@@ -793,8 +793,19 @@ const LeadProfile: React.FC = () => {
                 </button>
               ))}
               <div className="border-t border-slate-100">
-                <button onClick={() => { navigate('/portal/leads'); }} className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
+                <button onClick={() => { navigate('/portal/leads'); }} className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
                   Back to Leads
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Delete ${lead.name}? This action cannot be undone.`)) return;
+                    const { error } = await supabase.from('leads').delete().eq('id', lead.id);
+                    if (error) { console.error('Delete lead error:', error.message); return; }
+                    navigate('/portal/leads');
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  Delete Lead
                 </button>
               </div>
             </div>

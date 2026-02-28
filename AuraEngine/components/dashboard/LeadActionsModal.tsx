@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Lead, AIInsight } from '../../types';
-import { PhoneIcon, MailIcon, ChartIcon, RefreshIcon, SparklesIcon, FolderIcon, XIcon, FlameIcon, BoltIcon, ClockIcon } from '../Icons';
+import { PhoneIcon, MailIcon, ChartIcon, RefreshIcon, SparklesIcon, FolderIcon, XIcon, FlameIcon, BoltIcon, ClockIcon, TrashIcon, AlertTriangleIcon } from '../Icons';
 import { supabase } from '../../lib/supabase';
 import { generateLeadInsights } from '../../lib/insights';
 
@@ -14,6 +14,7 @@ interface LeadActionsModalProps {
   onAddToList?: (lead: Lead) => void;
   manualLists?: { id: string; name: string; leadIds: string[] }[];
   onAddToManualList?: (listId: string, leadId: string) => void;
+  onLeadDeleted?: () => void;
 }
 
 const scoreStars = (score: number): number => {
@@ -44,10 +45,12 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
   onSendEmail,
   onAddToList,
   manualLists,
-  onAddToManualList
+  onAddToManualList,
+  onLeadDeleted
 }) => {
   const [activeTab, setActiveTab] = useState<'actions' | 'insights' | 'analytics' | 'lists'>('actions');
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleNote, setScheduleNote] = useState('');
@@ -340,6 +343,32 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
                 <div className="flex-grow">
                   <p className="text-sm font-bold text-slate-800">Add to List</p>
                   <p className="text-xs text-slate-400">Segment management</p>
+                </div>
+              </button>
+
+              {/* Delete Lead */}
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Delete ${lead.name}? This action cannot be undone.`)) return;
+                  setDeleteLoading(true);
+                  const { error } = await supabase.from('leads').delete().eq('id', lead.id);
+                  setDeleteLoading(false);
+                  if (error) {
+                    console.error('Delete lead error:', error.message);
+                    return;
+                  }
+                  onLeadDeleted?.();
+                  onClose();
+                }}
+                disabled={deleteLoading}
+                className="w-full flex items-center space-x-4 p-4 border border-red-200 rounded-xl hover:bg-red-50 transition-colors text-left disabled:opacity-50"
+              >
+                <div className="w-10 h-10 bg-red-50 text-red-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <TrashIcon className="w-5 h-5" />
+                </div>
+                <div className="flex-grow">
+                  <p className="text-sm font-bold text-red-600">{deleteLoading ? 'Deleting...' : 'Delete Lead'}</p>
+                  <p className="text-xs text-red-400">Permanently remove this lead</p>
                 </div>
               </button>
             </div>
