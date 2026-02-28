@@ -20,11 +20,13 @@ import type { User } from '../../types';
 
 interface VoiceAgentProps {
   user?: User | null;
+  agentId?: string;
 }
 
-const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
+const DEFAULT_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
 
-const VoiceAgent: React.FC<VoiceAgentProps> = ({ user }) => {
+const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId }) => {
+  const AGENT_ID = agentId || DEFAULT_AGENT_ID;
   const navigate = useNavigate();
   const location = useLocation();
   const { mode } = useUIMode();

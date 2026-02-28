@@ -33,6 +33,7 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
           VITE_ELEVENLABS_AGENT_ID: ${{ secrets.VITE_ELEVENLABS_AGENT_ID }}
+          VITE_ELEVENLABS_AUTH_AGENT_ID: ${{ secrets.VITE_ELEVENLABS_AUTH_AGENT_ID }}
         run: npm run build
 
       - name: Deploy (zero-downtime symlink swap)

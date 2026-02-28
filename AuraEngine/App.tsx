@@ -255,7 +255,7 @@ const App: React.FC = () => {
           </Route>
 
           <Route path="/signup" element={<ErrorBoundary><TrialSignupPage /></ErrorBoundary>} />
-          <Route path="/auth" element={<><AuthPage user={user} onLogin={(u) => setUser(u)} /><Suspense fallback={null}><VoiceAgentLauncher /></Suspense></>} />
+          <Route path="/auth" element={<><AuthPage user={user} onLogin={(u) => setUser(u)} /><Suspense fallback={null}><VoiceAgentLauncher agentId={import.meta.env.VITE_ELEVENLABS_AUTH_AGENT_ID} /></Suspense></>} />
           <Route path="/reset-password" element={<ErrorBoundary><ResetPasswordPage /></ErrorBoundary>} />
           <Route path="/auth/confirm" element={<ErrorBoundary><ConfirmEmailPage /></ErrorBoundary>} />
 

@@ -2,20 +2,25 @@ import React, { useState, useCallback, Suspense, lazy } from 'react';
 
 const VoiceAgent = lazy(() => import('./VoiceAgent'));
 
-const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
+const DEFAULT_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
+
+interface VoiceAgentLauncherProps {
+  agentId?: string;
+}
 
 /**
  * Lightweight shell that shows the mic FAB without loading @elevenlabs/react.
  * On first click it lazy-loads the full VoiceAgent component (and the SDK).
  */
-const VoiceAgentLauncher: React.FC = () => {
+const VoiceAgentLauncher: React.FC<VoiceAgentLauncherProps> = ({ agentId }) => {
   const [activated, setActivated] = useState(false);
+  const resolvedId = agentId || DEFAULT_AGENT_ID;
 
   const handleActivate = useCallback(() => {
     setActivated(true);
   }, []);
 
-  if (!AGENT_ID) return null;
+  if (!resolvedId) return null;
 
   // Once activated, render the full VoiceAgent (which imports @elevenlabs/react)
   if (activated) {
@@ -31,7 +36,7 @@ const VoiceAgentLauncher: React.FC = () => {
           </svg>
         </button>
       }>
-        <VoiceAgent />
+        <VoiceAgent agentId={resolvedId} />
       </Suspense>
     );
   }
