@@ -22,7 +22,7 @@ const VoiceAgentLauncher: React.FC = () => {
     return (
       <Suspense fallback={
         <button
-          className="fixed bottom-6 right-6 z-[60] flex items-center justify-center w-14 h-14 rounded-full bg-gray-800 text-white shadow-lg cursor-wait"
+          className="fixed bottom-6 right-6 z-[60] flex items-center justify-center w-14 h-14 rounded-full bg-violet-600 text-white shadow-[0_0_20px_rgba(124,58,237,0.4)] cursor-wait"
           aria-label="Loading voice agent..."
           disabled
         >
@@ -40,7 +40,7 @@ const VoiceAgentLauncher: React.FC = () => {
   return (
     <button
       onClick={handleActivate}
-      className="fixed bottom-6 right-6 z-[60] flex items-center justify-center w-14 h-14 rounded-full bg-gray-800 hover:bg-gray-900 text-white shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+      className="fixed bottom-6 right-6 z-[60] flex items-center justify-center w-14 h-14 rounded-full bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white shadow-[0_0_20px_rgba(124,58,237,0.4)] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-400"
       aria-label="Talk to Scaliyo assistant"
       title="Talk to Scaliyo assistant"
     >
