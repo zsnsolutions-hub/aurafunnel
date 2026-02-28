@@ -258,7 +258,7 @@ function fabStyles(status: Status, isSpeaking: boolean, error: string | null): s
         ? 'bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-400'
         : 'bg-green-500 hover:bg-green-600 text-white focus:ring-green-400';
     default:
-      return 'bg-gray-800 hover:bg-gray-900 text-white focus:ring-gray-500';
+      return 'bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white focus:ring-violet-400 shadow-[0_0_20px_rgba(124,58,237,0.4)]';
   }
 }
 
