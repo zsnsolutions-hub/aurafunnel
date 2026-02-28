@@ -135,6 +135,7 @@ const PreviewGrid: React.FC<PreviewGridProps> = ({ images, loading, onSave, onIn
           <img
             src={lightboxUrl}
             alt="Preview"
+            loading="lazy"
             className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
             onClick={e => e.stopPropagation()}
           />

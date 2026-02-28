@@ -99,7 +99,7 @@ const MediaUploader: React.FC<Props> = ({ userId, mediaPaths, setMediaPaths }) =
             {mediaPaths.map((path, i) => (
               <div key={path} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 group">
                 {previews[i] ? (
-                  <img src={previews[i]} alt="" className="w-full h-full object-cover" />
+                  <img src={previews[i]} alt="" loading="lazy" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-400 text-[9px] font-bold">
                     VIDEO

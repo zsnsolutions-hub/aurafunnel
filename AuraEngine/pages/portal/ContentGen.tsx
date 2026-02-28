@@ -2113,7 +2113,7 @@ const ContentGen: React.FC = () => {
                           <div className="mt-1.5 flex flex-wrap gap-2">
                             {emailImages.map((url, idx) => (
                               <div key={idx} className="relative group">
-                                <img src={url} alt={`Image ${idx + 1}`} className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
+                                <img src={url} alt={`Image ${idx + 1}`} loading="lazy" className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
                                 <button
                                   onClick={() => setEmailImages(prev => prev.filter((_, i) => i !== idx))}
                                   className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -3423,7 +3423,7 @@ const ContentGen: React.FC = () => {
                   {emailImages.length > 0 && i === 0 && (
                     <div className="mb-3 space-y-2">
                       {emailImages.map((url, imgIdx) => (
-                        <img key={imgIdx} src={url} alt="" className="max-w-full rounded-xl border border-slate-200" />
+                        <img key={imgIdx} src={url} alt="" loading="lazy" className="max-w-full rounded-xl border border-slate-200" />
                       ))}
                     </div>
                   )}

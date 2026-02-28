@@ -724,7 +724,7 @@ const BlogDrafts: React.FC = () => {
                       <div className="relative h-[120px] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group hover:border-indigo-300 transition-all">
                         {newPost.featured_image ? (
                           <div className="relative w-full h-full">
-                            <img src={newPost.featured_image} className="w-full h-full object-cover" />
+                            <img src={newPost.featured_image} loading="lazy" className="w-full h-full object-cover" />
                             <button onClick={() => setNewPost(prev => ({ ...prev, featured_image: null }))} className="absolute top-2 right-2 p-1 bg-white/90 rounded-lg text-slate-500 hover:text-red-500 transition-colors">
                               <XIcon className="w-3.5 h-3.5" />
                             </button>
@@ -997,7 +997,7 @@ const BlogDrafts: React.FC = () => {
               <div key={d.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 overflow-hidden">
                 {d.featured_image && (
                   <div className="h-32 overflow-hidden">
-                    <img src={d.featured_image} className="w-full h-full object-cover" />
+                    <img src={d.featured_image} loading="lazy" className="w-full h-full object-cover" />
                   </div>
                 )}
                 <div className="p-5">

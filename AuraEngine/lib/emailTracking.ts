@@ -178,30 +178,29 @@ export async function fetchLeadEmailEngagement(
 
   const messageIds = messages.map((m) => m.id);
 
-  // Fetch events for these messages (exclude bots)
-  const { data: events, error: evtErr } = await supabase
-    .from('email_events')
-    .select('*')
-    .in('message_id', messageIds)
-    .eq('is_bot', false)
-    .order('created_at', { ascending: false });
+  // Fetch events and top clicked link in parallel (independent queries)
+  const [eventsResult, topLinksResult] = await Promise.all([
+    supabase
+      .from('email_events')
+      .select('*')
+      .in('message_id', messageIds)
+      .eq('is_bot', false)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('email_links')
+      .select('*')
+      .in('message_id', messageIds)
+      .order('click_count', { ascending: false })
+      .limit(1),
+  ]);
 
-  if (evtErr) {
-    console.error('Failed to fetch email events:', evtErr);
+  if (eventsResult.error) {
+    console.error('Failed to fetch email events:', eventsResult.error);
     return null;
   }
 
-  const allEvents = (events ?? []) as EmailEvent[];
-
-  // Fetch top clicked link
-  const { data: topLinks } = await supabase
-    .from('email_links')
-    .select('*')
-    .in('message_id', messageIds)
-    .order('click_count', { ascending: false })
-    .limit(1);
-
-  const topLink = topLinks?.[0] as EmailLink | undefined;
+  const allEvents = (eventsResult.data ?? []) as EmailEvent[];
+  const topLink = topLinksResult.data?.[0] as EmailLink | undefined;
 
   // Aggregate
   const opens = allEvents.filter((e) => e.event_type === 'open');

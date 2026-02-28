@@ -83,5 +83,6 @@ export function useAllLeads(limit?: number) {
 
       return normalizeLeads(data || []);
     },
+    staleTime: 5 * 60 * 1000, // 5 min — admin view tolerates slightly stale data
   });
 }

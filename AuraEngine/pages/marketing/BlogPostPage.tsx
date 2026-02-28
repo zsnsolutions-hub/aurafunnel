@@ -187,6 +187,7 @@ const BlogPostPage: React.FC = () => {
               <img
                 src={post.featured_image}
                 alt={post.title}
+                loading="lazy"
                 className="w-full h-auto object-cover max-h-[480px]"
               />
             </div>

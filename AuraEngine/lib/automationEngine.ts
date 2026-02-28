@@ -108,7 +108,8 @@ export async function loadWorkflows(userId: string): Promise<Workflow[]> {
     .from('workflows')
     .select('*')
     .eq('user_id', userId)
-    .order('updated_at', { ascending: false });
+    .order('updated_at', { ascending: false })
+    .limit(100);
 
   if (error) {
     console.error('Failed to load workflows:', error.message);

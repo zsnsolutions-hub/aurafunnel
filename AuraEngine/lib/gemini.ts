@@ -144,8 +144,7 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
     .replace('{{score}}', lead.score.toString())
     .replace('{{insights}}', lead.insights)
     .replace('{{type}}', type)
-    .replace('{{tone}}', lead.score > 80 ? 'high-priority and urgent' : 'helpful and consultative')
-    + buildBusinessContext(businessProfile);
+    .replace('{{tone}}', lead.score > 80 ? 'high-priority and urgent' : 'helpful and consultative');
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -157,7 +156,7 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
         model: MODEL_NAME,
         contents: finalPrompt,
         config: {
-          systemInstruction,
+          systemInstruction: systemInstruction + buildBusinessContext(businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,
@@ -246,8 +245,7 @@ Keep response under 300 words. Be specific, not generic.`,
     .replace('{{avg_score}}', avgScore.toString())
     .replace('{{status_breakdown}}', Object.entries(statusBreakdown).map(([k, v]) => `${k}: ${v}`).join(', '))
     .replace('{{hot_leads}}', leads.filter(l => l.score > 80).length.toString())
-    .replace('{{lead_summary}}', leadSummary)
-    + buildBusinessContext(businessProfile);
+    .replace('{{lead_summary}}', leadSummary);
 
   try {
     const controller = new AbortController();
@@ -257,7 +255,7 @@ Keep response under 300 words. Be specific, not generic.`,
       model: MODEL_NAME,
       contents: prompt,
       config: {
-        systemInstruction: resolved.systemInstruction,
+        systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
         temperature: resolved.temperature,
         topP: resolved.topP,
       }
@@ -353,8 +351,7 @@ BODY:
     .replace('{{goal_label}}', goalLabel)
     .replace('{{cadence_days}}', cadenceDays.toString())
     .replace(/\{\{tone\}\}/g, config.tone)
-    .replace('{{audience_count}}', config.audienceLeadIds.length.toString())
-    + buildBusinessContext(businessProfile);
+    .replace('{{audience_count}}', config.audienceLeadIds.length.toString());
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -366,7 +363,7 @@ BODY:
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,
@@ -472,8 +469,7 @@ export const generateContentByCategory = async (
     .replace(/\{\{insights\}\}/g, lead.insights || '')
     .replace(/\{\{tone\}\}/g, tone)
     .replace(/\{\{first_name\}\}/g, (lead.name || '').split(' ')[0] || '')
-    + (additionalContext ? ` ${additionalContext}` : '')
-    + buildBusinessContext(businessProfile);
+    + (additionalContext ? ` ${additionalContext}` : '');
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -485,7 +481,7 @@ export const generateContentByCategory = async (
         model: MODEL_NAME,
         contents: finalCategoryPrompt,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,
@@ -696,10 +692,9 @@ Return ONE structured JSON object in this exact schema (no commentary outside th
     .replace('{{company}}', lead.company)
     .replace('{{email_domain}}', emailDomain ? `- Email Domain: ${emailDomain}` : '')
     .replace('{{insights}}', lead.insights ? `- Existing Insights: ${lead.insights}` : '')
-    .replace('{{url_context}}', urlContext || 'None provided')
-    + buildBusinessContext(businessProfile);
+    .replace('{{url_context}}', urlContext || 'None provided');
 
-  const systemInstruction = resolved.systemInstruction;
+  const systemInstruction = resolved.systemInstruction + buildBusinessContext(businessProfile);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1245,8 +1240,7 @@ export const generateCommandCenterResponse = async (
   const contextBlock = `${pipelineStats}
 
 TOP LEADS:
-${leadContext || 'No leads in pipeline.'}
-${buildBusinessContext(businessProfile)}`;
+${leadContext || 'No leads in pipeline.'}`;
 
   // Build multi-turn contents from conversation history (last 10)
   const historySlice = conversationHistory.slice(-10);
@@ -1288,7 +1282,7 @@ ${buildBusinessContext(businessProfile)}`;
         model: MODEL_NAME,
         contents,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,
@@ -1362,8 +1356,7 @@ Return exactly 5 suggestions.`,
   });
 
   const prompt = resolved.promptTemplate
-    .replace('{{content}}', content)
-    + buildBusinessContext(businessProfile);
+    .replace('{{content}}', content);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1375,7 +1368,7 @@ Return exactly 5 suggestions.`,
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
         }
@@ -1476,8 +1469,7 @@ Be specific and data-driven.`,
     .replace('{{emails_sent}}', input.emailsSent.toString())
     .replace('{{emails_opened}}', input.emailsOpened.toString())
     .replace('{{conversion_rate}}', input.conversionRate.toString())
-    .replace('{{recent_activity}}', input.recentActivity)
-    + buildBusinessContext(input.businessProfile);
+    .replace('{{recent_activity}}', input.recentActivity);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1489,7 +1481,7 @@ Be specific and data-driven.`,
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(input.businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
         }
@@ -1656,8 +1648,7 @@ EXISTING CONTENT TO EXPAND:
     .replace('{{existing_content}}', params.existingContent || '(No content provided)')
     .replace('{{tone_guide}}', toneGuide)
     .replace('{{category_guide}}', categoryGuide)
-    .replace('{{keyword_guide}}', keywordGuide)
-    + buildBusinessContext(params.businessProfile);
+    .replace('{{keyword_guide}}', keywordGuide);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1669,7 +1660,7 @@ EXISTING CONTENT TO EXPAND:
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,
@@ -1765,8 +1756,7 @@ Output ONLY the caption text.`,
   const prompt = resolved.promptTemplate
     .replace('{{post_title}}', params.postTitle)
     .replace('{{post_excerpt}}', params.postExcerpt ? `EXCERPT: ${params.postExcerpt}` : '')
-    .replace('{{post_url}}', params.postUrl)
-    + buildBusinessContext(params.businessProfile);
+    .replace('{{post_url}}', params.postUrl);
 
   try {
     const controller = new AbortController();
@@ -1776,7 +1766,7 @@ Output ONLY the caption text.`,
       model: MODEL_NAME,
       contents: prompt,
       config: {
-        systemInstruction: resolved.systemInstruction,
+        systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
         temperature: resolved.temperature,
         topP: resolved.topP,
       }
@@ -1860,8 +1850,7 @@ BODY: [rewritten HTML email body]`,
     .replace('{{lead_context}}', leadContext)
     .replace('{{subject_template}}', input.subjectTemplate)
     .replace('{{body_template}}', input.bodyTemplate)
-    .replace('{{tone}}', toneLabel)
-    + buildBusinessContext(input.businessProfile);
+    .replace('{{tone}}', toneLabel);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -1873,7 +1862,7 @@ BODY: [rewritten HTML email body]`,
           model: MODEL_NAME,
           contents: prompt,
           config: {
-            systemInstruction: resolved.systemInstruction,
+            systemInstruction: resolved.systemInstruction + buildBusinessContext(input.businessProfile),
             temperature: resolved.temperature,
             topP: resolved.topP,
           }
@@ -2016,8 +2005,7 @@ Return each suggestion on its own line, prefixed with "- ".`,
     .replace('{{conversion_rate}}', input.stats.conversionRate.toString())
     .replace('{{time_saved_hrs}}', input.stats.timeSavedHrs.toString())
     .replace('{{roi}}', input.stats.roi.toString())
-    .replace('{{lead_count}}', input.leadCount.toString())
-    + buildBusinessContext(businessProfile);
+    .replace('{{lead_count}}', input.leadCount.toString());
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -2029,7 +2017,7 @@ Return each suggestion on its own line, prefixed with "- ".`,
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
         }
@@ -2117,8 +2105,7 @@ Respond in EXACTLY this format:
     .replace('{{blog_url}}', params.blogUrl ? `- Blog URL: ${params.blogUrl}` : '')
     .replace('{{contact_name}}', params.contactName ? `- Editor/Contact: ${params.contactName}` : '')
     .replace('{{tone}}', params.tone)
-    .replace('{{proposed_topics}}', params.proposedTopics ? `\nPROPOSED TOPICS:\n${params.proposedTopics}` : '')
-    + buildBusinessContext(params.businessProfile);
+    .replace('{{proposed_topics}}', params.proposedTopics ? `\nPROPOSED TOPICS:\n${params.proposedTopics}` : '');
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -2130,7 +2117,7 @@ Respond in EXACTLY this format:
         model: MODEL_NAME,
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction,
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,

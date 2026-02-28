@@ -287,7 +287,7 @@ const BlogManager: React.FC = () => {
                   <tr key={post.id} className="hover:bg-slate-50/30 transition-colors group">
                     <td className="px-10 py-7">
                       <div className="flex items-center space-x-4">
-                        {post.featured_image && <img src={post.featured_image} className="w-10 h-10 rounded-lg object-cover shadow-sm border border-slate-100" />}
+                        {post.featured_image && <img src={post.featured_image} loading="lazy" className="w-10 h-10 rounded-lg object-cover shadow-sm border border-slate-100" />}
                         <div>
                           <p className="text-sm font-bold text-slate-900 font-heading">{post.title}</p>
                           <p className="text-[10px] text-slate-400 font-mono">/{post.slug}</p>
@@ -436,10 +436,11 @@ const BlogManager: React.FC = () => {
                    <div className="relative h-56 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group">
                       {formData.featured_image ? (
                         <>
-                          <img 
+                          <img
                             key={formData.featured_image}
-                            src={formData.featured_image} 
-                            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300" 
+                            src={formData.featured_image}
+                            loading="lazy"
+                            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
                             onError={(e) => {
                               console.error("Asset Link Broken:", formData.featured_image);
                               (e.target as any).src = 'https://via.placeholder.com/800x450?text=Asset+Link+Failure';

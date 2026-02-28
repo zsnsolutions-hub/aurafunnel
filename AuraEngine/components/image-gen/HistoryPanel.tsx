@@ -56,7 +56,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ moduleType, onReuse }) => {
             onClick={() => onReuse(img)}
             className="w-full flex items-center space-x-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all text-left group"
           >
-            <img src={url} alt="" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+            <img src={url} alt="" loading="lazy" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-slate-700 truncate">{img.prompt.slice(0, 60)}…</p>
               <div className="flex items-center space-x-2 mt-0.5">

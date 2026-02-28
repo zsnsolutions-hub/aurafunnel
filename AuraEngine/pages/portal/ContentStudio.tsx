@@ -2197,6 +2197,7 @@ const ContentStudio: React.FC = () => {
                               <img
                                 src={seg.value}
                                 alt={`Image ${imgIdx + 1}`}
+                                loading="lazy"
                                 className="w-16 h-16 rounded-lg object-cover border-2 border-white shadow-sm flex-shrink-0"
                               />
                               <div className="flex-1 min-w-0">
@@ -2324,7 +2325,7 @@ const ContentStudio: React.FC = () => {
                     <div className="mt-1.5 flex flex-wrap gap-2">
                       {emailImages.map((url, idx) => (
                         <div key={idx} className="relative group">
-                          <img src={url} alt={`Image ${idx + 1}`} className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
+                          <img src={url} alt={`Image ${idx + 1}`} loading="lazy" className="w-20 h-20 rounded-xl object-cover border border-slate-200" />
                           <button
                             onClick={() => setEmailImages(prev => prev.filter((_, i) => i !== idx))}
                             className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -2493,7 +2494,7 @@ const ContentStudio: React.FC = () => {
                       ).map((seg, i) =>
                         seg.type === 'image' ? (
                           <div key={i} style={{ margin: '16px 0' }}>
-                            <img src={seg.value} alt="" className="max-w-full h-auto rounded-lg" />
+                            <img src={seg.value} alt="" loading="lazy" className="max-w-full h-auto rounded-lg" />
                           </div>
                         ) : (
                           <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{seg.value}</span>
@@ -2541,7 +2542,7 @@ const ContentStudio: React.FC = () => {
                   {/* Post image */}
                   {emailImages.length > 0 && (
                     <div className="border-t border-b border-slate-100">
-                      <img src={emailImages[0]} alt="Post image" className="w-full object-cover" />
+                      <img src={emailImages[0]} alt="Post image" loading="lazy" className="w-full object-cover" />
                     </div>
                   )}
                   {/* Engagement bar */}

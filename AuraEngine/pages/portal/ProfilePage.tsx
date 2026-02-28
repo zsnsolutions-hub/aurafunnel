@@ -1349,7 +1349,7 @@ const ProfilePage: React.FC = () => {
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Company Logo</span>
                 {logoUrl ? (
                   <div className="flex items-center space-x-4">
-                    <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                    <img src={logoUrl} alt="Logo" loading="lazy" className="w-16 h-16 object-contain rounded-xl border border-slate-200 bg-slate-50" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-slate-700 truncate">{logoUrl.split('/').pop()}</p>
                     </div>
@@ -1661,7 +1661,7 @@ const ProfilePage: React.FC = () => {
                   </div>
                   {logoUrl ? (
                     <div className="flex items-center space-x-4">
-                      <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                      <img src={logoUrl} alt="Logo" loading="lazy" className="w-16 h-16 object-contain rounded-xl border border-slate-200 bg-slate-50" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-slate-700 truncate">{logoUrl.split('/').pop()}</p>
                       </div>

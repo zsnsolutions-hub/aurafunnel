@@ -390,7 +390,8 @@ export async function fetchContentAnalytics(
       .select('id, status, created_at')
       .eq('author_id', userId)
       .gte('created_at', from)
-      .lte('created_at', to);
+      .lte('created_at', to)
+      .limit(500);
 
     if (error || !posts || posts.length === 0) return empty;
 
@@ -428,7 +429,8 @@ export async function fetchAIUsageAnalytics(
       .select('tokens_used, created_at')
       .eq('user_id', userId)
       .gte('created_at', from)
-      .lte('created_at', to);
+      .lte('created_at', to)
+      .limit(1000);
 
     if (error || !logs || logs.length === 0) return empty;
 

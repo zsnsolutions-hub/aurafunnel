@@ -73,7 +73,7 @@ const LogoPicker: React.FC<LogoPickerProps> = ({
                 selectedId === logo.id ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-200 hover:border-slate-300'
               }`}
             >
-              <img src={logo.file_url} alt={logo.file_name || 'Logo'} className="w-full h-full object-contain p-1" />
+              <img src={logo.file_url} alt={logo.file_name || 'Logo'} loading="lazy" className="w-full h-full object-contain p-1" />
             </button>
             {selectedId === logo.id && (
               <div className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 rounded-full flex items-center justify-center">
