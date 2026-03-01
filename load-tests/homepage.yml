@@ -15,26 +15,29 @@ config:
       Accept-Encoding: "gzip, br"
 
 scenarios:
-  - name: "Homepage flow"
+  - name: "Homepage + assets"
     flow:
       - get:
           url: "/"
-      - think: 2
-      - get:
-          url: "/assets/"
-          followRedirect: false
       - think: 1
+      - get:
+          url: "/assets/index-BYHEwBuH.css"
+      - get:
+          url: "/assets/index-zpqAfgNO.js"
+      - think: 2
 
-  - name: "Marketing pages"
+  - name: "Full page load simulation"
     flow:
       - get:
           url: "/"
-      - think: 2
       - get:
-          url: "/#/features"
+          url: "/assets/index-BYHEwBuH.css"
+      - get:
+          url: "/assets/index-zpqAfgNO.js"
+      - get:
+          url: "/assets/vendor-react-B0kr7u-i.js"
+      - get:
+          url: "/assets/vendor-supabase-DdzJP3aL.js"
       - think: 3
       - get:
-          url: "/#/pricing"
-      - think: 2
-      - get:
-          url: "/#/contact"
+          url: "/"
