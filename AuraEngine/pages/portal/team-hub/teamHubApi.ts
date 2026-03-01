@@ -277,6 +277,36 @@ export async function deleteFlow(flowId: string): Promise<void> {
 // ─── Flow with lanes + items ───
 
 export async function fetchFlowWithData(flowId: string): Promise<FlowWithData> {
+  // Try single-RPC snapshot first (deployed via board_snapshot_rpc migration)
+  try {
+    const { data, error } = await supabase.rpc('get_board_snapshot', { p_board_id: flowId });
+    if (!error && data && data.board) {
+      const board = data.board;
+      const lists = (data.lists || []).map((lane: any) => ({
+        ...lane,
+        cards: (data.cards || [])
+          .filter((c: any) => c.list_id === lane.id)
+          .map((c: any) => ({
+            ...c,
+            labels: c.labels || [],
+            comment_count: c.comment_count ?? 0,
+            latest_comment: c.latest_comment ?? null,
+            assigned_members: c.assigned_members || [],
+            lead_link: c.lead_link ?? null,
+          }))
+          .sort((a: any, b: any) => a.position - b.position),
+      }));
+      return { ...board, lists };
+    }
+  } catch {
+    // RPC not available yet — fall through to legacy multi-query
+  }
+
+  return fetchFlowWithDataLegacy(flowId);
+}
+
+/** Legacy multi-query fallback (pre-RPC) */
+async function fetchFlowWithDataLegacy(flowId: string): Promise<FlowWithData> {
   const [flowRes, lanesRes, itemsRes] = await Promise.all([
     supabase.from('teamhub_boards').select('*').eq('id', flowId).single(),
     supabase.from('teamhub_lists').select('*').eq('board_id', flowId).order('position'),

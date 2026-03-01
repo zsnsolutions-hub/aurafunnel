@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -17,10 +17,11 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { LayoutGrid, Eye, Flag, ArrowRight, Pencil, Plus, Trash2, Archive, Users, Link2, Unlink, CircleDot, AlertTriangle } from 'lucide-react';
-import type { FlowWithData, Item, Lane, FlowMember, ItemLeadLink } from '../teamHubApi';
+import type { FlowWithData, Item, Lane, ItemLeadLink } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import type { BoardFilter, BoardSort, ViewMode } from './FlowHeader';
 import * as api from '../teamHubApi';
+import { useBoardMembers } from '../hooks/useTeamHubQueries';
 import LaneColumn, { type LaneColumnHandle } from './LaneColumn';
 import ContextMenu, { type ContextMenuItem } from '../../../../components/teamhub/ContextMenu';
 import AddLaneInline from './AddLaneInline';
@@ -60,7 +61,6 @@ const FlowView: React.FC<FlowViewProps> = ({
   const [boardFilter, setBoardFilter] = useState<BoardFilter>({ priority: '', due: '' });
   const [boardSort, setBoardSort] = useState<BoardSort>('default');
   const [showActivity, setShowActivity] = useState(false);
-  const [members, setMembers] = useState<FlowMember[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: FlowContextTarget } | null>(null);
   const [leadLinkItem, setLeadLinkItem] = useState<Item | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -68,15 +68,11 @@ const FlowView: React.FC<FlowViewProps> = ({
   const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const laneRefs = useRef<Map<string, React.RefObject<LaneColumnHandle | null>>>(new Map());
 
-  React.useEffect(() => { setLanes(flow.lists); }, [flow.lists]);
+  // Board members via TanStack Query (cached, staleTime: 2min)
+  const membersQuery = useBoardMembers(flow.id);
+  const members = membersQuery.data ?? [];
 
-  useEffect(() => {
-    let cancelled = false;
-    api.fetchFlowMembers(flow.id)
-      .then(data => { if (!cancelled) setMembers(data); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [flow.id]);
+  React.useEffect(() => { setLanes(flow.lists); }, [flow.lists]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

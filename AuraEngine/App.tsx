@@ -9,6 +9,9 @@ import { SupportBanner } from './components/support/SupportBanner';
 import { UIModeProvider } from './components/ui-mode';
 import { useIdlePrefetch } from './hooks/useIdlePrefetch';
 
+// Dev perf panel — lazy-loaded, tree-shaken in production
+const PerfPanel = lazy(() => import('./components/dev/PerfPanel'));
+
 // Layouts — lazy-loaded to keep main bundle lean
 const MarketingLayout = lazy(() => import('./components/layout/MarketingLayout'));
 const AdminLayout = lazy(() => import('./components/layout/AdminLayout'));
@@ -97,9 +100,14 @@ const PageFallback = () => {
   );
 };
 
+const AUTH_TIMEOUT_MS = 2000;
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  /** Phase 1: set as soon as getSession() returns a session (near-instant from localStorage) */
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  /** True until Phase 1 (session check) completes OR timeout fires */
+  const [authChecked, setAuthChecked] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const loggingOutRef = useRef(false);
@@ -143,17 +151,29 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Safety net: render routes after AUTH_TIMEOUT_MS even if auth hasn't resolved
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setAuthChecked(true);
+    }, AUTH_TIMEOUT_MS);
+
     const checkUser = async () => {
       try {
+        // Phase 1: getSession() reads from localStorage — near-instant
         const { data: { session } } = await supabase.auth.getSession();
         if (session && !cancelled) {
+          setSessionUserId(session.user.id);
+          setAuthChecked(true); // unblock rendering immediately
+
+          // Phase 2: fetch profile in background (doesn't block routes)
           const profile = await fetchProfile(session.user.id);
           if (profile && !cancelled) setUser(profile);
+        } else if (!cancelled) {
+          setAuthChecked(true);
         }
       } catch (err) {
         console.warn('Session check failed:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setAuthChecked(true);
       }
     };
     checkUser();
@@ -161,6 +181,7 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || loggingOutRef.current) {
         setUser(null);
+        setSessionUserId(null);
         return;
       }
       if (event === 'PASSWORD_RECOVERY') {
@@ -168,15 +189,18 @@ const App: React.FC = () => {
         return;
       }
       if (session) {
+        setSessionUserId(session.user.id);
         const profile = await fetchProfile(session.user.id);
         if (profile) setUser(profile);
       } else {
         setUser(null);
+        setSessionUserId(null);
       }
     });
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [fetchProfile]);
@@ -189,12 +213,13 @@ const App: React.FC = () => {
     setShowLogoutModal(false);
     loggingOutRef.current = true;
     setUser(null);
+    setSessionUserId(null);
     await supabase.auth.signOut({ scope: 'global' });
     loggingOutRef.current = false;
     navigate('/');
   };
 
-  if (loading) {
+  if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
@@ -264,6 +289,7 @@ const App: React.FC = () => {
             element={
               user?.role === UserRole.CLIENT ?
               <OnboardingPage user={user!} refreshProfile={refreshProfile} /> :
+              sessionUserId ? <PageFallback /> :
               <Navigate to="/auth" state={{ from: location }} />
             }
           />
@@ -276,6 +302,7 @@ const App: React.FC = () => {
                 <Navigate to="/onboarding" replace /> :
                 <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} />
               ) :
+              sessionUserId ? <PageFallback /> :
               <Navigate to="/auth" state={{ from: location }} />
             }
           >
@@ -309,6 +336,7 @@ const App: React.FC = () => {
             element={
               user?.role === UserRole.ADMIN ?
               <AdminLayout user={user!} onLogout={handleLogout} /> :
+              sessionUserId ? <PageFallback /> :
               <Navigate to="/auth" state={{ from: location }} />
             }
           >
@@ -331,6 +359,9 @@ const App: React.FC = () => {
         </Routes>
       </Suspense>
     </ErrorBoundary>
+    {import.meta.env.DEV && (
+      <Suspense fallback={null}><PerfPanel /></Suspense>
+    )}
     </SupportProvider>
     </UIModeProvider>
     </GuideProvider>

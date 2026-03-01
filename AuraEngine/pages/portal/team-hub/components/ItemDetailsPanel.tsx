@@ -3,6 +3,7 @@ import { X, Calendar, Flag, XCircle, Loader2, Tag, Plus, Users, Link2, Unlink, M
 import type { Item, Comment, Activity, ItemPriority, ItemTag, CardMember, FlowMember, ItemLeadLink } from '../teamHubApi';
 import type { FlowPermissions } from '../hooks/useFlowPermissions';
 import * as api from '../teamHubApi';
+import { useCardDetail } from '../hooks/useTeamHubQueries';
 import Comments from './Comments';
 import ActivityFeed from './ActivityFeed';
 import LeadLinkDialog from './LeadLinkDialog';
@@ -85,7 +86,10 @@ const ItemDetailsPanel: React.FC<ItemDetailsPanelProps> = ({
   const titleRef = useRef<HTMLInputElement>(null);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load item detail
+  // Card detail via TanStack Query (cached, staleTime: 15s)
+  const cardDetailQuery = useCardDetail(item?.id ?? null);
+
+  // Sync local state from props + query data
   useEffect(() => {
     if (!item) return;
     setTitle(item.title);
@@ -97,18 +101,22 @@ const ItemDetailsPanel: React.FC<ItemDetailsPanelProps> = ({
     setLeadLink(item.lead_link || null);
     setShowAssignDropdown(false);
     setShowLeadLinkDialog(false);
-
-    setLoading(true);
-    api.fetchItemDetail(item.id)
-      .then(({ comments: c, activity: a, cardMembers: cm, leadLink: ll }) => {
-        setComments(c);
-        setActivity(a);
-        setCardMembers(cm);
-        setLeadLink(ll);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
   }, [item]);
+
+  // When query data arrives, update comments/activity/members/lead
+  useEffect(() => {
+    if (!cardDetailQuery.data) return;
+    const { comments: c, activity: a, cardMembers: cm, leadLink: ll } = cardDetailQuery.data;
+    setComments(c);
+    setActivity(a);
+    setCardMembers(cm);
+    setLeadLink(ll);
+  }, [cardDetailQuery.data]);
+
+  // Derive loading from query state
+  useEffect(() => {
+    setLoading(cardDetailQuery.isLoading);
+  }, [cardDetailQuery.isLoading]);
 
   // Escape to close (guarded: skip when LeadLinkDialog is open)
   useEffect(() => {
@@ -248,8 +256,8 @@ const ItemDetailsPanel: React.FC<ItemDetailsPanelProps> = ({
     if (!item) return;
     const newComment = await api.addComment(item.id, userId, body, flowId, userName);
     setComments(prev => [...prev, { ...newComment, user_name: userName }]);
-    const { activity: a } = await api.fetchItemDetail(item.id);
-    setActivity(a);
+    // Invalidate the cached card detail to refresh activity feed
+    cardDetailQuery.refetch();
     onItemUpdated();
   };
 

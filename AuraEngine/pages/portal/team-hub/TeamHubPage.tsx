@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   LayoutGrid, Plus, Loader2, Trash2, Search, ListChecks,
   Layers, AlertTriangle, Clock, CheckCircle2, MoreHorizontal,
@@ -10,6 +11,13 @@ import type { User } from '../../../types';
 import type { FlowWithData, FlowSummary, DashboardStats, Activity as ActivityType } from './teamHubApi';
 import * as api from './teamHubApi';
 import { useFlowPermissions } from './hooks/useFlowPermissions';
+import {
+  useFlowsWithStats,
+  useRecentActivity,
+  useBoardData,
+  usePrefetchBoard,
+  teamHubKeys,
+} from './hooks/useTeamHubQueries';
 import FlowView from './components/FlowView';
 import FlowMembersPanel from './components/FlowMembersPanel';
 import FlowTemplateSelector from './components/FlowTemplateSelector';
@@ -40,13 +48,20 @@ type SortMode = 'recent' | 'name' | 'items';
 
 const TeamHubPage: React.FC = () => {
   const { user } = useOutletContext<OutletCtx>();
+  const queryClient = useQueryClient();
+  const prefetchBoard = usePrefetchBoard();
 
-  // Flow list state
-  const [flows, setFlows] = useState<FlowSummary[]>([]);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentActivity, setRecentActivity] = useState<ActivityType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // ─── TanStack Query data ───
+  const dashboardQuery = useFlowsWithStats(user.id);
+  const activityQuery = useRecentActivity(user.id);
+
+  const flows = dashboardQuery.data?.flows ?? [];
+  const stats = dashboardQuery.data?.stats ?? null;
+  const recentActivity = activityQuery.data ?? [];
+  const loading = dashboardQuery.isLoading;
+  const refreshing = dashboardQuery.isFetching && !dashboardQuery.isLoading;
+
+  // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [showNewFlowInput, setShowNewFlowInput] = useState(false);
@@ -60,61 +75,28 @@ const TeamHubPage: React.FC = () => {
 
   // Flow detail state
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
-  const [flowData, setFlowData] = useState<FlowWithData | null>(null);
-  const [flowLoading, setFlowLoading] = useState(false);
   const [showMembersPanel, setShowMembersPanel] = useState(false);
+
+  // Board data via TanStack Query (cached, instant on revisit)
+  const boardQuery = useBoardData(selectedFlowId);
+  const flowData = boardQuery.data ?? null;
+  const flowLoading = boardQuery.isLoading;
 
   // RBAC
   const permissions = useFlowPermissions(selectedFlowId, user.id);
 
-  // ─── Data loading ───
+  // ─── Refresh helpers (invalidate TanStack Query cache) ───
 
-  const loadDashboard = useCallback(async (showRefresh = false) => {
-    if (showRefresh) setRefreshing(true);
-    try {
-      const [{ flows: f, stats: s }, activity] = await Promise.all([
-        api.fetchFlowsWithStats(user.id),
-        api.fetchRecentActivity(user.id),
-      ]);
-      setFlows(f);
-      setStats(s);
-      setRecentActivity(activity);
-    } catch (err) {
-      console.error('Failed to load dashboard:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [user.id]);
-
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
-
-  // Load flow detail
-  const loadFlowData = useCallback(async (flowId: string) => {
-    setFlowLoading(true);
-    try {
-      const data = await api.fetchFlowWithData(flowId);
-      setFlowData(data);
-    } catch (err) {
-      console.error('Failed to load flow:', err);
-    } finally {
-      setFlowLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (selectedFlowId) {
-      loadFlowData(selectedFlowId);
-    } else {
-      setFlowData(null);
-    }
-  }, [selectedFlowId, loadFlowData]);
+  const loadDashboard = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: teamHubKeys.dashboard(user.id) });
+    queryClient.invalidateQueries({ queryKey: teamHubKeys.activity(user.id) });
+  }, [queryClient, user.id]);
 
   const handleRefresh = useCallback(() => {
-    if (selectedFlowId) loadFlowData(selectedFlowId);
-  }, [selectedFlowId, loadFlowData]);
+    if (selectedFlowId) {
+      queryClient.invalidateQueries({ queryKey: teamHubKeys.board(selectedFlowId) });
+    }
+  }, [selectedFlowId, queryClient]);
 
   // ─── Flow CRUD ───
 
@@ -157,10 +139,10 @@ const TeamHubPage: React.FC = () => {
   };
 
   const handleRenameFlow = async (flowId: string, name: string) => {
-    setFlows(prev => prev.map(f => f.id === flowId ? { ...f, name } : f));
-    setFlowData(prev => prev && prev.id === flowId ? { ...prev, name } : prev);
     try {
       await api.updateFlow(flowId, name);
+      loadDashboard();
+      if (selectedFlowId) queryClient.invalidateQueries({ queryKey: teamHubKeys.board(selectedFlowId) });
     } catch {
       loadDashboard();
     }
@@ -173,7 +155,6 @@ const TeamHubPage: React.FC = () => {
       await api.deleteFlow(deleteConfirm);
       if (selectedFlowId === deleteConfirm) {
         setSelectedFlowId(null);
-        setFlowData(null);
       }
       loadDashboard();
     } catch (err) {
@@ -267,7 +248,7 @@ const TeamHubPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => loadDashboard(true)}
+            onClick={() => loadDashboard()}
             disabled={refreshing}
             className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all disabled:opacity-40"
             title="Refresh"
@@ -386,6 +367,7 @@ const TeamHubPage: React.FC = () => {
                   {filteredFlows.map((flow, idx) => (
                     <div
                       key={flow.id}
+                      onMouseEnter={() => prefetchBoard(flow.id)}
                       className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:border-slate-300 transition-all group relative"
                     >
                       {/* Color banner */}
