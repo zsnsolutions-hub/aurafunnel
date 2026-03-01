@@ -1,6 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { redis } from '../cache/redis.js';
 import { createClient } from '@supabase/supabase-js';
+import { runResearchJob } from '../research/index.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -60,8 +61,20 @@ export function startDataWorker() {
         }
 
         case 'lead_enrichment': {
-          // TODO: Implement lead enrichment (Apollo/Clearbit API calls)
-          return { processed: 0, failed: 0 };
+          const { domain, companyName, leadId } = params as { domain: string; companyName?: string; leadId: string };
+          const result = await runResearchJob({ domain, companyName });
+          if (result.status === 'completed' && leadId) {
+            await supabase.from('leads').update({
+              knowledgeBase: {
+                aiResearchBrief: result.signals.bodyText.slice(0, 2000),
+                aiResearchedAt: new Date().toISOString(),
+                title: result.signals.title,
+                industry: result.signals.description,
+                talkingPoints: result.signals.headings.slice(0, 5),
+              }
+            }).eq('id', leadId);
+          }
+          return { processed: result.status === 'completed' ? 1 : 0, failed: result.status !== 'completed' ? 1 : 0 };
         }
 
         default:
