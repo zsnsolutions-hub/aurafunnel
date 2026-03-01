@@ -106,7 +106,7 @@ BEGIN
   FROM teamhub_cards WHERE id = NEW.item_id;
 
   -- Get the lead's owner
-  SELECT user_id INTO v_lead_owner
+  SELECT client_id INTO v_lead_owner
   FROM leads WHERE id = NEW.lead_id;
 
   -- Check that the lead owner is a member of the board
