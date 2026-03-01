@@ -4,3 +4,9 @@ dist/
 *.local
 AuraEngine/supabase/
 supabase/.temp/
+
+# Export / scratch files
+landing-page-copy.md
+portal-navigation-export.json
+ux-audit-export.json
+ux-audit-export.md
