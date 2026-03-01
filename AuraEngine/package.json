@@ -14,6 +14,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@elevenlabs/react": "^0.14.1",
     "@google/genai": "^1.35.0",
+    "@sentry/react": "^10.40.0",
     "@stripe/react-stripe-js": "^5.6.0",
     "@stripe/stripe-js": "^8.7.0",
     "@supabase/supabase-js": "^2.48.1",

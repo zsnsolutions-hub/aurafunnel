@@ -119,6 +119,31 @@ export async function fetchEmailAnalytics(
     openRate: 0, clickRate: 0, bounceRate: 0,
   };
 
+  // Try materialized view first (fast path)
+  const { data: summary, error: mvErr } = await supabase
+    .from('email_analytics_summary')
+    .select('total_sent, unique_opens, unique_clicks, total_open_events, total_click_events')
+    .eq('owner_id', userId)
+    .gte('analytics_date', from)
+    .lte('analytics_date', to);
+
+  if (!mvErr && summary && summary.length > 0) {
+    const totalSent = summary.reduce((s, r) => s + (r.total_sent ?? 0), 0);
+    const uniqueOpens = summary.reduce((s, r) => s + (r.unique_opens ?? 0), 0);
+    const uniqueClicks = summary.reduce((s, r) => s + (r.unique_clicks ?? 0), 0);
+    const totalOpens = summary.reduce((s, r) => s + (r.total_open_events ?? 0), 0);
+    const totalClicks = summary.reduce((s, r) => s + (r.total_click_events ?? 0), 0);
+    const openRate = totalSent > 0 ? +((uniqueOpens / totalSent) * 100).toFixed(1) : 0;
+    const clickRate = totalSent > 0 ? +((uniqueClicks / totalSent) * 100).toFixed(1) : 0;
+
+    return {
+      totalSent, totalDelivered: totalSent, totalBounced: 0, totalFailed: 0,
+      totalOpens, uniqueOpens, totalClicks, uniqueClicks,
+      openRate, clickRate, bounceRate: 0,
+    };
+  }
+
+  // Fallback: query raw tables (before materialized view is created)
   const { data: messages, error: msgErr } = await supabase
     .from('email_messages')
     .select('id, status')

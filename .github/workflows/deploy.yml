@@ -34,6 +34,7 @@ jobs:
           VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
           VITE_ELEVENLABS_AGENT_ID: ${{ secrets.VITE_ELEVENLABS_AGENT_ID }}
           VITE_ELEVENLABS_AUTH_AGENT_ID: ${{ secrets.VITE_ELEVENLABS_AUTH_AGENT_ID }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
         run: npm run build
 
       - name: Deploy (zero-downtime symlink swap)
@@ -80,3 +81,30 @@ jobs:
           SSH_CMD="ssh -i ~/.ssh/deploy_key"
           rsync -azq -e "$SSH_CMD" nginx/aurafunnel.conf $USER@$HOST:/var/www/scaliyo/nginx-staged.conf
           $SSH_CMD $USER@$HOST "sudo -n cp /var/www/scaliyo/nginx-staged.conf /etc/nginx/sites-available/aurafunnel.conf && sudo -n nginx -t && sudo -n systemctl reload nginx"
+
+      - name: Check if backend changed
+        id: backend-check
+        working-directory: .
+        run: |
+          if git diff HEAD~1 --name-only 2>/dev/null | grep -q '^backend/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy backend
+        if: steps.backend-check.outputs.changed == 'true'
+        continue-on-error: true
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        working-directory: .
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
+          SSH_CMD="ssh -i ~/.ssh/deploy_key"
+          rsync -azq --delete --exclude node_modules --exclude dist -e "$SSH_CMD" backend/ $USER@$HOST:/var/www/scaliyo/backend/
+          $SSH_CMD $USER@$HOST "cd /var/www/scaliyo/backend && npm ci --production && npm run build && pm2 restart scaliyo-backend --update-env || pm2 start ecosystem.config.cjs"

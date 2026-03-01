@@ -1,0 +1,40 @@
+config:
+  target: "https://scaliyo.com"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Sustained load"
+    - duration: 30
+      arrivalRate: 50
+      name: "Peak load"
+  defaults:
+    headers:
+      Accept-Encoding: "gzip, br"
+
+scenarios:
+  - name: "Homepage flow"
+    flow:
+      - get:
+          url: "/"
+      - think: 2
+      - get:
+          url: "/assets/"
+          followRedirect: false
+      - think: 1
+
+  - name: "Marketing pages"
+    flow:
+      - get:
+          url: "/"
+      - think: 2
+      - get:
+          url: "/#/features"
+      - think: 3
+      - get:
+          url: "/#/pricing"
+      - think: 2
+      - get:
+          url: "/#/contact"

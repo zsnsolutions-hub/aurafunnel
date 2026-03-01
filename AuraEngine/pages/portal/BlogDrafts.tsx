@@ -369,6 +369,9 @@ const BlogDrafts: React.FC = () => {
         category: categories.find(c => c.id === newPost.category_id)?.name,
         keywords: aiKeywords ? aiKeywords.split(',').map(k => k.trim()).filter(Boolean) : undefined,
         existingContent: (aiMode === 'improve' || aiMode === 'expand') ? newPost.content : undefined,
+      }, undefined, {
+        stream: true,
+        onChunk: (text) => setAiResult(text),
       });
       setAiResult(result.text);
       if (refreshProfile) await refreshProfile();

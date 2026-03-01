@@ -1,0 +1,38 @@
+config:
+  target: "https://app.scaliyo.com"
+  phases:
+    - duration: 30
+      arrivalRate: 3
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 10
+      name: "Sustained load"
+    - duration: 30
+      arrivalRate: 25
+      name: "Peak load"
+  defaults:
+    headers:
+      Accept-Encoding: "gzip, br"
+
+scenarios:
+  - name: "Portal SPA load"
+    flow:
+      - get:
+          url: "/"
+      - think: 1
+      - get:
+          url: "/#/portal/dashboard"
+      - think: 3
+      - get:
+          url: "/#/portal/leads"
+      - think: 2
+      - get:
+          url: "/#/portal/content-studio"
+
+  - name: "Auth page load"
+    flow:
+      - get:
+          url: "/#/auth"
+      - think: 5
+      - get:
+          url: "/#/portal/dashboard"

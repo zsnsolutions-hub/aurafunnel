@@ -1,0 +1,50 @@
+config:
+  target: "https://app.scaliyo.com"
+  phases:
+    - duration: 30
+      arrivalRate: 2
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 5
+      name: "Sustained API load"
+    - duration: 30
+      arrivalRate: 10
+      name: "Peak API load"
+  defaults:
+    headers:
+      Accept-Encoding: "gzip, br"
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Rapid page transitions"
+    flow:
+      - get:
+          url: "/#/portal/dashboard"
+      - think: 1
+      - get:
+          url: "/#/portal/leads"
+      - think: 1
+      - get:
+          url: "/#/portal/analytics"
+      - think: 1
+      - get:
+          url: "/#/portal/content-studio"
+      - think: 1
+      - get:
+          url: "/#/portal/ai-command-center"
+      - think: 1
+      - get:
+          url: "/#/portal/blog"
+      - think: 1
+      - get:
+          url: "/#/portal/settings"
+
+  - name: "Asset preload stress"
+    flow:
+      - get:
+          url: "/"
+      - loop:
+          - get:
+              url: "/#/portal/dashboard"
+          - think: 0.5
+        count: 5

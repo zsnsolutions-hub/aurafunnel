@@ -527,6 +527,9 @@ const LeadManagement: React.FC = () => {
 
   const handleStatusUpdate = async (leadId: string, newStatus: Lead['status']) => {
     const lead = allLeads.find(l => l.id === leadId);
+    const prevStatus = lead?.status;
+    const prevActivity = lead?.lastActivity;
+    // Optimistic update
     setAllLeads(prev => prev.map(l =>
       l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
     ));
@@ -534,13 +537,25 @@ const LeadManagement: React.FC = () => {
       setSelectedLead({ ...selectedLead, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
     }
     const { error: updateError } = await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', leadId);
-    if (updateError) console.error('Lead status update error:', updateError.message);
-    const { error: logError } = await supabase.from('audit_logs').insert({
+    if (updateError) {
+      // Rollback on failure
+      setAllLeads(prev => prev.map(l =>
+        l.id === leadId ? { ...l, status: prevStatus!, lastActivity: prevActivity! } : l
+      ));
+      if (selectedLead?.id === leadId) {
+        setSelectedLead({ ...selectedLead, status: prevStatus!, lastActivity: prevActivity! });
+      }
+      console.error('Lead status update error:', updateError.message);
+      return;
+    }
+    // Audit log (fire-and-forget)
+    supabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'LEAD_STATUS_UPDATED',
       details: `${lead?.name || 'Lead'} moved to ${newStatus}`
+    }).then(({ error: logError }) => {
+      if (logError) console.error('Audit log error:', logError.message);
     });
-    if (logError) console.error('Audit log error:', logError.message);
   };
 
   const getNextStage = (currentStatus: Lead['status']): Lead['status'] | null => {
@@ -875,21 +890,26 @@ const LeadManagement: React.FC = () => {
   const handleDeleteConfirm = useCallback(async () => {
     if (deleteTargetIds.length === 0) return;
     setDeleteLoading(true);
+    // Snapshot for rollback
+    const snapshot = allLeads.filter(l => deleteTargetIds.includes(l.id));
+    // Optimistic removal
+    setAllLeads(prev => prev.filter(l => !deleteTargetIds.includes(l.id)));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      deleteTargetIds.forEach(id => next.delete(id));
+      return next;
+    });
+
     const { error } = await supabase.from('leads').delete().in('id', deleteTargetIds);
     if (error) {
+      // Rollback
+      setAllLeads(prev => [...snapshot, ...prev]);
       console.error('Delete leads error:', error.message);
-    } else {
-      setAllLeads(prev => prev.filter(l => !deleteTargetIds.includes(l.id)));
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        deleteTargetIds.forEach(id => next.delete(id));
-        return next;
-      });
     }
     setDeleteLoading(false);
     setDeleteConfirmOpen(false);
     setDeleteTargetIds([]);
-  }, [deleteTargetIds]);
+  }, [deleteTargetIds, allLeads]);
 
   // ── Activity Log ──
   const handleLogActivity = () => {

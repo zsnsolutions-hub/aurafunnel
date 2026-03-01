@@ -1,5 +1,5 @@
-// jsPDF is loaded on-demand (~400 kB + html2canvas ~200 kB) so the cost is
-// only paid when the user actually triggers a PDF export.
+// jsPDF is loaded on-demand (~400 kB) so the cost is only paid when the user
+// actually triggers a PDF export.
 async function loadJsPDF() {
   const { default: jsPDF } = await import('jspdf');
   return jsPDF;

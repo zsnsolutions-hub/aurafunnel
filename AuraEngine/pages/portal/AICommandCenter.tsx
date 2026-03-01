@@ -678,28 +678,45 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
         return;
       }
       const history = getConversationHistory();
+      const streamMsgId = `ai-${Date.now()}`;
+      setThinking(false);
+      // Add placeholder message for streaming
+      setMessages(prev => [...prev, {
+        id: streamMsgId,
+        role: 'ai',
+        content: '',
+        timestamp: new Date(),
+        confidence: 90,
+        type: 'insight',
+      }]);
       const aiResult = await generateCommandCenterResponse(
         prompt,
         aiMode,
         leads,
         history,
-        user.businessProfile
+        user.businessProfile,
+        undefined,
+        {
+          stream: true,
+          onChunk: (text) => {
+            setMessages(prev => prev.map(m =>
+              m.id === streamMsgId ? { ...m, content: frameModeResponse(text) } : m
+            ));
+          },
+        }
       );
 
       if (aiResult.text) {
         if (refreshProfile) await refreshProfile();
-        // Gemini succeeded — use AI response
-        setMessages(prev => [...prev, {
-          id: `ai-${Date.now()}`,
-          role: 'ai',
-          content: frameModeResponse(aiResult.text),
-          timestamp: new Date(),
-          confidence: 90,
-          type: 'insight',
-        }]);
-        setThinking(false);
+        // Finalize streamed message
+        setMessages(prev => prev.map(m =>
+          m.id === streamMsgId ? { ...m, content: frameModeResponse(aiResult.text) } : m
+        ));
         setResponseCount(prev => prev + 1);
         return;
+      } else {
+        // Remove empty streaming placeholder
+        setMessages(prev => prev.filter(m => m.id !== streamMsgId));
       }
     } catch {
       // Gemini failed — fall through to template

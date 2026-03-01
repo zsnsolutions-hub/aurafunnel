@@ -107,6 +107,11 @@ export interface AIResponse {
   prompt_version: number;
 }
 
+export interface StreamOptions {
+  stream: true;
+  onChunk: (accumulatedText: string) => void;
+}
+
 export const generateLeadContent = async (lead: Lead, type: ContentType, businessProfile?: BusinessProfile, userId?: string): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -289,7 +294,8 @@ export const generateEmailSequence = async (
   leads: Lead[],
   config: EmailSequenceConfig,
   businessProfile?: BusinessProfile,
-  userId?: string
+  userId?: string,
+  streamOpts?: StreamOptions
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -353,30 +359,50 @@ BODY:
     .replace(/\{\{tone\}\}/g, config.tone)
     .replace('{{audience_count}}', config.audienceLeadIds.length.toString());
 
+  const genConfig = {
+    systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
+    temperature: resolved.temperature,
+    topP: resolved.topP,
+    topK: 40,
+  };
+
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: prompt,
-        config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
-          temperature: resolved.temperature,
-          topP: resolved.topP,
-          topK: 40,
+      let text: string;
+      let tokensUsed = 0;
+
+      if (streamOpts?.stream) {
+        const stream = await ai.models.generateContentStream({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: genConfig,
+        });
+        text = '';
+        for await (const chunk of stream) {
+          text += chunk.text || '';
+          streamOpts.onChunk(text);
         }
-      });
+        // Token count not available in stream mode
+      } else {
+        const response = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: genConfig,
+        });
+        text = response.text || '';
+        tokensUsed = response.usageMetadata?.totalTokenCount || 0;
+      }
 
       clearTimeout(timeoutId);
-      const text = response.text;
       if (!text) throw new Error("Empty sequence response.");
 
       return {
         text,
-        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        tokens_used: tokensUsed,
         model_name: MODEL_NAME,
         prompt_name: 'email_sequence',
         prompt_version: resolved.promptVersion
@@ -1204,7 +1230,8 @@ export const generateCommandCenterResponse = async (
   leads: Lead[],
   conversationHistory: { role: 'user' | 'ai'; content: string }[],
   businessProfile?: BusinessProfile,
-  userId?: string
+  userId?: string,
+  streamOpts?: StreamOptions
 ): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -1272,30 +1299,49 @@ ${leadContext || 'No leads in pipeline.'}`;
     topP: 0.9,
   });
 
+  const genConfig = {
+    systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
+    temperature: resolved.temperature,
+    topP: resolved.topP,
+    topK: 40,
+  };
+
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-      const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents,
-        config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
-          temperature: resolved.temperature,
-          topP: resolved.topP,
-          topK: 40,
+      let text: string;
+      let tokensUsed = 0;
+
+      if (streamOpts?.stream) {
+        const stream = await ai.models.generateContentStream({
+          model: MODEL_NAME,
+          contents,
+          config: genConfig,
+        });
+        text = '';
+        for await (const chunk of stream) {
+          text += chunk.text || '';
+          streamOpts.onChunk(text);
         }
-      });
+      } else {
+        const response = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents,
+          config: genConfig,
+        });
+        text = response.text || '';
+        tokensUsed = response.usageMetadata?.totalTokenCount || 0;
+      }
 
       clearTimeout(timeoutId);
-      const text = response.text;
       if (!text) throw new Error('Empty response from Command Center.');
 
       return {
         text,
-        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        tokens_used: tokensUsed,
         model_name: MODEL_NAME,
         prompt_name: promptKey,
         prompt_version: resolved.promptVersion,
@@ -1581,7 +1627,7 @@ export interface BlogContentParams {
   businessProfile?: BusinessProfile;
 }
 
-export const generateBlogContent = async (params: BlogContentParams, userId?: string): Promise<AIResponse> => {
+export const generateBlogContent = async (params: BlogContentParams, userId?: string, streamOpts?: StreamOptions): Promise<AIResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const modeKeyMap: Record<BlogContentMode, string> = {
@@ -1650,30 +1696,49 @@ EXISTING CONTENT TO EXPAND:
     .replace('{{category_guide}}', categoryGuide)
     .replace('{{keyword_guide}}', keywordGuide);
 
+  const genConfig = {
+    systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
+    temperature: resolved.temperature,
+    topP: resolved.topP,
+    topK: 40,
+  };
+
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: prompt,
-        config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
-          temperature: resolved.temperature,
-          topP: resolved.topP,
-          topK: 40,
+      let text: string;
+      let tokensUsed = 0;
+
+      if (streamOpts?.stream) {
+        const stream = await ai.models.generateContentStream({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: genConfig,
+        });
+        text = '';
+        for await (const chunk of stream) {
+          text += chunk.text || '';
+          streamOpts.onChunk(text);
         }
-      });
+      } else {
+        const response = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: prompt,
+          config: genConfig,
+        });
+        text = response.text || '';
+        tokensUsed = response.usageMetadata?.totalTokenCount || 0;
+      }
 
       clearTimeout(timeoutId);
-      const text = response.text;
       if (!text) throw new Error('Empty blog content response.');
 
       return {
         text,
-        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        tokens_used: tokensUsed,
         model_name: MODEL_NAME,
         prompt_name: promptKey,
         prompt_version: resolved.promptVersion,
