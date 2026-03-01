@@ -107,7 +107,7 @@ export interface CardMember {
 
 export interface FlowMember {
   id: string;
-  flow_id: string;
+  board_id: string;
   user_id: string;
   role: FlowRole;
   created_at: string;
@@ -118,7 +118,7 @@ export interface FlowMember {
 
 export interface FlowInvite {
   id: string;
-  flow_id: string;
+  board_id: string;
   email: string;
   role: FlowRole;
   invited_by: string;
@@ -148,9 +148,9 @@ export async function fetchFlowsWithStats(userId: string): Promise<{ flows: Flow
   // Get flow IDs the user is a member of
   const { data: memberships } = await supabase
     .from('teamhub_flow_members')
-    .select('flow_id')
+    .select('board_id')
     .eq('user_id', userId);
-  const flowIds = (memberships || []).map(m => m.flow_id);
+  const flowIds = (memberships || []).map(m => m.board_id);
 
   if (flowIds.length === 0) {
     return {
@@ -206,9 +206,9 @@ export async function fetchFlowsWithStats(userId: string): Promise<{ flows: Flow
 export async function fetchRecentActivity(userId: string, limit = 15): Promise<Activity[]> {
   const { data: memberships } = await supabase
     .from('teamhub_flow_members')
-    .select('flow_id')
+    .select('board_id')
     .eq('user_id', userId);
-  const flowIds = (memberships || []).map(m => m.flow_id);
+  const flowIds = (memberships || []).map(m => m.board_id);
   if (flowIds.length === 0) return [];
 
   const { data, error } = await supabase
@@ -226,9 +226,9 @@ export async function fetchRecentActivity(userId: string, limit = 15): Promise<A
 export async function fetchFlows(userId: string): Promise<Flow[]> {
   const { data: memberships } = await supabase
     .from('teamhub_flow_members')
-    .select('flow_id')
+    .select('board_id')
     .eq('user_id', userId);
-  const flowIds = (memberships || []).map(m => m.flow_id);
+  const flowIds = (memberships || []).map(m => m.board_id);
   if (flowIds.length === 0) return [];
 
   const { data, error } = await supabase
@@ -250,7 +250,7 @@ export async function createFlow(userId: string, name: string): Promise<Flow> {
 
   // Auto-create owner membership
   await supabase.from('teamhub_flow_members').insert({
-    flow_id: data.id,
+    board_id: data.id,
     user_id: userId,
     role: 'owner',
   });
@@ -626,7 +626,7 @@ export async function fetchFlowMembers(flowId: string): Promise<FlowMember[]> {
   const { data, error } = await supabase
     .from('teamhub_flow_members')
     .select('*')
-    .eq('flow_id', flowId)
+    .eq('board_id', flowId)
     .order('created_at', { ascending: true });
   if (error) throw error;
 
@@ -647,7 +647,7 @@ export async function fetchFlowMembers(flowId: string): Promise<FlowMember[]> {
 
   return members.map((m: any) => ({
     id: m.id,
-    flow_id: m.flow_id,
+    board_id: m.board_id,
     user_id: m.user_id,
     role: m.role,
     created_at: m.created_at,
@@ -661,7 +661,7 @@ export async function fetchUserFlowRole(flowId: string, userId: string): Promise
   const { data, error } = await supabase
     .from('teamhub_flow_members')
     .select('role')
-    .eq('flow_id', flowId)
+    .eq('board_id', flowId)
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -671,7 +671,7 @@ export async function fetchUserFlowRole(flowId: string, userId: string): Promise
 export async function addFlowMember(flowId: string, userId: string, role: FlowRole): Promise<void> {
   const { error } = await supabase
     .from('teamhub_flow_members')
-    .insert({ flow_id: flowId, user_id: userId, role });
+    .insert({ board_id: flowId, user_id: userId, role });
   if (error) throw error;
   await logActivity(flowId, null, 'member_added', { user_id: userId, role });
 }
@@ -697,7 +697,7 @@ export async function removeFlowMember(flowId: string, memberId: string): Promis
 export async function inviteToFlow(flowId: string, email: string, role: FlowRole, invitedBy: string): Promise<FlowInvite> {
   const { data, error } = await supabase
     .from('teamhub_invites')
-    .insert({ flow_id: flowId, email, role, invited_by: invitedBy })
+    .insert({ board_id: flowId, email, role, invited_by: invitedBy })
     .select()
     .single();
   if (error) throw error;
@@ -709,7 +709,7 @@ export async function fetchFlowInvites(flowId: string): Promise<FlowInvite[]> {
   const { data, error } = await supabase
     .from('teamhub_invites')
     .select('*')
-    .eq('flow_id', flowId)
+    .eq('board_id', flowId)
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
   if (error) throw error;
@@ -732,7 +732,7 @@ export async function acceptInvite(inviteId: string, userId: string): Promise<vo
     .single();
   if (error) throw error;
 
-  await addFlowMember(invite.flow_id, userId, invite.role);
+  await addFlowMember(invite.board_id, userId, invite.role);
 
   await supabase
     .from('teamhub_invites')
@@ -923,6 +923,9 @@ function resolveLeadStatusForLane(
   return DEFAULT_LANE_STATUS_MAP[toLaneName.toLowerCase().trim()] || null;
 }
 
+// NOTE: Server-side DB trigger (trg_teamhub_card_lead_sync) now provides authoritative
+// lead sync on card move. This client-side version is kept as a harmless fallback
+// (idempotent update) and may be removed in a future cleanup pass.
 async function syncLeadStatusOnMove(
   itemId: string,
   flowId: string,
@@ -1094,7 +1097,7 @@ export async function createFlowFromTemplate(
 
   // Auto-create owner membership
   await supabase.from('teamhub_flow_members').insert({
-    flow_id: flow.id,
+    board_id: flow.id,
     user_id: userId,
     role: 'owner',
   });
