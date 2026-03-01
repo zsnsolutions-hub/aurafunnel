@@ -1,0 +1,954 @@
+[
+  {
+    "id": "f3228e8e-6178-41e9-9e20-6ca61becd19c",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Aly Shah moved to Contacted",
+    "created_at": "2026-02-15T01:33:47.255042+00:00",
+    "team_id": null
+  },
+  {
+    "id": "b63c8891-3923-4043-9b0c-06325e1efff2",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Aly Shah moved to Qualified",
+    "created_at": "2026-02-15T01:33:53.400623+00:00",
+    "team_id": null
+  },
+  {
+    "id": "30ffb53a-7430-4ffb-a1bd-f761a1ff891a",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED_QUICK",
+    "details": "Quick gen Cold Email for ALy Shah Amjad. Template: default_sales_outreach v0",
+    "created_at": "2026-02-15T01:48:05.684918+00:00",
+    "team_id": null
+  },
+  {
+    "id": "095e475c-4133-464b-b156-69ccfe29ad21",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED_QUICK",
+    "details": "Quick gen LinkedIn Message for ALy Shah Amjad. Template: default_sales_outreach v0",
+    "created_at": "2026-02-15T01:48:45.153064+00:00",
+    "team_id": null
+  },
+  {
+    "id": "2ca1674f-48ea-4d78-83b3-8ff6bf0f7635",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Landing Pages for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-15T02:08:17.610847+00:00",
+    "team_id": null
+  },
+  {
+    "id": "857b0e77-cc5a-400f-a918-b32bd5b29799",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "CONTENT_SENT",
+    "details": "Landing Pages: 1 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-15T02:09:14.493497+00:00",
+    "team_id": null
+  },
+  {
+    "id": "c8b2093a-86d7-49df-a016-363ba157878f",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED_QUICK",
+    "details": "Quick gen LinkedIn Message for ALy Shah Amjad. Template: default_sales_outreach v0",
+    "created_at": "2026-02-15T02:22:32.646411+00:00",
+    "team_id": null
+  },
+  {
+    "id": "ef64768d-38ee-40dc-bb8b-f2576e89d5e1",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED_QUICK",
+    "details": "Quick gen SMS Text for ALy Shah Amjad. Template: default_sales_outreach v0",
+    "created_at": "2026-02-15T02:23:51.120606+00:00",
+    "team_id": null
+  },
+  {
+    "id": "bb78d4ff-582a-4ef7-b43b-303456860243",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Social Media Posts for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-15T02:37:21.959791+00:00",
+    "team_id": null
+  },
+  {
+    "id": "5cb178e9-f792-4d06-876b-421f95196964",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED_QUICK",
+    "details": "Quick gen Follow-up Proposal for ALy Shah Amjad. Template: default_sales_outreach v0",
+    "created_at": "2026-02-15T03:01:02.871863+00:00",
+    "team_id": null
+  },
+  {
+    "id": "394a5825-b5f4-42c9-b6c3-b97b4d5e02e9",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED_QUICK",
+    "details": "Quick gen LinkedIn Message for ALy Shah Amjad. Template: default_sales_outreach v0",
+    "created_at": "2026-02-15T03:02:54.261987+00:00",
+    "team_id": null
+  },
+  {
+    "id": "003ca79e-58f5-4c73-8750-f0f00d6030f2",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "apollo_import",
+    "details": "{\"imported\":0,\"skipped\":0,\"failed\":2,\"search_log_id\":null}",
+    "created_at": "2026-02-17T02:40:55.727124+00:00",
+    "team_id": null
+  },
+  {
+    "id": "a4c6c582-e956-443e-b8dc-a8670a216953",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Social Media Posts for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T03:12:58.100635+00:00",
+    "team_id": null
+  },
+  {
+    "id": "210fdc81-bb37-42fe-96d8-25a65447dad7",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Ad Copy for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T03:14:22.437796+00:00",
+    "team_id": null
+  },
+  {
+    "id": "3e3bb606-203f-42ec-bf9d-65f2fc75f026",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Landing Pages for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T04:04:05.298048+00:00",
+    "team_id": null
+  },
+  {
+    "id": "9692610f-c6a7-493a-9e12-78dd4b1cfe03",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_DRAFT_SAVED",
+    "details": "Landing Pages: 3 blocks. Mode: draft. Recipients: 2 leads.",
+    "created_at": "2026-02-17T04:06:29.039543+00:00",
+    "team_id": null
+  },
+  {
+    "id": "bcc924c0-b4fe-4f8c-a9c3-3ca1cb6186ae",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Landing Pages: 3 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T04:07:09.848257+00:00",
+    "team_id": null
+  },
+  {
+    "id": "647371f6-c570-4ca2-9788-943b720d8570",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Proposals & Pitches for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Features → Benefits.",
+    "created_at": "2026-02-17T04:08:13.77152+00:00",
+    "team_id": null
+  },
+  {
+    "id": "19764f34-8695-4256-9da0-40829eb51755",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Landing Pages: 3 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T05:30:44.854657+00:00",
+    "team_id": null
+  },
+  {
+    "id": "896f0ba7-2b5e-4e89-9ff3-915a08256789",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Landing Pages: 3 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T06:24:55.320367+00:00",
+    "team_id": null
+  },
+  {
+    "id": "3c187265-ad89-49e8-bbd7-9cb9954d1232",
+    "user_id": "23f7ce0d-8f3f-4d5a-ace0-b99b29c232a1",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Book a Meeting, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T16:15:26.787844+00:00",
+    "team_id": null
+  },
+  {
+    "id": "2d77c9b3-d563-4c5f-bec9-f6620263f4cc",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T16:16:57.802519+00:00",
+    "team_id": null
+  },
+  {
+    "id": "19d0448e-c237-4e28-ad4d-e8182af80cda",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Aly S moved to Contacted",
+    "created_at": "2026-02-17T16:22:22.092402+00:00",
+    "team_id": null
+  },
+  {
+    "id": "9feaf257-116d-402c-85c4-680683fa663e",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Aly S moved to New",
+    "created_at": "2026-02-17T16:22:29.181705+00:00",
+    "team_id": null
+  },
+  {
+    "id": "e736fad8-5afb-4422-807c-9a1d82151c72",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Social Media Posts for 2 leads. Goal: Start Free Trial, Tone: Professional, Focus: Features → Benefits.",
+    "created_at": "2026-02-17T16:23:48.964107+00:00",
+    "team_id": null
+  },
+  {
+    "id": "4b0ec9ab-cf8c-450c-8573-8424f489cec1",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T17:21:32.044527+00:00",
+    "team_id": null
+  },
+  {
+    "id": "ae0e8673-bfb5-4417-b5ea-1dcb1ae62c7b",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Social Media Posts for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T18:17:47.032493+00:00",
+    "team_id": null
+  },
+  {
+    "id": "18740569-0669-4732-b6cd-36745e74765e",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T18:24:40.999788+00:00",
+    "team_id": null
+  },
+  {
+    "id": "162416ea-8e4d-4223-b6e5-89076b0caa38",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T18:43:46.992438+00:00",
+    "team_id": null
+  },
+  {
+    "id": "106db406-4df4-4a9f-928b-1d88f5a2f94a",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T18:44:22.170493+00:00",
+    "team_id": null
+  },
+  {
+    "id": "80069149-5cb8-4edd-aa00-50fdaf3c60ed",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 2 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T19:00:27.972815+00:00",
+    "team_id": null
+  },
+  {
+    "id": "b42a59ff-de77-4fc0-9692-d740f6cfa491",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T19:21:35.740124+00:00",
+    "team_id": null
+  },
+  {
+    "id": "0188fea7-f70e-4e4b-b01a-93467cd8f812",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 5 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-17T19:22:06.839619+00:00",
+    "team_id": null
+  },
+  {
+    "id": "c4bbc346-8abe-487b-bac9-1e97cd1e7c5b",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 5 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T21:00:42.747099+00:00",
+    "team_id": null
+  },
+  {
+    "id": "ba1a9952-9e8a-4d94-af31-f5cf216d94f7",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 5 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T21:16:48.903922+00:00",
+    "team_id": null
+  },
+  {
+    "id": "7fb31b09-f276-4d49-9634-edbfce0a429e",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 5 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T21:36:57.770843+00:00",
+    "team_id": null
+  },
+  {
+    "id": "26659e63-1204-4f7e-843b-33e3cf104235",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 5 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T21:43:38.643326+00:00",
+    "team_id": null
+  },
+  {
+    "id": "4c530250-860e-4c62-ae8b-1ca72149cb81",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Book a Meeting, Tone: Persuasive, Focus: Features → Benefits.",
+    "created_at": "2026-02-17T22:12:52.654124+00:00",
+    "team_id": null
+  },
+  {
+    "id": "2a6ed7d9-ca1a-41e9-8b31-f4843bd13771",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-17T22:13:32.455142+00:00",
+    "team_id": null
+  },
+  {
+    "id": "7defc06e-8982-495b-a3a8-7b591ff92db5",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T22:20:27.035504+00:00",
+    "team_id": null
+  },
+  {
+    "id": "923208bd-617e-46c4-be52-69f9cf787dfa",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 2 leads.",
+    "created_at": "2026-02-17T22:29:49.008578+00:00",
+    "team_id": null
+  },
+  {
+    "id": "0da9b60a-b7e1-406b-bacc-596c949d5422",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED_QUICK",
+    "details": "Quick gen Cold Email for Aly S. Template: default_sales_outreach v0",
+    "created_at": "2026-02-17T22:31:32.926115+00:00",
+    "team_id": null
+  },
+  {
+    "id": "ea1905a9-dab0-47d5-b9c8-54ce31457906",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Book a Meeting, Tone: Persuasive, Focus: Features → Benefits.",
+    "created_at": "2026-02-17T22:44:34.226502+00:00",
+    "team_id": null
+  },
+  {
+    "id": "94c84074-4946-4b7f-be4a-63fe636d4c6e",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-17T22:45:24.184659+00:00",
+    "team_id": null
+  },
+  {
+    "id": "92ed16b0-347c-418e-bd4a-7bc4ccacc17f",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Casual, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T22:56:49.978418+00:00",
+    "team_id": null
+  },
+  {
+    "id": "9ef6482c-0c1e-43f1-835a-4d9bf9246a07",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Casual, Focus: Problem → Solution.",
+    "created_at": "2026-02-17T22:57:39.685613+00:00",
+    "team_id": null
+  },
+  {
+    "id": "502a30f0-00c3-4233-be30-0dc1a7d446fd",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-17T22:58:53.665066+00:00",
+    "team_id": null
+  },
+  {
+    "id": "e4b83bef-0449-4cf8-b2f9-60eb3976ebb7",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Gladys Inc moved to Contacted",
+    "created_at": "2026-02-17T23:18:49.336183+00:00",
+    "team_id": null
+  },
+  {
+    "id": "3d6751e6-8879-41f4-969d-bd932fa5ab23",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Gladys Inc moved to Qualified",
+    "created_at": "2026-02-17T23:18:53.707629+00:00",
+    "team_id": null
+  },
+  {
+    "id": "af46e568-5b78-4bae-b853-bb9cdd65911a",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Gladys Inc moved to New",
+    "created_at": "2026-02-17T23:19:13.521123+00:00",
+    "team_id": null
+  },
+  {
+    "id": "c0e26d34-1270-4422-a825-ed8e2ac2bffe",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Download Content, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-18T01:38:19.952517+00:00",
+    "team_id": null
+  },
+  {
+    "id": "5597eedf-0e12-41d1-b9eb-f5a9d7dab9b3",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-18T01:39:00.037175+00:00",
+    "team_id": null
+  },
+  {
+    "id": "bff23090-e343-4597-8b2c-04a3315ed599",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Download Content, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-18T04:19:42.06171+00:00",
+    "team_id": null
+  },
+  {
+    "id": "71212b13-eb08-4b69-a82c-de863a2e308f",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-18T04:20:13.380141+00:00",
+    "team_id": null
+  },
+  {
+    "id": "9c4dd6b8-497d-4e99-adb5-09a48e8d66e7",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-18T04:29:20.808974+00:00",
+    "team_id": null
+  },
+  {
+    "id": "0a2a7ba5-861f-4bfc-95e3-6f35cb187464",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-18T04:29:48.101155+00:00",
+    "team_id": null
+  },
+  {
+    "id": "b590c242-7934-4c93-a23c-c24a65df0630",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AUTOMATION_ALERT",
+    "details": "{\"workflowId\":\"8cd03d93-fdf4-4dd0-a817-747d0b343271\",\"leadId\":\"15e751ea-691a-431c-a6be-37facd238313\",\"leadName\":\"LULU\",\"message\":\"Hot lead detected! Score above 90.\"}",
+    "created_at": "2026-02-18T23:36:23.943806+00:00",
+    "team_id": null
+  },
+  {
+    "id": "f5e6479f-2471-47a8-bddf-6499147f7584",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AUTOMATION_ALERT",
+    "details": "{\"workflowId\":\"8cd03d93-fdf4-4dd0-a817-747d0b343271\",\"leadId\":\"831bc78e-eba3-4165-809c-c60c09e2e0a6\",\"leadName\":\"ALy Shah Amjad\",\"message\":\"Hot lead detected! Score above 90.\"}",
+    "created_at": "2026-02-18T23:36:25.478627+00:00",
+    "team_id": null
+  },
+  {
+    "id": "601e9a6e-deee-4981-bf29-13c6e111b972",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AUTOMATION_EXECUTED",
+    "details": "{\"workflowId\":\"8cd03d93-fdf4-4dd0-a817-747d0b343271\",\"workflowName\":\"Test: High-Score Lead Qualifier\",\"leadsProcessed\":5,\"succeeded\":3,\"skipped\":2}",
+    "created_at": "2026-02-18T23:36:26.691563+00:00",
+    "team_id": null
+  },
+  {
+    "id": "9da99cd0-aa47-4de8-b711-bd4ce258af0f",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_TASK_CREATED",
+    "details": "Fallback task: Manually send email to Robert Fox (abrobert@gmail.com). Original node: \"Send welcome email\". Error: SendGrid API key not configured. Go to Settings → Integrations → SendGrid to add your key.",
+    "created_at": "2026-02-19T00:29:53.939861+00:00",
+    "team_id": null
+  },
+  {
+    "id": "49ed6e46-ef45-4918-85e0-c6e7f95f8b47",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_ALERT",
+    "details": "Alert from workflow node \"Notify sales team\" for lead Robert Fox (ABC Comp)",
+    "created_at": "2026-02-19T00:30:03.409068+00:00",
+    "team_id": null
+  },
+  {
+    "id": "c6320983-b4e8-471d-b515-3f26bca6f050",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_EXECUTED",
+    "details": "Workflow \"New Lead Nurturing Sequence\" executed on 1 lead(s) — 0 succeeded, 1 failed",
+    "created_at": "2026-02-19T00:30:04.360231+00:00",
+    "team_id": null
+  },
+  {
+    "id": "898d2092-ecb1-4a30-aa99-c4b5bb4dfffa",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_TASK_CREATED",
+    "details": "Fallback task: Manually send email to Gladys Inc (info@cybertrustsystems.com). Original node: \"Send welcome email\". Error: SendGrid API key not configured. Go to Settings → Integrations → SendGrid to add your key.",
+    "created_at": "2026-02-19T12:32:03.223121+00:00",
+    "team_id": null
+  },
+  {
+    "id": "84363118-7e77-4891-9535-db0524ceb81f",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_EXECUTED",
+    "details": "Workflow \"New Lead Nurturing Sequence\" executed on 1 lead(s) — 0 succeeded, 1 failed",
+    "created_at": "2026-02-19T12:32:13.608251+00:00",
+    "team_id": null
+  },
+  {
+    "id": "99c553ef-2f61-45af-8517-398ce911b507",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_TASK_CREATED",
+    "details": "Fallback task: Manually send email to Gladys Inc (info@cybertrustsystems.com). Original node: \"Send welcome email\". Error: SendGrid API key not configured. Go to Settings → Integrations → SendGrid to add your key.",
+    "created_at": "2026-02-19T12:52:59.886428+00:00",
+    "team_id": null
+  },
+  {
+    "id": "e6b3c0b9-1457-4ed7-a129-527717431512",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_EXECUTED",
+    "details": "Workflow \"New Lead Nurturing Sequence\" executed on 1 lead(s) — 0 succeeded, 1 failed",
+    "created_at": "2026-02-19T12:53:09.049845+00:00",
+    "team_id": null
+  },
+  {
+    "id": "cf2a89ef-ef8e-4e52-89d5-d94640d72669",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Landing Pages for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-19T16:53:38.534085+00:00",
+    "team_id": null
+  },
+  {
+    "id": "4a6a932b-8b11-49ff-80cb-87fc62a456a2",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Blog Articles for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-19T19:34:57.361712+00:00",
+    "team_id": null
+  },
+  {
+    "id": "bc8def9b-88eb-4423-890d-68011c4c9bef",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Blog Articles for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-19T22:44:42.972728+00:00",
+    "team_id": null
+  },
+  {
+    "id": "12b3fb97-1fae-4fc1-aab0-50b33b3d7298",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Landing Pages for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-19T22:54:22.639816+00:00",
+    "team_id": null
+  },
+  {
+    "id": "76cfcf6f-9849-421e-bb02-74613151e8a0",
+    "user_id": "73b03865-0c7d-475a-9c29-6ba1bb805c61",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-19T22:55:05.062106+00:00",
+    "team_id": null
+  },
+  {
+    "id": "6c040a38-9bf2-447a-afd2-2b8dd4785820",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Download Content, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-20T17:48:31.517057+00:00",
+    "team_id": null
+  },
+  {
+    "id": "d319769f-ba38-4a7f-85f9-52879b0a8aef",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "CONTENT_SENT",
+    "details": "Email Sequences: 7 blocks. Mode: now. Recipients: 1 leads.",
+    "created_at": "2026-02-20T17:49:54.263105+00:00",
+    "team_id": null
+  },
+  {
+    "id": "6503c1c6-4c27-499a-a5c2-125c7a5682ba",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Social Media Posts for 1 leads. Goal: Download Content, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-21T13:59:33.100807+00:00",
+    "team_id": null
+  },
+  {
+    "id": "60474578-3f81-4d77-8112-f81861a9de85",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Social Media Posts for 1 leads. Goal: Download Content, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-21T14:21:37.207359+00:00",
+    "team_id": null
+  },
+  {
+    "id": "c394d3c3-b960-4329-af4b-51af8ae55455",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_TASK_CREATED",
+    "details": "Fallback task: Manually send email to Robert Fox (abrobert@gmail.com). Original node: \"Send welcome email\". Error: SendGrid API key not configured. Go to Settings → Integrations → SendGrid to add your key.",
+    "created_at": "2026-02-21T17:51:26.203786+00:00",
+    "team_id": null
+  },
+  {
+    "id": "fc28d0fc-a984-41fc-a6b5-55778920aafb",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_ALERT",
+    "details": "Alert from workflow node \"Notify sales team\" for lead Robert Fox (ABC Comp)",
+    "created_at": "2026-02-21T17:51:35.71706+00:00",
+    "team_id": null
+  },
+  {
+    "id": "90597869-b5d5-46a6-b2f3-25f57d16d1f6",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AUTOMATION_EXECUTED",
+    "details": "Workflow \"New Lead Nurturing Sequence\" executed on 1 lead(s) — 0 succeeded, 1 failed",
+    "created_at": "2026-02-21T17:51:36.757156+00:00",
+    "team_id": null
+  },
+  {
+    "id": "46056fdf-fc55-4ba7-8c6b-4e8805714fca",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Created task",
+    "details": "AAA",
+    "created_at": "2026-02-22T20:07:41.23853+00:00",
+    "team_id": null
+  },
+  {
+    "id": "0832854f-6197-4cb2-b2a1-03d699b6e5dc",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "AAA",
+    "created_at": "2026-02-22T20:07:43.473208+00:00",
+    "team_id": null
+  },
+  {
+    "id": "32f24720-e301-43d5-8230-ed08deb731b4",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to todo",
+    "details": "AAA",
+    "created_at": "2026-02-22T20:07:44.464861+00:00",
+    "team_id": null
+  },
+  {
+    "id": "c30f6aa2-f19b-41b6-a712-219da7d5f8e7",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "AAA",
+    "created_at": "2026-02-22T20:09:30.186732+00:00",
+    "team_id": null
+  },
+  {
+    "id": "dc3bb0b0-d4aa-4be0-96e4-99fba39a0ce9",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "AAA",
+    "created_at": "2026-02-22T20:09:33.375669+00:00",
+    "team_id": null
+  },
+  {
+    "id": "e36b6458-7d77-4cf0-8401-91985f85ef7d",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "AAA",
+    "created_at": "2026-02-22T20:09:34.531143+00:00",
+    "team_id": null
+  },
+  {
+    "id": "85ae206f-c715-497d-9473-a779d0e0312d",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to todo",
+    "details": "AAA",
+    "created_at": "2026-02-22T20:09:35.143455+00:00",
+    "team_id": null
+  },
+  {
+    "id": "7e4e2471-a4d3-4f91-aaf8-d5b2377e35b2",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Invited team member",
+    "details": "pinebooksllc77@gmail.com",
+    "created_at": "2026-02-22T21:03:37.502809+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "66e39f85-0db3-44a6-a8b3-95680d75e1db",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Invited admin",
+    "details": "Gladys (gladstinc@gmail.com)",
+    "created_at": "2026-02-23T11:46:45.392927+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "e1b4aacc-0580-4623-aef9-a6390a4ebbf4",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Invited member",
+    "details": "Gladys (gladstinc@gmail.com)",
+    "created_at": "2026-02-23T12:46:49.054181+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "b737ac3f-e649-4548-b5fd-8e3d0193b628",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Invited member",
+    "details": "Gladys (gladstinc@gmail.com)",
+    "created_at": "2026-02-23T12:49:41.690021+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "13b65633-b58c-46e5-b09c-d99d3e98192c",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Invited member",
+    "details": "Gladys (gladstinc@gmail.com)",
+    "created_at": "2026-02-23T12:53:19.436933+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "ede2678d-6262-4d34-93bf-f29379e8d8e0",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:29.044336+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "c1de3c1f-df27-4e8f-9519-a091c73f9ae9",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:29.548877+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "955289b4-c551-4d9f-8a46-caeee35fb662",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to todo",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:30.29505+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "ef342c0a-da82-4f0c-b101-4a2c3d5ca64a",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:30.887174+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "375431ef-9788-42e9-ad5d-86c57eed564c",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:31.591065+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "15f9a437-eb26-4a97-a5f1-334a478a0bfe",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to todo",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:32.59844+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "480311a6-7317-4206-9c6a-de461a313244",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:33.440449+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "5007e9f2-4831-47f2-9fef-5a9adf8b3df9",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to todo",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:34.564196+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "fac5e575-d7b0-47d4-8e1c-fc97e494857f",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:37.503497+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "1d2dcc24-79b6-40e1-b9b6-18e719286b55",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:38.060221+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "eb29ea51-901a-415a-ac01-a91da776cd1e",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to todo",
+    "details": "AAA",
+    "created_at": "2026-02-23T16:38:38.752314+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "4cb64f9e-23ed-445c-8c12-c4230e2d38ab",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Deleted task",
+    "details": "Scheduled email pending for Robert Fox",
+    "created_at": "2026-02-23T17:30:19.4883+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "a38523eb-3fd4-4981-8e9b-45272c365ab4",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "Follow up with Aly S",
+    "created_at": "2026-02-23T17:31:11.888298+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "6e940d90-fb9b-40c2-9c00-66cc7f3e0cd3",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Created task",
+    "details": "Hello",
+    "created_at": "2026-02-23T19:15:17.843739+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "0e740022-acb9-44f0-b4d4-f7fbd55cf06c",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Created task",
+    "details": "AbCC",
+    "created_at": "2026-02-23T19:55:15.294266+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "bc906600-9c85-4b98-849e-12ad1b09ac72",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Deleted task",
+    "details": "AbCC",
+    "created_at": "2026-02-23T19:55:24.802717+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "ff0274d3-3aef-4c12-bcdc-52fd98bb50e1",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "Follow up with Gladys Inc",
+    "created_at": "2026-02-23T19:56:07.358834+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "12fbfaf5-6a38-4dfc-b453-cb77e817da2a",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "Follow up with Gladys Inc",
+    "created_at": "2026-02-23T22:52:23.857022+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "29c27777-e8be-409b-a43d-c0fdd98bb51c",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to todo",
+    "details": "Follow up with Gladys Inc",
+    "created_at": "2026-02-23T22:52:25.531199+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "fc57f39d-53b0-48c5-a4d2-71db5aee47ba",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "Follow up with Aly S",
+    "created_at": "2026-02-23T23:05:06.214615+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "6981fbe3-05da-4e7d-8fbd-556f37a313ba",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to done",
+    "details": "Follow up with Gladys Inc",
+    "created_at": "2026-02-23T23:06:22.072404+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "c00cd9c0-3f34-467e-8fad-647750605405",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Gladys Inc moved to Contacted",
+    "created_at": "2026-02-24T00:43:24.851214+00:00",
+    "team_id": null
+  },
+  {
+    "id": "b5762cda-d3a0-46a4-a5b3-762a5905730c",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "LEAD_STATUS_UPDATED",
+    "details": "Aly S moved to Contacted",
+    "created_at": "2026-02-24T00:43:41.758958+00:00",
+    "team_id": null
+  },
+  {
+    "id": "c3ada8d6-f0a6-49f9-8ca5-3e5a2c1fcd10",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Moved task to in progress",
+    "details": "Follow up with Gladys Inc",
+    "created_at": "2026-02-24T00:44:07.013055+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "fbc0769d-6c52-40c9-9bda-9df95d9a3562",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "Deleted task",
+    "details": "Hello",
+    "created_at": "2026-02-24T00:44:11.422286+00:00",
+    "team_id": "617a57f1-7343-4db4-86d4-2da5fdfc7b7f"
+  },
+  {
+    "id": "f88de0f9-56b0-4729-855d-8ce243446db7",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-26T21:29:18.040732+00:00",
+    "team_id": null
+  },
+  {
+    "id": "470a636d-07da-4f8a-a03d-e82e60597eea",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Social Media Posts for 1 leads. Goal: Schedule Product Demo, Tone: Professional, Focus: Problem → Solution.",
+    "created_at": "2026-02-27T01:10:51.304102+00:00",
+    "team_id": null
+  },
+  {
+    "id": "10ef0baa-7bde-496d-9ceb-cf9b77979453",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "FILE_IMPORT",
+    "details": "Imported 327, updated 0, skipped 13 from dataset_leads-finder_2026-02-27_19-52-39-908.csv",
+    "created_at": "2026-02-27T23:34:18.366634+00:00",
+    "team_id": null
+  },
+  {
+    "id": "8f35957a-cfe2-46c9-82b7-62bff04fe7e6",
+    "user_id": "60d570e1-9ca8-42de-8248-5525bc4b265a",
+    "action": "AI_CONTENT_GENERATED",
+    "details": "Generated Email Sequences for 1 leads. Goal: Book a Meeting, Tone: Professional, Focus: Features → Benefits.",
+    "created_at": "2026-03-01T00:05:34.024126+00:00",
+    "team_id": null
+  }
+]

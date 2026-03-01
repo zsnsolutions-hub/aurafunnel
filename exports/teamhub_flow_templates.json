@@ -1,0 +1,85 @@
+[
+  {
+    "id": "9149606e-e79c-49ef-bad9-982845a0acfc",
+    "name": "Basic Workflow",
+    "type": "system",
+    "structure_json": {
+      "lanes": [
+        {
+          "name": "To Do",
+          "position": 0
+        },
+        {
+          "name": "Progress",
+          "position": 1
+        },
+        {
+          "name": "Done",
+          "position": 2
+        }
+      ],
+      "lead_sync": true,
+      "lane_status_map": {
+        "Done": "Converted",
+        "To Do": "New",
+        "Progress": "Contacted"
+      }
+    },
+    "created_by": null,
+    "created_at": "2026-02-23T20:27:39.207704+00:00"
+  },
+  {
+    "id": "c8e6175d-30f6-460e-8ebb-ae10854e8560",
+    "name": "Sales Sprint",
+    "type": "system",
+    "structure_json": {
+      "lanes": [
+        {
+          "name": "Prospecting",
+          "position": 0
+        },
+        {
+          "name": "Contacted",
+          "position": 1
+        },
+        {
+          "name": "Negotiation",
+          "position": 2
+        },
+        {
+          "name": "Closed",
+          "position": 3
+        }
+      ]
+    },
+    "created_by": null,
+    "created_at": "2026-02-23T20:27:39.207704+00:00"
+  },
+  {
+    "id": "50ff3ee1-4f07-4047-bdc7-70680dfc0507",
+    "name": "Project Delivery",
+    "type": "system",
+    "structure_json": {
+      "lanes": [
+        {
+          "name": "Planning",
+          "position": 0
+        },
+        {
+          "name": "Active",
+          "position": 1
+        },
+        {
+          "name": "Review",
+          "position": 2
+        },
+        {
+          "name": "Complete",
+          "position": 3
+        }
+      ]
+    },
+    "created_by": null,
+    "created_at": "2026-02-23T20:27:39.207704+00:00"
+  }
+]
