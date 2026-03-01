@@ -58,9 +58,12 @@ CREATE TABLE IF NOT EXISTS public.import_batches (
 
 ALTER TABLE public.import_batches ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users manage own import batches"
-  ON public.import_batches FOR ALL
-  USING (auth.uid() = workspace_id);
+DO $$ BEGIN
+  CREATE POLICY "Users manage own import batches"
+    ON public.import_batches FOR ALL
+    USING (auth.uid() = workspace_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 
 -- ── 4. import_leads_batch RPC ──────────────────────────────────────────────
