@@ -21,8 +21,17 @@ CREATE INDEX IF NOT EXISTS idx_teamhub_flow_members_board ON teamhub_flow_member
 DROP INDEX IF EXISTS idx_teamhub_invites_flow;
 CREATE INDEX IF NOT EXISTS idx_teamhub_invites_board ON teamhub_invites(board_id);
 
--- B. Replace SECURITY DEFINER helper function
-CREATE OR REPLACE FUNCTION public.teamhub_user_flow_role(p_board_id UUID)
+-- B. Drop ALL policies that depend on teamhub_user_flow_role() BEFORE dropping the function
+DROP POLICY IF EXISTS "member_select" ON teamhub_flow_members;
+DROP POLICY IF EXISTS "member_insert" ON teamhub_flow_members;
+DROP POLICY IF EXISTS "member_update" ON teamhub_flow_members;
+DROP POLICY IF EXISTS "member_delete" ON teamhub_flow_members;
+DROP POLICY IF EXISTS "member_bootstrap_insert" ON teamhub_flow_members;
+DROP POLICY IF EXISTS "Co-members can view profiles" ON profiles;
+
+-- B. Now safe to drop + recreate function with renamed parameter
+DROP FUNCTION IF EXISTS public.teamhub_user_flow_role(UUID);
+CREATE FUNCTION public.teamhub_user_flow_role(p_board_id UUID)
 RETURNS TEXT
 LANGUAGE sql
 STABLE
@@ -33,15 +42,7 @@ AS $$
   LIMIT 1;
 $$;
 
--- B. Drop ALL flow_id-referencing RLS policies and recreate with board_id
-
--- ─── teamhub_flow_members policies ───
-DROP POLICY IF EXISTS "member_select" ON teamhub_flow_members;
-DROP POLICY IF EXISTS "member_insert" ON teamhub_flow_members;
-DROP POLICY IF EXISTS "member_update" ON teamhub_flow_members;
-DROP POLICY IF EXISTS "member_delete" ON teamhub_flow_members;
-DROP POLICY IF EXISTS "member_bootstrap_insert" ON teamhub_flow_members;
-
+-- B. Recreate teamhub_flow_members policies with board_id
 CREATE POLICY "member_select" ON teamhub_flow_members
   FOR SELECT USING (
     public.teamhub_user_flow_role(board_id) IS NOT NULL
@@ -126,8 +127,6 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- ─── Co-members profile policy (uses renamed column) ───
-DROP POLICY IF EXISTS "Co-members can view profiles" ON profiles;
-
 DO $$ BEGIN
   CREATE POLICY "Co-members can view profiles" ON profiles
     FOR SELECT USING (
