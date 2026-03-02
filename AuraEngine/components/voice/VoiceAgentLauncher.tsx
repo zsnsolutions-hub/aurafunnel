@@ -1,4 +1,5 @@
-import React, { useState, useCallback, Suspense, lazy } from 'react';
+import React, { Component, useState, useCallback, Suspense, lazy } from 'react';
+import type { ReactNode, ErrorInfo } from 'react';
 
 const VoiceAgent = lazy(() => import('./VoiceAgent'));
 
@@ -8,9 +9,51 @@ interface VoiceAgentLauncherProps {
   agentId?: string;
 }
 
+/* ── Inline ErrorBoundary — catches chunk-load and render errors ── */
+interface EBProps { onReset: () => void; children: ReactNode }
+interface EBState { error: string | null }
+
+class VoiceErrorBoundary extends Component<EBProps, EBState> {
+  state: EBState = { error: null };
+
+  static getDerivedStateFromError(err: Error) {
+    return { error: err.message || 'Failed to load voice agent' };
+  }
+
+  componentDidCatch(err: Error, info: ErrorInfo) {
+    console.error('[VoiceAgent] chunk/render error:', err, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <>
+          <button
+            onClick={() => { this.setState({ error: null }); this.props.onReset(); }}
+            className="fixed bottom-6 right-6 z-[60] flex items-center justify-center w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-400"
+            aria-label="Voice agent error — click to retry"
+            title="Click to retry"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" x2="12" y1="19" y2="22" />
+            </svg>
+          </button>
+          <div className="fixed bottom-[5.5rem] right-6 z-[60] text-xs text-red-500 bg-white border border-red-200 rounded-lg px-3 py-1.5 shadow-sm max-w-[320px] text-center break-words">
+            {this.state.error}
+          </div>
+        </>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /**
  * Lightweight shell that shows the mic FAB without loading @elevenlabs/react.
- * On first click it lazy-loads the full VoiceAgent component (and the SDK).
+ * On first click it lazy-loads the full VoiceAgent component (and the SDK),
+ * then auto-connects so the user doesn't need a second click.
  */
 const VoiceAgentLauncher: React.FC<VoiceAgentLauncherProps> = ({ agentId }) => {
   const [activated, setActivated] = useState(false);
@@ -20,24 +63,30 @@ const VoiceAgentLauncher: React.FC<VoiceAgentLauncherProps> = ({ agentId }) => {
     setActivated(true);
   }, []);
 
+  const handleReset = useCallback(() => {
+    setActivated(false);
+  }, []);
+
   if (!resolvedId) return null;
 
   // Once activated, render the full VoiceAgent (which imports @elevenlabs/react)
   if (activated) {
     return (
-      <Suspense fallback={
-        <button
-          className="fixed bottom-6 right-6 z-[60] flex items-center justify-center w-14 h-14 rounded-full bg-violet-600 text-white shadow-[0_0_20px_rgba(124,58,237,0.4)] cursor-wait"
-          aria-label="Loading voice agent..."
-          disabled
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
-        </button>
-      }>
-        <VoiceAgent agentId={resolvedId} />
-      </Suspense>
+      <VoiceErrorBoundary onReset={handleReset}>
+        <Suspense fallback={
+          <button
+            className="fixed bottom-6 right-6 z-[60] flex items-center justify-center w-14 h-14 rounded-full bg-violet-600 text-white shadow-[0_0_20px_rgba(124,58,237,0.4)] cursor-wait"
+            aria-label="Loading voice agent..."
+            disabled
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+          </button>
+        }>
+          <VoiceAgent agentId={resolvedId} autoConnect />
+        </Suspense>
+      </VoiceErrorBoundary>
     );
   }
 

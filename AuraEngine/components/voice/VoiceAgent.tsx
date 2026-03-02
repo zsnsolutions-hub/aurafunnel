@@ -21,11 +21,14 @@ import type { User } from '../../types';
 interface VoiceAgentProps {
   user?: User | null;
   agentId?: string;
+  autoConnect?: boolean;
 }
+
+const CONNECT_TIMEOUT_MS = 15_000;
 
 const DEFAULT_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
 
-const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId }) => {
+const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) => {
   const AGENT_ID = agentId || DEFAULT_AGENT_ID;
   const navigate = useNavigate();
   const location = useLocation();
@@ -162,11 +165,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId }) => {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const handleToggle = useCallback(async () => {
-    if (status === 'connected' || status === 'connecting') {
-      await conversation.endSession();
-      return;
-    }
+  const connect = useCallback(async () => {
+    if (status === 'connected' || status === 'connecting') return;
 
     if (!AGENT_ID) {
       setError('Voice agent not configured');
@@ -184,17 +184,43 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId }) => {
     }
 
     try {
-      await conversation.startSession({
+      const sessionPromise = conversation.startSession({
         agentId: AGENT_ID,
         connectionType: 'webrtc',
       } as Parameters<typeof conversation.startSession>[0]);
+
+      // Race against a timeout so the spinner never hangs forever
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out')), CONNECT_TIMEOUT_MS),
+      );
+
+      await Promise.race([sessionPromise, timeout]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[VoiceAgent] startSession failed:', err);
       setError(msg || 'Failed to connect');
       track('voice_error', { message: msg || 'session_start_failed' });
+      // If we timed out, the session might still be connecting — kill it
+      try { await conversation.endSession(); } catch { /* noop */ }
     }
   }, [status, conversation]);
+
+  const handleToggle = useCallback(async () => {
+    if (status === 'connected' || status === 'connecting') {
+      await conversation.endSession();
+      return;
+    }
+    await connect();
+  }, [status, conversation, connect]);
+
+  // Auto-connect on mount when launched from VoiceAgentLauncher
+  const autoConnectDone = useRef(false);
+  useEffect(() => {
+    if (autoConnect && !autoConnectDone.current) {
+      autoConnectDone.current = true;
+      connect();
+    }
+  }, [autoConnect, connect]);
 
   const handleToastConfirm = useCallback(() => setToast(null), []);
   const handleToastCancel = useCallback(() => setToast(null), []);
