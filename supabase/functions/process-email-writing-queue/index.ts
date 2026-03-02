@@ -279,6 +279,19 @@ serve(async (req) => {
         await supabaseAdmin.rpc("finalize_email_sequence_run", {
           p_run_id: runId,
         });
+
+        // Trigger immediate sending of due emails (step 0 / delay_days=0)
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/process-scheduled-emails`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+          });
+        } catch (sendErr) {
+          console.error("Failed to trigger scheduled email processing:", sendErr);
+        }
       }
     }
 
