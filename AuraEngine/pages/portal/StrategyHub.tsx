@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead, Team, TeamInvite } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { normalizeLeads } from '../../lib/queries';
+import { normalizeLeads, leadDisplayName } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { generatePipelineStrategy, parsePipelineStrategyResponse, PipelineStrategyResponse } from '../../lib/gemini';
 import {
@@ -43,6 +43,7 @@ interface StrategyNote {
   id: string;
   user_id: string;
   content: string;
+  lead_id: string | null;
   lead_name: string | null;
   created_at: string;
   team_id: string | null;
@@ -205,6 +206,7 @@ function formatAction(action: string): { label: string; type: ActivityType } {
 // ─── Component ───
 const StrategyHub: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<LayoutContext>();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabView>('dashboard');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<StrategyTask[]>([]);
@@ -228,6 +230,7 @@ const StrategyHub: React.FC = () => {
 
   // Note
   const [newNoteContent, setNewNoteContent] = useState('');
+  const [noteLeadId, setNoteLeadId] = useState<string | null>(null);
 
   // Sidebar panels
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -406,6 +409,7 @@ const StrategyHub: React.FC = () => {
           id: n.id,
           user_id: n.user_id,
           content: n.content,
+          lead_id: n.lead_id || null,
           lead_name: n.lead_name || null,
           created_at: n.created_at,
           team_id: n.team_id || null,
@@ -513,7 +517,7 @@ const StrategyHub: React.FC = () => {
 
   const journalMetrics = useMemo(() => {
     const totalNotes = notes.length;
-    const notesWithLeads = notes.filter(n => n.lead_name).length;
+    const notesWithLeads = notes.filter(n => n.lead_id).length;
     const totalActivity = activityLog.length;
 
     // Activity by hour
@@ -636,22 +640,27 @@ const StrategyHub: React.FC = () => {
   const handleAddNote = useCallback(async () => {
     if (!newNoteContent.trim()) return;
     const tempId = `tn-${Date.now()}`;
+    const selectedLead = noteLeadId ? leads.find(l => l.id === noteLeadId) : null;
     const optimisticNote: StrategyNote = {
       id: tempId,
       user_id: user.id,
       content: newNoteContent,
-      lead_name: null,
+      lead_id: noteLeadId,
+      lead_name: selectedLead ? leadDisplayName(selectedLead) : null,
       created_at: new Date().toISOString(),
       team_id: isTeamMode ? team!.id : null,
       author_name: user.name || null,
     };
     setNotes(prev => [optimisticNote, ...prev]);
     setNewNoteContent('');
+    setNoteLeadId(null);
 
     try {
       const insertPayload: any = {
         user_id: user.id,
         content: optimisticNote.content,
+        lead_id: noteLeadId || null,
+        lead_name: selectedLead ? leadDisplayName(selectedLead) : null,
       };
       if (isTeamMode) {
         insertPayload.team_id = team!.id;
@@ -675,7 +684,7 @@ const StrategyHub: React.FC = () => {
       console.error('Failed to create note:', err);
       setNotes(prev => prev.filter(n => n.id !== tempId));
     }
-  }, [newNoteContent, user.id, user.name, isTeamMode, team]);
+  }, [newNoteContent, noteLeadId, leads, user.id, user.name, isTeamMode, team]);
 
   const handleDeleteNote = useCallback(async (noteId: string) => {
     const note = notes.find(n => n.id === noteId);
@@ -1555,7 +1564,19 @@ const StrategyHub: React.FC = () => {
                       className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none placeholder-slate-300"
                     />
                     <div className="flex items-center justify-between mt-2">
-                      <p className="text-[10px] text-slate-400">Document your strategy insights and learnings</p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-[10px] text-slate-400">Document your strategy insights and learnings</p>
+                        <select
+                          value={noteLeadId || ''}
+                          onChange={e => setNoteLeadId(e.target.value || null)}
+                          className="px-2 py-1 border border-slate-200 rounded-lg text-xs text-slate-600 bg-white"
+                        >
+                          <option value="">No lead</option>
+                          {leads.map(l => (
+                            <option key={l.id} value={l.id}>{leadDisplayName(l)}</option>
+                          ))}
+                        </select>
+                      </div>
                       <button
                         onClick={handleAddNote}
                         disabled={!newNoteContent.trim()}
@@ -1594,7 +1615,10 @@ const StrategyHub: React.FC = () => {
                                 {new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               </span>
                               {note.lead_name && (
-                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold">
+                                <span
+                                  className={`px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold${note.lead_id ? ' cursor-pointer hover:bg-indigo-100' : ''}`}
+                                  onClick={() => note.lead_id && navigate(`/portal/leads/${note.lead_id}`)}
+                                >
                                   {note.lead_name}
                                 </span>
                               )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Team } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
@@ -45,6 +45,7 @@ interface StrategyNote {
   id: string;
   user_id: string;
   content: string;
+  lead_id: string | null;
   lead_name: string | null;
   created_at: string;
   team_id: string | null;
@@ -73,6 +74,7 @@ const PRIORITY_META: Record<TaskPriority, { label: string; color: string }> = {
 // ─── Component ───
 const TeamHub: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabView>('board');
   const [tasks, setTasks] = useState<StrategyTask[]>([]);
   const [notes, setNotes] = useState<StrategyNote[]>([]);
@@ -86,6 +88,7 @@ const TeamHub: React.FC = () => {
 
   // Note
   const [newNoteContent, setNewNoteContent] = useState('');
+  const [noteLeadId, setNoteLeadId] = useState<string | null>(null);
 
   // Shortcuts modal
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -251,6 +254,7 @@ const TeamHub: React.FC = () => {
           id: n.id,
           user_id: n.user_id,
           content: n.content,
+          lead_id: n.lead_id || null,
           lead_name: n.lead_name || null,
           created_at: n.created_at,
           team_id: n.team_id || null,
@@ -572,22 +576,27 @@ const TeamHub: React.FC = () => {
   const handleAddNote = useCallback(async () => {
     if (!newNoteContent.trim()) return;
     const tempId = `tn-${Date.now()}`;
+    const selectedLeadInfo = noteLeadId ? leadInfoMap.get(noteLeadId) : null;
     const optimisticNote: StrategyNote = {
       id: tempId,
       user_id: user.id,
       content: newNoteContent,
-      lead_name: null,
+      lead_id: noteLeadId,
+      lead_name: selectedLeadInfo ? selectedLeadInfo.name : null,
       created_at: new Date().toISOString(),
       team_id: isTeamMode ? team!.id : null,
       author_name: user.name || null,
     };
     setNotes(prev => [optimisticNote, ...prev]);
     setNewNoteContent('');
+    setNoteLeadId(null);
 
     try {
       const insertPayload: any = {
         user_id: user.id,
         content: optimisticNote.content,
+        lead_id: noteLeadId || null,
+        lead_name: selectedLeadInfo ? selectedLeadInfo.name : null,
       };
       if (isTeamMode) {
         insertPayload.team_id = team!.id;
@@ -610,7 +619,7 @@ const TeamHub: React.FC = () => {
       console.error('Failed to create note:', err);
       setNotes(prev => prev.filter(n => n.id !== tempId));
     }
-  }, [newNoteContent, user.id, user.name, isTeamMode, team]);
+  }, [newNoteContent, noteLeadId, leadInfoMap, user.id, user.name, isTeamMode, team]);
 
   const handleDeleteNote = useCallback(async (noteId: string) => {
     const note = notes.find(n => n.id === noteId);
@@ -1507,7 +1516,19 @@ const TeamHub: React.FC = () => {
                       className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none placeholder-slate-300"
                     />
                     <div className="flex items-center justify-between mt-2">
-                      <p className="text-[10px] text-slate-400">Document insights and share with your team</p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-[10px] text-slate-400">Document insights and share with your team</p>
+                        <select
+                          value={noteLeadId || ''}
+                          onChange={e => setNoteLeadId(e.target.value || null)}
+                          className="px-2 py-1 border border-slate-200 rounded-lg text-xs text-slate-600 bg-white"
+                        >
+                          <option value="">No lead</option>
+                          {Array.from(leadInfoMap.entries()).map(([id, info]) => (
+                            <option key={id} value={id}>{info.name}</option>
+                          ))}
+                        </select>
+                      </div>
                       <button
                         onClick={handleAddNote}
                         disabled={!newNoteContent.trim()}
@@ -1551,7 +1572,10 @@ const TeamHub: React.FC = () => {
                                 {new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               </span>
                               {note.lead_name && (
-                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold">
+                                <span
+                                  className={`px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold${note.lead_id ? ' cursor-pointer hover:bg-indigo-100' : ''}`}
+                                  onClick={() => note.lead_id && navigate(`/portal/leads/${note.lead_id}`)}
+                                >
                                   {note.lead_name}
                                 </span>
                               )}
