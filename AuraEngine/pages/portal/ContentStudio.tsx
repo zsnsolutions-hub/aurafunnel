@@ -951,12 +951,8 @@ const ContentStudio: React.FC = () => {
     setAiError(null);
 
     try {
-      console.log('[Generate] Starting — mode:', contentMode, 'leads:', leads.length);
-
       const creditType = contentMode === 'email' ? 'email_sequence' : 'content_generation';
-      console.log('[Generate] Consuming credits:', creditType);
       const creditResult = await consumeCredits(supabase, CREDIT_COSTS[creditType]);
-      console.log('[Generate] Credits result:', creditResult);
       if (!creditResult.success) {
         setAiError(creditResult.message || 'Insufficient credits.');
         setAiGenerating(false);
@@ -970,15 +966,12 @@ const ContentStudio: React.FC = () => {
           cadence: 'every_2_days',
           tone: ToneType.PROFESSIONAL,
         };
-        console.log('[Generate] Calling generateEmailSequence...');
         const response = await generateEmailSequence(leads, config, user.businessProfile);
-        console.log('[Generate] Response received, length:', response.text?.length, 'starts:', response.text?.slice(0, 80));
         if (response.text.startsWith('SEQUENCE GENERATION FAILED') || response.text.startsWith('CRITICAL FAILURE')) {
           setAiError(`Email generation failed: ${response.text.slice(0, 200)}`);
           return;
         }
         const parsed = parseEmailSequenceResponse(response.text, config);
-        console.log('[Generate] Parsed steps:', parsed.length);
         if (parsed.length > 0) {
           const newSteps: EmailStep[] = parsed.map(p => ({
             id: p.id,
@@ -999,22 +992,18 @@ const ContentStudio: React.FC = () => {
         }
       } else if (contentMode === 'linkedin') {
         const context = `Tone: ${linkedinTone}, Goal: ${linkedinGoal}`;
-        console.log('[Generate] Calling generateContentByCategory for linkedin...');
         const response = await generateContentByCategory(
           leads[0], ContentCategory.SOCIAL_MEDIA, ToneType.PROFESSIONAL, context, user.businessProfile
         );
-        console.log('[Generate] LinkedIn response received, length:', response.text?.length);
         if (!response.text.startsWith('GENERATION FAILED') && !response.text.startsWith('CRITICAL FAILURE')) {
           setLinkedinPost(response.text);
         } else {
           setAiError('LinkedIn post generation failed. Please try again.');
         }
       } else if (contentMode === 'proposal') {
-        console.log('[Generate] Calling generateContentByCategory for proposal...');
         const response = await generateContentByCategory(
           leads[0], ContentCategory.PROPOSAL, ToneType.PROFESSIONAL, '', user.businessProfile
         );
-        console.log('[Generate] Proposal response received, length:', response.text?.length);
         if (!response.text.startsWith('GENERATION FAILED') && !response.text.startsWith('CRITICAL FAILURE')) {
           const sections = parseProposalSections(response.text);
           setProposalSections(prev => ({ ...prev, ...sections }));
@@ -1022,11 +1011,8 @@ const ContentStudio: React.FC = () => {
           setAiError('Proposal generation failed. Please try again.');
         }
       }
-      console.log('[Generate] Done, refreshing profile...');
       if (refreshProfile) await refreshProfile();
-      console.log('[Generate] Complete!');
     } catch (err: unknown) {
-      console.error('[Generate] CAUGHT ERROR:', err);
       const msg = err instanceof Error ? err.message : String(err);
       setAiError(`Generation error: ${msg}`);
     } finally {
