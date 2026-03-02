@@ -1283,9 +1283,9 @@ const ContentStudio: React.FC = () => {
         config: {
           tone: 'professional',
           goal: 'book a meeting',
-          fromEmail: connectedProvider?.from_email,
-          fromName: connectedProvider?.from_name,
-          provider: connectedProvider?.provider,
+          fromEmail: connectedProvider?.from_email ?? user.businessProfile?.businessEmail ?? user.email,
+          fromName: connectedProvider?.from_name ?? user.name,
+          provider: connectedProvider?.provider ?? 'sendgrid',
           businessProfile: user.businessProfile as Record<string, unknown> | undefined,
           sendMode,
         },
@@ -3842,7 +3842,7 @@ const ContentStudio: React.FC = () => {
                   </button>
                   <button
                     onClick={handleSendEmails}
-                    disabled={sendingEmails || selectedLeadIds.size === 0 || !connectedProvider || (sendMode === 'scheduled' && !scheduleDate)}
+                    disabled={sendingEmails || selectedLeadIds.size === 0 || (sendMode === 'scheduled' && !scheduleDate)}
                     className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 flex items-center justify-center space-x-2"
                   >
                     {sendingEmails ? (
