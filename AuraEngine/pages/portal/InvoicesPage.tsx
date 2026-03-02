@@ -9,12 +9,8 @@ import PackageManagerDrawer from '../../components/invoices/PackageManagerDrawer
 import { PlusIcon, EditIcon, XIcon, ChevronDownIcon } from '../../components/Icons';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
-
-const formatCents = (cents: number, currency = 'usd'): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-  }).format(cents / 100);
+import { formatMoneyUSD } from '../../lib/formatMoney';
+import { computeInvoiceKPIs } from '../../lib/financeAggregator';
 
 type StatusFilter = 'all' | 'open' | 'paid' | 'void';
 type PageTab = 'invoices' | 'packages';
@@ -92,14 +88,7 @@ const InvoicesPage: React.FC = () => {
   }, [invoices, statusFilter]);
 
   // Stats
-  const totalOutstanding = useMemo(
-    () => invoices.filter((i) => i.status === 'open').reduce((sum, i) => sum + i.total_cents, 0),
-    [invoices]
-  );
-  const totalCollected = useMemo(
-    () => invoices.filter((i) => i.status === 'paid').reduce((sum, i) => sum + i.total_cents, 0),
-    [invoices]
-  );
+  const kpis = useMemo(() => computeInvoiceKPIs(invoices), [invoices]);
 
   const handleResend = async (inv: Invoice) => {
     if (!confirm(`Resend invoice ${inv.invoice_number || inv.id.slice(0, 8)}?`)) return;
@@ -236,15 +225,15 @@ const InvoicesPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding</p>
-                <p className="text-2xl font-bold text-blue-600 mt-1">{formatCents(totalOutstanding)}</p>
+                <p className="text-2xl font-bold text-blue-600 mt-1">{formatMoneyUSD(kpis.totalOutstandingCents)}</p>
               </div>
               <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Collected</p>
-                <p className="text-2xl font-bold text-emerald-600 mt-1">{formatCents(totalCollected)}</p>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">{formatMoneyUSD(kpis.totalCollectedCents)}</p>
               </div>
               <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Invoices</p>
-                <p className="text-2xl font-bold text-slate-800 mt-1">{invoices.length}</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{kpis.totalCount}</p>
               </div>
             </div>
           </AdvancedOnly>
@@ -319,7 +308,7 @@ const InvoicesPage: React.FC = () => {
                           <p className="text-xs text-slate-400">{inv.lead_email}</p>
                         </td>
                         <td className="px-5 py-3.5 text-sm font-bold text-slate-800">
-                          {formatCents(inv.total_cents, inv.currency)}
+                          {formatMoneyUSD(inv.total_cents, inv.currency)}
                         </td>
                         <td className="px-5 py-3.5">
                           <InvoiceStatusBadge status={inv.status} />
@@ -486,7 +475,7 @@ const InvoicesPage: React.FC = () => {
                         {pkg.items.length} item{pkg.items.length !== 1 ? 's' : ''}
                       </span>
                       <span className="text-sm font-bold text-slate-800">
-                        {formatCents(getPackageTotal(pkg))}
+                        {formatMoneyUSD(getPackageTotal(pkg))}
                       </span>
                     </div>
                   </div>
@@ -507,15 +496,15 @@ const InvoicesPage: React.FC = () => {
                               <tr key={item.id}>
                                 <td className="px-3 py-2 text-slate-700">{item.description}</td>
                                 <td className="px-3 py-2 text-center text-slate-500">{item.quantity}</td>
-                                <td className="px-3 py-2 text-right text-slate-500">{formatCents(item.unit_price_cents)}</td>
-                                <td className="px-3 py-2 text-right font-medium text-slate-700">{formatCents(item.quantity * item.unit_price_cents)}</td>
+                                <td className="px-3 py-2 text-right text-slate-500">{formatMoneyUSD(item.unit_price_cents)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-700">{formatMoneyUSD(item.quantity * item.unit_price_cents)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                         <div className="border-t-2 border-slate-200 px-3 py-2.5 flex items-center justify-between bg-slate-50">
                           <span className="text-xs font-bold text-slate-600">Total</span>
-                          <span className="text-sm font-bold text-slate-800">{formatCents(getPackageTotal(pkg))}</span>
+                          <span className="text-sm font-bold text-slate-800">{formatMoneyUSD(getPackageTotal(pkg))}</span>
                         </div>
                       </div>
                     </div>

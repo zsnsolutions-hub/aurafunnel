@@ -603,7 +603,7 @@ const BillingPage: React.FC = () => {
 
         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 flex flex-col group">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-bold text-slate-900 font-heading">Invoice Archive</h3>
+            <h3 className="text-xl font-bold text-slate-900 font-heading">Subscription Payments</h3>
             <div className="p-2.5 bg-slate-50 rounded-xl group-hover:bg-indigo-50 transition-colors">
               <ShieldIcon className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" />
             </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import InvoiceStatusBadge from './InvoiceStatusBadge';
+import { formatMoneyUSD } from '../../lib/formatMoney';
 
 interface LineItem {
   description: string;
@@ -25,12 +26,6 @@ interface InvoicePreviewPanelProps {
   createdAt?: string | null;
   compact?: boolean;
 }
-
-const formatCents = (cents: number, currency = 'USD'): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-  }).format(cents / 100);
 
 const InvoicePreviewPanel: React.FC<InvoicePreviewPanelProps> = ({
   recipientName,
@@ -109,15 +104,15 @@ const InvoicePreviewPanel: React.FC<InvoicePreviewPanelProps> = ({
                 <tr key={i}>
                   <td className="px-3 py-2 text-slate-700">{item.description}</td>
                   <td className="px-3 py-2 text-center text-slate-500">{item.quantity}</td>
-                  <td className="px-3 py-2 text-right text-slate-500">{formatCents(item.unit_price_cents, currency)}</td>
-                  <td className="px-3 py-2 text-right font-medium text-slate-700">{formatCents(item.quantity * item.unit_price_cents, currency)}</td>
+                  <td className="px-3 py-2 text-right text-slate-500">{formatMoneyUSD(item.unit_price_cents, currency)}</td>
+                  <td className="px-3 py-2 text-right font-medium text-slate-700">{formatMoneyUSD(item.quantity * item.unit_price_cents, currency)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="border-t-2 border-slate-200 px-3 py-2.5 flex items-center justify-between bg-slate-100">
             <span className="text-sm font-bold text-slate-600">Total</span>
-            <span className="text-sm font-bold text-slate-800">{formatCents(subtotalCents, currency)}</span>
+            <span className="text-sm font-bold text-slate-800">{formatMoneyUSD(subtotalCents, currency)}</span>
           </div>
         </div>
       ) : (

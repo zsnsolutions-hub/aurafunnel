@@ -4,6 +4,7 @@ import InvoiceStatusBadge from './InvoiceStatusBadge';
 import InvoicePreviewPanel from './InvoicePreviewPanel';
 import { PlusIcon, ChevronDownIcon } from '../Icons';
 import type { User } from '../../types';
+import { formatMoneyUSD } from '../../lib/formatMoney';
 
 interface LeadInvoicesTabProps {
   leadId: string;
@@ -11,13 +12,6 @@ interface LeadInvoicesTabProps {
   user: User;
   onCreateInvoice: () => void;
 }
-
-const formatCents = (cents: number, currency = 'usd'): string => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-  }).format(cents / 100);
-};
 
 const LeadInvoicesTab: React.FC<LeadInvoicesTabProps> = ({ leadId, leadName, user, onCreateInvoice }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -164,7 +158,7 @@ const LeadInvoicesTab: React.FC<LeadInvoicesTabProps> = ({ leadId, leadName, use
                     <InvoiceStatusBadge status={inv.status} />
                   </div>
                   <span className="text-sm font-bold text-slate-800">
-                    {formatCents(inv.total_cents, inv.currency)}
+                    {formatMoneyUSD(inv.total_cents, inv.currency)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

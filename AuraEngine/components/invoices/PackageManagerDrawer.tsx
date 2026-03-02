@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Drawer } from '../ui/Drawer';
 import { savePackage, type InvoicePackage } from '../../lib/invoices';
 import { PlusIcon, XIcon } from '../Icons';
+import { formatMoneyUSD } from '../../lib/formatMoney';
 
 interface PackageManagerDrawerProps {
   open: boolean;
@@ -80,9 +81,6 @@ const PackageManagerDrawer: React.FC<PackageManagerDrawerProps> = ({
     (sum, item) => sum + (item.quantity || 0) * (item.unit_price_cents || 0),
     0
   );
-
-  const formatDollars = (cents: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 
   const handleSave = async () => {
     setError('');
@@ -219,7 +217,7 @@ const PackageManagerDrawer: React.FC<PackageManagerDrawerProps> = ({
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-slate-600">Package Total</span>
-            <span className="text-lg font-bold text-slate-800">{formatDollars(subtotalCents)}</span>
+            <span className="text-lg font-bold text-slate-800">{formatMoneyUSD(subtotalCents)}</span>
           </div>
         </div>
 

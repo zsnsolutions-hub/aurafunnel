@@ -5,6 +5,7 @@ import { createAndSendInvoice, sendInvoiceEmail, resendInvoice, copyInvoiceLink,
 import InvoicePreviewPanel from './InvoicePreviewPanel';
 import { PlusIcon, XIcon, ChevronDownIcon, EyeIcon, ArrowLeftIcon } from '../Icons';
 import type { User } from '../../types';
+import { formatMoneyUSD } from '../../lib/formatMoney';
 
 interface CreateInvoiceDrawerProps {
   open: boolean;
@@ -144,9 +145,6 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
     (sum, item) => sum + (item.quantity || 0) * (item.unit_price_cents || 0),
     0
   );
-
-  const formatDollars = (cents: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 
   const handlePreview = () => {
     setError('');
@@ -433,8 +431,8 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
                   <option value="">Add items manually</option>
                   {packages.map((pkg) => (
                     <option key={pkg.id} value={pkg.id}>
-                      {pkg.name} ({new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                        pkg.items.reduce((sum, item) => sum + item.quantity * item.unit_price_cents, 0) / 100
+                      {pkg.name} ({formatMoneyUSD(
+                        pkg.items.reduce((sum, item) => sum + item.quantity * item.unit_price_cents, 0)
                       )})
                     </option>
                   ))}
@@ -534,7 +532,7 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-600">Subtotal</span>
-                <span className="text-lg font-bold text-slate-800">{formatDollars(subtotalCents)}</span>
+                <span className="text-lg font-bold text-slate-800">{formatMoneyUSD(subtotalCents)}</span>
               </div>
             </div>
 

@@ -3,6 +3,7 @@ import { buildEmailCtaButtonHTML } from './emailCtaButton';
 import { fetchConnectedEmailProvider, sendTrackedEmail } from './emailTracking';
 import type { SendEmailResult } from './emailTracking';
 import type { User } from '../types';
+import { formatMoneyUSD } from './formatMoney';
 
 // ── Types ──
 
@@ -389,10 +390,7 @@ export async function sendInvoiceEmail(invoiceId: string, user: User): Promise<S
     .eq('id', invoiceId)
     .single();
 
-  const totalFormatted = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: (invoiceData.currency || 'usd').toUpperCase(),
-  }).format(invoiceData.total_cents / 100);
+  const totalFormatted = formatMoneyUSD(invoiceData.total_cents, invoiceData.currency);
 
   const businessName = user.businessProfile?.companyName || user.name;
 
