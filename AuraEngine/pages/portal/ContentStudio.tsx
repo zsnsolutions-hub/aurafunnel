@@ -20,6 +20,8 @@ import {
 } from '../../components/Icons';
 import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawer';
 import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal';
+import EmailWriterProgressModal from '../../components/email/EmailWriterProgressModal';
+import { startEmailSequenceRun } from '../../lib/emailWriterQueue';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
 import { useIntegrations } from '../../lib/integrations';
@@ -381,6 +383,10 @@ const ContentStudio: React.FC = () => {
   const [sendingEmails, setSendingEmails] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
   const [segmentFilter, setSegmentFilter] = useState<string>('all');
+
+  // ─── AI Writer Queue ───
+  const [writerRunId, setWriterRunId] = useState<string | null>(null);
+  const [showWriterProgress, setShowWriterProgress] = useState(false);
 
   // ─── Test Email ───
   const [showTestEmailModal, setShowTestEmailModal] = useState(false);
@@ -1225,99 +1231,78 @@ const ContentStudio: React.FC = () => {
     try {
       const eligibleLeads = leads
         .filter(l => selectedLeadIds.has(l.id) && l.email)
-        .map(l => ({ id: l.id, email: l.email, name: l.name, company: l.company, insights: l.insights, score: l.score, status: l.status, lastActivity: l.lastActivity, knowledgeBase: l.knowledgeBase }));
+        .map(l => ({
+          id: l.id,
+          email: l.email,
+          name: l.name,
+          company: l.company,
+          score: l.score,
+          status: l.status as string,
+          insights: l.insights,
+          knowledgeBase: l.knowledgeBase,
+          industry: l.industry,
+          title: l.title,
+        }));
 
       if (eligibleLeads.length === 0) {
         setSendResult({ sent: 0, failed: 0 });
         return;
       }
 
-      const sequenceId = `seq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const footer = buildEmailFooter(user.businessProfile);
-      let totalSent = 0;
-      let totalFailed = 0;
+      // Build steps with active variant content
+      const stepsPayload = steps.map((step, i) => {
+        const sv = step.variants.find(vr => vr.id === step.activeVariantId) || step.variants[0];
+        const delayMatch = step.delay.match(/\d+/);
+        const delayDays = delayMatch ? parseInt(delayMatch[0], 10) : i * 2;
+        return {
+          stepIndex: i,
+          delayDays,
+          subject: sv.subject,
+          body: sv.body,
+        };
+      });
 
-      if (sendMode === 'now') {
-        // Send first step immediately
-        const firstStep = steps[0];
-        const v = firstStep.variants.find(vr => vr.id === firstStep.activeVariantId) || firstStep.variants[0];
-        const htmlBody = buildHtmlBody(v.body, footer);
-        const result = await sendTrackedEmailBatch(
-          eligibleLeads,
-          v.subject,
-          htmlBody,
-          { trackOpens: true, trackClicks: true, provider: connectedProvider?.provider as EmailProvider, fromName: connectedProvider?.from_name }
-        );
-        totalSent += result.sent;
-        totalFailed += result.failed;
+      const result = await startEmailSequenceRun({
+        leads: eligibleLeads,
+        steps: stepsPayload,
+        config: {
+          tone: 'professional',
+          goal: 'book a meeting',
+          fromEmail: connectedProvider?.from_email,
+          fromName: connectedProvider?.from_name,
+          provider: connectedProvider?.provider,
+          businessProfile: user.businessProfile as Record<string, unknown> | undefined,
+          sendMode,
+        },
+      });
 
-        // Auto-mark New leads as Contacted
-        try {
-          const storedPrefs = localStorage.getItem('scaliyo_dashboard_prefs');
-          const prefs = storedPrefs ? JSON.parse(storedPrefs) : {};
-          if (prefs.autoContactedOnSend) {
-            const newLeadIds = eligibleLeads.filter(l => l.status === 'New').map(l => l.id);
-            if (newLeadIds.length > 0) {
-              await supabase.from('leads')
-                .update({ status: 'Contacted', lastActivity: 'Auto-contacted via email send' })
-                .in('id', newLeadIds)
-                .eq('status', 'New');
-            }
-          }
-        } catch (e) {
-          console.error('Auto-contacted hook error:', e);
-        }
-
-        // Schedule remaining steps
-        for (let i = 1; i < steps.length; i++) {
-          const step = steps[i];
-          const sv = step.variants.find(vr => vr.id === step.activeVariantId) || step.variants[0];
-          const delayMatch = step.delay.match(/\d+/);
-          const delayDays = delayMatch ? parseInt(delayMatch[0], 10) : (i + 1) * 2;
-          const scheduledAt = new Date();
-          scheduledAt.setDate(scheduledAt.getDate() + delayDays);
-
-          const stepHtml = buildHtmlBody(sv.body, footer);
-          await scheduleEmailBlock({
-            leads: eligibleLeads,
-            subject: sv.subject,
-            htmlBody: stepHtml,
-            scheduledAt,
-            blockIndex: i,
-            sequenceId,
-            fromEmail: connectedProvider?.from_email,
-            fromName: connectedProvider?.from_name,
-            provider: connectedProvider?.provider,
-          });
-        }
-      } else {
-        // Schedule ALL steps relative to base date
-        const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
-        for (let i = 0; i < steps.length; i++) {
-          const step = steps[i];
-          const sv = step.variants.find(vr => vr.id === step.activeVariantId) || step.variants[0];
-          const delayMatch = step.delay.match(/\d+/);
-          const delayDays = delayMatch ? parseInt(delayMatch[0], 10) : i * 2;
-          const scheduledAt = new Date(baseDate.getTime() + delayDays * 86400000);
-
-          const stepHtml = buildHtmlBody(sv.body, footer);
-          await scheduleEmailBlock({
-            leads: eligibleLeads,
-            subject: sv.subject,
-            htmlBody: stepHtml,
-            scheduledAt,
-            blockIndex: i,
-            sequenceId,
-            fromEmail: connectedProvider?.from_email,
-            fromName: connectedProvider?.from_name,
-            provider: connectedProvider?.provider,
-          });
-          totalSent += eligibleLeads.length;
-        }
+      if ('error' in result) {
+        console.error('Start run error:', result.error);
+        setSendResult({ sent: 0, failed: selectedLeadIds.size });
+        return;
       }
 
-      setSendResult({ sent: totalSent, failed: totalFailed });
-      fetchData();
+      // Success — open the progress modal
+      setWriterRunId(result.runId);
+      setShowSendModal(false);
+      setShowWriterProgress(true);
+
+      // Auto-mark New leads as Contacted
+      try {
+        const storedPrefs = localStorage.getItem('scaliyo_dashboard_prefs');
+        const prefs = storedPrefs ? JSON.parse(storedPrefs) : {};
+        if (prefs.autoContactedOnSend) {
+          const newLeadIds = eligibleLeads.filter(l => l.status === 'New').map(l => l.id);
+          if (newLeadIds.length > 0) {
+            await supabase.from('leads')
+              .update({ status: 'Contacted', lastActivity: 'Auto-contacted via email send' })
+              .in('id', newLeadIds)
+              .eq('status', 'New');
+          }
+        }
+      } catch (e) {
+        console.error('Auto-contacted hook error:', e);
+      }
     } catch (err: unknown) {
       console.error('Send emails error:', err);
       setSendResult({ sent: 0, failed: selectedLeadIds.size });
@@ -3913,6 +3898,17 @@ const ContentStudio: React.FC = () => {
           onClose={clearLimitError}
         />
       )}
+
+      {/* AI Writer Progress Modal */}
+      <EmailWriterProgressModal
+        isOpen={showWriterProgress}
+        onClose={() => {
+          setShowWriterProgress(false);
+          setWriterRunId(null);
+          fetchData();
+        }}
+        runId={writerRunId}
+      />
     </div>
   );
 };
