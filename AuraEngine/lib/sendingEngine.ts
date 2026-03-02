@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { resolvePlanName } from './credits';
 import { getOutboundLimits, type OutboundLimits } from './planLimits';
 import { listOutreachAccounts } from './senderAccounts';
+import { incrementUsage } from './usageTracker';
 import type { SenderAccount } from '../types';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -31,10 +32,6 @@ export interface InboxSelection {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function monthKey(): string {
   return new Date().toISOString().slice(0, 7);
@@ -170,53 +167,36 @@ export async function selectInbox(
 // ── Post-send tracking ───────────────────────────────────────────────────────
 
 /**
- * Track a successful email send. Increments:
- * - Per-sender daily counter
- * - Workspace daily + monthly counter
+ * Track a successful email send. Uses single `increment_usage` RPC which
+ * atomically increments workspace_usage_counters AND sender daily count.
  */
 export async function trackEmailSent(
   workspaceId: string,
   senderAccountId: string,
+  sourceEventId?: string,
 ): Promise<void> {
-  await Promise.all([
-    supabase.rpc('increment_sender_daily_sent', { p_sender_id: senderAccountId }),
-    supabase.rpc('increment_workspace_usage', {
-      p_workspace_id: workspaceId,
-      p_date_key: todayKey(),
-      p_month_key: monthKey(),
-      p_emails: 1,
-      p_linkedin: 0,
-      p_ai_credits: 0,
-      p_warmup: 0,
-    }),
-  ]);
+  await incrementUsage({
+    workspaceId,
+    eventType: 'email_sent',
+    sourceEventId,
+    senderAccountId,
+  });
 }
 
 /**
  * Track a warm-up email send. Does NOT count toward outreach limits.
+ * Uses single `increment_usage` RPC for workspace counter.
  */
 export async function trackWarmupSent(
   workspaceId: string,
   senderAccountId: string,
+  sourceEventId?: string,
 ): Promise<void> {
-  // Increment warmup counter on sender
-  await supabase
-    .from('sender_accounts')
-    .update({
-      warmup_daily_sent: supabase.rpc ? undefined : 0, // handled by RPC below
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', senderAccountId);
-
-  // Increment workspace warmup counter only
-  await supabase.rpc('increment_workspace_usage', {
-    p_workspace_id: workspaceId,
-    p_date_key: todayKey(),
-    p_month_key: monthKey(),
-    p_emails: 0,
-    p_linkedin: 0,
-    p_ai_credits: 0,
-    p_warmup: 1,
+  await incrementUsage({
+    workspaceId,
+    eventType: 'warmup_sent',
+    sourceEventId,
+    senderAccountId,
   });
 }
 

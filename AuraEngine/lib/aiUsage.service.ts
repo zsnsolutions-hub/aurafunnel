@@ -5,6 +5,7 @@ import {
   CREDIT_CONVERSION_RATE,
 } from './pricing.config';
 import { resolvePlanName } from './credits';
+import { incrementUsage } from './usageTracker';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,14 @@ export async function trackAiUsage(
       console.error('AI usage tracking failed:', rpcErr.message);
     }
     const newUsed = (rpcData as number) ?? creditsDeducted;
+
+    // Best-effort sync to workspace_usage_counters for dashboard consistency.
+    incrementUsage({
+      workspaceId,
+      eventType: 'ai_credit',
+      quantity: creditsDeducted,
+    }).catch(() => {});
+
     return {
       creditsDeducted,
       creditsRemaining: Math.max(config.aiCreditsMonthly - newUsed, 0),
@@ -136,6 +145,15 @@ export async function trackAiUsage(
   }
 
   const newUsed = data?.credits_used ?? creditsDeducted;
+
+  // Best-effort sync to workspace_usage_counters for dashboard consistency.
+  // workspace_ai_usage remains authoritative for AI enforcement.
+  incrementUsage({
+    workspaceId,
+    eventType: 'ai_credit',
+    quantity: creditsDeducted,
+  }).catch(() => {});
+
   return {
     creditsDeducted,
     creditsRemaining: Math.max(config.aiCreditsMonthly - newUsed, 0),

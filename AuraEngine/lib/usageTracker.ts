@@ -21,106 +21,111 @@ export interface ThresholdWarning {
   percent: number;
 }
 
+export type UsageEventType = 'email_sent' | 'linkedin_action' | 'ai_credit' | 'warmup_sent';
+
+export interface IncrementUsageParams {
+  workspaceId: string;
+  eventType: UsageEventType;
+  sourceEventId?: string;
+  quantity?: number;
+  senderAccountId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface IncrementUsageResult {
+  duplicate: boolean;
+  event_type?: string;
+  quantity?: number;
+  source_event_id?: string;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10); // '2026-02-27'
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function monthKey(): string {
-  return new Date().toISOString().slice(0, 7); // '2026-02'
+  return new Date().toISOString().slice(0, 7); // 'YYYY-MM'
 }
 
-/**
- * Atomically increment a counter row, inserting it if it doesn't exist.
- * Returns the new count after the increment.
- */
-async function incrementCounter(
-  workspaceId: string,
-  channel: 'email' | 'linkedin',
-  periodType: 'daily' | 'monthly',
-  periodKey: string,
-  inboxId: string | null,
-): Promise<number> {
-  const { data, error } = await supabase
-    .from('outbound_usage')
-    .upsert(
-      {
-        workspace_id: workspaceId,
-        inbox_id: inboxId,
-        channel,
-        period_type: periodType,
-        period_key: periodKey,
-        count: 1,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'workspace_id,inbox_id,channel,period_type,period_key' },
-    )
-    .select('count')
-    .single();
-
-  if (error) {
-    // If upsert returned conflict, fall back to manual increment
-    const { data: updated, error: rpcErr } = await supabase.rpc(
-      'increment_outbound_usage',
-      {
-        p_workspace_id: workspaceId,
-        p_inbox_id: inboxId,
-        p_channel: channel,
-        p_period_type: periodType,
-        p_period_key: periodKey,
-      },
-    );
-    if (rpcErr) throw new Error(`Usage tracking failed: ${rpcErr.message}`);
-    return (updated as number) ?? 0;
-  }
-
-  return data?.count ?? 0;
+/** Read workspace monthly totals from workspace_usage_counters. */
+async function getMonthlyUsage(workspaceId: string): Promise<{
+  emails: number;
+  linkedin: number;
+  ai: number;
+  warmup: number;
+}> {
+  const { data, error } = await supabase.rpc('get_workspace_monthly_usage', {
+    p_workspace_id: workspaceId,
+    p_month_key: monthKey(),
+  });
+  if (error) return { emails: 0, linkedin: 0, ai: 0, warmup: 0 };
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    emails: Number(row?.total_emails_sent ?? 0),
+    linkedin: Number(row?.total_linkedin_actions ?? 0),
+    ai: Number(row?.total_ai_credits_used ?? 0),
+    warmup: Number(row?.total_warmup_sent ?? 0),
+  };
 }
 
-/** Read the current counter value (0 if no row exists). */
-async function getCount(
-  workspaceId: string,
-  channel: 'email' | 'linkedin',
-  periodType: 'daily' | 'monthly',
-  periodKey: string,
-  inboxId?: string | null,
-): Promise<number> {
-  let query = supabase
-    .from('outbound_usage')
-    .select('count')
-    .eq('workspace_id', workspaceId)
-    .eq('channel', channel)
-    .eq('period_type', periodType)
-    .eq('period_key', periodKey);
+/** Read workspace daily totals from workspace_usage_counters. */
+async function getDailyUsage(workspaceId: string): Promise<{
+  emails: number;
+  linkedin: number;
+  ai: number;
+  warmup: number;
+}> {
+  const { data, error } = await supabase.rpc('get_workspace_daily_usage', {
+    p_workspace_id: workspaceId,
+  });
+  if (error) return { emails: 0, linkedin: 0, ai: 0, warmup: 0 };
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    emails: Number(row?.emails_sent ?? 0),
+    linkedin: Number(row?.linkedin_actions ?? 0),
+    ai: Number(row?.ai_credits_used ?? 0),
+    warmup: Number(row?.warmup_emails_sent ?? 0),
+  };
+}
 
-  if (inboxId) {
-    query = query.eq('inbox_id', inboxId);
-  } else if (channel === 'email' && periodType === 'monthly') {
-    // For monthly email totals, sum across all inboxes
-    const { data, error } = await supabase
-      .from('outbound_usage')
-      .select('count')
-      .eq('workspace_id', workspaceId)
-      .eq('channel', 'email')
-      .eq('period_type', 'monthly')
-      .eq('period_key', periodKey);
-    if (error) return 0;
-    return (data ?? []).reduce((sum, row) => sum + (row.count ?? 0), 0);
-  } else {
-    query = query.is('inbox_id', null);
-  }
-
-  const { data, error } = await query.maybeSingle();
-  if (error || !data) return 0;
-  return data.count ?? 0;
+/** Get per-sender daily sent count (auto-resets on new day). */
+async function getSenderDailySent(senderId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('get_sender_daily_sent', {
+    p_sender_id: senderId,
+  });
+  if (error) return 0;
+  return (data as number) ?? 0;
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
+ * Idempotent usage increment via the `increment_usage` RPC.
+ * Duplicate `sourceEventId` returns `{ duplicate: true }` without incrementing.
+ */
+export async function incrementUsage(params: IncrementUsageParams): Promise<IncrementUsageResult> {
+  const { data, error } = await supabase.rpc('increment_usage', {
+    p_workspace_id: params.workspaceId,
+    p_event_type: params.eventType,
+    p_source_event_id: params.sourceEventId ?? null,
+    p_quantity: params.quantity ?? 1,
+    p_sender_account_id: params.senderAccountId ?? null,
+    p_metadata: params.metadata ?? {},
+  });
+
+  if (error) throw new Error(`Usage increment failed: ${error.message}`);
+
+  const result = data as IncrementUsageResult;
+  return result ?? { duplicate: false };
+}
+
+/**
  * Check whether sending one more email is allowed for this inbox + workspace.
  * Returns null if allowed, or a LimitError if blocked.
+ *
+ * `inboxId` backward compatibility:
+ *  - UUID → enforce per-sender daily limit via `get_sender_daily_sent()`
+ *  - Non-UUID (e.g. 'default', email string) → skip per-sender check, monthly cap still enforced
  */
 export async function checkEmailAllowed(
   workspaceId: string,
@@ -129,15 +134,17 @@ export async function checkEmailAllowed(
 ): Promise<LimitError | null> {
   const limits = getOutboundLimits(planName);
 
-  // Daily per-inbox check
-  const dailyCount = await getCount(workspaceId, 'email', 'daily', todayKey(), inboxId);
-  if (dailyCount >= limits.emailsPerDayPerInbox) {
-    return { code: 'LIMIT_REACHED', type: 'DAILY_EMAIL' };
+  // Per-sender daily check (only for UUID sender account IDs)
+  if (UUID_RE.test(inboxId)) {
+    const dailySent = await getSenderDailySent(inboxId);
+    if (dailySent >= limits.emailsPerDayPerInbox) {
+      return { code: 'LIMIT_REACHED', type: 'DAILY_EMAIL' };
+    }
   }
 
-  // Monthly total check (sum across all inboxes)
-  const monthlyCount = await getCount(workspaceId, 'email', 'monthly', monthKey());
-  if (monthlyCount >= limits.emailsPerMonth) {
+  // Monthly workspace cap
+  const monthly = await getMonthlyUsage(workspaceId);
+  if (monthly.emails >= limits.emailsPerMonth) {
     return { code: 'LIMIT_REACHED', type: 'MONTHLY_EMAIL' };
   }
 
@@ -154,13 +161,15 @@ export async function checkLinkedInAllowed(
 ): Promise<LimitError | null> {
   const limits = getOutboundLimits(planName);
 
-  const dailyCount = await getCount(workspaceId, 'linkedin', 'daily', todayKey());
-  if (dailyCount >= limits.linkedInPerDay) {
+  // Daily LinkedIn check
+  const daily = await getDailyUsage(workspaceId);
+  if (daily.linkedin >= limits.linkedInPerDay) {
     return { code: 'LIMIT_REACHED', type: 'DAILY_LINKEDIN' };
   }
 
-  const monthlyCount = await getCount(workspaceId, 'linkedin', 'monthly', monthKey());
-  if (monthlyCount >= limits.linkedInPerMonth) {
+  // Monthly LinkedIn check
+  const monthly = await getMonthlyUsage(workspaceId);
+  if (monthly.linkedin >= limits.linkedInPerMonth) {
     return { code: 'LIMIT_REACHED', type: 'MONTHLY_LINKEDIN' };
   }
 
@@ -169,29 +178,34 @@ export async function checkLinkedInAllowed(
 
 /**
  * Increment email counter after a successful send.
- * Throws if the limit has already been reached (call checkEmailAllowed first).
+ * Calls the idempotent `increment_usage` RPC.
  */
 export async function trackEmailSend(
   workspaceId: string,
   inboxId: string,
+  sourceEventId?: string,
 ): Promise<void> {
-  await Promise.all([
-    incrementCounter(workspaceId, 'email', 'daily', todayKey(), inboxId),
-    incrementCounter(workspaceId, 'email', 'monthly', monthKey(), inboxId),
-  ]);
+  await incrementUsage({
+    workspaceId,
+    eventType: 'email_sent',
+    sourceEventId,
+    senderAccountId: UUID_RE.test(inboxId) ? inboxId : undefined,
+  });
 }
 
 /**
  * Increment LinkedIn counter after a successful action.
- * Throws if the limit has already been reached (call checkLinkedInAllowed first).
+ * Calls the idempotent `increment_usage` RPC.
  */
 export async function trackLinkedInAction(
   workspaceId: string,
+  sourceEventId?: string,
 ): Promise<void> {
-  await Promise.all([
-    incrementCounter(workspaceId, 'linkedin', 'daily', todayKey(), null),
-    incrementCounter(workspaceId, 'linkedin', 'monthly', monthKey(), null),
-  ]);
+  await incrementUsage({
+    workspaceId,
+    eventType: 'linkedin_action',
+    sourceEventId,
+  });
 }
 
 /**
@@ -204,16 +218,15 @@ export async function checkThreshold(
   const limits = getOutboundLimits(planName);
   const warnings: ThresholdWarning[] = [];
 
-  const [monthlyEmail, dailyLinkedIn, monthlyLinkedIn] = await Promise.all([
-    getCount(workspaceId, 'email', 'monthly', monthKey()),
-    getCount(workspaceId, 'linkedin', 'daily', todayKey()),
-    getCount(workspaceId, 'linkedin', 'monthly', monthKey()),
+  const [monthly, daily] = await Promise.all([
+    getMonthlyUsage(workspaceId),
+    getDailyUsage(workspaceId),
   ]);
 
   const checks: { type: LimitType; current: number; limit: number }[] = [
-    { type: 'MONTHLY_EMAIL', current: monthlyEmail, limit: limits.emailsPerMonth },
-    { type: 'DAILY_LINKEDIN', current: dailyLinkedIn, limit: limits.linkedInPerDay },
-    { type: 'MONTHLY_LINKEDIN', current: monthlyLinkedIn, limit: limits.linkedInPerMonth },
+    { type: 'MONTHLY_EMAIL', current: monthly.emails, limit: limits.emailsPerMonth },
+    { type: 'DAILY_LINKEDIN', current: daily.linkedin, limit: limits.linkedInPerDay },
+    { type: 'MONTHLY_LINKEDIN', current: monthly.linkedin, limit: limits.linkedInPerMonth },
   ];
 
   for (const c of checks) {

@@ -379,7 +379,11 @@ export async function sendTrackedEmail(
     // ── Track successful send ──
     if (data.success) {
       try {
-        await trackEmailSend(userId, inboxId);
+        await trackEmailSend(
+          userId,
+          inboxId,
+          data.message_id ? `email:msg:${data.message_id}` : undefined,
+        );
       } catch {
         // Don't fail the send if tracking fails
       }

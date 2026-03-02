@@ -91,32 +91,44 @@ serve(async (req) => {
 
     const totalItems = leads.length * steps.length;
 
-    // Pre-flight: check monthly usage limit
+    // Pre-flight: check monthly usage limit via workspace_usage_counters
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const { data: usageRows } = await supabaseAdmin
-      .from("outbound_usage")
-      .select("email_count")
-      .eq("user_id", user.id)
-      .gte("period_start", monthStart)
-      .limit(1);
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    const currentUsage = usageRows?.[0]?.email_count ?? 0;
+    const { data: usageData } = await supabaseAdmin.rpc(
+      "get_workspace_monthly_usage",
+      {
+        p_workspace_id: user.id,
+        p_month_key: monthKey,
+      }
+    );
+    const currentUsage = Number(
+      (Array.isArray(usageData) ? usageData[0] : usageData)
+        ?.total_emails_sent ?? 0
+    );
 
-    // Fetch user's plan limits
+    // Fetch user's plan and resolve limits
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("plan")
       .eq("id", user.id)
       .single();
 
+    const rawPlan = profile?.plan ?? "Starter";
+    // Resolve legacy plan name aliases
+    const resolvedPlan =
+      rawPlan === "Professional"
+        ? "Growth"
+        : rawPlan === "Enterprise" || rawPlan === "Business"
+          ? "Scale"
+          : rawPlan;
+
     const planLimits: Record<string, number> = {
-      Starter: 500,
-      Growth: 2500,
-      Scale: 10000,
-      Enterprise: 50000,
+      Starter: 1000,
+      Growth: 10000,
+      Scale: 50000,
     };
-    const limit = planLimits[profile?.plan ?? "Starter"] ?? 500;
+    const limit = planLimits[resolvedPlan] ?? 1000;
 
     if (currentUsage + totalItems > limit) {
       return new Response(
