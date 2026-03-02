@@ -186,7 +186,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
     try {
       const sessionPromise = conversation.startSession({
         agentId: AGENT_ID,
-        connectionType: 'webrtc',
+        connectionType: 'websocket',
       } as Parameters<typeof conversation.startSession>[0]);
 
       // Race against a timeout so the spinner never hangs forever
