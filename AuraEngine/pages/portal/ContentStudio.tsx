@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead, ToneType, ContentCategory, EmailSequenceConfig, EmailProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { normalizeLeads } from '../../lib/queries';
+import { normalizeLeads, leadDisplayName } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { fetchOwnerEmailPerformance, sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchConnectedEmailProvider } from '../../lib/emailTracking';
 import type { ConnectedEmailProvider } from '../../lib/emailTracking';
@@ -425,7 +425,7 @@ const ContentStudio: React.FC = () => {
 
   const filteredLeadsForSend = useMemo(() => {
     return leads.filter(l => {
-      if (!l.email) return false;
+      if (!l.primary_email) return false;
       if (segmentFilter === 'all') return true;
       if (segmentFilter === 'hot') return l.score > 75;
       if (segmentFilter === 'warm') return l.score >= 40 && l.score <= 75;
@@ -1231,11 +1231,11 @@ const ContentStudio: React.FC = () => {
 
     try {
       const eligibleLeads = leads
-        .filter(l => selectedLeadIds.has(l.id) && l.email)
+        .filter(l => selectedLeadIds.has(l.id) && l.primary_email)
         .map(l => ({
           id: l.id,
-          email: l.email,
-          name: l.name,
+          email: l.primary_email,
+          name: leadDisplayName(l),
           company: l.company,
           score: l.score,
           status: l.status as string,
@@ -3732,8 +3732,8 @@ const ContentStudio: React.FC = () => {
                             className="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-slate-700 truncate">{lead.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{lead.company} &middot; {lead.email}</p>
+                            <p className="text-xs font-bold text-slate-700 truncate">{leadDisplayName(lead)}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{lead.company} &middot; {lead.primary_email}</p>
                           </div>
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
                             lead.score > 75 ? 'bg-emerald-50 text-emerald-700' :

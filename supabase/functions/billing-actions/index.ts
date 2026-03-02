@@ -154,7 +154,7 @@ serve(async (req) => {
       // Fetch lead info
       const { data: lead, error: leadErr } = await supabaseAdmin
         .from("leads")
-        .select("name, email")
+        .select("first_name, last_name, primary_email")
         .eq("id", invoice.lead_id)
         .single();
 
@@ -191,8 +191,8 @@ serve(async (req) => {
           total_cents: invoice.total_cents,
           currency: invoice.currency,
           due_date: invoice.due_date,
-          lead_email: lead.email,
-          lead_name: lead.name,
+          lead_email: lead.primary_email,
+          lead_name: [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown',
           hosted_url: hostedUrl,
           lead_id: invoice.lead_id,
         }),

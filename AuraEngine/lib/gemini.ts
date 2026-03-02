@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { ContentType, ContentCategory, ToneType, EmailSequenceConfig, EmailStep, Lead, BusinessProfile, BusinessAnalysisResult, KnowledgeBase } from "../types";
 import { supabase } from "./supabase";
 import { resolvePrompt } from "./promptResolver";
+import { leadDisplayName } from "./queries";
 
 const buildBusinessContext = (profile?: BusinessProfile): string => {
   if (!profile) return '';
@@ -144,7 +145,7 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
   const systemInstruction = resolved.systemInstruction;
 
   const finalPrompt = resolved.promptTemplate
-    .replace('{{lead_name}}', lead.name)
+    .replace('{{lead_name}}', leadDisplayName(lead))
     .replace('{{company}}', lead.company)
     .replace('{{score}}', lead.score.toString())
     .replace('{{insights}}', lead.insights)
@@ -489,12 +490,12 @@ export const generateContentByCategory = async (
   });
 
   const finalCategoryPrompt = resolved.promptTemplate
-    .replace(/\{\{lead_name\}\}/g, lead.name || '')
+    .replace(/\{\{lead_name\}\}/g, leadDisplayName(lead))
     .replace(/\{\{company\}\}/g, lead.company || '')
     .replace(/\{\{score\}\}/g, lead.score.toString())
     .replace(/\{\{insights\}\}/g, lead.insights || '')
     .replace(/\{\{tone\}\}/g, tone)
-    .replace(/\{\{first_name\}\}/g, (lead.name || '').split(' ')[0] || '')
+    .replace(/\{\{first_name\}\}/g, lead.first_name || '')
     + (additionalContext ? ` ${additionalContext}` : '');
 
   let attempt = 0;
@@ -545,7 +546,7 @@ export const generateContentByCategory = async (
 };
 
 export const generateLeadResearch = async (
-  lead: Pick<Lead, 'name' | 'company' | 'email' | 'insights'>,
+  lead: Pick<Lead, 'first_name' | 'last_name' | 'primary_email' | 'company' | 'insights'>,
   socialUrls: Record<string, string>,
   businessProfile?: BusinessProfile,
   userId?: string
@@ -557,7 +558,7 @@ export const generateLeadResearch = async (
     .map(([k, v]) => `- ${k}: ${v}`)
     .join('\n');
 
-  const emailDomain = lead.email?.includes('@') ? lead.email.split('@')[1] : '';
+  const emailDomain = lead.primary_email?.includes('@') ? lead.primary_email.split('@')[1] : '';
 
   // Determine the best website URL to crawl
   const websiteUrl = socialUrls.website || (emailDomain ? `https://${emailDomain}` : lead.company ? `https://${lead.company.toLowerCase().replace(/\s+/g, '')}.com` : '');
@@ -714,7 +715,7 @@ Return ONE structured JSON object in this exact schema (no commentary outside th
 
   const prompt = resolved.promptTemplate
     .replace('{{website_url}}', websiteUrl)
-    .replace('{{lead_name}}', lead.name)
+    .replace('{{lead_name}}', leadDisplayName(lead))
     .replace('{{company}}', lead.company)
     .replace('{{email_domain}}', emailDomain ? `- Email Domain: ${emailDomain}` : '')
     .replace('{{insights}}', lead.insights ? `- Existing Insights: ${lead.insights}` : '')
@@ -1877,7 +1878,7 @@ export async function generatePersonalizedEmail(
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const leadContext = [
-    `Name: ${input.lead.name}`,
+    `Name: ${leadDisplayName(input.lead)}`,
     `Company: ${input.lead.company}`,
     `Score: ${input.lead.score}/100`,
     input.lead.insights ? `Insights: ${input.lead.insights}` : '',

@@ -112,7 +112,7 @@ serve(async (req) => {
     // 1. Fetch lead and verify ownership
     const { data: lead, error: leadError } = await supabaseAdmin
       .from("leads")
-      .select("id, name, email, client_id")
+      .select("id, first_name, last_name, primary_email, client_id")
       .eq("id", lead_id)
       .single();
 
@@ -130,7 +130,7 @@ serve(async (req) => {
       );
     }
 
-    if (!lead.email) {
+    if (!lead.primary_email) {
       return new Response(
         JSON.stringify({ error: "Lead does not have an email address" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -153,8 +153,8 @@ serve(async (req) => {
       stripeCustomerId = existingInvoice.stripe_customer_id;
     } else {
       const customer = await stripePost("/v1/customers", {
-        name: lead.name || "",
-        email: lead.email,
+        name: [lead.first_name, lead.last_name].filter(Boolean).join(' ') || "",
+        email: lead.primary_email,
         "metadata[lead_id]": lead_id,
         "metadata[owner_id]": userId,
       }, stripeApiKey);

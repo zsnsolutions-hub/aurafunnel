@@ -150,21 +150,21 @@ export interface KnowledgeBase {
 export interface Lead {
   id: string;
   client_id: string;
-  name: string;
+  // ─── Canonical fields (always use these) ───
+  first_name: string;
+  last_name: string;
+  primary_email: string;
+  primary_phone: string;
   company: string;
-  email: string;
   score: number;
   status: 'New' | 'Contacted' | 'Qualified' | 'Converted' | 'Lost';
-  lastActivity: string;
+  last_activity: string;
   insights: string;
   source?: string;
   created_at?: string;
+  updated_at?: string;
   knowledgeBase?: KnowledgeBase;
-  first_name?: string;
-  last_name?: string;
-  primary_email?: string;
   emails?: string[];
-  primary_phone?: string;
   phones?: string[];
   linkedin_url?: string;
   location?: string;
@@ -174,7 +174,11 @@ export interface Lead {
   import_batch_id?: string;
   imported_at?: string;
   custom_fields?: Record<string, string>;
-  updated_at?: string;
+  // ─── Legacy (deprecated — read-only, removed next release) ───
+  /** @deprecated Use primary_email */ email?: string;
+  /** @deprecated Use first_name + last_name */ name?: string;
+  /** @deprecated Use last_activity */ lastActivity?: string;
+  /** @deprecated Use primary_phone */ phone?: string;
 }
 
 export interface Plan {

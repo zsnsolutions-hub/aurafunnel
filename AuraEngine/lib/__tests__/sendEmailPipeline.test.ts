@@ -47,12 +47,14 @@ import type { Lead } from '../../types';
 const testLead: Lead = {
   id: 'lead-001',
   client_id: 'client-001',
-  name: 'Jane Smith',
+  first_name: 'Jane',
+  last_name: 'Smith',
+  primary_email: 'jane@acme.com',
+  primary_phone: '',
   company: 'Acme Corp',
-  email: 'jane@acme.com',
   score: 85,
   status: 'New',
-  lastActivity: '2026-02-19',
+  last_activity: '2026-02-19',
   insights: 'Recently raised Series B funding',
   knowledgeBase: {
     industry: 'SaaS',
@@ -64,8 +66,9 @@ const testLead: Lead = {
 const leadNoEmail: Lead = {
   ...testLead,
   id: 'lead-002',
-  name: 'Bob NoEmail',
-  email: '',
+  first_name: 'Bob',
+  last_name: 'NoEmail',
+  primary_email: '',
 };
 
 function buildWorkflow(nodes: WorkflowNode[]): Workflow {
@@ -191,7 +194,7 @@ describe('send_email pipeline — end to end', () => {
     // AI was called
     expect(mockGeneratePersonalizedEmail).toHaveBeenCalledTimes(1);
     const aiInput = mockGeneratePersonalizedEmail.mock.calls[0][0];
-    expect(aiInput.lead.name).toBe('Jane Smith');
+    expect(aiInput.lead.first_name).toBe('Jane');
 
     // sendTrackedEmail used AI-enhanced content
     const emailCall = mockSendTrackedEmail.mock.calls[0][0];

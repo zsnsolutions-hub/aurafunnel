@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon, TrashIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { normalizeLeads } from '../../lib/queries';
+import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchBatchEmailSummary } from '../../lib/emailTracking';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
@@ -267,7 +267,7 @@ const LeadManagement: React.FC = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('leads')
-      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at')
+      .select('id,client_id,first_name,last_name,primary_email,company,score,status,last_activity,insights,created_at,knowledgeBase,primary_phone,linkedin_url,location,title,industry,company_size,source')
       .eq('client_id', user.id)
       .order('score', { ascending: false });
     if (error) {
@@ -528,22 +528,23 @@ const LeadManagement: React.FC = () => {
   const handleStatusUpdate = async (leadId: string, newStatus: Lead['status']) => {
     const lead = allLeads.find(l => l.id === leadId);
     const prevStatus = lead?.status;
-    const prevActivity = lead?.lastActivity;
+    const prevActivity = lead?.last_activity;
+    const newActivity = new Date().toISOString();
     // Optimistic update
     setAllLeads(prev => prev.map(l =>
-      l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
+      l.id === leadId ? { ...l, status: newStatus, last_activity: newActivity, lastActivity: newActivity } : l
     ));
     if (selectedLead?.id === leadId) {
-      setSelectedLead({ ...selectedLead, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
+      setSelectedLead({ ...selectedLead, status: newStatus, last_activity: newActivity, lastActivity: newActivity });
     }
-    const { error: updateError } = await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', leadId);
+    const { error: updateError } = await supabase.from('leads').update({ status: newStatus, last_activity: newActivity }).eq('id', leadId);
     if (updateError) {
       // Rollback on failure
       setAllLeads(prev => prev.map(l =>
-        l.id === leadId ? { ...l, status: prevStatus!, lastActivity: prevActivity! } : l
+        l.id === leadId ? { ...l, status: prevStatus!, last_activity: prevActivity!, lastActivity: prevActivity! } : l
       ));
       if (selectedLead?.id === leadId) {
-        setSelectedLead({ ...selectedLead, status: prevStatus!, lastActivity: prevActivity! });
+        setSelectedLead({ ...selectedLead, status: prevStatus!, last_activity: prevActivity!, lastActivity: prevActivity! });
       }
       console.error('Lead status update error:', updateError.message);
       return;
@@ -658,13 +659,15 @@ const LeadManagement: React.FC = () => {
       const knowledgeBase = Object.keys(kbCleaned).length > 0 ? kbCleaned : null;
 
       const payload: Record<string, any> = {
-        name: newLead.name.trim(),
-        email: newLead.email.trim(),
+        first_name: newLead.name.trim().split(' ')[0] || '',
+        last_name: newLead.name.trim().split(' ').slice(1).join(' ') || '',
+        primary_email: newLead.email.trim(),
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
         score: mockScore,
         status: 'New',
+        last_activity: new Date().toISOString(),
       };
       if (knowledgeBase) payload.knowledgeBase = knowledgeBase;
 
@@ -765,8 +768,9 @@ const LeadManagement: React.FC = () => {
       const knowledgeBase = Object.keys(kbCleaned).length > 0 ? kbCleaned : null;
 
       const payload: Record<string, any> = {
-        name: editLead.name.trim(),
-        email: editLead.email.trim(),
+        first_name: editLead.name.trim().split(' ')[0] || '',
+        last_name: editLead.name.trim().split(' ').slice(1).join(' ') || '',
+        primary_email: editLead.email.trim(),
         company: editLead.company.trim(),
         insights: editLead.insights.trim() || '',
       };

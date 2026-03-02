@@ -3,6 +3,7 @@ import { Lead, AIInsight } from '../../types';
 import { PhoneIcon, MailIcon, ChartIcon, RefreshIcon, SparklesIcon, FolderIcon, XIcon, FlameIcon, BoltIcon, ClockIcon, TrashIcon, AlertTriangleIcon } from '../Icons';
 import { supabase } from '../../lib/supabase';
 import { generateLeadInsights } from '../../lib/insights';
+import { leadDisplayName, leadInitials } from '../../lib/queries';
 
 interface LeadActionsModalProps {
   lead: Lead;
@@ -65,14 +66,14 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
     setStatusUpdating(true);
     const { error } = await supabase
       .from('leads')
-      .update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` })
+      .update({ status: newStatus, last_activity: new Date().toISOString() })
       .eq('id', lead.id);
 
     if (!error) {
       await supabase.from('audit_logs').insert({
         user_id: lead.client_id,
         action: 'LEAD_STATUS_UPDATED',
-        details: `${lead.name} moved to ${newStatus}`
+        details: `${leadDisplayName(lead)} moved to ${newStatus}`
       });
       onStatusUpdate(lead.id, newStatus);
     }
@@ -84,7 +85,7 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
     await supabase.from('audit_logs').insert({
       user_id: lead.client_id,
       action: 'CONTACT_SCHEDULED',
-      details: `Scheduled contact with ${lead.name} on ${scheduleDate}. Note: ${scheduleNote || 'N/A'}`
+      details: `Scheduled contact with ${leadDisplayName(lead)} on ${scheduleDate}. Note: ${scheduleNote || 'N/A'}`
     });
     setScheduleSaved(true);
     setTimeout(() => { setScheduleSaved(false); setShowSchedule(false); }, 1500);
@@ -114,10 +115,10 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-4">
               <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg">
-                {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('') || '?'}
+                {leadInitials(lead)}
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900 font-heading">{lead.name}</h2>
+                <h2 className="text-xl font-bold text-slate-900 font-heading">{leadDisplayName(lead)}</h2>
                 <p className="text-sm text-slate-500">{lead.company}</p>
                 <div className="flex items-center space-x-2 mt-1.5">
                   <div className="flex items-center space-x-0.5">
@@ -349,7 +350,7 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
               {/* Delete Lead */}
               <button
                 onClick={async () => {
-                  if (!window.confirm(`Delete ${lead.name}? This action cannot be undone.`)) return;
+                  if (!window.confirm(`Delete ${leadDisplayName(lead)}? This action cannot be undone.`)) return;
                   setDeleteLoading(true);
                   const { error } = await supabase.from('leads').delete().eq('id', lead.id);
                   setDeleteLoading(false);
@@ -376,7 +377,7 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
 
           {activeTab === 'insights' && (
             <div className="space-y-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">AI Recommendations for {lead.name}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">AI Recommendations for {leadDisplayName(lead)}</p>
               {leadInsights.map(insight => (
                 <div key={insight.id} className="p-4 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-indigo-50/30 transition-all">
                   <div className="flex items-start space-x-3">
@@ -430,7 +431,7 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Last Activity</p>
-                  <p className="text-sm font-bold text-slate-900 mt-1 truncate">{lead.lastActivity || '—'}</p>
+                  <p className="text-sm font-bold text-slate-900 mt-1 truncate">{lead.last_activity ? new Date(lead.last_activity).toLocaleDateString() : '—'}</p>
                 </div>
               </div>
 
@@ -462,7 +463,7 @@ const LeadActionsModal: React.FC<LeadActionsModalProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <span className="text-xs text-slate-500">Email</span>
-                    <span className="text-xs font-bold text-slate-800">{lead.email}</span>
+                    <span className="text-xs font-bold text-slate-800">{lead.primary_email}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <span className="text-xs text-slate-500">Company</span>

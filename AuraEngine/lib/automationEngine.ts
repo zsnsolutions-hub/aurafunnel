@@ -3,6 +3,7 @@ import { sendTrackedEmail, scheduleEmailBlock } from './emailTracking';
 import { personalizeForSend } from './personalization';
 import { generatePersonalizedEmail } from './gemini';
 import { fetchIntegration, updateWebhookStats } from './integrations';
+import { leadDisplayName } from './queries';
 import type { Lead, EmailTemplate } from '../types';
 
 // ─── Types ───
@@ -228,7 +229,7 @@ export async function executeWorkflow(
 
     results.push({
       leadId: lead.id,
-      leadName: lead.name,
+      leadName: leadDisplayName(lead),
       status: overallStatus,
       steps,
       startedAt,
@@ -302,7 +303,7 @@ function executeTrigger(
 
   switch (triggerType) {
     case 'lead_created':
-      return { status: 'pass', message: `Trigger matched — lead "${lead.name}" exists in pipeline` };
+      return { status: 'pass', message: `Trigger matched — lead "${leadDisplayName(lead)}" exists in pipeline` };
 
     case 'score_change': {
       const threshold = Number(node.config.threshold) || 50;
@@ -335,7 +336,7 @@ async function executeAction(
 
   switch (actionType) {
     case 'send_email': {
-      if (!lead.email) {
+      if (!lead.primary_email) {
         return { status: 'fail', message: 'No email address for this lead' };
       }
 
@@ -351,7 +352,7 @@ async function executeAction(
 
       if (templateCategory === '__custom__') {
         subject = (node.config.customSubject as string) || `${node.title} — ${lead.company}`;
-        htmlBody = (node.config.customBody as string) || `<p>Hi ${lead.name},</p><p>This is a message from ${node.title}.</p>`;
+        htmlBody = (node.config.customBody as string) || `<p>Hi ${lead.first_name || leadDisplayName(lead)},</p><p>This is a message from ${node.title}.</p>`;
       } else {
         // Fetch from email_templates, preferring user template over default
         const { data: templates } = await supabase
@@ -368,7 +369,7 @@ async function executeAction(
           htmlBody = template.body_template;
         } else {
           subject = `${node.title} — ${lead.company}`;
-          htmlBody = `<p>Hi ${lead.name},</p><p>This is an automated email from "${node.title}".</p>`;
+          htmlBody = `<p>Hi ${lead.first_name || leadDisplayName(lead)},</p><p>This is an automated email from "${node.title}".</p>`;
         }
       }
 
@@ -396,7 +397,7 @@ async function executeAction(
         if (timing === 'immediate') {
           const result = await sendTrackedEmail({
             leadId: lead.id,
-            toEmail: lead.email,
+            toEmail: lead.primary_email,
             subject,
             htmlBody,
             trackOpens: true,
@@ -404,14 +405,14 @@ async function executeAction(
           });
 
           if (result.success) {
-            return { status: 'pass', message: `Email sent to ${lead.email} (template: ${templateCategory}${aiEnabled ? ', AI-enhanced' : ''})` };
+            return { status: 'pass', message: `Email sent to ${lead.primary_email} (template: ${templateCategory}${aiEnabled ? ', AI-enhanced' : ''})` };
           }
           throw new Error(result.error || 'Send failed');
         } else {
           // Schedule for later
           const scheduledAt = calculateScheduledTime(timing);
           const schedResult = await scheduleEmailBlock({
-            leads: [{ id: lead.id, email: lead.email, name: lead.name, company: lead.company, insights: lead.insights, score: lead.score, status: lead.status, lastActivity: lead.lastActivity, knowledgeBase: lead.knowledgeBase }],
+            leads: [{ id: lead.id, email: lead.primary_email, name: leadDisplayName(lead), company: lead.company, insights: lead.insights, score: lead.score, status: lead.status, lastActivity: lead.last_activity, knowledgeBase: lead.knowledgeBase }],
             subject,
             htmlBody,
             scheduledAt,
@@ -420,7 +421,7 @@ async function executeAction(
           });
 
           if (schedResult.scheduled > 0) {
-            return { status: 'pass', message: `Email scheduled for ${scheduledAt.toLocaleString()} to ${lead.email} (template: ${templateCategory}, timing: ${timing}${aiEnabled ? ', AI-enhanced' : ''})` };
+            return { status: 'pass', message: `Email scheduled for ${scheduledAt.toLocaleString()} to ${lead.primary_email} (template: ${templateCategory}, timing: ${timing}${aiEnabled ? ', AI-enhanced' : ''})` };
           }
           throw new Error(schedResult.errors.join('; ') || 'Schedule failed');
         }
@@ -470,12 +471,12 @@ async function executeAction(
       const { error } = await supabase.from('audit_logs').insert({
         user_id: userId,
         action: 'AUTOMATION_ALERT',
-        details: `Alert from workflow node "${node.title}" for lead ${lead.name} (${lead.company})`,
+        details: `Alert from workflow node "${node.title}" for lead ${leadDisplayName(lead)} (${lead.company})`,
       });
       if (error) {
         return { status: 'fail', message: `Alert creation failed: ${error.message}` };
       }
-      return { status: 'pass', message: `Alert created for "${lead.name}"` };
+      return { status: 'pass', message: `Alert created for "${leadDisplayName(lead)}"` };
     }
 
     case 'assign_user': {
@@ -506,7 +507,7 @@ async function executeAction(
         const messageTemplate = (node.config.messageTemplate as string) || '';
         const text = messageTemplate
           ? personalizeForSend(messageTemplate, lead)
-          : `*New lead activity* — ${lead.name} (${lead.company})\nScore: ${lead.score} | Status: ${lead.status}\nEmail: ${lead.email}`;
+          : `*New lead activity* — ${leadDisplayName(lead)} (${lead.company})\nScore: ${lead.score} | Status: ${lead.status}\nEmail: ${lead.primary_email}`;
 
         const res = await fetch(webhookUrl, {
           method: 'POST',
@@ -514,7 +515,7 @@ async function executeAction(
           body: JSON.stringify({ text }),
         });
         if (res.ok) {
-          return { status: 'pass', message: `Slack notification sent for "${lead.name}"` };
+          return { status: 'pass', message: `Slack notification sent for "${leadDisplayName(lead)}"` };
         }
         return { status: 'fail', message: `Slack returned ${res.status}` };
       } catch (err) {
@@ -542,9 +543,9 @@ async function executeAction(
             },
             body: JSON.stringify({
               properties: {
-                email: lead.email,
-                firstname: (lead.name || '').split(' ')[0] || lead.name || '',
-                lastname: (lead.name || '').split(' ').slice(1).join(' ') || '',
+                email: lead.primary_email,
+                firstname: lead.first_name || '',
+                lastname: lead.last_name || '',
                 company: lead.company,
                 hs_lead_status: lead.status === 'Qualified' ? 'QUALIFIED' : 'NEW',
               },
@@ -553,7 +554,7 @@ async function executeAction(
 
           if (res.ok) {
             const data = await res.json();
-            return { status: 'pass', message: `Synced "${lead.name}" to HubSpot (ID: ${data.id})` };
+            return { status: 'pass', message: `Synced "${leadDisplayName(lead)}" to HubSpot (ID: ${data.id})` };
           }
           const errBody = await res.json().catch(() => ({}));
           return { status: 'fail', message: `HubSpot sync failed: ${(errBody as any).message || res.status}` };
@@ -570,9 +571,9 @@ async function executeAction(
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              Email: lead.email,
-              FirstName: (lead.name || '').split(' ')[0] || lead.name || '',
-              LastName: (lead.name || '').split(' ').slice(1).join(' ') || lead.name || '',
+              Email: lead.primary_email,
+              FirstName: lead.first_name || '',
+              LastName: lead.last_name || leadDisplayName(lead),
               Company: lead.company || 'Unknown',
               Status: lead.status === 'Qualified' ? 'Qualified' : 'Open - Not Contacted',
             }),
@@ -580,7 +581,7 @@ async function executeAction(
 
           if (res.ok) {
             const data = await res.json();
-            return { status: 'pass', message: `Synced "${lead.name}" to Salesforce (ID: ${data.id})` };
+            return { status: 'pass', message: `Synced "${leadDisplayName(lead)}" to Salesforce (ID: ${data.id})` };
           }
           const errBody = await res.json().catch(() => ({}));
           const errMsg = Array.isArray(errBody) ? errBody.map((e: any) => e.message).join('; ') : (errBody as any).message || String(res.status);
@@ -610,7 +611,7 @@ async function executeAction(
       try {
         const payload = JSON.stringify({
           event: webhook.trigger_event,
-          lead: { id: lead.id, name: lead.name, email: lead.email, company: lead.company, score: lead.score, status: lead.status },
+          lead: { id: lead.id, name: leadDisplayName(lead), email: lead.primary_email, company: lead.company, score: lead.score, status: lead.status },
           timestamp: new Date().toISOString(),
           workflowId: node.id,
         });
@@ -738,10 +739,10 @@ export async function getExecutionLog(
   if (leadIds.length > 0) {
     const { data: leads } = await supabase
       .from('leads')
-      .select('id, name')
+      .select('id, first_name, last_name')
       .in('id', leadIds);
     if (leads) {
-      leadMap = new Map(leads.map((l: any) => [l.id, l.name]));
+      leadMap = new Map(leads.map((l: any) => [l.id, [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unknown']));
     }
   }
 
@@ -868,7 +869,7 @@ async function executeFallback(
       await supabase.from('audit_logs').insert({
         user_id: userId,
         action: 'AUTOMATION_ALERT',
-        details: `Fallback alert: Email to ${lead.name} (${lead.email}) failed at node "${node.title}". Error: ${errorMsg}`,
+        details: `Fallback alert: Email to ${leadDisplayName(lead)} (${lead.primary_email}) failed at node "${node.title}". Error: ${errorMsg}`,
       });
       return { status: 'pass', message: `Email failed but fallback alert created. Error: ${errorMsg}` };
     }
@@ -877,7 +878,7 @@ async function executeFallback(
       await supabase.from('audit_logs').insert({
         user_id: userId,
         action: 'AUTOMATION_TASK_CREATED',
-        details: `Fallback task: Manually send email to ${lead.name} (${lead.email}). Original node: "${node.title}". Error: ${errorMsg}`,
+        details: `Fallback task: Manually send email to ${leadDisplayName(lead)} (${lead.primary_email}). Original node: "${node.title}". Error: ${errorMsg}`,
       });
       return { status: 'pass', message: `Email failed but follow-up task created. Error: ${errorMsg}` };
     }
@@ -889,7 +890,7 @@ async function executeFallback(
         const { error } = await supabase.from('scheduled_emails').insert({
           owner_id: userId,
           lead_id: lead.id,
-          to_email: lead.email,
+          to_email: lead.primary_email,
           subject: emailContent.subject,
           html_body: emailContent.htmlBody,
           scheduled_at: retryAt.toISOString(),

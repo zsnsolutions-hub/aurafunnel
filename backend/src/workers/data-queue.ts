@@ -2,6 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { redis } from '../cache/redis.js';
 import { createClient } from '@supabase/supabase-js';
 import { runResearchJob } from '../research/index.js';
+import { mapLeadPayloadToCanonical } from '../../../AuraEngine/lib/leadFieldMapper.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -44,8 +45,8 @@ export function startDataWorker() {
 
           for (let i = 0; i < leads.length; i += batchSize) {
             const batch = leads.slice(i, i + batchSize).map(lead => ({
-              ...lead,
-              user_id: userId,
+              ...mapLeadPayloadToCanonical(lead),
+              client_id: userId,
             }));
             const { error } = await supabase.from('leads').insert(batch);
             if (error) {

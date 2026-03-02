@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lead, ManualList } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
 import { TargetIcon, SparklesIcon, BoltIcon } from '../../components/Icons';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import LeadSegmentation from '../../components/dashboard/LeadSegmentation';
@@ -48,9 +49,10 @@ const LeadsManagement: React.FC = () => {
       .order('score', { ascending: false });
 
     if (data) {
-      const formatted = data.map(l => ({
+      const normalized = normalizeLeads(data as Record<string, unknown>[]);
+      const formatted = normalized.map(l => ({
         ...l,
-        sourceClient: l.profiles?.name || l.profiles?.email?.split('@')[0] || 'Unknown Source'
+        sourceClient: (l as any).profiles?.name || (l as any).profiles?.email?.split('@')[0] || 'Unknown Source'
       }));
       setLeads(formatted);
       setFilteredLeads(formatted);
@@ -70,19 +72,20 @@ const LeadsManagement: React.FC = () => {
   const displayLeads = getDisplayLeads();
 
   const handleStatusUpdate = (leadId: string, newStatus: Lead['status']) => {
+    const newActivity = new Date().toISOString();
     const updatedLeads = leads.map(l =>
-      l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
+      l.id === leadId ? { ...l, status: newStatus, last_activity: newActivity, lastActivity: newActivity } : l
     );
     setLeads(updatedLeads);
     if (activeSegmentId) {
       setFilteredLeads(filteredLeads.map(l =>
-        l.id === leadId ? { ...l, status: newStatus, lastActivity: `Status changed to ${newStatus}` } : l
+        l.id === leadId ? { ...l, status: newStatus, last_activity: newActivity, lastActivity: newActivity } : l
       ));
     } else {
       setFilteredLeads(updatedLeads);
     }
     if (selectedLead?.id === leadId) {
-      setSelectedLead({ ...selectedLead, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
+      setSelectedLead({ ...selectedLead, status: newStatus, last_activity: newActivity, lastActivity: newActivity });
     }
   };
 
@@ -179,14 +182,14 @@ const LeadsManagement: React.FC = () => {
                         <td className="px-8 py-7">
                           <button onClick={() => openActionsModal(lead)} className="flex items-center space-x-4 text-left">
                             <div className="w-11 h-11 rounded-[1.25rem] bg-slate-100 flex items-center justify-center text-slate-400 font-black group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
-                              {(lead.name || '?')[0]}
+                              {leadInitials(lead)}
                             </div>
                             <div>
                               <div className="flex items-center space-x-2">
-                                <p className="text-sm font-bold text-slate-900 font-heading hover:text-indigo-600 transition-colors">{lead.name}</p>
+                                <p className="text-sm font-bold text-slate-900 font-heading hover:text-indigo-600 transition-colors">{leadDisplayName(lead)}</p>
                                 <span className="text-[10px] font-bold text-slate-400">&#8226; {lead.company}</span>
                               </div>
-                              <p className="text-[10px] text-slate-400 font-mono tracking-tighter mt-0.5">{lead.email}</p>
+                              <p className="text-[10px] text-slate-400 font-mono tracking-tighter mt-0.5">{lead.primary_email}</p>
                             </div>
                           </button>
                         </td>

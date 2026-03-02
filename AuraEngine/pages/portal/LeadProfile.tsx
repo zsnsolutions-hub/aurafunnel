@@ -10,7 +10,7 @@ import {
   SendIcon, EyeIcon, CursorClickIcon, TrashIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { normalizeLeads } from '../../lib/queries';
+import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
@@ -75,7 +75,7 @@ const deriveCompanyDetails = (lead: Lead) => {
 };
 
 const deriveContactInfo = (lead: Lead) => {
-  const name = lead.name || 'Unknown';
+  const name = leadDisplayName(lead);
   return {
     phone: lead.primary_phone || `(555) ${String(Math.abs(name.charCodeAt(0) * 7 + 100)).slice(0, 3)}-${String(Math.abs((name.charCodeAt(1) || 0) * 13 + 1000)).slice(0, 4)}`,
     linkedin: lead.linkedin_url || `linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '')}`,
@@ -260,17 +260,11 @@ const LeadProfile: React.FC = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('leads')
-      .select('id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase,first_name,last_name,primary_email,primary_phone,linkedin_url,location,title,source,industry,company_size,import_batch_id,imported_at,custom_fields,updated_at')
+      .select('id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,linkedin_url,location,title,source,industry,company_size,import_batch_id,imported_at,custom_fields')
       .eq('id', leadId)
       .single();
     if (error) {
-      // Column may not exist — fall back to SELECT *
-      const fallback = await supabase.from('leads').select('*').eq('id', leadId).single();
-      if (!fallback.error && fallback.data) {
-        const [normalized] = normalizeLeads([fallback.data]);
-        setLead(normalized);
-        fetchLeadEmailEngagement(normalized.id).then(setEmailEngagement);
-      }
+      console.error('LeadProfile fetch error:', error.message);
     } else if (data) {
       const [normalized] = normalizeLeads([data]);
       setLead(normalized);
@@ -301,10 +295,10 @@ const LeadProfile: React.FC = () => {
     if (!lead) return;
     const kb = lead.knowledgeBase || {};
     setEditForm({
-      name: lead.name || '',
-      email: lead.email || '',
+      name: leadDisplayName(lead),
+      email: lead.primary_email || '',
       company: lead.company || '',
-      phone: (kb as Record<string, string>).phone || '',
+      phone: lead.primary_phone || (kb as Record<string, string>).phone || '',
       insights: lead.insights || '',
     });
     setEditKb({
@@ -343,8 +337,9 @@ const LeadProfile: React.FC = () => {
       const knowledgeBase = Object.keys(kbCleaned).length > 0 ? kbCleaned : null;
 
       const payload: Record<string, any> = {
-        name: editForm.name.trim(),
-        email: editForm.email.trim(),
+        first_name: editForm.name.trim().split(' ')[0] || '',
+        last_name: editForm.name.trim().split(' ').slice(1).join(' ') || '',
+        primary_email: editForm.email.trim(),
         company: editForm.company.trim(),
         insights: editForm.insights.trim() || '',
       };
@@ -522,13 +517,14 @@ const LeadProfile: React.FC = () => {
 
   const handleStatusChange = async (newStatus: Lead['status']) => {
     if (!lead) return;
-    const { error: updateError } = await supabase.from('leads').update({ status: newStatus, lastActivity: `Status changed to ${newStatus}` }).eq('id', lead.id);
+    const newActivity = new Date().toISOString();
+    const { error: updateError } = await supabase.from('leads').update({ status: newStatus, last_activity: newActivity }).eq('id', lead.id);
     if (updateError) console.error('Lead status update error:', updateError.message);
-    setLead({ ...lead, status: newStatus });
+    setLead({ ...lead, status: newStatus, last_activity: newActivity });
     const { error: logError } = await supabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'LEAD_STATUS_UPDATED',
-      details: `${lead.name} moved to ${newStatus}`
+      details: `${leadDisplayName(lead)} moved to ${newStatus}`
     });
     if (logError) console.error('Audit log error:', logError.message);
     showFeedback(`Status updated to ${newStatus}`);
@@ -955,7 +951,7 @@ const LeadProfile: React.FC = () => {
               {/* Avatar + Score */}
               <div className="flex flex-col items-center space-y-4">
                 <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-indigo-100">
-                  {(lead.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2) || '?'}
+                  {leadInitials(lead)}
                 </div>
                 <div className="text-center">
                   <div className="flex items-center space-x-1 mb-1">
@@ -1025,7 +1021,7 @@ const LeadProfile: React.FC = () => {
                   <div className="space-y-2.5">
                     <div className="flex items-center space-x-2">
                       <MailIcon className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-xs text-indigo-600 font-medium truncate">{lead.email}</span>
+                      <span className="text-xs text-indigo-600 font-medium truncate">{lead.primary_email}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <PhoneIcon className="w-3.5 h-3.5 text-slate-400" />
@@ -2286,10 +2282,10 @@ const LeadProfile: React.FC = () => {
                     const postUrl = `${window.location.origin}/#/blog/${post.slug}`;
                     const result = await sendTrackedEmail({
                       leadId: lead.id,
-                      toEmail: lead.email,
+                      toEmail: lead.primary_email,
                       subject: `Check out: ${post.title}`,
                       htmlBody: `<div style="font-family:Arial,sans-serif;max-width:600px">
-                        <p>Hi ${(lead.name || '').split(' ')[0] || 'there'},</p>
+                        <p>Hi ${lead.first_name || 'there'},</p>
                         <h2 style="color:#1e293b">${post.title}</h2>
                         <p style="color:#64748b;line-height:1.6">${post.excerpt || post.content.substring(0, 200)}...</p>
                         <a href="${postUrl}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Read Full Post</a>

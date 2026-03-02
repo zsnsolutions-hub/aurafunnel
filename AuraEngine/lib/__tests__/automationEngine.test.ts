@@ -83,9 +83,10 @@ describe('calculateScheduledTime', () => {
 
 describe('personalizeForSend', () => {
   const lead = {
-    name: 'Jane Smith',
+    first_name: 'Jane',
+    last_name: 'Smith',
     company: 'Acme Corp',
-    email: 'jane@acme.com',
+    primary_email: 'jane@acme.com',
     score: 85,
     insights: 'Recently raised Series B',
     knowledgeBase: {

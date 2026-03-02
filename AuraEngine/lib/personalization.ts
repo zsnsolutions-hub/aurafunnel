@@ -9,8 +9,9 @@ export function resolvePersonalizationTags(
   lead: Partial<Lead>,
   businessProfile?: BusinessProfile
 ): string {
-  const firstName = lead.name?.split(' ')[0] || '';
-  const lastName = lead.name?.split(' ').slice(1).join(' ') || '';
+  const firstName = lead.first_name || '';
+  const lastName = lead.last_name || '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ');
   const kb = lead.knowledgeBase;
   const insights = lead.insights || '';
 
@@ -18,11 +19,11 @@ export function resolvePersonalizationTags(
     // Lead identity
     .replace(/\{\{first_name\}\}/gi, firstName)
     .replace(/\{\{last_name\}\}/gi, lastName)
-    .replace(/\{\{full_name\}\}/gi, lead.name || '')
-    .replace(/\{\{name\}\}/gi, lead.name || '')
-    .replace(/\{\{lead_name\}\}/gi, lead.name || '')
+    .replace(/\{\{full_name\}\}/gi, fullName)
+    .replace(/\{\{name\}\}/gi, fullName)
+    .replace(/\{\{lead_name\}\}/gi, fullName)
     .replace(/\{\{company\}\}/gi, lead.company || '')
-    .replace(/\{\{email\}\}/gi, lead.email || '')
+    .replace(/\{\{email\}\}/gi, lead.primary_email || '')
     // KB structured fields
     .replace(/\{\{title\}\}/gi, kb?.title || '')
     .replace(/\{\{job_title\}\}/gi, kb?.title || '')
@@ -38,7 +39,7 @@ export function resolvePersonalizationTags(
     .replace(/\{\{ai_insight\}\}/gi, insights)
     .replace(/\{\{insights\}\}/gi, insights)
     .replace(/\{\{insight_1\}\}/gi, insights)
-    .replace(/\{\{recent_activity\}\}/gi, lead.lastActivity || insights)
+    .replace(/\{\{recent_activity\}\}/gi, lead.last_activity || insights)
     // Lead metadata
     .replace(/\{\{score\}\}/gi, lead.score != null ? String(lead.score) : '')
     // Business profile / sender fields

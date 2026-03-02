@@ -152,7 +152,7 @@ export async function getTargetWebhooks(userId: string) {
 export async function getTargetLeads(userId: string, limit = 100) {
   const { data } = await supabase
     .from('leads')
-    .select('id, name, email, company, status, score, created_at')
+    .select('id, first_name, last_name, primary_email, company, status, score, created_at')
     .eq('client_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);

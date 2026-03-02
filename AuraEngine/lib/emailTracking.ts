@@ -740,7 +740,7 @@ export async function fetchCampaignRecipients(sequenceId: string): Promise<Campa
   const leadIds = [...new Set(rows.map(r => r.lead_id).filter(Boolean))];
   const { data: leadsData } = await supabase
     .from('leads')
-    .select('id, name, company, score, status')
+    .select('id, first_name, last_name, company, score, status')
     .in('id', leadIds);
 
   const leadMap = new Map((leadsData ?? []).map(l => [l.id, l]));
@@ -756,9 +756,10 @@ export async function fetchCampaignRecipients(sequenceId: string): Promise<Campa
   const recipients: CampaignRecipient[] = [];
   for (const [key, leadRows] of grouped) {
     const lead = leadMap.get(key);
+    const leadName = lead ? [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown' : 'Unknown';
     recipients.push({
       lead_id: key,
-      lead_name: lead?.name ?? 'Unknown',
+      lead_name: leadName,
       lead_company: lead?.company ?? '',
       lead_email: leadRows[0].to_email,
       lead_score: lead?.score ?? 0,

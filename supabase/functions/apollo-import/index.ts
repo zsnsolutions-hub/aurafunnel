@@ -88,7 +88,7 @@ serve(async (req) => {
     // Fetch user's existing leads for dedup
     const { data: existingLeads } = await supabaseAdmin
       .from("leads")
-      .select("id, name, email, company, knowledgeBase")
+      .select("id, first_name, last_name, primary_email, company, knowledgeBase")
       .eq("client_id", user.id);
 
     const emailSet = new Set<string>();
@@ -96,11 +96,12 @@ serve(async (req) => {
     const companyNameSet = new Set<string>();
 
     for (const lead of existingLeads ?? []) {
-      if (lead.email) emailSet.add(lead.email.toLowerCase());
+      if (lead.primary_email) emailSet.add(lead.primary_email.toLowerCase());
       const kb = lead.knowledgeBase as Record<string, string> | null;
       if (kb?.linkedin) linkedinSet.add(kb.linkedin.toLowerCase());
-      if (lead.company && lead.name) {
-        companyNameSet.add(`${lead.company.toLowerCase()}::${lead.name.toLowerCase()}`);
+      const leadName = [lead.first_name, lead.last_name].filter(Boolean).join(' ');
+      if (lead.company && leadName) {
+        companyNameSet.add(`${lead.company.toLowerCase()}::${leadName.toLowerCase()}`);
       }
     }
 
@@ -180,12 +181,13 @@ serve(async (req) => {
 
       leadsToInsert.push({
         client_id: user.id,
-        name,
+        first_name: name.split(' ')[0] || '',
+        last_name: name.split(' ').slice(1).join(' ') || '',
+        primary_email: (contact.email ?? "").toLowerCase().trim(),
         company,
-        email: contact.email ?? "",
         score: computeScore(contact),
         status: "New",
-        lastActivity: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
         insights: insightParts.join(" | "),
         source: "apollo",
         knowledgeBase,
@@ -197,7 +199,7 @@ serve(async (req) => {
       const { data: insertedData, error: insertError } = await supabaseAdmin
         .from("leads")
         .insert(leadsToInsert)
-        .select("id, name, email, company, score");
+        .select("id, first_name, last_name, primary_email, company, score");
 
       if (insertError) {
         // Fallback: retry without knowledgeBase in case column doesn't exist
@@ -206,7 +208,7 @@ serve(async (req) => {
         const { data: fallbackData, error: fallbackError } = await supabaseAdmin
           .from("leads")
           .insert(leadsWithoutKB)
-          .select("id, name, email, company, score");
+          .select("id, first_name, last_name, primary_email, company, score");
 
         if (fallbackError) {
           console.error("Fallback insert also failed:", fallbackError.message);

@@ -1,4 +1,5 @@
 import { Lead, AIInsight } from '../types';
+import { leadDisplayName } from './queries';
 
 export const generateProgrammaticInsights = (leads: Lead[]): AIInsight[] => {
   const insights: AIInsight[] = [];
@@ -15,7 +16,7 @@ export const generateProgrammaticInsights = (leads: Lead[]): AIInsight[] => {
       id: 'score-hot',
       category: 'score',
       title: `${hotPct}% of leads are high-intent`,
-      description: `${hotLeads.length} lead${hotLeads.length > 1 ? 's' : ''} scored above 80. Prioritize outreach to ${hotLeads.slice(0, 3).map(l => l.name).join(', ')} for fastest conversion.`,
+      description: `${hotLeads.length} lead${hotLeads.length > 1 ? 's' : ''} scored above 80. Prioritize outreach to ${hotLeads.slice(0, 3).map(l => leadDisplayName(l)).join(', ')} for fastest conversion.`,
       confidence: Math.min(95, 70 + hotPct),
       action: 'Focus outreach on hot leads'
     });
@@ -172,7 +173,7 @@ export const generateLeadInsights = (lead: Lead, allLeads: Lead[]): AIInsight[] 
       id: `${lead.id}-company`,
       category: 'company',
       title: `${sameCompany.length} other contact${sameCompany.length > 1 ? 's' : ''} at ${lead.company}`,
-      description: `Multi-threading opportunity: ${sameCompany.map(l => l.name).join(', ')} are also in your pipeline. Coordinate outreach for maximum impact.`,
+      description: `Multi-threading opportunity: ${sameCompany.map(l => leadDisplayName(l)).join(', ')} are also in your pipeline. Coordinate outreach for maximum impact.`,
       confidence: 88,
       action: 'Coordinate multi-threaded approach'
     });

@@ -85,27 +85,20 @@ const CSVImportModal: React.FC<CSVImportModalProps> = ({ isOpen, onClose, userId
 
     const leadsToInsert = parsedRows.map(row => ({
       client_id: userId,
-      name: row.name,
-      email: row.email,
+      first_name: row.name.split(' ')[0] || '',
+      last_name: row.name.split(' ').slice(1).join(' ') || '',
+      primary_email: row.email,
       company: row.company,
       insights: row.insights || 'Imported via CSV',
       score: Math.floor(Math.random() * 40) + 50,
       status: 'New' as const,
-      lastActivity: 'Imported'
+      last_activity: new Date().toISOString(),
     }));
 
-    let { data, error: insertErr } = await supabase
+    const { data, error: insertErr } = await supabase
       .from('leads')
       .insert(leadsToInsert)
       .select();
-
-    // If lastActivity column doesn't exist, retry without it
-    if (insertErr && insertErr.message?.includes('lastActivity')) {
-      const withoutLastActivity = leadsToInsert.map(({ lastActivity, ...rest }) => rest);
-      const retry = await supabase.from('leads').insert(withoutLastActivity).select();
-      data = retry.data;
-      insertErr = retry.error;
-    }
 
     if (insertErr) {
       setError(insertErr.message);

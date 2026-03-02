@@ -2,17 +2,41 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { Lead } from '../types';
 
-// Columns actually used by the app — avoids SELECT *
-const LEAD_COLUMNS = 'id,client_id,name,company,email,score,status,lastActivity,insights,created_at,knowledgeBase,first_name,last_name,primary_email,primary_phone,linkedin_url,location,title,source,import_batch_id,imported_at,custom_fields' as const;
+// Canonical columns used by the app — avoids SELECT *
+const LEAD_COLUMNS = 'id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,linkedin_url,location,title,industry,company_size,source,import_batch_id,imported_at,custom_fields' as const;
 
-/** Coerce nullable legacy columns so downstream code never sees null for name/company/email */
+/** Normalize DB rows → Lead objects with canonical + computed legacy aliases */
 export function normalizeLeads(rows: Record<string, unknown>[]): Lead[] {
-  return rows.map(r => ({
-    ...r,
-    name: (r.name as string) || '',
-    company: (r.company as string) || '',
-    email: (r.email as string) || '',
-  })) as Lead[];
+  return rows.map(r => {
+    const firstName = (r.first_name as string) || '';
+    const lastName = (r.last_name as string) || '';
+    const primaryEmail = (r.primary_email as string) || '';
+    const primaryPhone = (r.primary_phone as string) || '';
+    const lastActivity = (r.last_activity as string) || '';
+    return {
+      ...r,
+      first_name: firstName,
+      last_name: lastName,
+      primary_email: primaryEmail,
+      primary_phone: primaryPhone,
+      last_activity: lastActivity,
+      company: (r.company as string) || '',
+      // Legacy aliases (computed, never from DB)
+      name: [firstName, lastName].filter(Boolean).join(' '),
+      email: primaryEmail,
+      lastActivity: lastActivity,
+    } as Lead;
+  });
+}
+
+/** Full display name from canonical fields */
+export function leadDisplayName(lead: Pick<Lead, 'first_name' | 'last_name'>): string {
+  return [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown';
+}
+
+/** Initials for avatar */
+export function leadInitials(lead: Pick<Lead, 'first_name' | 'last_name'>): string {
+  return [lead.first_name?.[0], lead.last_name?.[0]].filter(Boolean).join('').toUpperCase() || '?';
 }
 
 /** Fetches all leads for a client with only the columns used by the UI */
@@ -21,16 +45,8 @@ export function useLeads(userId: string | undefined) {
     queryKey: ['leads', userId],
     queryFn: async () => {
       if (!userId) return [];
-      const query = supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId).order('score', { ascending: false });
-      const { data, error } = await query;
-
-      if (error) {
-        // Column may not exist — fall back to SELECT *
-        const fallback = await supabase.from('leads').select('*').eq('client_id', userId).order('score', { ascending: false });
-        if (fallback.error) throw fallback.error;
-        return normalizeLeads(fallback.data || []);
-      }
-
+      const { data, error } = await supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId).order('score', { ascending: false });
+      if (error) throw error;
       return normalizeLeads(data || []);
     },
     enabled: !!userId,
@@ -71,16 +87,7 @@ export function useAllLeads(limit?: number) {
       let query = supabase.from('leads').select(LEAD_COLUMNS).order('score', { ascending: false });
       if (limit) query = query.limit(limit);
       const { data, error } = await query;
-
-      if (error) {
-        // Column may not exist — fall back to SELECT *
-        let fallbackQuery = supabase.from('leads').select('*').order('score', { ascending: false });
-        if (limit) fallbackQuery = fallbackQuery.limit(limit);
-        const fallback = await fallbackQuery;
-        if (fallback.error) throw fallback.error;
-        return normalizeLeads(fallback.data || []);
-      }
-
+      if (error) throw error;
       return normalizeLeads(data || []);
     },
     staleTime: 5 * 60 * 1000, // 5 min — admin view tolerates slightly stale data
