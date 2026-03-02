@@ -4,6 +4,9 @@
 -- update teamhub trigger to use canonical field names.
 -- ====================================================
 
+-- 0. Add last_activity column if it doesn't exist yet
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_activity timestamptz DEFAULT now();
+
 -- 1a. Backfill primary_email from email (dedupe-safe: one winner per client+email)
 WITH candidates AS (
   SELECT DISTINCT ON (client_id, lower(trim(email)))
@@ -30,11 +33,7 @@ UPDATE leads SET
       ELSE '' END)
 WHERE first_name IS NULL AND name IS NOT NULL AND trim(name) != '';
 
--- 1c. Backfill primary_phone from phone
-UPDATE leads SET primary_phone = COALESCE(primary_phone, phone)
-WHERE primary_phone IS NULL AND phone IS NOT NULL AND trim(phone) != '';
-
--- 1d. Backfill last_activity from lastActivity (TEXT) or fallback to timestamps
+-- 1c. Backfill last_activity from lastActivity (TEXT) or fallback to timestamps
 UPDATE leads SET last_activity = COALESCE(
   last_activity,
   CASE WHEN "lastActivity" ~ '^\d{4}-\d{2}-\d{2}' THEN "lastActivity"::timestamptz ELSE NULL END,
