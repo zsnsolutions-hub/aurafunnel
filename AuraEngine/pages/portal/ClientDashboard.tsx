@@ -72,7 +72,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isCSVOpen, setIsCSVOpen] = useState(false);
-  const [prospectPageSize, setProspectPageSize] = useState(25);
+  const [prospectPageSize, setProspectPageSize] = useState(10);
 
   // Lead Actions
   const [selectedLeadForActions, setSelectedLeadForActions] = useState<Lead | null>(null);
@@ -986,6 +986,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                     onChange={(e) => setProspectPageSize(Number(e.target.value))}
                     className="text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 cursor-pointer"
                   >
+                    <option value={10}>10</option>
                     <option value={25}>25</option>
                     <option value={50}>50</option>
                     <option value={100}>100</option>
