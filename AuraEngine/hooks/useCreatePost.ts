@@ -1,6 +1,7 @@
 // File: AuraEngine/hooks/useCreatePost.ts
 import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { getRequestId } from '../lib/requestId';
 
 interface PostTarget {
   channel: string;
@@ -38,7 +39,7 @@ async function callEdgeFunction(name: string, body: any): Promise<any> {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, request_id: getRequestId() }),
   });
 
   const data = await res.json();

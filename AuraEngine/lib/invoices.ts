@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getRequestId } from './requestId';
 import { buildEmailCtaButtonHTML } from './emailCtaButton';
 import { fetchConnectedEmailProvider, sendTrackedEmail } from './emailTracking';
 import type { SendEmailResult } from './emailTracking';
@@ -122,7 +123,7 @@ export async function createAndSendInvoice(
   let error: any;
   try {
     const result = await supabase.functions.invoke('billing-create-invoice', {
-      body: params,
+      body: { ...params, request_id: getRequestId() },
     });
     data = result.data;
     error = result.error;
@@ -147,7 +148,7 @@ export async function createAndSendInvoice(
 
 export async function resendInvoice(invoiceId: string): Promise<void> {
   const { data, error } = await supabase.functions.invoke('billing-actions', {
-    body: { action: 'resend', invoice_id: invoiceId },
+    body: { action: 'resend', invoice_id: invoiceId, request_id: getRequestId() },
   });
 
   if (error) {
@@ -161,7 +162,7 @@ export async function resendInvoice(invoiceId: string): Promise<void> {
 
 export async function voidInvoice(invoiceId: string): Promise<void> {
   const { data, error } = await supabase.functions.invoke('billing-actions', {
-    body: { action: 'void', invoice_id: invoiceId },
+    body: { action: 'void', invoice_id: invoiceId, request_id: getRequestId() },
   });
 
   if (error) {
@@ -343,7 +344,7 @@ export interface PrepareInvoiceSendResult {
 
 export async function prepareInvoiceSend(invoiceId: string): Promise<PrepareInvoiceSendResult> {
   const { data, error } = await supabase.functions.invoke('billing-actions', {
-    body: { action: 'send_email', invoice_id: invoiceId },
+    body: { action: 'send_email', invoice_id: invoiceId, request_id: getRequestId() },
   });
 
   if (error) {

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getRequestId } from './requestId';
 import { ApolloContact, ApolloSearchParams } from '../types';
 
 export interface ApolloSearchResult {
@@ -22,7 +23,7 @@ export interface ApolloImportResult {
 
 export async function searchApollo(params: ApolloSearchParams): Promise<ApolloSearchResult> {
   const { data, error } = await supabase.functions.invoke('apollo-search', {
-    body: params,
+    body: { ...params, request_id: getRequestId() },
   });
 
   if (error) {
@@ -41,7 +42,7 @@ export async function importApolloContacts(
   searchLogId: string | null
 ): Promise<ApolloImportResult> {
   const { data, error } = await supabase.functions.invoke('apollo-import', {
-    body: { contacts, search_log_id: searchLogId },
+    body: { contacts, search_log_id: searchLogId, request_id: getRequestId() },
   });
 
   if (error) {

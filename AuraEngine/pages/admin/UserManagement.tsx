@@ -6,6 +6,7 @@ import {
   TrendUpIcon, TrendDownIcon, TargetIcon, ActivityIcon, BrainIcon,
   AlertTriangleIcon, CheckIcon, PieChartIcon, LayersIcon, SparklesIcon
 } from '../../components/Icons';
+import { getPlans, type DbPlan } from '../../lib/plans';
 
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
@@ -21,8 +22,13 @@ const UserManagement: React.FC = () => {
   const [showPlanAnalytics, setShowPlanAnalytics] = useState(false);
   const [showRiskAssessment, setShowRiskAssessment] = useState(false);
 
+  // Plan change state
+  const [availablePlans, setAvailablePlans] = useState<DbPlan[]>([]);
+  const [changingPlanFor, setChangingPlanFor] = useState<string | null>(null);
+
   useEffect(() => {
     fetchUsers();
+    getPlans().then(setAvailablePlans).catch(() => {});
   }, []);
 
   const fetchUsers = async () => {
@@ -79,6 +85,41 @@ const UserManagement: React.FC = () => {
       }
     } finally {
       setIsProcessing(null);
+    }
+  };
+
+  const changeUserPlan = async (userId: string, newPlan: string) => {
+    setChangingPlanFor(userId);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      const { data, error } = await supabase.rpc('admin_change_user_plan', {
+        p_target_user_id: userId,
+        p_new_plan_name: newPlan,
+        p_admin_id: authUser.id,
+        p_reason: 'Admin override via User Directory',
+      });
+      if (error) throw new Error(error.message);
+      const result = data as { success: boolean; message: string };
+      if (!result.success) throw new Error(result.message);
+
+      // Update local state
+      setUsers(prev => prev.map(u => {
+        if (u.id !== userId) return u;
+        return {
+          ...u,
+          plan: newPlan,
+          subscription: u.subscription
+            ? { ...u.subscription, plan: newPlan, plan_name: newPlan }
+            : { plan: newPlan, plan_name: newPlan, status: 'active' },
+        };
+      }));
+    } catch (err) {
+      console.error('Plan change failed:', err);
+      alert(`Plan change failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setChangingPlanFor(null);
     }
   };
 
@@ -439,6 +480,23 @@ const UserManagement: React.FC = () => {
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end space-x-2">
+                        <select
+                          value={currentPlan}
+                          onChange={e => changeUserPlan(user.id, e.target.value)}
+                          disabled={changingPlanFor === user.id}
+                          className={`px-2 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border transition-all outline-none ${
+                            changingPlanFor === user.id
+                              ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-wait'
+                              : 'bg-white text-indigo-600 border-indigo-100 hover:border-indigo-300 focus:ring-2 focus:ring-indigo-100'
+                          }`}
+                        >
+                          {availablePlans.map(plan => (
+                            <option key={plan.id} value={plan.name}>{plan.name}</option>
+                          ))}
+                          {!availablePlans.find(p => p.name === currentPlan) && (
+                            <option value={currentPlan}>{currentPlan}</option>
+                          )}
+                        </select>
                         <button
                           onClick={() => toggleUserRole(user.id, user.role)}
                           disabled={isProcessing === user.id}

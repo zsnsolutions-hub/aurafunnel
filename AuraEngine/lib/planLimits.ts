@@ -1,4 +1,5 @@
 import { resolvePlanName } from './credits';
+import { getPlanByName, getPlanLimitsSync, type PlanLimits } from './plans';
 
 export interface OutboundLimits {
   maxInboxes: number;
@@ -7,6 +8,8 @@ export interface OutboundLimits {
   linkedInPerDay: number;
   linkedInPerMonth: number;
 }
+
+// ── Hardcoded fallback (used only when DB is unreachable) ───────────────────
 
 export const OUTBOUND_LIMITS: Record<string, OutboundLimits> = {
   Starter: {
@@ -32,8 +35,50 @@ export const OUTBOUND_LIMITS: Record<string, OutboundLimits> = {
   },
 };
 
-/** Resolve a raw plan name and return its outbound limits (defaults to Starter). */
+/** Synchronous: resolve a raw plan name and return its outbound limits (uses hardcoded defaults). */
 export function getOutboundLimits(planName: string): OutboundLimits {
   const resolved = resolvePlanName(planName);
+  // Try sync fallback from plans.ts (which has identical defaults)
+  const dbSync = getPlanLimitsSync(resolved);
+  return {
+    maxInboxes: dbSync.maxInboxes,
+    emailsPerDayPerInbox: dbSync.emailsPerDayPerInbox,
+    emailsPerMonth: dbSync.emailsPerMonth,
+    linkedInPerDay: dbSync.linkedInPerDay,
+    linkedInPerMonth: dbSync.linkedInPerMonth,
+  };
+}
+
+/**
+ * Async DB-driven: fetch outbound limits from DB plans table.
+ * Falls back to hardcoded if DB fetch fails.
+ */
+export async function getOutboundLimitsAsync(planName: string): Promise<OutboundLimits> {
+  const resolved = resolvePlanName(planName);
+  try {
+    const plan = await getPlanByName(resolved);
+    if (plan) {
+      return {
+        maxInboxes: plan.limits.maxInboxes,
+        emailsPerDayPerInbox: plan.limits.emailsPerDayPerInbox,
+        emailsPerMonth: plan.limits.emailsPerMonth,
+        linkedInPerDay: plan.limits.linkedInPerDay,
+        linkedInPerMonth: plan.limits.linkedInPerMonth,
+      };
+    }
+  } catch {
+    // Fall through to hardcoded
+  }
   return OUTBOUND_LIMITS[resolved] ?? OUTBOUND_LIMITS.Starter;
+}
+
+/** Extract outbound limits from a PlanLimits object. */
+export function extractOutboundLimits(limits: PlanLimits): OutboundLimits {
+  return {
+    maxInboxes: limits.maxInboxes,
+    emailsPerDayPerInbox: limits.emailsPerDayPerInbox,
+    emailsPerMonth: limits.emailsPerMonth,
+    linkedInPerDay: limits.linkedInPerDay,
+    linkedInPerMonth: limits.linkedInPerMonth,
+  };
 }

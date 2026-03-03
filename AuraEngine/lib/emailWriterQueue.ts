@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getRequestId } from './requestId';
 import type { KnowledgeBase } from '../types';
 
 // ── Types ──
@@ -97,7 +98,7 @@ export async function startEmailSequenceRun(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify(params),
+      body: JSON.stringify({ ...params, request_id: getRequestId() }),
       signal: controller.signal,
     });
 
@@ -160,7 +161,7 @@ export async function triggerWriterWorker(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ run_id: runId ?? null }),
+        body: JSON.stringify({ run_id: runId ?? null, request_id: getRequestId() }),
       }
     );
 

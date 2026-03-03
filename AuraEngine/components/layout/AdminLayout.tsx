@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
-  Shield, Lock, Settings, LogOut, DollarSign, Headphones
+  Shield, Lock, Settings, LogOut, DollarSign, Headphones, Wrench, Terminal, LayoutDashboard
 } from 'lucide-react';
 import { User } from '../../types';
+import { BRAND } from '../../lib/brand';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { BrandLogo } from './BrandLogo';
+import { ActivityPanel } from '../activity/ActivityPanel';
 
 interface AdminLayoutProps {
   user: User;
@@ -20,15 +23,18 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
 
   const navItems = [
     { label: 'Overview', path: '/admin', icon: <BarChart3 size={20} /> },
+    { label: 'Admin Console', path: '/admin/console', icon: <LayoutDashboard size={20} /> },
     { label: 'User Directory', path: '/admin/users', icon: <Users size={20} /> },
     { label: 'Neural Analytics', path: '/admin/ai', icon: <Sparkles size={20} /> },
-    { label: 'Prompt Lab', path: '/admin/prompts', icon: <Zap size={20} /> },
+    { label: 'DNA Registry', path: '/admin/prompts', icon: <Zap size={20} /> },
     { label: 'Global Leads', path: '/admin/leads', icon: <Target size={20} /> },
     { label: 'Blog Engine', path: '/admin/blog', icon: <PenSquare size={20} /> },
     { label: 'System Integrity', path: '/admin/health', icon: <Shield size={20} /> },
     { label: 'Audit Vault', path: '/admin/audit', icon: <Lock size={20} /> },
     { label: 'Pricing Management', path: '/admin/pricing', icon: <DollarSign size={20} /> },
     { label: 'Platform Settings', path: '/admin/settings', icon: <Settings size={20} /> },
+    { label: 'Ops Center', path: '/admin/ops', icon: <Wrench size={20} /> },
+    { label: 'Command Center', path: '/admin/command', icon: <Terminal size={20} /> },
   ];
 
   if (user?.is_super_admin) {
@@ -36,6 +42,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
   }
 
   return (
+    <>
     <AppShell
       sidebarCollapsed={sidebarCollapsed}
       sidebar={
@@ -44,46 +51,34 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
           onToggle={() => setSidebarCollapsed(prev => !prev)}
           navItems={navItems}
           activePath={location.pathname}
-          variant="dark"
-          header={
-            <Link to="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/20">A</div>
-              <span className="text-lg font-bold text-white tracking-tight">AuraAdmin</span>
-            </Link>
-          }
-          headerCollapsed={
-            <Link to="/">
-              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/20">A</div>
-            </Link>
-          }
+          header={<BrandLogo />}
+          headerCollapsed={<BrandLogo collapsed />}
           footer={
             sidebarCollapsed ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-indigo-400 text-xs border border-slate-700">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
                   {user?.name?.charAt(0) || user?.email?.charAt(0) || 'A'}
                 </div>
-                <button onClick={onLogout} className="p-1.5 text-red-400 hover:text-red-500 transition-colors duration-150">
+                <button onClick={onLogout} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors duration-150">
                   <LogOut size={16} />
                 </button>
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-3 px-1 mb-4">
-                  <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-indigo-400 text-xs border border-slate-700 uppercase shrink-0">
-                    {user?.name?.charAt(0) || user?.email?.charAt(0) || 'A'}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0 uppercase">
+                      {user?.name?.charAt(0) || user?.email?.charAt(0) || 'A'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{user?.name || 'Admin'}</p>
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Administrator</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate">{user?.name || 'Admin'}</p>
-                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Administrator</p>
-                  </div>
+                  <button onClick={onLogout} className="p-2 text-gray-300 hover:text-red-500 transition-colors duration-150">
+                    <LogOut size={16} />
+                  </button>
                 </div>
-                <button
-                  onClick={onLogout}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-xl transition-all duration-150 ease-out text-xs font-bold uppercase tracking-wider"
-                >
-                  <LogOut size={16} />
-                  <span>Terminate Session</span>
-                </button>
               </>
             )
           }
@@ -92,7 +87,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
       topbar={
         <Topbar
           actions={
-            <span className="text-[9px] font-black bg-gray-900 text-white px-3 py-1 rounded-full uppercase tracking-widest">v10.0.0-Stable</span>
+            <span className="text-[9px] font-black bg-gray-100 text-gray-500 px-3 py-1 rounded-full uppercase tracking-widest">{BRAND.version}</span>
           }
         >
           <div className="flex items-center gap-3">
@@ -107,6 +102,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
     >
       <Outlet />
     </AppShell>
+    <ActivityPanel />
+    </>
   );
 };
 

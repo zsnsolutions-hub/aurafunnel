@@ -29,3 +29,28 @@ export async function logSupportAction(entry: AuditEntry): Promise<void> {
     // audit logging should never block the caller
   }
 }
+
+/**
+ * Insert a row into the workspace-visible audit_logs table.
+ * This makes the action visible to the target user's own audit trail.
+ * Silently swallows errors so callers don't break on audit failures.
+ */
+export async function logAuditAction(entry: {
+  user_id: string;
+  action: string;
+  resource_type?: string;
+  resource_id?: string;
+  details?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    await supabase.from('audit_logs').insert({
+      user_id: entry.user_id,
+      action: entry.action,
+      resource_type: entry.resource_type ?? null,
+      resource_id: entry.resource_id ?? null,
+      details: entry.details ?? {},
+    });
+  } catch {
+    // audit logging should never block the caller
+  }
+}

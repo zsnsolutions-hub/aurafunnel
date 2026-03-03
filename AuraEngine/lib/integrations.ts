@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabase';
+import { getRequestId } from './requestId';
 import type { Integration, WebhookConfig } from '../types';
 
 // ─── Integration CRUD ───
@@ -200,7 +201,7 @@ export async function validateIntegration(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ provider, credentials }),
+      body: JSON.stringify({ provider, credentials, request_id: getRequestId() }),
     });
 
     return await res.json();
