@@ -12,7 +12,8 @@ type EventName =
   | 'voice_error'
   | 'nav_executed'
   | 'simplified_toggled'
-  | 'mic_permission_denied';
+  | 'mic_permission_denied'
+  | 'voice_command_palette';
 
 export function track(event: EventName, props?: Record<string, unknown>) {
   if (import.meta.env.DEV) {
