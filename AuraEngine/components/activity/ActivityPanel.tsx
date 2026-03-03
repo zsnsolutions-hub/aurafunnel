@@ -6,17 +6,19 @@
  * - Recent completed/failed jobs
  * - Retry/cancel actions per job
  * - Job event details on expand
+ * - Connection status indicator (green = live, yellow = reconnecting)
  *
- * Polls active jobs every 3s with backoff when idle.
+ * Uses Realtime for live job updates with automatic polling fallback.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Activity, X, ChevronRight, ChevronDown,
   CheckCircle, XCircle, Loader2, Clock, RotateCcw, Ban,
   Minimize2, Maximize2,
 } from 'lucide-react';
-import { Job, JobEvent, listJobs, getJobEvents, cancelJob } from '../../lib/jobs';
+import { type JobEvent, getJobEvents, cancelJob } from '../../lib/jobs';
+import { useRealtimeJobs } from '../../hooks/useRealtimeJobs';
 import { supabase } from '../../lib/supabase';
 
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -39,14 +41,19 @@ const STATUS_CONFIG: Record<string, { icon: React.ReactNode; color: string; bg: 
   canceled:  { icon: <Ban size={14} />,                color: 'text-gray-400',    bg: 'bg-gray-50' },
 };
 
+const CONNECTION_DOT: Record<string, { color: string; title: string }> = {
+  connected:    { color: 'bg-emerald-400', title: 'Live updates' },
+  connecting:   { color: 'bg-amber-400 animate-pulse', title: 'Connecting...' },
+  disconnected: { color: 'bg-red-400', title: 'Disconnected — using polling' },
+  error:        { color: 'bg-red-400', title: 'Connection error — using polling' },
+};
+
 export const ActivityPanel: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [events, setEvents] = useState<Record<string, JobEvent[]>>({});
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Get workspace ID
   useEffect(() => {
@@ -55,33 +62,11 @@ export const ActivityPanel: React.FC = () => {
     });
   }, []);
 
-  // Poll jobs with adaptive interval
-  const fetchJobs = useCallback(async () => {
-    if (!workspaceId) return;
-    try {
-      const data = await listJobs(workspaceId, { limit: 15 });
-      setJobs(data);
-    } catch {
-      // Silent — don't break the panel on fetch errors
-    }
-  }, [workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    fetchJobs();
-
-    const poll = () => {
-      const hasActive = jobs.some(j => j.status === 'queued' || j.status === 'running');
-      const interval = hasActive ? 3000 : 15000; // 3s when active, 15s when idle
-      pollRef.current = setTimeout(async () => {
-        await fetchJobs();
-        poll();
-      }, interval);
-    };
-
-    poll();
-    return () => { if (pollRef.current) clearTimeout(pollRef.current); };
-  }, [workspaceId, fetchJobs, jobs]);
+  // Realtime jobs hook
+  const { jobs, connectionStatus, refresh } = useRealtimeJobs({
+    workspaceId,
+    limit: 15,
+  });
 
   // Load events when expanding a job
   const toggleExpand = async (jobId: string) => {
@@ -100,17 +85,18 @@ export const ActivityPanel: React.FC = () => {
     }
   };
 
-  const handleCancel = async (jobId: string) => {
+  const handleCancel = useCallback(async (jobId: string) => {
     try {
       await cancelJob(jobId);
-      await fetchJobs();
+      await refresh();
     } catch {
       // Silent
     }
-  };
+  }, [refresh]);
 
   const activeCount = jobs.filter(j => j.status === 'queued' || j.status === 'running').length;
   const failedCount = jobs.filter(j => j.status === 'failed').length;
+  const dot = CONNECTION_DOT[connectionStatus] ?? CONNECTION_DOT.connecting;
 
   // Floating trigger button
   if (!open) {
@@ -148,6 +134,8 @@ export const ActivityPanel: React.FC = () => {
               {activeCount > 0 && (
                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md">{activeCount} active</span>
               )}
+              {/* Connection status dot */}
+              <span className={`w-2 h-2 rounded-full ${dot.color}`} title={dot.title} />
             </div>
             <div className="flex items-center gap-1">
               <button onClick={() => setMinimized(true)} className="p-1 text-gray-400 hover:text-gray-600"><Minimize2 size={14} /></button>

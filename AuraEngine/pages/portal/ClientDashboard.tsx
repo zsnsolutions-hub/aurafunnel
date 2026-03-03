@@ -376,7 +376,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       .from('leads')
       .select('*')
       .eq('client_id', user.id)
-      .order('score', { ascending: false });
+      .order('score', { ascending: false })
+      .order('updated_at', { ascending: false });
 
     if (data) {
       const normalized = normalizeLeads(data);
@@ -957,7 +958,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
           />
         </div>
 
-        {/* Priority Prospect List */}
+        {/* Priority Prospect List — capped at 25 */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
@@ -968,8 +969,24 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                     Filtered: {filteredLeads.length} leads
                   </span>
                 )}
+                {filteredLeads.length > 25 && (
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    Showing 25 of {filteredLeads.length}
+                  </span>
+                )}
               </div>
-              {loadingLeads && <span className="text-xs text-indigo-600 animate-pulse font-bold">Syncing...</span>}
+              <div className="flex items-center space-x-3">
+                {loadingLeads && <span className="text-xs text-indigo-600 animate-pulse font-bold">Syncing...</span>}
+                {filteredLeads.length > 25 && (
+                  <button
+                    onClick={() => navigate('/portal/leads')}
+                    className="inline-flex items-center space-x-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                  >
+                    <span>View all</span>
+                    <ArrowRightIcon className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -983,7 +1000,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredLeads.map((lead) => (
+                  {filteredLeads.slice(0, 25).map((lead) => (
                     <tr key={lead.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="px-6 py-4">
                         <button onClick={() => openActionsModal(lead)} className="flex items-center space-x-3 text-left">

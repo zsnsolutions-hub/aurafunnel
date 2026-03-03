@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { XIcon, CheckIcon, ClockIcon, SparklesIcon, AlertTriangleIcon, RefreshIcon } from '../Icons';
 import {
-  pollRunProgress,
-  triggerWriterWorker,
   cancelRun,
   retryFailedItems,
-  type EmailSequenceRun,
   type EmailSequenceRunItem,
 } from '../../lib/emailWriterQueue';
+import { useRealtimeEmailRun } from '../../hooks/useRealtimeEmailRun';
 
 interface EmailWriterProgressModalProps {
   isOpen: boolean;
@@ -22,6 +20,13 @@ const STATUS_CONFIG = {
   failed: { icon: AlertTriangleIcon, color: 'text-red-500', bg: 'bg-red-50', label: 'Failed' },
 } as const;
 
+const CONNECTION_DOT: Record<string, { color: string; title: string }> = {
+  connected:    { color: 'bg-emerald-400', title: 'Live updates' },
+  connecting:   { color: 'bg-amber-400 animate-pulse', title: 'Connecting...' },
+  disconnected: { color: 'bg-red-400', title: 'Disconnected — using polling' },
+  error:        { color: 'bg-red-400', title: 'Connection error — using polling' },
+};
+
 function formatElapsed(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -33,46 +38,27 @@ const EmailWriterProgressModal: React.FC<EmailWriterProgressModalProps> = ({
   onClose,
   runId,
 }) => {
-  const [run, setRun] = useState<EmailSequenceRun | null>(null);
-  const [items, setItems] = useState<EmailSequenceRunItem[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(Date.now());
 
-  // Polling loop
+  // Realtime email run hook
+  const { run, items, connectionStatus } = useRealtimeEmailRun({
+    runId,
+    enabled: isOpen,
+  });
+
+  const dot = CONNECTION_DOT[connectionStatus] ?? CONNECTION_DOT.connecting;
+
+  // Reset timer when modal opens
   useEffect(() => {
-    if (!runId || !isOpen) return;
-
-    startTimeRef.current = Date.now();
-
-    const poll = async () => {
-      const progress = await pollRunProgress(runId);
-      setRun(progress.run);
-      setItems(progress.items);
-
-      // Trigger worker if still processing
-      if (progress.run?.status === 'processing') {
-        triggerWriterWorker(runId).catch(() => {});
-      }
-
-      // Stop polling when terminal
-      if (
-        progress.run &&
-        ['completed', 'failed', 'cancelled'].includes(progress.run.status)
-      ) {
-        if (pollInterval.current) clearInterval(pollInterval.current);
-      }
-    };
-
-    poll();
-    const pollInterval = { current: setInterval(poll, 1500) };
-
-    return () => {
-      if (pollInterval.current) clearInterval(pollInterval.current);
-    };
-  }, [runId, isOpen]);
+    if (isOpen && runId) {
+      startTimeRef.current = Date.now();
+      setElapsed(0);
+    }
+  }, [isOpen, runId]);
 
   // Elapsed time ticker
   useEffect(() => {
@@ -150,9 +136,13 @@ const EmailWriterProgressModal: React.FC<EmailWriterProgressModalProps> = ({
               }`} />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-900">
-                {isTerminal ? 'AI Email Writing' : 'AI Writing Emails...'}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-black text-slate-900">
+                  {isTerminal ? 'AI Email Writing' : 'AI Writing Emails...'}
+                </h2>
+                {/* Connection status dot */}
+                <span className={`w-2 h-2 rounded-full ${dot.color}`} title={dot.title} />
+              </div>
               {run && (
                 <div className="flex items-center space-x-2 mt-0.5">
                   {statusBadge && (

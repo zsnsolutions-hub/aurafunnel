@@ -192,12 +192,15 @@ export interface Plan {
   storage: number;
   description: string;
   features: string[];
-}
-
-export interface AuthState {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
+  // New DB-driven fields (added by 20260303200000_plans_admin_tooling)
+  key?: string | null;
+  price_monthly_cents?: number;
+  currency?: string;
+  stripe_price_id?: string | null;
+  is_active?: boolean;
+  limits?: Record<string, unknown>;
+  sort_order?: number;
+  updated_at?: string;
 }
 
 export enum ContentType {

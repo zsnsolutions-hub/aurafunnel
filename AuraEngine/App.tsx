@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { UserRole, User } from './types';
-import { supabase } from './lib/supabase';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { UserRole } from './types';
 import ErrorBoundary from './components/ErrorBoundary';
 import { GuideProvider } from './components/guide/GuideProvider';
 import { SupportProvider } from './components/support/SupportProvider';
 import { SupportBanner } from './components/support/SupportBanner';
 import { UIModeProvider } from './components/ui-mode';
 import { useIdlePrefetch } from './hooks/useIdlePrefetch';
+import { useAuthMachine } from './hooks/useAuthMachine';
+import { AuthGate } from './components/auth/AuthGate';
 
 // Dev perf panel — lazy-loaded, tree-shaken in production
 const PerfPanel = lazy(() => import('./components/dev/PerfPanel'));
@@ -71,10 +72,14 @@ const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
 const LeadsManagement = lazy(() => import('./pages/admin/LeadsManagement'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AIOperations = lazy(() => import('./pages/admin/AIOperations'));
-const PromptLab = lazy(() => import('./pages/admin/PromptLab'));
+const DnaRegistryPage = lazy(() => import('./pages/admin/prompt-lab/DnaRegistryPage'));
+const DnaEditorPage = lazy(() => import('./pages/admin/prompt-lab/DnaEditorPage'));
 const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const BlogManager = lazy(() => import('./pages/admin/BlogManager'));
 const PricingManagement = lazy(() => import('./pages/admin/PricingManagement'));
+const AdminOpsCenter = lazy(() => import('./pages/admin/AdminOpsCenter'));
+const AdminCommandCenter = lazy(() => import('./pages/admin/CommandCenter/AdminCommandCenterPage'));
+const AdminConsolePage = lazy(() => import('./pages/admin/console/AdminConsolePage'));
 
 const PageFallback = () => {
   const [show, setShow] = useState(false);
@@ -100,110 +105,13 @@ const PageFallback = () => {
   );
 };
 
-const AUTH_TIMEOUT_MS = 2000;
-
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  /** Phase 1: set as soon as getSession() returns a session (near-instant from localStorage) */
-  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
-  /** True until Phase 1 (session check) completes OR timeout fires */
-  const [authChecked, setAuthChecked] = useState(false);
-  const [dbError, setDbError] = useState<string | null>(null);
+  const { state, retry, logout, setUser, refreshProfile } = useAuthMachine();
+  const { user } = state;
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const loggingOutRef = useRef(false);
   const location = useLocation();
-  const navigate = useNavigate();
 
   useIdlePrefetch();
-
-  const fetchProfile = useCallback(async (userId: string): Promise<User | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*, subscription:subscriptions(*)')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) {
-        setDbError("Database Schema Sync Required. Please visit Auth page for script.");
-        return null;
-      }
-
-      if (data) {
-        const subData = Array.isArray(data.subscription) ? data.subscription[0] : data.subscription;
-        return {
-          ...data,
-          subscription: subData
-        } as unknown as User;
-      }
-      return null;
-    } catch (err) {
-      return null;
-    }
-  }, []);
-
-  const refreshProfile = useCallback(async () => {
-    if (user?.id) {
-      const profile = await fetchProfile(user.id);
-      if (profile) setUser(profile);
-    }
-  }, [user?.id, fetchProfile]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    // Safety net: render routes after AUTH_TIMEOUT_MS even if auth hasn't resolved
-    const timeoutId = setTimeout(() => {
-      if (!cancelled) setAuthChecked(true);
-    }, AUTH_TIMEOUT_MS);
-
-    const checkUser = async () => {
-      try {
-        // Phase 1: getSession() reads from localStorage — near-instant
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session && !cancelled) {
-          setSessionUserId(session.user.id);
-          setAuthChecked(true); // unblock rendering immediately
-
-          // Phase 2: fetch profile in background (doesn't block routes)
-          const profile = await fetchProfile(session.user.id);
-          if (profile && !cancelled) setUser(profile);
-        } else if (!cancelled) {
-          setAuthChecked(true);
-        }
-      } catch (err) {
-        console.warn('Session check failed:', err);
-        if (!cancelled) setAuthChecked(true);
-      }
-    };
-    checkUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || loggingOutRef.current) {
-        setUser(null);
-        setSessionUserId(null);
-        return;
-      }
-      if (event === 'PASSWORD_RECOVERY') {
-        navigate('/reset-password');
-        return;
-      }
-      if (session) {
-        setSessionUserId(session.user.id);
-        const profile = await fetchProfile(session.user.id);
-        if (profile) setUser(profile);
-      } else {
-        setUser(null);
-        setSessionUserId(null);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-      subscription.unsubscribe();
-    };
-  }, [fetchProfile]);
 
   const handleLogout = () => {
     setShowLogoutModal(true);
@@ -211,23 +119,11 @@ const App: React.FC = () => {
 
   const confirmLogout = async () => {
     setShowLogoutModal(false);
-    loggingOutRef.current = true;
-    setUser(null);
-    setSessionUserId(null);
-    await supabase.auth.signOut({ scope: 'global' });
-    loggingOutRef.current = false;
-    navigate('/');
+    await logout();
   };
 
-  if (!authChecked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
   return (
+    <AuthGate phase={state.phase} error={state.error} onRetry={retry}>
     <GuideProvider>
     <UIModeProvider userId={user?.id}>
     <SupportProvider user={user}>
@@ -289,7 +185,6 @@ const App: React.FC = () => {
             element={
               user?.role === UserRole.CLIENT ?
               <OnboardingPage user={user!} refreshProfile={refreshProfile} /> :
-              sessionUserId ? <PageFallback /> :
               <Navigate to="/auth" state={{ from: location }} />
             }
           />
@@ -302,7 +197,6 @@ const App: React.FC = () => {
                 <Navigate to="/onboarding" replace /> :
                 <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} />
               ) :
-              sessionUserId ? <PageFallback /> :
               <Navigate to="/auth" state={{ from: location }} />
             }
           >
@@ -336,20 +230,23 @@ const App: React.FC = () => {
             element={
               user?.role === UserRole.ADMIN ?
               <AdminLayout user={user!} onLogout={handleLogout} /> :
-              sessionUserId ? <PageFallback /> :
               <Navigate to="/auth" state={{ from: location }} />
             }
           >
             <Route index element={<ErrorBoundary><AdminDashboard /></ErrorBoundary>} />
             <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
             <Route path="ai" element={<ErrorBoundary><AIOperations /></ErrorBoundary>} />
-            <Route path="prompts" element={<ErrorBoundary><PromptLab /></ErrorBoundary>} />
+            <Route path="prompts" element={<ErrorBoundary><DnaRegistryPage /></ErrorBoundary>} />
+            <Route path="prompts/:id" element={<ErrorBoundary><DnaEditorPage /></ErrorBoundary>} />
             <Route path="leads" element={<ErrorBoundary><LeadsManagement /></ErrorBoundary>} />
             <Route path="blog" element={<ErrorBoundary><BlogManager /></ErrorBoundary>} />
             <Route path="health" element={<ErrorBoundary><SystemHealth /></ErrorBoundary>} />
             <Route path="audit" element={<ErrorBoundary><AuditLogs /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><AdminSettings /></ErrorBoundary>} />
             <Route path="pricing" element={<ErrorBoundary><PricingManagement /></ErrorBoundary>} />
+            <Route path="console" element={<ErrorBoundary><AdminConsolePage /></ErrorBoundary>} />
+            <Route path="ops" element={<ErrorBoundary><AdminOpsCenter /></ErrorBoundary>} />
+            <Route path="command" element={<ErrorBoundary><AdminCommandCenter /></ErrorBoundary>} />
             {user?.is_super_admin && (
               <Route path="support" element={<ErrorBoundary><SupportConsole /></ErrorBoundary>} />
             )}
@@ -365,6 +262,7 @@ const App: React.FC = () => {
     </SupportProvider>
     </UIModeProvider>
     </GuideProvider>
+    </AuthGate>
   );
 };
 

@@ -191,6 +191,9 @@ export interface PollOptions {
  *
  * Interval: 2s → 3s → 4.5s → 6.75s → 10s → 15s (capped)
  * This replaces the old 1.5s fixed-interval polling.
+ *
+ * @deprecated Use `useRealtimeJobs` hook instead for live updates via Supabase Realtime.
+ * Polling is now only used as an automatic fallback when Realtime disconnects.
  */
 export async function pollJobUntilDone(jobId: string, opts?: PollOptions): Promise<Job> {
   const initial = opts?.initialInterval ?? 2000;
