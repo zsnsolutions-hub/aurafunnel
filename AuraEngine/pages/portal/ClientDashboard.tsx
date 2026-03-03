@@ -72,6 +72,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isCSVOpen, setIsCSVOpen] = useState(false);
+  const [prospectPageSize, setProspectPageSize] = useState(25);
 
   // Lead Actions
   const [selectedLeadForActions, setSelectedLeadForActions] = useState<Lead | null>(null);
@@ -958,7 +959,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
           />
         </div>
 
-        {/* Priority Prospect List — capped at 25 */}
+        {/* Priority Prospect List */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
@@ -969,15 +970,28 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                     Filtered: {filteredLeads.length} leads
                   </span>
                 )}
-                {filteredLeads.length > 25 && (
+                {filteredLeads.length > prospectPageSize && (
                   <span className="text-[10px] text-slate-400 font-medium">
-                    Showing 25 of {filteredLeads.length}
+                    Showing {prospectPageSize} of {filteredLeads.length}
                   </span>
                 )}
               </div>
               <div className="flex items-center space-x-3">
                 {loadingLeads && <span className="text-xs text-indigo-600 animate-pulse font-bold">Syncing...</span>}
-                {filteredLeads.length > 25 && (
+                <div className="flex items-center space-x-1.5">
+                  <label htmlFor="prospect-page-size" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Show</label>
+                  <select
+                    id="prospect-page-size"
+                    value={prospectPageSize}
+                    onChange={(e) => setProspectPageSize(Number(e.target.value))}
+                    className="text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 cursor-pointer"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                {filteredLeads.length > prospectPageSize && (
                   <button
                     onClick={() => navigate('/portal/leads')}
                     className="inline-flex items-center space-x-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
@@ -1000,7 +1014,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredLeads.slice(0, 25).map((lead) => (
+                  {filteredLeads.slice(0, prospectPageSize).map((lead) => (
                     <tr key={lead.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="px-6 py-4">
                         <button onClick={() => openActionsModal(lead)} className="flex items-center space-x-3 text-left">
