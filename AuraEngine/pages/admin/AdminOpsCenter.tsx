@@ -331,20 +331,20 @@ const AdminOpsCenter: React.FC = () => {
         if (profile && mounted) {
           const [subscription, aiUsage, usageCounters] = await Promise.all([
             getTargetSubscription(uid),
-            supabase
+            Promise.resolve(supabase
               .from('workspace_ai_usage')
               .select('*')
               .eq('workspace_id', uid)
               .eq('month_year', new Date().toISOString().slice(0, 7))
-              .maybeSingle()
+              .maybeSingle())
               .then(r => r.data)
               .catch(() => null),
-            supabase
+            Promise.resolve(supabase
               .from('workspace_usage_counters')
               .select('*')
               .eq('workspace_id', uid)
               .eq('date_key', new Date().toISOString().slice(0, 10))
-              .maybeSingle()
+              .maybeSingle())
               .then(r => r.data)
               .catch(() => null),
           ]);
@@ -384,55 +384,55 @@ const AdminOpsCenter: React.FC = () => {
         ] = await Promise.all([
           // Recent admin actions
           opsQuery('global:admin_actions', () =>
-            supabase.from('audit_logs')
+            Promise.resolve(supabase.from('audit_logs')
               .select('id, action, user_id, entity_type, details, created_at')
               .or('action.ilike.ADMIN_%,action.ilike.OPS_%')
               .order('created_at', { ascending: false })
-              .limit(20)
+              .limit(20))
           ),
 
           // Failed emails last 24h
           opsCount('global:failed_emails_24h', () =>
-            supabase.from('scheduled_emails')
+            Promise.resolve(supabase.from('scheduled_emails')
               .select('id', { count: 'exact', head: true })
               .eq('status', 'failed')
-              .gte('created_at', yesterday)
+              .gte('created_at', yesterday))
           ),
 
           // Error integrations
           opsCount('global:error_integrations', () =>
-            supabase.from('integrations')
+            Promise.resolve(supabase.from('integrations')
               .select('id', { count: 'exact', head: true })
-              .eq('status', 'error')
+              .eq('status', 'error'))
           ),
 
           // Failed imports
           opsCount('global:failed_imports', () =>
-            supabase.from('import_batches')
+            Promise.resolve(supabase.from('import_batches')
               .select('id', { count: 'exact', head: true })
               .eq('status', 'failed')
-              .gte('created_at', yesterday)
+              .gte('created_at', yesterday))
           ),
 
           // Recent workspaces for picker
           opsQuery('global:recent_profiles', () =>
-            supabase.from('profiles')
+            Promise.resolve(supabase.from('profiles')
               .select('id, email, name, role, status, plan, credits_total, credits_used, createdAt:created_at')
               .order('updated_at', { ascending: false })
-              .limit(10)
+              .limit(10))
           ),
 
           // Total user count
           opsCount('global:total_users', () =>
-            supabase.from('profiles')
-              .select('id', { count: 'exact', head: true })
+            Promise.resolve(supabase.from('profiles')
+              .select('id', { count: 'exact', head: true }))
           ),
 
           // Active subscriptions
           opsCount('global:active_subscriptions', () =>
-            supabase.from('subscriptions')
+            Promise.resolve(supabase.from('subscriptions')
               .select('id', { count: 'exact', head: true })
-              .eq('status', 'active')
+              .eq('status', 'active'))
           ),
         ]);
 
@@ -458,7 +458,7 @@ const AdminOpsCenter: React.FC = () => {
   // Check for active support session when workspace changes
   useEffect(() => {
     if (!adminId || !wsId) { setSupportSession(null); return; }
-    supabase
+    Promise.resolve(supabase
       .from('support_sessions')
       .select('*')
       .eq('admin_id', adminId)
@@ -468,7 +468,7 @@ const AdminOpsCenter: React.FC = () => {
       .is('ended_at', null)
       .order('started_at', { ascending: false })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle())
       .then(({ data }) => setSupportSession(data as SupportSession | null))
       .catch(() => setSupportSession(null));
   }, [adminId, wsId]);
@@ -623,20 +623,20 @@ const AdminOpsCenter: React.FC = () => {
     try {
       const [subscription, aiUsage, usageCounters] = await Promise.all([
         getTargetSubscription(profile.id),
-        supabase
+        Promise.resolve(supabase
           .from('workspace_ai_usage')
           .select('*')
           .eq('workspace_id', profile.id)
           .eq('month_year', new Date().toISOString().slice(0, 7))
-          .maybeSingle()
+          .maybeSingle())
           .then(r => r.data)
           .catch(() => null),
-        supabase
+        Promise.resolve(supabase
           .from('workspace_usage_counters')
           .select('*')
           .eq('workspace_id', profile.id)
           .eq('date_key', new Date().toISOString().slice(0, 10))
-          .maybeSingle()
+          .maybeSingle())
           .then(r => r.data)
           .catch(() => null),
       ]);
@@ -680,34 +680,34 @@ const AdminOpsCenter: React.FC = () => {
               stuckItems,
             ] = await Promise.all([
               opsCount('triage:pending_emails', () =>
-                supabase.from('scheduled_emails').select('id', { count: 'exact', head: true }).eq('owner_id', wsId).eq('status', 'pending')
+                Promise.resolve(supabase.from('scheduled_emails').select('id', { count: 'exact', head: true }).eq('owner_id', wsId).eq('status', 'pending'))
               ),
               opsCount('triage:failed_emails', () =>
-                supabase.from('scheduled_emails').select('id', { count: 'exact', head: true }).eq('owner_id', wsId).eq('status', 'failed')
+                Promise.resolve(supabase.from('scheduled_emails').select('id', { count: 'exact', head: true }).eq('owner_id', wsId).eq('status', 'failed'))
               ),
               opsQuery('triage:recent_messages', () =>
-                supabase.from('email_messages').select('id, subject, status, provider, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(10)
+                Promise.resolve(supabase.from('email_messages').select('id, subject, status, provider, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(10))
               ),
               opsQuery('triage:recent_events', async () => {
                 const { data: msgIds } = await supabase.from('email_messages').select('id').eq('owner_id', wsId).limit(100);
-                return supabase.from('email_events').select('id, event_type, is_bot, created_at, message_id')
+                return Promise.resolve(supabase.from('email_events').select('id, event_type, is_bot, created_at, message_id')
                   .in('message_id', msgIds?.map(m => m.id) ?? ['__none__'])
-                  .order('created_at', { ascending: false }).limit(20);
+                  .order('created_at', { ascending: false }).limit(20));
               }),
               opsQuery('triage:sequence_runs', () =>
-                supabase.from('email_sequence_runs').select('id, status, items_total, items_done, items_failed, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(5)
+                Promise.resolve(supabase.from('email_sequence_runs').select('id, status, items_total, items_done, items_failed, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(5))
               ),
               opsCount('triage:stuck_writing', () =>
-                supabase.from('email_sequence_run_items').select('id', { count: 'exact', head: true }).eq('status', 'writing')
+                Promise.resolve(supabase.from('email_sequence_run_items').select('id', { count: 'exact', head: true }).eq('status', 'writing'))
               ),
             ]);
 
             const [intgs, socialPosts] = await Promise.all([
               opsQuery('triage:integrations', () =>
-                supabase.from('integrations').select('id, provider, status, updated_at').eq('owner_id', wsId)
+                Promise.resolve(supabase.from('integrations').select('id, provider, status, updated_at').eq('owner_id', wsId))
               ),
               opsQuery('triage:social_posts', () =>
-                supabase.from('social_posts').select('id, status, scheduled_at, created_at').eq('user_id', wsId).order('created_at', { ascending: false }).limit(10)
+                Promise.resolve(supabase.from('social_posts').select('id, status, scheduled_at, created_at').eq('user_id', wsId).order('created_at', { ascending: false }).limit(10))
               ),
             ]);
 
@@ -729,22 +729,22 @@ const AdminOpsCenter: React.FC = () => {
           case 'email': {
             const [seqRuns, runItems, scheduled, messages, events] = await Promise.all([
               opsQuery('email:sequence_runs', () =>
-                supabase.from('email_sequence_runs').select('*').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(10)
+                Promise.resolve(supabase.from('email_sequence_runs').select('*').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(10))
               ),
               opsQuery('email:run_items', () =>
-                supabase.from('email_sequence_run_items').select('id, run_id, status, step_index, lead_email, attempt_count, error_message, created_at').order('created_at', { ascending: false }).limit(50)
+                Promise.resolve(supabase.from('email_sequence_run_items').select('id, run_id, status, step_index, lead_email, attempt_count, error_message, created_at').order('created_at', { ascending: false }).limit(50))
               ),
               opsQuery('email:scheduled', () =>
-                supabase.from('scheduled_emails').select('id, status, scheduled_at, sequence_id, error_message, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50)
+                Promise.resolve(supabase.from('scheduled_emails').select('id, status, scheduled_at, sequence_id, error_message, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50))
               ),
               opsQuery('email:messages', () =>
-                supabase.from('email_messages').select('id, subject, to_email, status, provider, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50)
+                Promise.resolve(supabase.from('email_messages').select('id, subject, to_email, status, provider, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50))
               ),
               opsQuery('email:events', async () => {
                 const { data: msgIds } = await supabase.from('email_messages').select('id').eq('owner_id', wsId).limit(200);
-                return supabase.from('email_events').select('id, message_id, event_type, is_bot, created_at')
+                return Promise.resolve(supabase.from('email_events').select('id, message_id, event_type, is_bot, created_at')
                   .in('message_id', msgIds?.map(m => m.id) ?? ['__none__'])
-                  .order('created_at', { ascending: false }).limit(50);
+                  .order('created_at', { ascending: false }).limit(50));
               }),
             ]);
             if (mounted) {
@@ -768,10 +768,10 @@ const AdminOpsCenter: React.FC = () => {
           case 'social': {
             const [posts, targets] = await Promise.all([
               opsQuery('social:posts', () =>
-                supabase.from('social_posts').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(20)
+                Promise.resolve(supabase.from('social_posts').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(20))
               ),
               opsQuery('social:targets', () =>
-                supabase.from('social_post_targets').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(30)
+                Promise.resolve(supabase.from('social_post_targets').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(30))
               ),
             ]);
             if (mounted) setSocialData({ posts: posts.data ?? [], targets: targets.data ?? [] });
@@ -781,7 +781,7 @@ const AdminOpsCenter: React.FC = () => {
           case 'billing': {
             const [invoices, sub] = await Promise.all([
               opsQuery('billing:invoices', () =>
-                supabase.from('invoices').select('*').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(20)
+                Promise.resolve(supabase.from('invoices').select('*').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(20))
               ),
               getTargetSubscription(wsId),
             ]);
@@ -792,13 +792,13 @@ const AdminOpsCenter: React.FC = () => {
           case 'imports': {
             const [batches, apolloSearch, apolloImport] = await Promise.all([
               opsQuery('imports:batches', () =>
-                supabase.from('import_batches').select('*').eq('workspace_id', wsId).order('created_at', { ascending: false }).limit(20)
+                Promise.resolve(supabase.from('import_batches').select('*').eq('workspace_id', wsId).order('created_at', { ascending: false }).limit(20))
               ),
               opsQuery('imports:apollo_search', () =>
-                supabase.from('apollo_search_logs').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(10)
+                Promise.resolve(supabase.from('apollo_search_logs').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(10))
               ),
               opsQuery('imports:apollo_import', () =>
-                supabase.from('apollo_import_logs').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(10)
+                Promise.resolve(supabase.from('apollo_import_logs').select('*').eq('user_id', wsId).order('created_at', { ascending: false }).limit(10))
               ),
             ]);
             if (mounted) {
@@ -814,10 +814,10 @@ const AdminOpsCenter: React.FC = () => {
           case 'logs': {
             const [aLogs, saLogs] = await Promise.all([
               opsQuery('logs:audit', () =>
-                supabase.from('audit_logs').select('*').eq('workspace_id', wsId).order('created_at', { ascending: false }).limit(100)
+                Promise.resolve(supabase.from('audit_logs').select('*').eq('workspace_id', wsId).order('created_at', { ascending: false }).limit(100))
               ),
               opsQuery('logs:support_audit', () =>
-                supabase.from('support_audit_logs').select('*').eq('target_user_id', wsId).order('created_at', { ascending: false }).limit(100)
+                Promise.resolve(supabase.from('support_audit_logs').select('*').eq('target_user_id', wsId).order('created_at', { ascending: false }).limit(100))
               ),
             ]);
             if (mounted) {
@@ -877,13 +877,13 @@ const AdminOpsCenter: React.FC = () => {
     try {
       const [recentAudit, recentMessages, recentScheduled, intgs] = await Promise.all([
         opsQuery('diag:audit', () =>
-          supabase.from('audit_logs').select('*').eq('workspace_id', wsId).order('created_at', { ascending: false }).limit(50)
+          Promise.resolve(supabase.from('audit_logs').select('*').eq('workspace_id', wsId).order('created_at', { ascending: false }).limit(50))
         ),
         opsQuery('diag:messages', () =>
-          supabase.from('email_messages').select('id, subject, to_email, status, provider, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50)
+          Promise.resolve(supabase.from('email_messages').select('id, subject, to_email, status, provider, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50))
         ),
         opsQuery('diag:scheduled', () =>
-          supabase.from('scheduled_emails').select('id, status, scheduled_at, error_message, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50)
+          Promise.resolve(supabase.from('scheduled_emails').select('id, status, scheduled_at, error_message, created_at').eq('owner_id', wsId).order('created_at', { ascending: false }).limit(50))
         ),
         getTargetIntegrations(wsId),
       ]);
