@@ -1,5 +1,6 @@
 import React, { Component, useState, useCallback, Suspense, lazy } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
+import type { User } from '../../types';
 
 const VoiceAgent = lazy(() => import('./VoiceAgent'));
 
@@ -7,6 +8,7 @@ const DEFAULT_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
 
 interface VoiceAgentLauncherProps {
   agentId?: string;
+  user?: User | null;
 }
 
 /* ── Inline ErrorBoundary — catches chunk-load and render errors ── */
@@ -55,7 +57,7 @@ class VoiceErrorBoundary extends Component<EBProps, EBState> {
  * On first click it lazy-loads the full VoiceAgent component (and the SDK),
  * then auto-connects so the user doesn't need a second click.
  */
-const VoiceAgentLauncher: React.FC<VoiceAgentLauncherProps> = ({ agentId }) => {
+const VoiceAgentLauncher: React.FC<VoiceAgentLauncherProps> = ({ agentId, user }) => {
   const [activated, setActivated] = useState(false);
   const resolvedId = agentId || DEFAULT_AGENT_ID;
 
@@ -84,7 +86,7 @@ const VoiceAgentLauncher: React.FC<VoiceAgentLauncherProps> = ({ agentId }) => {
             </svg>
           </button>
         }>
-          <VoiceAgent agentId={resolvedId} autoConnect />
+          <VoiceAgent agentId={resolvedId} user={user} autoConnect />
         </Suspense>
       </VoiceErrorBoundary>
     );

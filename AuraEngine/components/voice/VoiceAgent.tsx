@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Mic, MicOff, Loader2, Volume2 } from 'lucide-react';
 import { useConversation } from '@elevenlabs/react';
@@ -6,7 +6,11 @@ import type { Status } from '@elevenlabs/react';
 import { useUIMode } from '../ui-mode/UIModeProvider';
 import { track } from '../../lib/analytics';
 import { getPageTitle } from '../../lib/navConfig';
+import { resolvePlanName, TIER_LIMITS } from '../../lib/credits';
 import {
+  isValidRouteKey,
+  resolveRoute,
+  VOICE_ROUTE_LABELS,
   isValidMarketingRouteKey,
   resolveMarketingRoute,
   isValidSectionKey,
@@ -30,9 +34,11 @@ const DEFAULT_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID;
 
 const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) => {
   const AGENT_ID = agentId || DEFAULT_AGENT_ID;
-  const navigate = useNavigate();
+  const nav = useNavigate();
   const location = useLocation();
   const { mode } = useUIMode();
+
+  const isPortal = location.pathname.startsWith('/portal');
 
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ label: string; path: string } | null>(null);
@@ -45,8 +51,60 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
   const modeRef = useRef(mode);
   useEffect(() => { modeRef.current = mode; }, [mode]);
 
-  const conversation = useConversation({
-    clientTools: {
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  // ── Build client tools based on portal vs marketing context ──
+  const clientTools = useMemo(() => {
+    if (isPortal) {
+      // Portal client tools
+      return {
+        navigate: async (params: { route_key: string }) => {
+          const { route_key } = params;
+          if (!isValidRouteKey(route_key)) {
+            const keys = Object.keys(VOICE_ROUTE_LABELS).join(', ');
+            return `Unknown page. Available pages: ${keys}.`;
+          }
+          if (!canNavigate()) {
+            return 'Please wait a moment before navigating again.';
+          }
+          const path = resolveRoute(route_key)!;
+          const label = VOICE_ROUTE_LABELS[route_key] ?? route_key;
+
+          setToast({ label, path });
+          nav(path);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          track('nav_executed', { routeKey: route_key, context: 'portal' });
+          return `Navigated to ${label}.`;
+        },
+
+        open_command_palette: async () => {
+          window.dispatchEvent(new Event('scaliyo:openCommandPalette'));
+          track('voice_command_palette');
+          return 'Command palette opened.';
+        },
+
+        get_page_context: async () => {
+          const u = userRef.current;
+          const planName = resolvePlanName(u?.subscription?.plan_name || u?.plan || 'Starter');
+          const creditsTotal = u?.credits_total || (TIER_LIMITS[planName]?.credits ?? TIER_LIMITS.Starter.credits);
+          const creditsUsed = u?.credits_used || 0;
+          return JSON.stringify({
+            currentRoute: locationRef.current.pathname,
+            pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
+            userName: u?.name || 'User',
+            userEmail: u?.email || '',
+            userPlan: planName,
+            creditsRemaining: creditsTotal - creditsUsed,
+            uiMode: modeRef.current,
+            isAuthenticated: true,
+          });
+        },
+      };
+    }
+
+    // Marketing client tools (existing behavior)
+    return {
       navigate: async (params: { route_key: string }) => {
         const { route_key } = params;
         if (!isValidMarketingRouteKey(route_key)) {
@@ -59,7 +117,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
         const label = MARKETING_ROUTE_LABELS[route_key] ?? route_key;
 
         setToast({ label, path });
-        navigate(path);
+        nav(path);
         window.scrollTo({ top: 0, behavior: 'smooth' });
         track('nav_executed', { routeKey: route_key });
         return `Navigated to ${label}.`;
@@ -78,7 +136,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
 
         // If not on home page, navigate there first
         if (locationRef.current.pathname !== '/') {
-          navigate('/');
+          nav('/');
           // Wait for route change and DOM update
           await new Promise((r) => setTimeout(r, 400));
         }
@@ -103,7 +161,11 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
           userName: user?.name || 'Visitor',
         });
       },
-    },
+    };
+  }, [isPortal]); // Stable for component lifetime — portal vs marketing determined by agent ID
+
+  const conversation = useConversation({
+    clientTools,
 
     onConnect: () => {
       setError(null);
@@ -139,24 +201,41 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
   useEffect(() => {
     if (!pendingContextUpdate || status !== 'connected') return;
     setPendingContextUpdate(false);
-    const ctx = JSON.stringify({
+
+    const u = userRef.current;
+    const base: Record<string, unknown> = {
       currentRoute: locationRef.current.pathname,
       pageTitle: getPageTitle(locationRef.current.pathname) || document.title,
-      userName: user?.name || 'Visitor',
-    });
-    conversation.sendContextualUpdate(ctx);
-  }, [pendingContextUpdate, status, conversation, user?.name]);
+      userName: u?.name || 'Visitor',
+    };
+
+    if (isPortal && u) {
+      const planName = resolvePlanName(u.subscription?.plan_name || u.plan || 'Starter');
+      const creditsTotal = u.credits_total || (TIER_LIMITS[planName]?.credits ?? TIER_LIMITS.Starter.credits);
+      base.userPlan = planName;
+      base.creditsRemaining = creditsTotal - (u.credits_used || 0);
+      base.currentModule = getPageTitle(locationRef.current.pathname) || 'Dashboard';
+    }
+
+    conversation.sendContextualUpdate(JSON.stringify(base));
+  }, [pendingContextUpdate, status, conversation, isPortal]);
 
   // Send contextual update when route changes (only while connected)
   useEffect(() => {
     if (status !== 'connected') return;
-    const ctx = JSON.stringify({
+
+    const ctx: Record<string, unknown> = {
       currentRoute: location.pathname,
       currentHash: location.hash,
       pageTitle: getPageTitle(location.pathname) || document.title,
-    });
-    conversation.sendContextualUpdate(ctx);
-  }, [location.pathname, location.hash, status]);
+    };
+
+    if (isPortal) {
+      ctx.currentModule = getPageTitle(location.pathname) || 'Dashboard';
+    }
+
+    conversation.sendContextualUpdate(JSON.stringify(ctx));
+  }, [location.pathname, location.hash, status, isPortal]);
 
   // Auto-dismiss toast
   useEffect(() => {

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
 import CommandPalette from '../dashboard/CommandPalette';
@@ -8,11 +8,14 @@ import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
 import { Sidebar, SidebarNavItem } from './Sidebar';
 import GlobalInviteBanner from './GlobalInviteBanner';
+import { BrandLogo } from './BrandLogo';
 import { useIntegrations } from '../../lib/integrations';
 import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
 import { NAV_CONFIG, NavConfigItem } from '../../lib/navConfig';
 import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
+import { ActivityPanel } from '../activity/ActivityPanel';
+import VoiceAgentLauncher from '../voice/VoiceAgentLauncher';
 
 interface ClientLayoutProps {
   user: User;
@@ -206,16 +209,8 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
             onToggle={() => setSidebarCollapsed(prev => !prev)}
             navItems={navItems}
             activePath={location.pathname}
-            header={
-              <Link to="/" className="flex items-center">
-                <img src="/scaliyo-logo-light.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto" />
-              </Link>
-            }
-            headerCollapsed={
-              <Link to="/">
-                <img src="/scaliyo-logo-light.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto" />
-              </Link>
-            }
+            header={<BrandLogo />}
+            headerCollapsed={<BrandLogo collapsed />}
             topSlot={
               <div className="flex items-center gap-2">
                 <GuideMenuButton />
@@ -286,6 +281,13 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       {/* Global Overlays */}
       <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
       <DailyBriefing user={user} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+      <ActivityPanel />
+      <Suspense fallback={null}>
+        <VoiceAgentLauncher
+          agentId={import.meta.env.VITE_ELEVENLABS_PORTAL_AGENT_ID}
+          user={user}
+        />
+      </Suspense>
     </>
   );
 };
