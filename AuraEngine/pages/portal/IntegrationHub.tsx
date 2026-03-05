@@ -875,6 +875,7 @@ const IntegrationHub: React.FC = () => {
           pass: emailSetupSmtpPass,
           fromEmail: emailSetupFromEmail,
           fromName: emailSetupFromName,
+          skipValidation: true, // Already validated via test email
         };
       } else if (emailSetupId === 'sendgrid') {
         edgeFn = 'connect-sendgrid';
@@ -892,9 +893,14 @@ const IntegrationHub: React.FC = () => {
         };
       }
 
-      const { error: fnError } = await supabase.functions.invoke(edgeFn, { body });
+      const { data: fnData, error: fnError } = await supabase.functions.invoke(edgeFn, { body });
       if (fnError) {
-        console.error(`Edge function ${edgeFn} error:`, fnError.message);
+        const detail = fnData?.error || fnError.message;
+        console.error(`Edge function ${edgeFn} error:`, detail);
+        setEmailSetupResult('error');
+        setEmailSetupTestError(`Failed to create sender account: ${detail}`);
+        setEmailSetupSaving(false);
+        return;
       }
 
       setIntegrations(prev => prev.map(i =>

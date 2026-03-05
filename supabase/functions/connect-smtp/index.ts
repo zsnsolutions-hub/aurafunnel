@@ -35,7 +35,7 @@ serve(async (req) => {
       );
     }
 
-    const { workspaceId, host, port, user: smtpUser, pass, fromEmail, fromName } = await req.json();
+    const { workspaceId, host, port, user: smtpUser, pass, fromEmail, fromName, skipValidation } = await req.json();
 
     if (!workspaceId || !host || !smtpUser || !pass || !fromEmail) {
       return new Response(
@@ -45,71 +45,74 @@ serve(async (req) => {
     }
 
     // ── 1. Validate SMTP credentials by attempting a connection ──
-    try {
-      const smtpPort = port ?? 587;
-      let conn: Deno.Conn;
+    // Skip when caller already verified (e.g. IntegrationHub sent a test email)
+    if (!skipValidation) {
+      try {
+        const smtpPort = port ?? 587;
+        let conn: Deno.Conn;
 
-      if (smtpPort === 465) {
-        conn = await Deno.connectTls({ hostname: host, port: smtpPort });
-      } else {
-        conn = await Deno.connect({ hostname: host, port: smtpPort });
-      }
-
-      const decoder = new TextDecoder();
-      const encoder = new TextEncoder();
-      const buf = new Uint8Array(4096);
-
-      async function readResp(): Promise<string> {
-        let full = "";
-        while (true) {
-          const n = await conn.read(buf);
-          if (!n) break;
-          full += decoder.decode(buf.subarray(0, n));
-          const lines = full.trimEnd().split("\n");
-          const last = lines[lines.length - 1].trimStart();
-          if (/^\d{3}\s/.test(last) || /^\d{3}$/.test(last)) break;
+        if (smtpPort === 465) {
+          conn = await Deno.connectTls({ hostname: host, port: smtpPort });
+        } else {
+          conn = await Deno.connect({ hostname: host, port: smtpPort });
         }
-        return full.trim();
-      }
 
-      async function send(cmd: string): Promise<string> {
-        await conn.write(encoder.encode(cmd + "\r\n"));
-        return await readResp();
-      }
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        const buf = new Uint8Array(4096);
 
-      // Read greeting
-      await readResp();
-      const ehlo = await send("EHLO localhost");
-
-      // STARTTLS for non-465 ports
-      if (smtpPort !== 465 && (ehlo.includes("STARTTLS") || smtpPort === 587)) {
-        const tlsResp = await send("STARTTLS");
-        if (tlsResp.startsWith("220")) {
-          conn = await (Deno as any).startTls(conn, { hostname: host });
-          await send("EHLO localhost");
+        async function readResp(): Promise<string> {
+          let full = "";
+          while (true) {
+            const n = await conn.read(buf);
+            if (!n) break;
+            full += decoder.decode(buf.subarray(0, n));
+            const lines = full.trimEnd().split("\n");
+            const last = lines[lines.length - 1].trimStart();
+            if (/^\d{3}\s/.test(last) || /^\d{3}$/.test(last)) break;
+          }
+          return full.trim();
         }
-      }
 
-      // AUTH LOGIN
-      await send("AUTH LOGIN");
-      await send(btoa(smtpUser));
-      const authResp = await send(btoa(pass));
+        async function send(cmd: string): Promise<string> {
+          await conn.write(encoder.encode(cmd + "\r\n"));
+          return await readResp();
+        }
 
-      if (authResp.startsWith("535") || authResp.startsWith("534")) {
+        // Read greeting
+        await readResp();
+        const ehlo = await send("EHLO localhost");
+
+        // STARTTLS for non-465 ports
+        if (smtpPort !== 465 && (ehlo.includes("STARTTLS") || smtpPort === 587)) {
+          const tlsResp = await send("STARTTLS");
+          if (tlsResp.startsWith("220")) {
+            conn = await (Deno as any).startTls(conn, { hostname: host });
+            await send("EHLO localhost");
+          }
+        }
+
+        // AUTH LOGIN
+        await send("AUTH LOGIN");
+        await send(btoa(smtpUser));
+        const authResp = await send(btoa(pass));
+
+        if (authResp.startsWith("535") || authResp.startsWith("534")) {
+          conn.close();
+          return new Response(
+            JSON.stringify({ error: "SMTP authentication failed. Check your credentials." }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        await send("QUIT");
         conn.close();
+      } catch (connErr) {
         return new Response(
-          JSON.stringify({ error: "SMTP authentication failed. Check your credentials." }),
+          JSON.stringify({ error: `SMTP connection failed: ${(connErr as Error).message}` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      await send("QUIT");
-      conn.close();
-    } catch (connErr) {
-      return new Response(
-        JSON.stringify({ error: `SMTP connection failed: ${(connErr as Error).message}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     }
 
     // ── 2. Store sender account + secrets via RPC ──
