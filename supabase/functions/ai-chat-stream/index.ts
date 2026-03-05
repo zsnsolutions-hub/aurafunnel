@@ -1,0 +1,204 @@
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+const MODEL_NAME = "gemini-2.5-flash-preview-05-20";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+const MODE_SYSTEM_INSTRUCTIONS: Record<string, string> = {
+  analyst:
+    "You are a senior data analyst for a B2B sales pipeline. Cite specific lead names, scores, and percentages. Use markdown tables when comparing data. Be precise and data-driven.",
+  strategist:
+    "You are a sales strategist for a B2B pipeline. Create actionable plans and reference leads by name. Always end with a clear next step the user can take immediately.",
+  coach:
+    "You are a sales coach reviewing a B2B pipeline. Give honest, constructive feedback. Identify strengths and weaknesses from the actual data. Be encouraging but direct.",
+  creative:
+    "You are a content specialist for B2B sales outreach. Write personalized content referencing specific lead details (name, company, insights). Never produce generic templates — every piece must be tailored to the data provided.",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    // ── Auth ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const token = authHeader.replace("Bearer ", "");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const body = await req.json();
+    const {
+      mode = "analyst",
+      prompt,
+      history = [],
+      leadContext = "",
+      pipelineStats = "",
+      businessContext = "",
+      threadId,
+      messageId,
+    } = body as {
+      mode: string;
+      prompt: string;
+      history: { role: string; content: string }[];
+      leadContext: string;
+      pipelineStats: string;
+      businessContext: string;
+      threadId?: string;
+      messageId?: string;
+    };
+
+    if (!prompt) {
+      return new Response(
+        JSON.stringify({ error: "Missing prompt" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!GEMINI_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Build Gemini request ──
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const systemInstruction =
+      (MODE_SYSTEM_INSTRUCTIONS[mode] || MODE_SYSTEM_INSTRUCTIONS.analyst) +
+      (businessContext ? `\n\nBUSINESS CONTEXT:\n${businessContext}` : "");
+
+    const contextBlock = `${pipelineStats}\n\nTOP LEADS:\n${leadContext || "No leads in pipeline."}`;
+
+    const contents: { role: "user" | "model"; parts: { text: string }[] }[] = [];
+    for (const msg of (history || []).slice(-10)) {
+      contents.push({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }],
+      });
+    }
+    contents.push({
+      role: "user",
+      parts: [{ text: `${contextBlock}\n\nUSER REQUEST:\n${prompt}` }],
+    });
+
+    const genConfig = {
+      systemInstruction,
+      temperature: mode === "creative" ? 0.85 : 0.7,
+      topP: 0.9,
+      topK: 40,
+    };
+
+    // ── Stream via SSE ──
+    const encoder = new TextEncoder();
+    let totalTokens = 0;
+    let fullText = "";
+    const startTime = Date.now();
+
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          const stream = await ai.models.generateContentStream({
+            model: MODEL_NAME,
+            contents,
+            config: genConfig,
+          });
+
+          for await (const chunk of stream) {
+            const text = chunk.text || "";
+            if (!text) continue;
+            fullText += text;
+
+            const data = JSON.stringify({ type: "chunk", text, accumulated: fullText.length });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          }
+
+          // Final event with metadata
+          totalTokens = Math.ceil(fullText.length / 4); // rough estimate
+          const latencyMs = Date.now() - startTime;
+          const done = JSON.stringify({
+            type: "done",
+            totalLength: fullText.length,
+            tokensUsed: totalTokens,
+            latencyMs,
+          });
+          controller.enqueue(encoder.encode(`data: ${done}\n\n`));
+
+          // ── Persist final message to DB if threadId provided ──
+          if (threadId && messageId) {
+            try {
+              await supabaseAdmin
+                .from("ai_messages")
+                .update({
+                  content: fullText,
+                  status: "complete",
+                  tokens_used: totalTokens,
+                  latency_ms: latencyMs,
+                  finished_at: new Date().toISOString(),
+                })
+                .eq("id", messageId);
+
+              // Update thread's last message timestamp
+              await supabaseAdmin
+                .from("ai_threads")
+                .update({ updated_at: new Date().toISOString() })
+                .eq("id", threadId);
+            } catch (dbErr) {
+              console.error("Failed to persist AI message:", dbErr);
+            }
+          }
+
+          controller.close();
+        } catch (err) {
+          const errorData = JSON.stringify({
+            type: "error",
+            message: (err as Error).message || "Generation failed",
+          });
+          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch (err) {
+    console.error("ai-chat-stream error:", err);
+    return new Response(
+      JSON.stringify({ error: `Internal error: ${(err as Error).message}` }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
