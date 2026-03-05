@@ -15,6 +15,10 @@ import {
 } from '../../components/Icons';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
+import { useAiStream } from '../../hooks/useAiStream';
+import { useAiThread } from '../../hooks/useAiThread';
+import AiErrorBoundary from '../../components/ai/AiErrorBoundary';
+import MessageRow from '../../components/ai/MessageRow';
 
 interface LayoutContext {
   user: User;
@@ -175,6 +179,77 @@ const AICommandCenter: React.FC = () => {
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [sessionStartTime] = useState(new Date());
   const [responseCount, setResponseCount] = useState(0);
+
+  // ── Streaming + Persistence ──
+  const streamingMsgIdRef = useRef<string | null>(null);
+  const dbMessageIdRef = useRef<string | null>(null);
+  const lastDraftRef = useRef<string>('');
+
+  const { thread, messages: dbMessages, loading: threadLoading, createNewThread, addMessage: persistMessage, startFlushLoop, stopFlushLoop, finalizeMessage } = useAiThread({
+    workspaceId: user?.id,
+    mode: aiMode,
+  });
+
+  const streamHook = useAiStream({
+    throttleMs: 67,
+    onChunk: (accumulated) => {
+      const msgId = streamingMsgIdRef.current;
+      if (!msgId) return;
+      lastDraftRef.current = accumulated;
+      setMessages(prev => prev.map(m =>
+        m.id === msgId ? { ...m, content: frameModeResponse(accumulated) } : m
+      ));
+    },
+    onDone: (fullText, meta) => {
+      const msgId = streamingMsgIdRef.current;
+      if (!msgId) return;
+      setMessages(prev => prev.map(m =>
+        m.id === msgId ? { ...m, content: frameModeResponse(fullText) } : m
+      ));
+      // Finalize in DB
+      if (dbMessageIdRef.current) {
+        finalizeMessage(dbMessageIdRef.current, frameModeResponse(fullText), 'complete', {
+          tokensUsed: meta.tokensUsed,
+          latencyMs: meta.latencyMs,
+        });
+      }
+      stopFlushLoop();
+      streamingMsgIdRef.current = null;
+      dbMessageIdRef.current = null;
+      setResponseCount(prev => prev + 1);
+    },
+    onError: (errMsg) => {
+      const msgId = streamingMsgIdRef.current;
+      if (msgId) {
+        setMessages(prev => prev.map(m =>
+          m.id === msgId ? { ...m, content: `Error: ${errMsg}. ${lastDraftRef.current ? 'Partial response preserved.' : ''}` } : m
+        ));
+      }
+      if (dbMessageIdRef.current) {
+        finalizeMessage(dbMessageIdRef.current, lastDraftRef.current, 'error');
+      }
+      stopFlushLoop();
+      streamingMsgIdRef.current = null;
+      dbMessageIdRef.current = null;
+    },
+  });
+
+  // Restore DB messages on load
+  useEffect(() => {
+    if (threadLoading || dbMessages.length === 0) return;
+    const restored: ChatMessage[] = dbMessages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: new Date(m.created_at),
+      confidence: m.confidence || (m.role === 'ai' ? 90 : undefined),
+      type: 'text' as const,
+    }));
+    if (restored.length > 0) {
+      setMessages(restored);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadLoading]);
 
   // ─── Fetch Data ───
   const fetchData = useCallback(async () => {
@@ -610,12 +685,12 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       return `I analyzed your request as your **${modeLabel}**. Here's what I found:\n\n${insights.length > 0 ? insights.slice(0, 2).map((ins, i) => `**${i + 1}. ${ins.title}**\n${ins.description}`).join('\n\n') : 'No specific insights match your query.'}\n\n${topLead ? `**Quick Stat:** Your top lead is **${topLead.name}** (${topLead.company}) with a score of ${topLead.score}.` : ''}\n\nTry these ${modeLabel} commands:\n${modeChips.slice(0, 4).map(c => `• "${c.label}"`).join('\n')}`;
     };
 
-    // ─── Deep Analysis (dedicated Gemini call) ───
+    // ─── Deep Analysis (dedicated Gemini call — non-streaming) ───
     if (lowerPrompt.includes('deep analysis') || lowerPrompt.includes('deep ai') || lowerPrompt.includes('gemini')) {
       setMessages(prev => [...prev, {
         id: `system-${Date.now()}`,
         role: 'system',
-        content: '🧠 Running deep AI analysis with Gemini...',
+        content: 'Running deep AI analysis...',
         timestamp: new Date(),
         type: 'text',
       }]);
@@ -636,32 +711,36 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
         }
         const result = await generateDashboardInsights(leads, user.businessProfile);
         if (refreshProfile) await refreshProfile();
+        const deepText = frameModeResponse(`**Deep AI Analysis**\n\n${result}`);
         setMessages(prev => [...prev, {
           id: `ai-deep-${Date.now()}`,
           role: 'ai',
-          content: frameModeResponse(`**🧠 Deep AI Analysis (Gemini)**\n\n${result}`),
+          content: deepText,
           timestamp: new Date(),
           confidence: 93,
           type: 'insight',
         }]);
+        persistMessage('ai', deepText, { confidence: 93 });
       } catch {
         const insights = generateProgrammaticInsights(leads);
-        const fallbackText = `**🧠 AI Analysis (Local Engine)**\n\n*Gemini API unavailable — using programmatic analysis:*\n\n${insights.map((ins, i) => `**${i + 1}. ${ins.title}**\n${ins.description}${ins.action ? `\n→ Action: ${ins.action}` : ''}`).join('\n\n')}\n\n*Tip: Configure your Gemini API key for deeper natural-language insights.*`;
+        const fallbackText = `**AI Analysis (Local Engine)**\n\n*AI API unavailable — using programmatic analysis:*\n\n${insights.map((ins, i) => `**${i + 1}. ${ins.title}**\n${ins.description}${ins.action ? `\n-> Action: ${ins.action}` : ''}`).join('\n\n')}`;
+        const framedFallback = frameModeResponse(fallbackText);
         setMessages(prev => [...prev, {
           id: `ai-fallback-${Date.now()}`,
           role: 'ai',
-          content: frameModeResponse(fallbackText),
+          content: framedFallback,
           timestamp: new Date(),
           confidence: 85,
           type: 'insight',
         }]);
+        persistMessage('ai', framedFallback, { confidence: 85 });
       }
       setThinking(false);
       setResponseCount(prev => prev + 1);
       return;
     }
 
-    // ─── All other prompts: Gemini first, template fallback ───
+    // ─── All other prompts: SSE stream via edge function, with template fallback ───
     try {
       const cmdCredit = await consumeCredits(supabase, CREDIT_COSTS['command_center']);
       if (!cmdCredit.success) {
@@ -677,9 +756,13 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
         setResponseCount(prev => prev + 1);
         return;
       }
+
       const history = getConversationHistory();
-      const streamMsgId = `ai-${Date.now()}`;
+      const streamMsgId = `ai-stream-${Date.now()}`;
+      streamingMsgIdRef.current = streamMsgId;
+      lastDraftRef.current = '';
       setThinking(false);
+
       // Add placeholder message for streaming
       setMessages(prev => [...prev, {
         id: streamMsgId,
@@ -689,62 +772,93 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
         confidence: 90,
         type: 'insight',
       }]);
-      const aiResult = await generateCommandCenterResponse(
-        prompt,
-        aiMode,
-        leads,
-        history,
-        user.businessProfile,
-        undefined,
-        {
-          stream: true,
-          onChunk: (text) => {
-            setMessages(prev => prev.map(m =>
-              m.id === streamMsgId ? { ...m, content: frameModeResponse(text) } : m
-            ));
-          },
-        }
-      );
 
-      if (aiResult.text) {
-        if (refreshProfile) await refreshProfile();
-        // Finalize streamed message
-        setMessages(prev => prev.map(m =>
-          m.id === streamMsgId ? { ...m, content: frameModeResponse(aiResult.text) } : m
-        ));
-        setResponseCount(prev => prev + 1);
-        return;
-      } else {
-        // Remove empty streaming placeholder
-        setMessages(prev => prev.filter(m => m.id !== streamMsgId));
+      // Persist the streaming AI message row in DB (status: streaming)
+      const aiDbId = await persistMessage('ai', '', { status: 'streaming', confidence: 90 });
+      dbMessageIdRef.current = aiDbId;
+
+      // Build lead context for edge function
+      const topLeads = leads.slice(0, 15);
+      const leadContext = topLeads.map(l => {
+        const parts = [`- ${l.name} (${l.company}) — Score: ${l.score}, Status: ${l.status}`];
+        if (l.insights) parts.push(`  Insights: ${l.insights}`);
+        return parts.join('\n');
+      }).join('\n');
+
+      const statusBreakdown: Record<string, number> = {};
+      leads.forEach(l => { statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1; });
+      const avgScore = leads.length > 0
+        ? Math.round(leads.reduce((a, b) => a + b.score, 0) / leads.length)
+        : 0;
+
+      const pipelineStats = `PIPELINE STATS:\n- Total Leads: ${leads.length}\n- Average Score: ${avgScore}/100\n- Hot Leads (80+): ${leads.filter(l => l.score > 80).length}\n- Status Breakdown: ${Object.entries(statusBreakdown).map(([k, v]) => `${k}: ${v}`).join(', ')}`;
+
+      // Start periodic DB flush
+      if (aiDbId) {
+        startFlushLoop(aiDbId, () => lastDraftRef.current);
       }
+
+      // Fire SSE stream
+      await streamHook.startStream({
+        mode: aiMode,
+        prompt,
+        history: history.map(h => ({ role: h.role, content: h.content })),
+        leadContext,
+        pipelineStats,
+        businessContext: user.businessProfile ? JSON.stringify(user.businessProfile) : '',
+        threadId: thread?.id,
+        messageId: aiDbId || undefined,
+      });
+
+      return;
     } catch {
-      // Gemini failed — fall through to template
+      // SSE failed — fall through to template
+      streamingMsgIdRef.current = null;
+      dbMessageIdRef.current = null;
+      stopFlushLoop();
     }
 
     // ─── Fallback to template responses ───
     const templateText = generateTemplateResponse();
+    const framedTemplate = frameModeResponse(templateText || 'I couldn\'t generate a response. Please try again or use one of the quick commands above.');
     setMessages(prev => [...prev, {
       id: `ai-${Date.now()}`,
       role: 'ai',
-      content: frameModeResponse(templateText || 'I couldn\'t generate a response. Please try again or use one of the quick commands above.'),
+      content: framedTemplate,
       timestamp: new Date(),
       confidence: templateText ? 85 : 60,
       type: templateText ? 'insight' : 'text',
     }]);
+    persistMessage('ai', framedTemplate, { confidence: templateText ? 85 : 60 });
 
     setThinking(false);
     setResponseCount(prev => prev + 1);
-  }, [leads, stats, aiMode, frameModeResponse, getConversationHistory, user.businessProfile]);
+  }, [leads, stats, aiMode, frameModeResponse, getConversationHistory, user.businessProfile, streamHook, thread, persistMessage, startFlushLoop, stopFlushLoop, finalizeMessage]);
 
   // ─── Handlers ───
   const handleSend = () => {
-    if (!inputValue.trim() || thinking) return;
-    generateResponse(inputValue.trim());
+    if (!inputValue.trim() || thinking || streamHook.status === 'streaming') return;
+    const prompt = inputValue.trim();
     setInputValue('');
+    // Persist user message to DB
+    persistMessage('user', prompt);
+    generateResponse(prompt);
   };
 
+  const handleStopGenerating = useCallback(() => {
+    streamHook.abort();
+    // Finalize with whatever we have
+    if (dbMessageIdRef.current && lastDraftRef.current) {
+      finalizeMessage(dbMessageIdRef.current, lastDraftRef.current, 'aborted');
+    }
+    stopFlushLoop();
+    streamingMsgIdRef.current = null;
+    dbMessageIdRef.current = null;
+    setThinking(false);
+  }, [streamHook, finalizeMessage, stopFlushLoop]);
+
   const handleChipClick = (chip: SuggestionChip) => {
+    persistMessage('user', chip.prompt);
     generateResponse(chip.prompt);
   };
 
@@ -755,7 +869,13 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
     }
   };
 
-  const clearChat = () => {
+  const clearChat = async () => {
+    streamHook.abort();
+    streamHook.reset();
+    stopFlushLoop();
+    streamingMsgIdRef.current = null;
+    dbMessageIdRef.current = null;
+    await createNewThread();
     setMessages([{
       id: 'welcome-reset',
       role: 'ai',
@@ -1093,100 +1213,26 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex-1 flex flex-col min-h-[500px]">
             <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[600px]">
               {messages.map(msg => (
-                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] ${msg.role === 'user' ? 'order-1' : 'order-1'}`}>
-                    {/* Avatar + timestamp row */}
-                    <div className={`flex items-center space-x-2 mb-1 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                      {msg.role !== 'user' && (
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${
-                          msg.role === 'ai' ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white' : 'bg-slate-200 text-slate-500'
-                        }`}>
-                          {msg.role === 'ai' ? <SparklesIcon className="w-3.5 h-3.5" /> : <BoltIcon className="w-3 h-3" />}
-                        </div>
-                      )}
-                      <span className="text-[10px] text-slate-400">
-                        {msg.role === 'ai' ? 'AuraAI' : msg.role === 'system' ? 'System' : 'You'} &middot; {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-
-                    {/* Message bubble */}
-                    <div className={`rounded-2xl px-4 py-3 ${
-                      msg.role === 'user'
-                        ? 'bg-indigo-600 text-white'
-                        : msg.role === 'system'
-                        ? 'bg-amber-50 border border-amber-200 text-amber-700'
-                        : 'bg-slate-50 border border-slate-100 text-slate-700'
-                    }`}>
-                      <div className={`text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? '' : ''}`}>
-                        {msg.content.split('\n').map((line, li) => {
-                          // Simple markdown-like bold
-                          const parts = line.split(/(\*\*[^*]+\*\*)/g);
-                          return (
-                            <React.Fragment key={li}>
-                              {parts.map((part, pi) => {
-                                if (part.startsWith('**') && part.endsWith('**')) {
-                                  return <strong key={pi} className="font-black">{part.slice(2, -2)}</strong>;
-                                }
-                                return <span key={pi}>{part}</span>;
-                              })}
-                              {li < msg.content.split('\n').length - 1 && <br />}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Confidence meter + Actions for AI messages */}
-                    {msg.role === 'ai' && msg.confidence && (
-                      <div className="mt-1.5 ml-1 flex items-center justify-between">
-                        <ConfidenceMeter confidence={msg.confidence} />
-                        <div className="flex items-center space-x-1">
-                          <button
-                            onClick={() => handleCopyMessage(msg)}
-                            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                            title="Copy"
-                          >
-                            {copiedMsgId === msg.id ? <CheckIcon className="w-3 h-3 text-emerald-500" /> : <CopyIcon className="w-3 h-3" />}
-                          </button>
-                          <button
-                            onClick={() => handlePinMessage(msg.id)}
-                            className={`p-1 rounded-lg transition-all ${
-                              pinnedMessageIds.has(msg.id)
-                                ? 'text-amber-500 bg-amber-50'
-                                : 'text-slate-300 hover:text-amber-500 hover:bg-amber-50'
-                            }`}
-                            title="Pin"
-                          >
-                            <StarIcon className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => handleExportChat()}
-                            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                            title="Export"
-                          >
-                            <DownloadIcon className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Save prompt for user messages */}
-                    {msg.role === 'user' && (
-                      <div className="mt-1 flex justify-end">
-                        <button
-                          onClick={() => handleSavePrompt(msg.content)}
-                          className={`text-[9px] font-bold transition-all ${
-                            savedPrompts.some(p => p.prompt === msg.content)
-                              ? 'text-indigo-500'
-                              : 'text-slate-300 hover:text-indigo-500'
-                          }`}
-                        >
-                          {savedPrompts.some(p => p.prompt === msg.content) ? 'Saved' : 'Save prompt'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <MessageRow
+                  key={msg.id}
+                  id={msg.id}
+                  role={msg.role}
+                  content={msg.content}
+                  timestamp={msg.timestamp}
+                  confidence={msg.confidence}
+                  isStreaming={streamingMsgIdRef.current === msg.id}
+                  isPinned={pinnedMessageIds.has(msg.id)}
+                  copiedId={copiedMsgId}
+                  onCopy={(id, content) => {
+                    navigator.clipboard.writeText(content.replace(/\*\*/g, ''));
+                    setCopiedMsgId(id);
+                    setTimeout(() => setCopiedMsgId(null), 2000);
+                  }}
+                  onPin={handlePinMessage}
+                  onExport={handleExportChat}
+                  onSavePrompt={handleSavePrompt}
+                  isSavedPrompt={savedPrompts.some(p => p.prompt === msg.content)}
+                />
               ))}
 
               {/* Thinking indicator */}
@@ -1213,6 +1259,19 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
                 </div>
               )}
 
+              {/* Stop generating button */}
+              {streamHook.status === 'streaming' && (
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleStopGenerating}
+                    className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                  >
+                    <XIcon className="w-3.5 h-3.5" />
+                    <span>Stop generating</span>
+                  </button>
+                </div>
+              )}
+
               <div ref={chatEndRef} />
             </div>
 
@@ -1228,21 +1287,21 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
                     onKeyDown={handleKeyDown}
                     placeholder={`Ask your ${aiMode} about pipeline, leads, or strategy...`}
                     className="w-full px-4 py-3 pr-20 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none placeholder:text-slate-400"
-                    disabled={thinking}
+                    disabled={thinking || streamHook.status === 'streaming'}
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-1.5">
                     <button className="p-1 text-slate-300 hover:text-indigo-500 transition-colors" title="Voice input (coming soon)">
                       <MicIcon className="w-4 h-4" />
                     </button>
-                    <div className={`w-1.5 h-1.5 rounded-full ${thinking ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></div>
+                    <div className={`w-1.5 h-1.5 rounded-full ${thinking || streamHook.status === 'streaming' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></div>
                   </div>
                 </div>
                 <button
                   onClick={handleSend}
-                  disabled={!inputValue.trim() || thinking}
+                  disabled={!inputValue.trim() || thinking || streamHook.status === 'streaming'}
                   className="px-5 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
-                  {thinking ? (
+                  {thinking || streamHook.status === 'streaming' ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   ) : (
                     <SendIcon className="w-4 h-4" />
@@ -1301,4 +1360,10 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
   );
 };
 
-export default AICommandCenter;
+const AICommandCenterWithBoundary: React.FC = () => (
+  <AiErrorBoundary>
+    <AICommandCenter />
+  </AiErrorBoundary>
+);
+
+export default AICommandCenterWithBoundary;
