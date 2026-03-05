@@ -829,8 +829,9 @@ const IntegrationHub: React.FC = () => {
     setEmailSetupSaving(true);
 
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) { setEmailSetupSaving(false); return; }
+      const { data: { session } } = await supabase.auth.getSession();
+      const authUser = session?.user;
+      if (!authUser || !session) { setEmailSetupSaving(false); return; }
 
       // 1. Save to legacy email_provider_configs (keeps existing flows working)
       const row: Record<string, unknown> = {
@@ -893,7 +894,10 @@ const IntegrationHub: React.FC = () => {
         };
       }
 
-      const { data: fnData, error: fnError } = await supabase.functions.invoke(edgeFn, { body });
+      const { data: fnData, error: fnError } = await supabase.functions.invoke(edgeFn, {
+        body,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
       if (fnError) {
         const detail = fnData?.error || fnError.message;
         console.error(`Edge function ${edgeFn} error:`, detail);

@@ -22,7 +22,7 @@ export interface WorkspaceSnapshot {
   subscription: {
     plan_name: string;
     status: string;
-    trial_ends_at: string | null;
+    expires_at: string | null;
   } | null;
   usage: {
     emails_sent: number;
@@ -49,15 +49,17 @@ export async function fetchWorkspaceSnapshot(workspaceId: string): Promise<Works
       .single(),
     supabase
       .from('subscriptions')
-      .select('plan_name, status, trial_ends_at')
+      .select('plan_name, status, expires_at')
       .eq('user_id', workspaceId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
       .from('workspace_usage_counters')
-      .select('emails_sent_today, contacts_imported_today, ai_credits_used_today')
+      .select('emails_sent, ai_credits_used')
       .eq('workspace_id', workspaceId)
+      .order('date_key', { ascending: false })
+      .limit(1)
       .maybeSingle(),
     supabase
       .from('leads')
@@ -82,9 +84,9 @@ export async function fetchWorkspaceSnapshot(workspaceId: string): Promise<Works
     },
     subscription: subsRes.data ?? null,
     usage: {
-      emails_sent: usageRes.data?.emails_sent_today ?? 0,
-      contacts_count: usageRes.data?.contacts_imported_today ?? 0,
-      ai_credits_used: usageRes.data?.ai_credits_used_today ?? 0,
+      emails_sent: usageRes.data?.emails_sent ?? 0,
+      contacts_count: 0,
+      ai_credits_used: usageRes.data?.ai_credits_used ?? 0,
     },
     counts: {
       leads: leadsRes.count ?? 0,
