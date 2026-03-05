@@ -25,14 +25,25 @@ export function useRealtimeJobs({ workspaceId, limit = 15 }: UseRealtimeJobsOpti
   const pollRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const prevStatusRef = useRef<ConnectionStatus>('connecting');
 
+  // Track whether the table exists to avoid infinite polling on 404
+  const tableErrorRef = useRef(false);
+
   // Initial fetch + refresh function
   const refresh = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!workspaceId || tableErrorRef.current) return;
     try {
       const data = await listJobs(workspaceId, { limit });
       setJobs(data);
-    } catch {
-      // Silent — don't break the panel on fetch errors
+    } catch (err: unknown) {
+      // If the table doesn't exist (PostgREST 404 / PGRST), stop retrying
+      const e = err as Record<string, unknown> | null;
+      const code = e?.code ?? '';
+      const msg = e?.message ?? (err instanceof Error ? err.message : String(err));
+      const combined = `${code} ${msg}`;
+      if (combined.includes('PGRST') || combined.includes('404') || combined.includes('relation') || combined.includes('does not exist')) {
+        tableErrorRef.current = true;
+        console.warn('Jobs table not found — disabling polling.');
+      }
     }
   }, [workspaceId, limit]);
 
@@ -84,17 +95,18 @@ export function useRealtimeJobs({ workspaceId, limit = 15 }: UseRealtimeJobsOpti
 
   // Fallback polling when Realtime is down
   useEffect(() => {
-    if (!shouldFallback || !workspaceId) {
+    if (!shouldFallback || !workspaceId || tableErrorRef.current) {
       if (pollRef.current) clearTimeout(pollRef.current);
       return;
     }
 
     const poll = () => {
+      if (tableErrorRef.current) return;
       const hasActive = jobs.some(j => j.status === 'queued' || j.status === 'running');
       const interval = hasActive ? 3000 : 15000;
       pollRef.current = setTimeout(async () => {
         await refresh();
-        poll();
+        if (!tableErrorRef.current) poll();
       }, interval);
     };
 
