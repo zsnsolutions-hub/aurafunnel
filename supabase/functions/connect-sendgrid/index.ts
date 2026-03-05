@@ -72,9 +72,7 @@ serve(async (req) => {
       p_from_email: fromEmail,
       p_from_name: fromName ?? "",
       p_use_for_outreach: true,
-      p_secrets: {
-        api_key: apiKey,
-      },
+      p_api_key: apiKey,
     });
 
     if (rpcError) {

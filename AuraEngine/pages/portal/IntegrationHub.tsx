@@ -832,6 +832,7 @@ const IntegrationHub: React.FC = () => {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) { setEmailSetupSaving(false); return; }
 
+      // 1. Save to legacy email_provider_configs (keeps existing flows working)
       const row: Record<string, unknown> = {
         owner_id: authUser.id,
         provider: emailSetupId,
@@ -858,6 +859,43 @@ const IntegrationHub: React.FC = () => {
       await supabase
         .from('email_provider_configs')
         .upsert(row, { onConflict: 'owner_id,provider' });
+
+      // 2. Create sender_accounts + sender_account_secrets via edge function
+      //    so the account appears on the Sender Accounts page.
+      let edgeFn: string;
+      let body: Record<string, unknown>;
+
+      if (isSmtpProvider(emailSetupId)) {
+        edgeFn = 'connect-smtp';
+        body = {
+          workspaceId: authUser.id,
+          host: emailSetupSmtpHost,
+          port: parseInt(emailSetupSmtpPort) || 587,
+          user: emailSetupSmtpUser,
+          pass: emailSetupSmtpPass,
+          fromEmail: emailSetupFromEmail,
+          fromName: emailSetupFromName,
+        };
+      } else if (emailSetupId === 'sendgrid') {
+        edgeFn = 'connect-sendgrid';
+        body = {
+          workspaceId: authUser.id,
+          apiKey: emailSetupApiKey,
+          fromEmail: emailSetupFromEmail,
+          fromName: emailSetupFromName,
+        };
+      } else {
+        edgeFn = 'connect-mailchimp-oauth';
+        body = {
+          workspaceId: authUser.id,
+          apiKey: emailSetupApiKey,
+        };
+      }
+
+      const { error: fnError } = await supabase.functions.invoke(edgeFn, { body });
+      if (fnError) {
+        console.error(`Edge function ${edgeFn} error:`, fnError.message);
+      }
 
       setIntegrations(prev => prev.map(i =>
         i.id === emailSetupId ? { ...i, status: 'connected' as IntegrationStatus, lastSync: 'Just now', error: undefined } : i

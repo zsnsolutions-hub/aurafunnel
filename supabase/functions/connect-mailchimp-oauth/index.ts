@@ -89,10 +89,8 @@ serve(async (req) => {
       p_from_email: accountEmail || "mailchimp@connected",
       p_from_name: "",
       p_use_for_outreach: false, // CRITICAL: Mailchimp is marketing only
-      p_secrets: {
-        api_key: apiKey,
-        datacenter: dc,
-      },
+      p_api_key: apiKey,
+      p_metadata: { datacenter: dc },
     });
 
     if (rpcError) {

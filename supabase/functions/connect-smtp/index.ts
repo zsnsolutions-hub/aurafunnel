@@ -120,12 +120,10 @@ serve(async (req) => {
       p_from_email: fromEmail,
       p_from_name: fromName ?? "",
       p_use_for_outreach: true,
-      p_secrets: {
-        smtp_host: host,
-        smtp_port: port ?? 587,
-        smtp_user: smtpUser,
-        smtp_pass: pass,
-      },
+      p_smtp_host: host,
+      p_smtp_port: port ?? 587,
+      p_smtp_user: smtpUser,
+      p_smtp_pass: pass,
     });
 
     if (rpcError) {
