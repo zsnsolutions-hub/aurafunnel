@@ -33,6 +33,10 @@ describe('computeInvoiceKPIs', () => {
       totalCollectedCents: 0,
       openCount: 0,
       paidCount: 0,
+      paidThisMonthCents: 0,
+      paidThisMonthCount: 0,
+      overdueCount: 0,
+      overdueCents: 0,
       totalCount: 0,
     });
   });
@@ -85,5 +89,32 @@ describe('computeInvoiceKPIs', () => {
     expect(kpis.openCount).toBe(1);
     expect(kpis.paidCount).toBe(2);
     expect(kpis.totalCount).toBe(5);
+  });
+
+  it('detects overdue invoices', () => {
+    const pastDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const invoices = [
+      fakeInvoice({ status: 'open', total_cents: 1000, due_date: pastDate }),
+      fakeInvoice({ status: 'open', total_cents: 2000, due_date: futureDate }),
+      fakeInvoice({ status: 'open', total_cents: 500, due_date: null }),
+    ];
+    const kpis = computeInvoiceKPIs(invoices);
+    expect(kpis.overdueCount).toBe(1);
+    expect(kpis.overdueCents).toBe(1000);
+    expect(kpis.openCount).toBe(3);
+  });
+
+  it('counts paid this month', () => {
+    const thisMonth = new Date().toISOString();
+    const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    const invoices = [
+      fakeInvoice({ status: 'paid', total_cents: 5000, paid_at: thisMonth }),
+      fakeInvoice({ status: 'paid', total_cents: 3000, paid_at: lastYear }),
+    ];
+    const kpis = computeInvoiceKPIs(invoices);
+    expect(kpis.paidThisMonthCount).toBe(1);
+    expect(kpis.paidThisMonthCents).toBe(5000);
+    expect(kpis.paidCount).toBe(2);
   });
 });

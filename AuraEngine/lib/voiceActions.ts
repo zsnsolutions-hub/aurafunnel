@@ -43,7 +43,7 @@ export const VOICE_ROUTE_LABELS: Record<string, string> = {
   integrations: 'Integrations',
   ai_settings: 'AI Settings',
   subscription: 'Subscription',
-  invoices: 'Billing History',
+  invoices: 'Invoices',
   settings: 'Settings',
   settings_security: 'Security Settings',
   settings_business: 'Business Profile',

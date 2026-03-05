@@ -179,8 +179,8 @@ const InvoicesPage: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-700">
       {/* Header */}
       <PageHeader
-        title="Billing History"
-        description="Create and manage invoices powered by Stripe"
+        title="Invoices"
+        description="Manage invoices sent to clients"
         actions={
           <button
             onClick={pageTab === 'invoices' ? () => setDrawerOpen(true) : handleNewPackage}
@@ -221,22 +221,28 @@ const InvoicesPage: React.FC = () => {
       {pageTab === 'invoices' ? (
         <>
           {/* Stat Cards */}
-          <AdvancedOnly>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding</p>
-                <p className="text-2xl font-bold text-blue-600 mt-1">{formatMoneyUSD(kpis.totalOutstandingCents)}</p>
-              </div>
-              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Collected</p>
-                <p className="text-2xl font-bold text-emerald-600 mt-1">{formatMoneyUSD(kpis.totalCollectedCents)}</p>
-              </div>
-              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Invoices</p>
-                <p className="text-2xl font-bold text-slate-800 mt-1">{kpis.totalCount}</p>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Open Invoices</p>
+              <p className="text-2xl font-bold text-blue-600 mt-1">{kpis.openCount}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{formatMoneyUSD(kpis.totalOutstandingCents)} outstanding</p>
             </div>
-          </AdvancedOnly>
+            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Paid This Month</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{formatMoneyUSD(kpis.paidThisMonthCents)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{kpis.paidThisMonthCount} invoice{kpis.paidThisMonthCount !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Overdue</p>
+              <p className={`text-2xl font-bold mt-1 ${kpis.overdueCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>{kpis.overdueCount}</p>
+              {kpis.overdueCount > 0 && (
+                <p className="text-xs text-red-500 mt-0.5">{formatMoneyUSD(kpis.overdueCents)} past due</p>
+              )}
+              {kpis.overdueCount === 0 && (
+                <p className="text-xs text-slate-400 mt-0.5">All invoices on track</p>
+              )}
+            </div>
+          </div>
 
           {/* Filter Tabs */}
           <AdvancedOnly>
@@ -282,10 +288,11 @@ const InvoicesPage: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    <th className="text-left px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">#</th>
+                    <th className="text-left px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Invoice</th>
                     <th className="text-left px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Client</th>
                     <th className="text-left px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Amount</th>
                     <th className="text-left px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                    <th className="text-left px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:table-cell">Sent</th>
                     <th className="text-left px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Due Date</th>
                     <th className="text-right px-5 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -312,6 +319,9 @@ const InvoicesPage: React.FC = () => {
                         </td>
                         <td className="px-5 py-3.5">
                           <InvoiceStatusBadge status={inv.status} />
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">
+                          {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : '—'}
                         </td>
                         <td className="px-5 py-3.5 text-sm text-slate-500">
                           {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '—'}
@@ -383,7 +393,7 @@ const InvoicesPage: React.FC = () => {
                       </tr>
                       {expandedRowId === inv.id && (
                         <tr>
-                          <td colSpan={6} className="px-5 py-4 bg-slate-50/50">
+                          <td colSpan={7} className="px-5 py-4 bg-slate-50/50">
                             <InvoicePreviewPanel
                               compact
                               recipientName={inv.lead_name || ''}

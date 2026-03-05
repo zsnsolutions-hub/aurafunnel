@@ -219,8 +219,8 @@ export const NAV_CONFIG: NavConfigItem[] = [
       },
       {
         route: '/portal/invoices',
-        navLabel: 'Billing History',
-        pageTitle: 'Billing History',
+        navLabel: 'Invoices',
+        pageTitle: 'Invoices',
         icon: FileText,
         section: 'billing',
         order: 1,
