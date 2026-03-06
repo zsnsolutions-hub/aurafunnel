@@ -1,5 +1,5 @@
-import React, { Suspense, useState, useMemo, useDeferredValue } from 'react';
-import { useOutlet } from 'react-router-dom';
+import React, { Suspense, useState, useRef, useTransition } from 'react';
+import { useOutlet, useLocation } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
   Shield, Lock, Settings, LogOut, DollarSign, Headphones, Wrench, Terminal, LayoutDashboard
@@ -23,9 +23,18 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  const { pathname } = useLocation();
   const currentOutlet = useOutlet();
-  const deferredOutlet = useDeferredValue(currentOutlet);
-  const isNavigating = currentOutlet !== deferredOutlet;
+  const [isPending, startTransition] = useTransition();
+  const [renderedOutlet, setRenderedOutlet] = useState(currentOutlet);
+  const prevPathRef = useRef(pathname);
+
+  if (pathname !== prevPathRef.current) {
+    prevPathRef.current = pathname;
+    startTransition(() => {
+      setRenderedOutlet(currentOutlet);
+    });
+  }
 
   const navItems = [
     { label: 'Overview', path: '/admin', icon: <BarChart3 size={20} /> },
@@ -106,9 +115,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
       }
     >
       <ErrorBoundary>
-        <div className={isNavigating ? 'opacity-60 pointer-events-none transition-opacity duration-150' : 'transition-opacity duration-150'}>
+        <div className={isPending ? 'opacity-60 pointer-events-none transition-opacity duration-150' : 'transition-opacity duration-150'}>
           <Suspense fallback={<PortalContentSkeleton />}>
-            {deferredOutlet}
+            {renderedOutlet}
           </Suspense>
         </div>
       </ErrorBoundary>
