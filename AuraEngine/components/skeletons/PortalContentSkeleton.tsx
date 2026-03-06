@@ -1,18 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
 /** Skeleton shown inside the portal content area while a lazy page loads.
  *  Matches the portal's full-width layout — no max-w-4xl centering. */
 const PortalContentSkeleton: React.FC = () => {
-  const [show, setShow] = useState(false);
-
-  // Delay 120ms to avoid flicker on fast navigations
-  useEffect(() => {
-    const id = setTimeout(() => setShow(true), 120);
-    return () => clearTimeout(id);
-  }, []);
-
-  if (!show) return null;
-
   return (
     <div className="animate-fadeIn w-full space-y-6 p-1">
       {/* Page title */}

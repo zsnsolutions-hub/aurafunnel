@@ -1,5 +1,5 @@
 import React, { Suspense, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
   Shield, Lock, Settings, LogOut, DollarSign, Headphones, Wrench, Terminal, LayoutDashboard
@@ -20,7 +20,7 @@ interface AdminLayoutProps {
 }
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
-  const { pathname } = useLocation();
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const navItems = [
@@ -101,7 +101,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
         </Topbar>
       }
     >
-      <ErrorBoundary key={pathname}>
+      <ErrorBoundary>
         <Suspense fallback={<PortalContentSkeleton />}>
           <Outlet />
         </Suspense>
