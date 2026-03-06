@@ -1,5 +1,5 @@
-import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo, useTransition, lazy, memo } from 'react';
-import { useOutlet, useNavigate, useLocation } from 'react-router-dom';
+import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo, lazy, memo } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
 import ErrorBoundary from '../ErrorBoundary';
@@ -207,20 +207,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
 
   const outletContext = useMemo(() => ({ user, refreshProfile }), [user, refreshProfile]);
 
-  // ─── Transition outlet: keeps old page visible while new lazy page loads ───
-  const { pathname } = useLocation();
-  const currentOutlet = useOutlet(outletContext);
-  const [isPending, startTransition] = useTransition();
-  const [renderedOutlet, setRenderedOutlet] = useState(currentOutlet);
-  const prevPathRef = useRef(pathname);
-
-  if (pathname !== prevPathRef.current) {
-    prevPathRef.current = pathname;
-    startTransition(() => {
-      setRenderedOutlet(currentOutlet);
-    });
-  }
-
   const sidebarHeader = useMemo(() => <BrandLogo />, []);
   const sidebarHeaderCollapsed = useMemo(() => <BrandLogo collapsed />, []);
 
@@ -304,11 +290,9 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
       >
         <GlobalInviteBanner user={user} />
         <ErrorBoundary>
-          <div className={isPending ? 'opacity-60 pointer-events-none transition-opacity duration-150' : 'transition-opacity duration-150'}>
-            <Suspense fallback={<PortalContentSkeleton />}>
-              {renderedOutlet}
-            </Suspense>
-          </div>
+          <Suspense fallback={<PortalContentSkeleton />}>
+            <Outlet context={outletContext} />
+          </Suspense>
         </ErrorBoundary>
       </AppShell>
 

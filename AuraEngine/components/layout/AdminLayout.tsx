@@ -1,5 +1,5 @@
-import React, { Suspense, useState, useRef, useTransition } from 'react';
-import { useOutlet, useLocation } from 'react-router-dom';
+import React, { Suspense, useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
   Shield, Lock, Settings, LogOut, DollarSign, Headphones, Wrench, Terminal, LayoutDashboard
@@ -22,19 +22,6 @@ interface AdminLayoutProps {
 const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  const { pathname } = useLocation();
-  const currentOutlet = useOutlet();
-  const [isPending, startTransition] = useTransition();
-  const [renderedOutlet, setRenderedOutlet] = useState(currentOutlet);
-  const prevPathRef = useRef(pathname);
-
-  if (pathname !== prevPathRef.current) {
-    prevPathRef.current = pathname;
-    startTransition(() => {
-      setRenderedOutlet(currentOutlet);
-    });
-  }
 
   const navItems = [
     { label: 'Overview', path: '/admin', icon: <BarChart3 size={20} /> },
@@ -115,11 +102,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
       }
     >
       <ErrorBoundary>
-        <div className={isPending ? 'opacity-60 pointer-events-none transition-opacity duration-150' : 'transition-opacity duration-150'}>
-          <Suspense fallback={<PortalContentSkeleton />}>
-            {renderedOutlet}
-          </Suspense>
-        </div>
+        <Suspense fallback={<PortalContentSkeleton />}>
+          <Outlet />
+        </Suspense>
       </ErrorBoundary>
     </AppShell>
     <ActivityPanel />
