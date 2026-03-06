@@ -1,5 +1,5 @@
-import React, { Suspense, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { Suspense, useState, useMemo, useDeferredValue } from 'react';
+import { useOutlet } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
   Shield, Lock, Settings, LogOut, DollarSign, Headphones, Wrench, Terminal, LayoutDashboard
@@ -22,6 +22,10 @@ interface AdminLayoutProps {
 const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const currentOutlet = useOutlet();
+  const deferredOutlet = useDeferredValue(currentOutlet);
+  const isNavigating = currentOutlet !== deferredOutlet;
 
   const navItems = [
     { label: 'Overview', path: '/admin', icon: <BarChart3 size={20} /> },
@@ -102,9 +106,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
       }
     >
       <ErrorBoundary>
-        <Suspense fallback={<PortalContentSkeleton />}>
-          <Outlet />
-        </Suspense>
+        <div className={isNavigating ? 'opacity-60 pointer-events-none transition-opacity duration-150' : 'transition-opacity duration-150'}>
+          <Suspense fallback={<PortalContentSkeleton />}>
+            {deferredOutlet}
+          </Suspense>
+        </div>
       </ErrorBoundary>
     </AppShell>
     <ActivityPanel />
