@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo, lazy } from 'react';
+import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo, lazy, memo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
@@ -26,7 +26,7 @@ interface ClientLayoutProps {
   refreshProfile: () => Promise<void>;
 }
 
-const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProfile }) => {
+const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refreshProfile }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -94,6 +94,10 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
   const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
   const creditsUsed = user.credits_used || 0;
   const usagePercentage = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
+
+  const handleToggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+  const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
+  const openNotifications = useCallback(() => setNotificationsOpen(true), []);
 
 
   // ─── Auto-show notifications once per session ───
@@ -202,6 +206,72 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
     };
   }, [navigate, commandPaletteOpen, toggleUIMode]);
 
+  const outletContext = useMemo(() => ({ user, refreshProfile }), [user, refreshProfile]);
+
+  const sidebarHeader = useMemo(() => <BrandLogo />, []);
+  const sidebarHeaderCollapsed = useMemo(() => <BrandLogo collapsed />, []);
+
+  const sidebarTopSlot = useMemo(() => (
+    <div className="flex items-center gap-2">
+      <GuideMenuButton />
+      <button
+        onClick={openCommandPalette}
+        className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
+        aria-label="Search"
+        title="Search (⌘K)"
+      >
+        <Search size={16} />
+      </button>
+      <button
+        onClick={openNotifications}
+        className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
+        aria-label="Notifications"
+        title="Notifications"
+      >
+        <Bell size={16} />
+      </button>
+    </div>
+  ), [openCommandPalette, openNotifications]);
+
+  const sidebarFooter = useMemo(() =>
+    sidebarCollapsed ? (
+      <div className="flex flex-col items-center gap-3">
+        <UIModeSwitcher collapsed />
+        <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
+          {user.name?.charAt(0) || 'U'}
+        </div>
+        <button onClick={onLogout} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors duration-150">
+          <LogOut size={16} />
+        </button>
+      </div>
+    ) : (
+      <>
+        <UIModeSwitcher />
+        <div className="p-4 bg-gray-900 rounded-2xl text-white mb-4 mt-3">
+          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">AI Credits</p>
+          <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mb-2">
+            <div className="bg-indigo-400 h-full rounded-full transition-all duration-1000" style={{ width: `${usagePercentage}%` }}></div>
+          </div>
+          <p className="text-[10px] font-bold text-gray-400">{(creditsTotal - creditsUsed).toLocaleString()} AI Actions Left</p>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
+              {user.name?.charAt(0) || 'U'}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{user.name || 'User'}</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Verified</p>
+            </div>
+          </div>
+          <button onClick={onLogout} className="p-2 text-gray-300 hover:text-red-500 transition-colors duration-150">
+            <LogOut size={16} />
+          </button>
+        </div>
+      </>
+    )
+  , [sidebarCollapsed, user.name, onLogout, usagePercentage, creditsTotal, creditsUsed]);
+
   return (
     <>
       <AppShell
@@ -209,70 +279,13 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
         sidebar={
           <Sidebar
             collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed(prev => !prev)}
+            onToggle={handleToggleSidebar}
             navItems={navItems}
             activePath={location.pathname}
-            header={<BrandLogo />}
-            headerCollapsed={<BrandLogo collapsed />}
-            topSlot={
-              <div className="flex items-center gap-2">
-                <GuideMenuButton />
-                <button
-                  onClick={() => setCommandPaletteOpen(true)}
-                  className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
-                  aria-label="Search"
-                  title="Search (⌘K)"
-                >
-                  <Search size={16} />
-                </button>
-                <button
-                  onClick={() => setNotificationsOpen(true)}
-                  className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
-                  aria-label="Notifications"
-                  title="Notifications"
-                >
-                  <Bell size={16} />
-                </button>
-              </div>
-            }
-            footer={
-              sidebarCollapsed ? (
-                <div className="flex flex-col items-center gap-3">
-                  <UIModeSwitcher collapsed />
-                  <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
-                    {user.name?.charAt(0) || 'U'}
-                  </div>
-                  <button onClick={onLogout} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors duration-150">
-                    <LogOut size={16} />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <UIModeSwitcher />
-                  <div className="p-4 bg-gray-900 rounded-2xl text-white mb-4 mt-3">
-                    <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">AI Credits</p>
-                    <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mb-2">
-                      <div className="bg-indigo-400 h-full rounded-full transition-all duration-1000" style={{ width: `${usagePercentage}%` }}></div>
-                    </div>
-                    <p className="text-[10px] font-bold text-gray-400">{(creditsTotal - creditsUsed).toLocaleString()} AI Actions Left</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
-                        {user.name?.charAt(0) || 'U'}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{user.name || 'User'}</p>
-                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Verified</p>
-                      </div>
-                    </div>
-                    <button onClick={onLogout} className="p-2 text-gray-300 hover:text-red-500 transition-colors duration-150">
-                      <LogOut size={16} />
-                    </button>
-                  </div>
-                </>
-              )
-            }
+            header={sidebarHeader}
+            headerCollapsed={sidebarHeaderCollapsed}
+            topSlot={sidebarTopSlot}
+            footer={sidebarFooter}
           />
         }
         topbar={null}
@@ -280,7 +293,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
         <GlobalInviteBanner user={user} />
         <ErrorBoundary>
           <Suspense fallback={<PortalContentSkeleton />}>
-            <Outlet context={{ user, refreshProfile }} />
+            <Outlet context={outletContext} />
           </Suspense>
         </ErrorBoundary>
       </AppShell>
@@ -312,6 +325,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
       </ErrorBoundary>
     </>
   );
-};
+});
 
 export default ClientLayout;

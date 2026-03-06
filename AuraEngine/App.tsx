@@ -129,14 +129,14 @@ const App: React.FC = () => {
   const isMobile = useIsMobile();
   useIdlePrefetch();
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setShowLogoutModal(true);
-  };
+  }, []);
 
-  const confirmLogout = async () => {
+  const confirmLogout = useCallback(async () => {
     setShowLogoutModal(false);
     await logout();
-  };
+  }, [logout]);
 
   return (
     <AuthGate phase={state.phase} error={state.error} onRetry={retry}>

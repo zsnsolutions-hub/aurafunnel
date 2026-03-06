@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import PrefetchLink from '../PrefetchLink';
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 
@@ -26,7 +26,7 @@ interface SidebarProps {
   variant?: 'light' | 'dark';
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
+export const Sidebar: React.FC<SidebarProps> = memo(({
   collapsed,
   onToggle,
   navItems,
@@ -212,4 +212,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
     </aside>
   );
-};
+});
