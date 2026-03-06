@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
 import ErrorBoundary from '../ErrorBoundary';
+import PortalContentSkeleton from '../skeletons/PortalContentSkeleton';
 const CommandPalette = lazy(() => import('../dashboard/CommandPalette'));
 
 const DailyBriefing = lazy(() => import('../dashboard/DailyBriefing'));
@@ -277,7 +278,11 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
         topbar={null}
       >
         <GlobalInviteBanner user={user} />
-        <Outlet context={{ user, refreshProfile }} />
+        <ErrorBoundary>
+          <Suspense fallback={<PortalContentSkeleton />}>
+            <Outlet context={{ user, refreshProfile }} />
+          </Suspense>
+        </ErrorBoundary>
       </AppShell>
 
       {/* Global Overlays — each wrapped in its own ErrorBoundary so a crash

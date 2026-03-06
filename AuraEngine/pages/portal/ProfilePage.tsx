@@ -14,6 +14,7 @@ import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
+import { BRAND } from '../../lib/brand';
 
 /** Safely extract a string from any value (handles {value,confidence} objects, nulls, etc.) */
 const safeStr = (v: unknown): string => {
@@ -1983,6 +1984,13 @@ const ProfilePage: React.FC = () => {
       )}
 
       {activeTab === 'pipeline_colors' && <StageColorSettings user={user} />}
+
+      {/* Build stamp */}
+      <div className="mt-8 text-center">
+        <p className="text-[10px] text-slate-300 font-mono">
+          {BRAND.version} &middot; build {BRAND.buildSha} &middot; {BRAND.buildTime ? new Date(BRAND.buildTime).toLocaleDateString() : ''}
+        </p>
+      </div>
 
       {/* Delete Modal */}
       {isDeleteModalOpen && (

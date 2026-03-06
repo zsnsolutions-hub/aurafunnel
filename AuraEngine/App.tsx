@@ -1,5 +1,6 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { UserRole } from './types';
 import ErrorBoundary from './components/ErrorBoundary';
 import { GuideProvider } from './components/guide/GuideProvider';
@@ -9,14 +10,15 @@ import { UIModeProvider } from './components/ui-mode';
 import { useIdlePrefetch } from './hooks/useIdlePrefetch';
 import { useAuthMachine } from './hooks/useAuthMachine';
 import { AuthGate } from './components/auth/AuthGate';
+import { useIsMobile } from './hooks/useIsMobile';
 
 // Dev perf panel — lazy-loaded, tree-shaken in production
 const PerfPanel = lazy(() => import('./components/dev/PerfPanel'));
 
-// Layouts — lazy-loaded to keep main bundle lean
-const MarketingLayout = lazy(() => import('./components/layout/MarketingLayout'));
-const AdminLayout = lazy(() => import('./components/layout/AdminLayout'));
-const ClientLayout = lazy(() => import('./components/layout/ClientLayout'));
+// Layouts — direct imports so the app shell never suspends
+import MarketingLayout from './components/layout/MarketingLayout';
+import AdminLayout from './components/layout/AdminLayout';
+import ClientLayout from './components/layout/ClientLayout';
 
 // ─── Lazy-loaded pages ───
 
@@ -55,7 +57,14 @@ const ProfilePage = lazy(() => import('./pages/portal/ProfilePage'));
 const LeadIntelligence = lazy(() => import('./pages/portal/LeadIntelligence'));
 const AICommandCenter = lazy(() => import('./pages/portal/AICommandCenter'));
 const ContentStudio = lazy(() => import('./pages/portal/ContentStudio'));
-const MobileDashboard = lazy(() => import('./pages/portal/MobileDashboard'));
+// Mobile portal
+import MobileAppShell from './components/layout/MobileAppShell';
+const MobileHome = lazy(() => import('./pages/portal/mobile/MobileHome'));
+const MobileLeads = lazy(() => import('./pages/portal/mobile/MobileLeads'));
+const MobileLeadDetail = lazy(() => import('./pages/portal/mobile/MobileLeadDetail'));
+const MobileCampaigns = lazy(() => import('./pages/portal/mobile/MobileCampaigns'));
+const MobileActivity = lazy(() => import('./pages/portal/mobile/MobileActivity'));
+const MobileMore = lazy(() => import('./pages/portal/mobile/MobileMore'));
 const ModelTraining = lazy(() => import('./pages/portal/ModelTraining'));
 const IntegrationHub = lazy(() => import('./pages/portal/IntegrationHub'));
 const ApolloSearchPage = lazy(() => import('./pages/portal/ApolloSearchPage'));
@@ -110,7 +119,14 @@ const App: React.FC = () => {
   const { user } = state;
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const location = useLocation();
+  const qc = useQueryClient();
 
+  // ErrorBoundary reset: invalidate caches + re-bootstrap auth
+  const handleErrorReset = useCallback(() => {
+    retry();
+  }, [retry]);
+
+  const isMobile = useIsMobile();
   useIdlePrefetch();
 
   const handleLogout = () => {
@@ -127,7 +143,7 @@ const App: React.FC = () => {
     <GuideProvider>
     <UIModeProvider userId={user?.id}>
     <SupportProvider user={user}>
-    <ErrorBoundary>
+    <ErrorBoundary queryClient={qc} onReset={handleErrorReset}>
       <SupportBanner />
       {/* Logout Confirmation Modal */}
       {showLogoutModal && (
@@ -163,68 +179,90 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <Suspense fallback={<PageFallback />}>
         <Routes>
+          {/* Marketing — has its own full-page Suspense since there's no persistent shell */}
           <Route element={<MarketingLayout />}>
-            <Route path="/" element={<ErrorBoundary><LandingPage /></ErrorBoundary>} />
-            <Route path="/features" element={<ErrorBoundary><FeaturesPage /></ErrorBoundary>} />
-            <Route path="/pricing" element={<ErrorBoundary><PricingPage /></ErrorBoundary>} />
-            <Route path="/blog" element={<ErrorBoundary><BlogPage /></ErrorBoundary>} />
-            <Route path="/blog/:slug" element={<ErrorBoundary><BlogPostPage /></ErrorBoundary>} />
-            <Route path="/about" element={<ErrorBoundary><AboutPage /></ErrorBoundary>} />
-            <Route path="/contact" element={<ErrorBoundary><ContactPage /></ErrorBoundary>} />
+            <Route path="/" element={<Suspense fallback={<PageFallback />}><LandingPage /></Suspense>} />
+            <Route path="/features" element={<Suspense fallback={<PageFallback />}><FeaturesPage /></Suspense>} />
+            <Route path="/pricing" element={<Suspense fallback={<PageFallback />}><PricingPage /></Suspense>} />
+            <Route path="/blog" element={<Suspense fallback={<PageFallback />}><BlogPage /></Suspense>} />
+            <Route path="/blog/:slug" element={<Suspense fallback={<PageFallback />}><BlogPostPage /></Suspense>} />
+            <Route path="/about" element={<Suspense fallback={<PageFallback />}><AboutPage /></Suspense>} />
+            <Route path="/contact" element={<Suspense fallback={<PageFallback />}><ContactPage /></Suspense>} />
           </Route>
 
-          <Route path="/signup" element={<ErrorBoundary><TrialSignupPage /></ErrorBoundary>} />
-          <Route path="/auth" element={<><AuthPage user={user} onLogin={(u) => setUser(u)} /><Suspense fallback={null}><VoiceAgentLauncher agentId={import.meta.env.VITE_ELEVENLABS_AUTH_AGENT_ID} /></Suspense></>} />
-          <Route path="/reset-password" element={<ErrorBoundary><ResetPasswordPage /></ErrorBoundary>} />
-          <Route path="/auth/confirm" element={<ErrorBoundary><ConfirmEmailPage /></ErrorBoundary>} />
+          <Route path="/signup" element={<Suspense fallback={<PageFallback />}><TrialSignupPage /></Suspense>} />
+          <Route path="/auth" element={<Suspense fallback={null}><AuthPage user={user} onLogin={(u) => setUser(u)} /><VoiceAgentLauncher agentId={import.meta.env.VITE_ELEVENLABS_AUTH_AGENT_ID} /></Suspense>} />
+          <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPasswordPage /></Suspense>} />
+          <Route path="/auth/confirm" element={<Suspense fallback={<PageFallback />}><ConfirmEmailPage /></Suspense>} />
 
           <Route
             path="/onboarding"
             element={
               user?.role === UserRole.CLIENT ?
-              <OnboardingPage user={user!} refreshProfile={refreshProfile} /> :
+              <Suspense fallback={<PageFallback />}><OnboardingPage user={user!} refreshProfile={refreshProfile} /></Suspense> :
               <Navigate to="/auth" state={{ from: location }} />
             }
           />
 
+          {/* Mobile portal — layout has ErrorBoundary + Suspense around Outlet */}
+          <Route
+            path="/portal/mobile"
+            element={
+              user?.role === UserRole.CLIENT ? (
+                !user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete') ?
+                <Navigate to="/onboarding" replace /> :
+                <MobileAppShell user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} />
+              ) :
+              <Navigate to="/auth" state={{ from: location }} />
+            }
+          >
+            <Route index element={<MobileHome />} />
+            <Route path="leads" element={<MobileLeads />} />
+            <Route path="leads/:leadId" element={<MobileLeadDetail />} />
+            <Route path="campaigns" element={<MobileCampaigns />} />
+            <Route path="activity" element={<MobileActivity />} />
+            <Route path="more" element={<MobileMore />} />
+          </Route>
+
+          {/* Desktop portal — layout has ErrorBoundary + Suspense around Outlet */}
           <Route
             path="/portal"
             element={
               user?.role === UserRole.CLIENT ? (
                 !user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete') ?
                 <Navigate to="/onboarding" replace /> :
+                isMobile ? <Navigate to="/portal/mobile" replace /> :
                 <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} />
               ) :
               <Navigate to="/auth" state={{ from: location }} />
             }
           >
-            <Route index element={<ErrorBoundary><ClientDashboard user={user!} /></ErrorBoundary>} />
-            <Route path="leads" element={<ErrorBoundary><LeadManagement /></ErrorBoundary>} />
-            <Route path="leads/apollo" element={<ErrorBoundary><ApolloSearchPage /></ErrorBoundary>} />
-            <Route path="leads/:leadId" element={<ErrorBoundary><LeadProfile /></ErrorBoundary>} />
-            <Route path="content" element={<ErrorBoundary><ContentGen /></ErrorBoundary>} />
-            <Route path="strategy" element={<ErrorBoundary><TeamHub /></ErrorBoundary>} />
-            <Route path="blog" element={<ErrorBoundary><BlogDrafts /></ErrorBoundary>} />
-            <Route path="analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
-            <Route path="automation" element={<ErrorBoundary><AutomationPage /></ErrorBoundary>} />
-            <Route path="billing" element={<ErrorBoundary><BillingPage /></ErrorBoundary>} />
-            <Route path="help" element={<ErrorBoundary><HelpCenterPage /></ErrorBoundary>} />
-            <Route path="manual" element={<ErrorBoundary><UserManualPage /></ErrorBoundary>} />
-            <Route path="settings" element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
-            <Route path="intelligence" element={<ErrorBoundary><LeadIntelligence /></ErrorBoundary>} />
-            <Route path="ai" element={<ErrorBoundary><AICommandCenter /></ErrorBoundary>} />
-            <Route path="content-studio" element={<ErrorBoundary><ContentStudio /></ErrorBoundary>} />
-            <Route path="mobile" element={<ErrorBoundary><MobileDashboard /></ErrorBoundary>} />
-            <Route path="model-training" element={<ErrorBoundary><ModelTraining /></ErrorBoundary>} />
-            <Route path="integrations" element={<ErrorBoundary><IntegrationHub /></ErrorBoundary>} />
-            <Route path="invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
-            <Route path="social-scheduler" element={<ErrorBoundary><SocialScheduler /></ErrorBoundary>} />
-            <Route path="team-hub" element={<ErrorBoundary><TeamHubBoards /></ErrorBoundary>} />
-            <Route path="sender-accounts" element={<ErrorBoundary><SenderAccountsPage /></ErrorBoundary>} />
+            <Route index element={<ClientDashboard user={user!} />} />
+            <Route path="leads" element={<LeadManagement />} />
+            <Route path="leads/apollo" element={<ApolloSearchPage />} />
+            <Route path="leads/:leadId" element={<LeadProfile />} />
+            <Route path="content" element={<ContentGen />} />
+            <Route path="strategy" element={<TeamHub />} />
+            <Route path="blog" element={<BlogDrafts />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="automation" element={<AutomationPage />} />
+            <Route path="billing" element={<BillingPage />} />
+            <Route path="help" element={<HelpCenterPage />} />
+            <Route path="manual" element={<UserManualPage />} />
+            <Route path="settings" element={<ProfilePage />} />
+            <Route path="intelligence" element={<LeadIntelligence />} />
+            <Route path="ai" element={<AICommandCenter />} />
+            <Route path="content-studio" element={<ContentStudio />} />
+            <Route path="model-training" element={<ModelTraining />} />
+            <Route path="integrations" element={<IntegrationHub />} />
+            <Route path="invoices" element={<InvoicesPage />} />
+            <Route path="social-scheduler" element={<SocialScheduler />} />
+            <Route path="team-hub" element={<TeamHubBoards />} />
+            <Route path="sender-accounts" element={<SenderAccountsPage />} />
           </Route>
 
+          {/* Admin — layout has ErrorBoundary + Suspense around Outlet */}
           <Route
             path="/admin"
             element={
@@ -233,28 +271,27 @@ const App: React.FC = () => {
               <Navigate to="/auth" state={{ from: location }} />
             }
           >
-            <Route index element={<ErrorBoundary><AdminDashboard /></ErrorBoundary>} />
-            <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
-            <Route path="ai" element={<ErrorBoundary><AIOperations /></ErrorBoundary>} />
-            <Route path="prompts" element={<ErrorBoundary><DnaRegistryPage /></ErrorBoundary>} />
-            <Route path="prompts/:id" element={<ErrorBoundary><DnaEditorPage /></ErrorBoundary>} />
-            <Route path="leads" element={<ErrorBoundary><LeadsManagement /></ErrorBoundary>} />
-            <Route path="blog" element={<ErrorBoundary><BlogManager /></ErrorBoundary>} />
-            <Route path="health" element={<ErrorBoundary><SystemHealth /></ErrorBoundary>} />
-            <Route path="audit" element={<ErrorBoundary><AuditLogs /></ErrorBoundary>} />
-            <Route path="settings" element={<ErrorBoundary><AdminSettings /></ErrorBoundary>} />
-            <Route path="pricing" element={<ErrorBoundary><PricingManagement /></ErrorBoundary>} />
-            <Route path="console" element={<ErrorBoundary><AdminConsolePage /></ErrorBoundary>} />
-            <Route path="ops" element={<ErrorBoundary><AdminOpsCenter /></ErrorBoundary>} />
-            <Route path="command" element={<ErrorBoundary><AdminCommandCenter /></ErrorBoundary>} />
+            <Route index element={<AdminDashboard />} />
+            <Route path="users" element={<UserManagement />} />
+            <Route path="ai" element={<AIOperations />} />
+            <Route path="prompts" element={<DnaRegistryPage />} />
+            <Route path="prompts/:id" element={<DnaEditorPage />} />
+            <Route path="leads" element={<LeadsManagement />} />
+            <Route path="blog" element={<BlogManager />} />
+            <Route path="health" element={<SystemHealth />} />
+            <Route path="audit" element={<AuditLogs />} />
+            <Route path="settings" element={<AdminSettings />} />
+            <Route path="pricing" element={<PricingManagement />} />
+            <Route path="console" element={<AdminConsolePage />} />
+            <Route path="ops" element={<AdminOpsCenter />} />
+            <Route path="command" element={<AdminCommandCenter />} />
             {user?.is_super_admin && (
-              <Route path="support" element={<ErrorBoundary><SupportConsole /></ErrorBoundary>} />
+              <Route path="support" element={<SupportConsole />} />
             )}
           </Route>
 
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
-      </Suspense>
     </ErrorBoundary>
     {import.meta.env.DEV && (
       <Suspense fallback={null}><PerfPanel /></Suspense>

@@ -45,12 +45,32 @@ type AuthAction =
   | { type: 'EXTERNAL_USER_UPDATE'; user: User }
   | { type: 'TOKEN_REFRESHED'; userId: string };
 
-const INITIAL_STATE: AuthMachineState = {
-  phase: 'idle',
-  user: null,
-  error: null,
-  failedPhase: null,
-};
+const AUTH_CACHE_KEY = 'scaliyo_auth_cache';
+
+/** Try to hydrate from sessionStorage for instant shell render on hard refresh. */
+function getInitialState(): AuthMachineState {
+  try {
+    const raw = sessionStorage.getItem(AUTH_CACHE_KEY);
+    if (raw) {
+      const cached = JSON.parse(raw) as { user: User };
+      if (cached.user?.id) {
+        return { phase: 'ready', user: cached.user, error: null, failedPhase: null };
+      }
+    }
+  } catch { /* corrupted cache — ignore */ }
+  return { phase: 'idle', user: null, error: null, failedPhase: null };
+}
+
+/** Persist user to sessionStorage so next hard-refresh is instant. */
+function cacheAuthState(user: User | null) {
+  try {
+    if (user) {
+      sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({ user }));
+    } else {
+      sessionStorage.removeItem(AUTH_CACHE_KEY);
+    }
+  } catch { /* quota exceeded — ignore */ }
+}
 
 // ── Reducer ──────────────────────────────────────────────────
 
@@ -89,10 +109,15 @@ function authReducer(state: AuthMachineState, action: AuthAction): AuthMachineSt
       return { ...state, phase: 'checking_session', error: null, failedPhase: null };
 
     case 'LOGOUT':
-      return { ...INITIAL_STATE, phase: 'ready' };
+      cacheAuthState(null);
+      return { phase: 'ready', user: null, error: null, failedPhase: null };
 
     case 'EXTERNAL_USER_UPDATE':
-      // Used by AuthPage's onLogin callback
+      // If already ready (e.g. background refresh after hydration), stay ready
+      if (state.phase === 'ready') {
+        return { ...state, user: action.user };
+      }
+      // Otherwise (e.g. AuthPage's onLogin callback), proceed to workspace check
       return { ...state, phase: 'checking_workspace', user: action.user };
 
     case 'TOKEN_REFRESHED':
@@ -108,7 +133,8 @@ function authReducer(state: AuthMachineState, action: AuthAction): AuthMachineSt
 // ── Hook ─────────────────────────────────────────────────────
 
 export function useAuthMachine() {
-  const [state, dispatch] = useReducer(authReducer, INITIAL_STATE);
+  const [state, dispatch] = useReducer(authReducer, undefined, getInitialState);
+  const hydratedRef = useRef(state.phase === 'ready' && state.user !== null);
   const navigate = useNavigate();
   const loggingOutRef = useRef(false);
   const initCycleRef = useRef(0);
@@ -173,7 +199,12 @@ export function useAuthMachine() {
   useEffect(() => {
     const cycle = ++initCycleRef.current;
 
-    dispatch({ type: 'INIT' });
+    const isHydrated = hydratedRef.current;
+
+    // If not hydrated from cache, show loading phases as before
+    if (!isHydrated) {
+      dispatch({ type: 'INIT' });
+    }
 
     const checkSession = async () => {
       if (cycle !== initCycleRef.current) return; // StrictMode guard
@@ -184,18 +215,34 @@ export function useAuthMachine() {
 
         if (session) {
           sessionUserIdRef.current = session.user.id;
-          dispatch({ type: 'SESSION_FOUND', userId: session.user.id });
+          if (isHydrated) {
+            // Silently refresh profile in background — shell already visible
+            const profile = await fetchProfile(session.user.id);
+            if (cycle !== initCycleRef.current) return;
+            if (profile) {
+              cacheAuthState(profile);
+              dispatch({ type: 'EXTERNAL_USER_UPDATE', user: profile });
+            }
+            // If profile fetch fails, keep showing cached user — non-fatal
+          } else {
+            dispatch({ type: 'SESSION_FOUND', userId: session.user.id });
+          }
         } else {
           sessionUserIdRef.current = null;
+          cacheAuthState(null);
           dispatch({ type: 'SESSION_EMPTY' });
         }
       } catch {
         sessionUserIdRef.current = null;
-        dispatch({ type: 'SESSION_EMPTY' });
+        if (!isHydrated) {
+          dispatch({ type: 'SESSION_EMPTY' });
+        }
+        // If hydrated and session check fails (network error), keep cached state
       }
     };
 
     checkSession();
+    hydratedRef.current = false; // Only use hydration on first mount
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cycle !== initCycleRef.current) return;
@@ -232,6 +279,15 @@ export function useAuthMachine() {
       subscription.unsubscribe();
     };
   }, [fetchProfile, navigate, checkWorkspace]);
+
+  // ── Cache auth state for instant hydration on hard refresh ──
+  useEffect(() => {
+    if (state.phase === 'ready') {
+      cacheAuthState(state.user);
+    } else if (state.phase === 'error') {
+      cacheAuthState(null);
+    }
+  }, [state.phase, state.user]);
 
   // ── Public API ──
 

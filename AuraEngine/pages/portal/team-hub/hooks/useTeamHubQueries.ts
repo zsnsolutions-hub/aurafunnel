@@ -26,6 +26,7 @@ export function useFlowsWithStats(userId: string) {
     queryKey: teamHubKeys.dashboard(userId),
     queryFn: () => api.fetchFlowsWithStats(userId),
     staleTime: 60_000,
+    enabled: !!userId,
   });
 }
 
@@ -34,6 +35,7 @@ export function useRecentActivity(userId: string) {
     queryKey: teamHubKeys.activity(userId),
     queryFn: () => api.fetchRecentActivity(userId),
     staleTime: 30_000,
+    enabled: !!userId,
   });
 }
 

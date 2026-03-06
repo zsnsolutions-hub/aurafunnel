@@ -46,7 +46,7 @@ const BoardActivitySidebar: React.FC<BoardActivitySidebarProps> = ({ flowId, lan
     setLoading(true);
     fetchFlowActivity(flowId, 30)
       .then(data => { if (!cancelled) setActivity(data); })
-      .catch(() => {})
+      .catch(e => console.warn('[TeamHub] activity load failed:', e))
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [flowId, open]);

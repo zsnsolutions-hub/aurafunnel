@@ -80,11 +80,12 @@ export const SupportProvider: React.FC<Props> = ({ user, children }) => {
           scheduleExpiry(session);
           getTargetProfile(session.target_user_id).then((p) => {
             if (p) setViewingAsUser(p);
-          }).catch(() => {});
+          }).catch(e => console.warn('[Support] profile load failed:', e));
         }
       })
-      .catch(() => {
-        // Table may not exist yet or RLS blocks — ignore silently
+      .catch(e => {
+        // Table may not exist yet or RLS blocks
+        console.warn('[Support] session check failed:', e);
       });
     return () => {
       if (expiryTimer.current) clearTimeout(expiryTimer.current);

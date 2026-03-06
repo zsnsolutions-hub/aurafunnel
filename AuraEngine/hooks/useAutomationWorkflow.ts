@@ -156,7 +156,7 @@ export function useAutomationWorkflow(userId: string | undefined) {
   }, [userId]);
 
   useEffect(() => {
-    fetchWebhooksFromDb().then(setAvailableWebhooks).catch(() => {});
+    fetchWebhooksFromDb().then(setAvailableWebhooks).catch(e => console.warn('[Automation] webhook load failed:', e));
   }, []);
 
   useEffect(() => {
@@ -164,7 +164,7 @@ export function useAutomationWorkflow(userId: string | undefined) {
     let cancelled = false;
     fetchBatchEmailSummary(leads.map(l => l.id)).then(map => {
       if (!cancelled) setEmailSummaryMap(map);
-    }).catch(() => {});
+    }).catch(e => console.warn('[Automation] email summary load failed:', e));
     return () => { cancelled = true; };
   }, [leads]);
 
@@ -215,7 +215,7 @@ export function useAutomationWorkflow(userId: string | undefined) {
     setCampaignHistoryLoading(true);
     fetchCampaignHistory().then(data => {
       if (!cancelled) { setCampaignHistory(data); setCampaignHistoryLoading(false); }
-    }).catch(() => { if (!cancelled) setCampaignHistoryLoading(false); });
+    }).catch(e => { console.warn('[Automation] campaign history load failed:', e); if (!cancelled) setCampaignHistoryLoading(false); });
     return () => { cancelled = true; };
   }, [panelVisibility.campaignsPanel]);
 
@@ -225,7 +225,7 @@ export function useAutomationWorkflow(userId: string | undefined) {
     setCampaignRecipientsLoading(true);
     fetchCampaignRecipients(selectedCampaignId).then(data => {
       if (!cancelled) { setCampaignRecipients(data); setCampaignRecipientsLoading(false); }
-    }).catch(() => { if (!cancelled) setCampaignRecipientsLoading(false); });
+    }).catch(e => { console.warn('[Automation] campaign recipients load failed:', e); if (!cancelled) setCampaignRecipientsLoading(false); });
     return () => { cancelled = true; };
   }, [selectedCampaignId]);
 
@@ -601,10 +601,10 @@ export function useAutomationWorkflow(userId: string | undefined) {
 
       refreshExecutionLog();
       if (panelVisibility.campaignsPanel) {
-        fetchCampaignHistory().then(setCampaignHistory).catch(() => {});
+        fetchCampaignHistory().then(setCampaignHistory).catch(e => console.warn('[Automation] campaign refresh failed:', e));
       }
       if (leads.length > 0) {
-        fetchBatchEmailSummary(leads.map(l => l.id)).then(setEmailSummaryMap).catch(() => {});
+        fetchBatchEmailSummary(leads.map(l => l.id)).then(setEmailSummaryMap).catch(e => console.warn('[Automation] email summary refresh failed:', e));
       }
     } catch (err) {
       setTestResults({

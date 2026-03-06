@@ -19,7 +19,7 @@ const DnaVersionHistory: React.FC<Props> = ({ dnaId, currentVersion, onRestore }
     setLoading(true);
     getDnaVersions(dnaId)
       .then(data => { if (!cancelled) setVersions(data); })
-      .catch(() => {})
+      .catch(e => console.warn('[DNA] version history load failed:', e))
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [dnaId, currentVersion]);

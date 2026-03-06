@@ -41,13 +41,13 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
     loading: true,
   });
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const [error, setError] = useState(false);
 
   // ─── Fetch briefing data from Supabase ───
-  useEffect(() => {
-    if (!open) return;
-
-    const fetchBriefing = async () => {
-      try {
+  const fetchBriefing = useCallback(async () => {
+    setBriefing(prev => ({ ...prev, loading: true }));
+    setError(false);
+    try {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
@@ -113,13 +113,16 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
           recommendations: recs.slice(0, 4),
           loading: false,
         });
-      } catch {
+      } catch (e) {
+        console.warn('[DailyBriefing] fetch failed:', e);
+        setError(true);
         setBriefing(prev => ({ ...prev, loading: false }));
       }
-    };
+  }, [user.id]);
 
-    fetchBriefing();
-  }, [open, user.id]);
+  useEffect(() => {
+    if (open) fetchBriefing();
+  }, [open, fetchBriefing]);
 
   const handleDismissRec = useCallback((idx: number) => {
     setDismissed(prev => new Set([...prev, idx]));
@@ -163,6 +166,16 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
         {briefing.loading ? (
           <div className="px-8 py-12 flex items-center justify-center">
             <div className="w-8 h-8 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+          </div>
+        ) : error ? (
+          <div className="px-8 py-12 text-center">
+            <p className="text-sm text-slate-500 mb-3">Failed to load briefing data</p>
+            <button
+              onClick={fetchBriefing}
+              className="px-4 py-2 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-xl hover:bg-indigo-50 transition-all"
+            >
+              Try Again
+            </button>
           </div>
         ) : (
           <div className="px-8 py-6 space-y-5 max-h-[55vh] overflow-y-auto">

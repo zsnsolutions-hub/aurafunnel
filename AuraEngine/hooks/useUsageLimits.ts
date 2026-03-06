@@ -31,12 +31,12 @@ export function useUsageLimits(
   // Fetch threshold warnings on mount / when ids change
   useEffect(() => {
     if (!workspaceId || !planName) return;
-    checkThreshold(workspaceId, planName).then(setWarnings).catch(() => {});
+    checkThreshold(workspaceId, planName).then(setWarnings).catch(e => console.warn('[UsageLimits] threshold check failed:', e));
   }, [workspaceId, planName]);
 
   const refreshWarnings = useCallback(() => {
     if (!workspaceId || !planName) return;
-    checkThreshold(workspaceId, planName).then(setWarnings).catch(() => {});
+    checkThreshold(workspaceId, planName).then(setWarnings).catch(e => console.warn('[UsageLimits] threshold refresh failed:', e));
   }, [workspaceId, planName]);
 
   const checkEmail = useCallback(

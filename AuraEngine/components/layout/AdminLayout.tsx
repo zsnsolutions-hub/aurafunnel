@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import {
   BarChart3, Users, Sparkles, Zap, Target, PenSquare,
@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { User } from '../../types';
 import { BRAND } from '../../lib/brand';
+import ErrorBoundary from '../ErrorBoundary';
+import PortalContentSkeleton from '../skeletons/PortalContentSkeleton';
 import { AppShell } from './AppShell';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -100,7 +102,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
         </Topbar>
       }
     >
-      <Outlet />
+      <ErrorBoundary>
+        <Suspense fallback={<PortalContentSkeleton />}>
+          <Outlet />
+        </Suspense>
+      </ErrorBoundary>
     </AppShell>
     <ActivityPanel />
     </>

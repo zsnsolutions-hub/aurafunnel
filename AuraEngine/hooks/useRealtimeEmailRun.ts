@@ -45,7 +45,7 @@ export function useRealtimeEmailRun({ runId, enabled = true }: UseRealtimeEmailR
 
       // Trigger worker if still processing
       if (progress.run?.status === 'processing') {
-        triggerWriterWorker(runId).catch(() => {});
+        triggerWriterWorker(runId).catch(e => console.warn('[EmailRun] worker trigger failed:', e));
       }
     } catch {
       // Silent

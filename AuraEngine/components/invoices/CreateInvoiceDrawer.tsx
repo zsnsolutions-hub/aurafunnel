@@ -67,7 +67,7 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
         .limit(500);
       setLeads((data || []).filter((l: any) => l.email));
     })();
-    fetchPackages().then(setPackages).catch(() => {});
+    fetchPackages().then(setPackages).catch(e => console.warn('[Invoices] package load failed:', e));
   }, [open]);
 
   // Reset form when drawer opens

@@ -1,6 +1,9 @@
 // ── Centralized brand configuration ──
 // Single source of truth for app identity, logos, and brand constants.
 
+declare const __BUILD_SHA__: string;
+declare const __BUILD_TIME__: string;
+
 export const BRAND = {
   name: 'Scaliyo',
   tagline: 'AI-Powered B2B Growth Intelligence',
@@ -20,4 +23,8 @@ export const BRAND = {
   logoCollapsedSize: { width: 32, height: 32 },
 
   version: 'v10.0.0',
+
+  // Build stamp — injected at build time by Vite
+  buildSha: typeof __BUILD_SHA__ !== 'undefined' ? __BUILD_SHA__ : 'dev',
+  buildTime: typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '',
 } as const;

@@ -80,7 +80,7 @@ export function useLeadCounts(userId: string | undefined) {
 }
 
 /** Fetches all leads for admin views (no client filter) */
-export function useAllLeads(limit?: number) {
+export function useAllLeads(limit?: number, opts?: { enabled?: boolean }) {
   return useQuery<Lead[]>({
     queryKey: ['allLeads', limit],
     queryFn: async () => {
@@ -91,5 +91,6 @@ export function useAllLeads(limit?: number) {
       return normalizeLeads(data || []);
     },
     staleTime: 5 * 60 * 1000, // 5 min — admin view tolerates slightly stale data
+    enabled: opts?.enabled ?? true,
   });
 }

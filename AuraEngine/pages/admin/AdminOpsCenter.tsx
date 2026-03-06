@@ -1533,7 +1533,7 @@ function WorkspaceTab({
   const p = snapshot.profile;
 
   useEffect(() => {
-    getPlans().then(setAvailablePlans).catch(() => {});
+    getPlans().then(setAvailablePlans).catch(e => console.warn('[AdminOps] plan load failed:', e));
   }, []);
 
   const currentPlan = String(

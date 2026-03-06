@@ -36,6 +36,8 @@ jobs:
           VITE_ELEVENLABS_AUTH_AGENT_ID: ${{ secrets.VITE_ELEVENLABS_AUTH_AGENT_ID }}
           VITE_ELEVENLABS_PORTAL_AGENT_ID: ${{ secrets.VITE_ELEVENLABS_PORTAL_AGENT_ID }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_BUILD_TIME: ${{ github.event.head_commit.timestamp }}
         run: npm run build
 
       - name: Deploy (zero-downtime symlink swap)

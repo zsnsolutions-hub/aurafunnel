@@ -28,7 +28,7 @@ const UserManagement: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
-    getPlans().then(setAvailablePlans).catch(() => {});
+    getPlans().then(setAvailablePlans).catch(e => console.warn('[UserMgmt] plan load failed:', e));
   }, []);
 
   const fetchUsers = async () => {

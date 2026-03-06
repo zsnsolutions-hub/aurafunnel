@@ -44,12 +44,19 @@ export function useRealtimeSubscription(config: RealtimeSubscriptionConfig) {
     enabled = true,
   } = config;
 
+  // Serialize events for stable dependency comparison — inline array literals
+  // like `events: ['INSERT', 'UPDATE']` create a new reference every render,
+  // which would cause the useEffect to run every render (infinite loop).
+  const eventsKey = events.join(',');
+
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [shouldFallback, setShouldFallback] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const onPayloadRef = useRef(onPayload);
   onPayloadRef.current = onPayload;
+  const eventsRef = useRef(events);
+  eventsRef.current = events;
 
   const cleanup = useCallback(() => {
     if (disconnectTimerRef.current) {
@@ -76,7 +83,7 @@ export function useRealtimeSubscription(config: RealtimeSubscriptionConfig) {
     // Build channel with postgres_changes listeners
     let channel = supabase.channel(uniqueName);
 
-    for (const event of events) {
+    for (const event of eventsRef.current) {
       const opts: Record<string, string> = {
         event,
         schema,
@@ -125,7 +132,9 @@ export function useRealtimeSubscription(config: RealtimeSubscriptionConfig) {
     channelRef.current = channel;
 
     return cleanup;
-  }, [channelName, table, filter, schema, enabled, cleanup, events]);
+    // eventsKey is a serialized string of the events array — avoids reference instability
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelName, table, filter, schema, enabled, cleanup, eventsKey]);
 
   return { connectionStatus, shouldFallback };
 }

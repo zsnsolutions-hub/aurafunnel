@@ -1,9 +1,14 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
+import type { QueryClient } from '@tanstack/react-query';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
+  /** Optional QueryClient — "Try Again" will invalidate all queries before re-rendering */
+  queryClient?: QueryClient;
+  /** Optional callback run before re-rendering (e.g. re-bootstrap auth) */
+  onReset?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -22,11 +27,23 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+    console.error(
+      '[ErrorBoundary] Caught error:', error.message,
+      '\n  Stack:', error.stack,
+      '\n  Component:', errorInfo.componentStack,
+    );
     Sentry.captureException(error, { extra: { componentStack: errorInfo.componentStack } });
   }
 
   handleReset = (): void => {
+    // Invalidate all React Query caches so stale data doesn't re-trigger the crash
+    if (this.props.queryClient) {
+      this.props.queryClient.invalidateQueries();
+    }
+    // Run custom reset callback (e.g. re-bootstrap auth)
+    if (this.props.onReset) {
+      this.props.onReset();
+    }
     this.setState({ hasError: false, error: null });
   };
 
@@ -53,13 +70,16 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               Something went wrong
             </h2>
             <p className="text-sm text-slate-500 mt-1 max-w-xs mx-auto">
-              An unexpected error occurred. Please try again or refresh the page.
+              An unexpected error occurred. Click retry to recover.
             </p>
             {isDev && this.state.error && (
               <div className="mt-4 rounded-xl bg-slate-50 border border-slate-200 p-3 text-left">
-                <p className="text-xs font-mono text-slate-600 break-words">
+                <p className="text-xs font-mono text-red-600 break-words font-semibold mb-1">
                   {this.state.error.message}
                 </p>
+                <pre className="text-[10px] font-mono text-slate-500 whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                  {this.state.error.stack}
+                </pre>
               </div>
             )}
             <div className="mt-6">
