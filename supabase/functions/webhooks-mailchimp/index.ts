@@ -3,11 +3,41 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const MAILCHIMP_WEBHOOK_SECRET = Deno.env.get("MAILCHIMP_WEBHOOK_SECRET") ?? "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "content-type",
 };
+
+// Verify Mailchimp webhook signature (HMAC-SHA256)
+async function verifyMailchimpSignature(
+  payload: string,
+  sigHeader: string | null,
+  secret: string
+): Promise<boolean> {
+  if (!secret || !sigHeader) return !secret; // skip only if secret not configured
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const signature = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(payload)
+    );
+    const computed = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return computed === sigHeader;
+  } catch {
+    return false;
+  }
+}
 
 // Map Mailchimp webhook types to our event types
 const EVENT_MAP: Record<string, string> = {
@@ -36,6 +66,20 @@ serve(async (req) => {
       status: 405,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  // Verify webhook signature when secret is configured
+  if (MAILCHIMP_WEBHOOK_SECRET) {
+    const rawBody = await req.clone().text();
+    const sigHeader = req.headers.get("x-mailchimp-signature");
+    const valid = await verifyMailchimpSignature(rawBody, sigHeader, MAILCHIMP_WEBHOOK_SECRET);
+    if (!valid) {
+      console.error("Invalid Mailchimp webhook signature");
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   }
 
   // Always return 200 to prevent Mailchimp retry storms

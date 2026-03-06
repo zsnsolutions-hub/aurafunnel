@@ -1,9 +1,11 @@
-import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo, lazy } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
-import CommandPalette from '../dashboard/CommandPalette';
-import DailyBriefing from '../dashboard/DailyBriefing';
+import ErrorBoundary from '../ErrorBoundary';
+const CommandPalette = lazy(() => import('../dashboard/CommandPalette'));
+
+const DailyBriefing = lazy(() => import('../dashboard/DailyBriefing'));
 import { GuideMenuButton } from '../guide/GuideProvider';
 import { AppShell } from './AppShell';
 import { Sidebar, SidebarNavItem } from './Sidebar';
@@ -14,7 +16,7 @@ import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
 import { NAV_CONFIG, NavConfigItem } from '../../lib/navConfig';
 import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
-import { ActivityPanel } from '../activity/ActivityPanel';
+const ActivityPanel = lazy(() => import('../activity/ActivityPanel').then(m => ({ default: m.ActivityPanel })));
 import VoiceAgentLauncher from '../voice/VoiceAgentLauncher';
 
 interface ClientLayoutProps {
@@ -278,16 +280,31 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ user, onLogout, refreshProf
         <Outlet context={{ user, refreshProfile }} />
       </AppShell>
 
-      {/* Global Overlays */}
-      <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
-      <DailyBriefing user={user} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
-      <ActivityPanel />
-      <Suspense fallback={null}>
-        <VoiceAgentLauncher
-          agentId={import.meta.env.VITE_ELEVENLABS_PORTAL_AGENT_ID}
-          user={user}
-        />
-      </Suspense>
+      {/* Global Overlays — each wrapped in its own ErrorBoundary so a crash
+           in any overlay cannot take down the entire portal layout. */}
+      <ErrorBoundary fallback={null}>
+        <Suspense fallback={null}>
+          {commandPaletteOpen && <CommandPalette user={user} open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />}
+        </Suspense>
+      </ErrorBoundary>
+      <ErrorBoundary fallback={null}>
+        <Suspense fallback={null}>
+          {notificationsOpen && <DailyBriefing user={user} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />}
+        </Suspense>
+      </ErrorBoundary>
+      <ErrorBoundary fallback={null}>
+        <Suspense fallback={null}>
+          <ActivityPanel />
+        </Suspense>
+      </ErrorBoundary>
+      <ErrorBoundary fallback={null}>
+        <Suspense fallback={null}>
+          <VoiceAgentLauncher
+            agentId={import.meta.env.VITE_ELEVENLABS_PORTAL_AGENT_ID}
+            user={user}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
 };

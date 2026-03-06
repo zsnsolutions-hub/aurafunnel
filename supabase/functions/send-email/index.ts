@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -12,11 +13,20 @@ const ENV_SMTP_PORT = parseInt(Deno.env.get("SMTP_PORT") ?? "587");
 const ENV_SMTP_USER = Deno.env.get("SMTP_USER") ?? "";
 const ENV_SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// In-memory rate limiting: 30 emails/min per user
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 60_000;
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(userId) ?? [];
+  const recent = timestamps.filter((t) => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT) return false;
+  recent.push(now);
+  rateLimitMap.set(userId, recent);
+  return true;
+}
 
 // ── Provider credentials (per-user DB config or env fallback) ──
 interface ProviderCreds {
@@ -286,9 +296,10 @@ async function sendViaSmtp(
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const corsResp = handleCors(req);
+  if (corsResp) return corsResp;
+
+  const corsHeaders = getCorsHeaders(req);
 
   if (req.method !== "POST") {
     return new Response(
@@ -382,6 +393,17 @@ serve(async (req) => {
         track_opens = true,
         track_clicks = true,
       } = body;
+    }
+
+    // Rate limit: 30 emails/min per user
+    if (!checkRateLimit(userId)) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded. Please wait before sending more emails." }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     if (!to_email || !subject || !html_body) {

@@ -1,17 +1,27 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
+import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const MODEL_NAME = "gemini-3-flash-preview";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// In-memory rate limiting: 20 requests/min per user
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MS = 60_000;
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(userId) ?? [];
+  const recent = timestamps.filter((t) => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT) return false;
+  recent.push(now);
+  rateLimitMap.set(userId, recent);
+  return true;
+}
 
 const MODE_SYSTEM_INSTRUCTIONS: Record<string, string> = {
   analyst:
@@ -25,9 +35,10 @@ const MODE_SYSTEM_INSTRUCTIONS: Record<string, string> = {
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const corsResp = handleCors(req);
+  if (corsResp) return corsResp;
+
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     // ── Auth ──
@@ -52,6 +63,14 @@ serve(async (req) => {
       );
     }
 
+    // Rate limit: 20 requests/min per user
+    if (!checkRateLimit(user.id)) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded. Please wait a moment." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const body = await req.json();
     const {
       mode = "analyst",
@@ -73,9 +92,23 @@ serve(async (req) => {
       messageId?: string;
     };
 
-    if (!prompt) {
+    if (!prompt || typeof prompt !== "string") {
       return new Response(
         JSON.stringify({ error: "Missing prompt" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Input length guardrails
+    if (prompt.length > 20_000) {
+      return new Response(
+        JSON.stringify({ error: "Prompt too long (max 20,000 characters)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (leadContext.length > 50_000 || pipelineStats.length > 10_000) {
+      return new Response(
+        JSON.stringify({ error: "Context data too large" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
