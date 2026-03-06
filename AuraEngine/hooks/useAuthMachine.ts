@@ -135,7 +135,9 @@ function authReducer(state: AuthMachineState, action: AuthAction): AuthMachineSt
 export function useAuthMachine() {
   const [state, dispatch] = useReducer(authReducer, undefined, getInitialState);
   const hydratedRef = useRef(state.phase === 'ready' && state.user !== null);
-  const navigate = useNavigate();
+  const navigateRaw = useNavigate();
+  const navigateRef = useRef(navigateRaw);
+  navigateRef.current = navigateRaw;
   const loggingOutRef = useRef(false);
   const initCycleRef = useRef(0);
   const sessionUserIdRef = useRef<string | null>(null);
@@ -254,7 +256,7 @@ export function useAuthMachine() {
       }
 
       if (event === 'PASSWORD_RECOVERY') {
-        navigate('/reset-password');
+        navigateRef.current('/reset-password');
         return;
       }
 
@@ -278,7 +280,7 @@ export function useAuthMachine() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [fetchProfile, navigate, checkWorkspace]);
+  }, [fetchProfile, checkWorkspace]);
 
   // ── Cache auth state for instant hydration on hard refresh ──
   useEffect(() => {
@@ -300,8 +302,8 @@ export function useAuthMachine() {
     dispatch({ type: 'LOGOUT' });
     await supabase.auth.signOut({ scope: 'global' });
     loggingOutRef.current = false;
-    navigate('/');
-  }, [navigate]);
+    navigateRef.current('/');
+  }, []);
 
   const setUser = useCallback((user: User) => {
     dispatch({ type: 'EXTERNAL_USER_UPDATE', user });
