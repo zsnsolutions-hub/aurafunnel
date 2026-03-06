@@ -46,7 +46,40 @@
 </head>
 <body class="bg-[#F8FAFC] text-slate-900">
     <div id="root"></div>
+    <!-- DEBUG: Crash detector — lives OUTSIDE React's root.
+         If this bar disappears during nav, the browser is doing a full page reload.
+         If it stays but shows errors, React is crashing. -->
+    <div id="crash-detector" style="position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#111;color:#0f0;font:11px/1.6 monospace;padding:2px 8px;display:flex;gap:12px">
+      <span id="cd-time"></span>
+      <span id="cd-navcount">navs: 0</span>
+      <span id="cd-errors" style="color:#f55"></span>
+    </div>
     <script>
+        // Crash detector — outside React
+        (function() {
+          var t0 = Date.now();
+          var navCount = 0;
+          document.getElementById('cd-time').textContent = 'mounted: ' + new Date().toLocaleTimeString();
+
+          // Count hash navigations (React Router HashRouter)
+          window.addEventListener('hashchange', function() {
+            navCount++;
+            document.getElementById('cd-navcount').textContent = 'navs: ' + navCount;
+          });
+
+          // Catch uncaught JS errors
+          window.addEventListener('error', function(e) {
+            var el = document.getElementById('cd-errors');
+            el.textContent = 'ERR: ' + (e.message || e).toString().slice(0, 120);
+          });
+
+          // Catch unhandled promise rejections
+          window.addEventListener('unhandledrejection', function(e) {
+            var el = document.getElementById('cd-errors');
+            el.textContent = 'REJ: ' + (e.reason ? (e.reason.message || e.reason) : 'unknown').toString().slice(0, 120);
+          });
+        })();
+
         // Unregister any stale service workers to prevent caching issues
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(regs) {
