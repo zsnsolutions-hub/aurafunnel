@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { UserRole } from './types';
+import { UserRole, User } from './types';
 import ErrorBoundary from './components/ErrorBoundary';
 import { GuideProvider } from './components/guide/GuideProvider';
 import { SupportProvider } from './components/support/SupportProvider';
@@ -90,6 +90,41 @@ const AdminOpsCenter = lazy(() => import('./pages/admin/AdminOpsCenter'));
 const AdminCommandCenter = lazy(() => import('./pages/admin/CommandCenter/AdminCommandCenterPage'));
 const AdminConsolePage = lazy(() => import('./pages/admin/console/AdminConsolePage'));
 
+// ─── Route guard components ───
+// These isolate useLocation / useIsMobile so App never re-renders on navigation.
+
+/** Redirects to /auth with the current location in state. Only mounts for unauthenticated users. */
+function AuthRedirect() {
+  const location = useLocation();
+  return <Navigate to="/auth" state={{ from: location }} />;
+}
+
+/** Portal entry guard — checks onboarding + mobile, then renders ClientLayout. */
+function PortalGuard({ user, onLogout, refreshProfile }: { user: User; onLogout: () => void; refreshProfile: () => Promise<void> }) {
+  const isMobile = useIsMobile();
+  if (!user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete')) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  if (isMobile) {
+    return <Navigate to="/portal/mobile" replace />;
+  }
+  return <ClientLayout user={user} onLogout={onLogout} refreshProfile={refreshProfile} />;
+}
+
+/** Mobile portal entry guard — checks onboarding, then renders MobileAppShell. */
+function MobilePortalGuard({ user, onLogout, refreshProfile }: { user: User; onLogout: () => void; refreshProfile: () => Promise<void> }) {
+  if (!user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete')) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return <MobileAppShell user={user} onLogout={onLogout} refreshProfile={refreshProfile} />;
+}
+
+/** Runs idle prefetching in isolation — its useLocation() doesn't cause App to re-render. */
+function IdlePrefetcher() {
+  useIdlePrefetch();
+  return null;
+}
+
 const PageFallback = () => {
   const [show, setShow] = useState(false);
   useEffect(() => {
@@ -118,16 +153,12 @@ const App: React.FC = () => {
   const { state, retry, logout, setUser, refreshProfile } = useAuthMachine();
   const { user } = state;
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const location = useLocation();
   const qc = useQueryClient();
 
   // ErrorBoundary reset: invalidate caches + re-bootstrap auth
   const handleErrorReset = useCallback(() => {
     retry();
   }, [retry]);
-
-  const isMobile = useIsMobile();
-  useIdlePrefetch();
 
   const handleLogout = useCallback(() => {
     setShowLogoutModal(true);
@@ -145,6 +176,7 @@ const App: React.FC = () => {
     <SupportProvider user={user}>
     <ErrorBoundary queryClient={qc} onReset={handleErrorReset}>
       <SupportBanner />
+      <IdlePrefetcher />
       {/* Logout Confirmation Modal */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -201,7 +233,7 @@ const App: React.FC = () => {
             element={
               user?.role === UserRole.CLIENT ?
               <Suspense fallback={<PageFallback />}><OnboardingPage user={user!} refreshProfile={refreshProfile} /></Suspense> :
-              <Navigate to="/auth" state={{ from: location }} />
+              <AuthRedirect />
             }
           />
 
@@ -209,12 +241,9 @@ const App: React.FC = () => {
           <Route
             path="/portal/mobile"
             element={
-              user?.role === UserRole.CLIENT ? (
-                !user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete') ?
-                <Navigate to="/onboarding" replace /> :
-                <MobileAppShell user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} />
-              ) :
-              <Navigate to="/auth" state={{ from: location }} />
+              user?.role === UserRole.CLIENT ?
+              <MobilePortalGuard user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} /> :
+              <AuthRedirect />
             }
           >
             <Route index element={<MobileHome />} />
@@ -229,13 +258,9 @@ const App: React.FC = () => {
           <Route
             path="/portal"
             element={
-              user?.role === UserRole.CLIENT ? (
-                !user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete') ?
-                <Navigate to="/onboarding" replace /> :
-                isMobile ? <Navigate to="/portal/mobile" replace /> :
-                <ClientLayout user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} />
-              ) :
-              <Navigate to="/auth" state={{ from: location }} />
+              user?.role === UserRole.CLIENT ?
+              <PortalGuard user={user!} onLogout={handleLogout} refreshProfile={refreshProfile} /> :
+              <AuthRedirect />
             }
           >
             <Route index element={<ClientDashboard user={user!} />} />
@@ -268,7 +293,7 @@ const App: React.FC = () => {
             element={
               user?.role === UserRole.ADMIN ?
               <AdminLayout user={user!} onLogout={handleLogout} /> :
-              <Navigate to="/auth" state={{ from: location }} />
+              <AuthRedirect />
             }
           >
             <Route index element={<AdminDashboard />} />

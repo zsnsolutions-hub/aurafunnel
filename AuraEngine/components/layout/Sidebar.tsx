@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { useLocation } from 'react-router-dom';
 import PrefetchLink from '../PrefetchLink';
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 
@@ -18,7 +19,6 @@ interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   navItems: SidebarNavItem[];
-  activePath: string;
   header: React.ReactNode;
   headerCollapsed?: React.ReactNode;
   footer?: React.ReactNode;
@@ -30,13 +30,13 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
   collapsed,
   onToggle,
   navItems,
-  activePath,
   header,
   headerCollapsed,
   footer,
   topSlot,
   variant = 'light',
 }) => {
+  const { pathname: activePath } = useLocation();
   const isLight = variant === 'light';
 
   return (

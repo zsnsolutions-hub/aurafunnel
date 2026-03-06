@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo, lazy, memo } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
 import ErrorBoundary from '../ErrorBoundary';
@@ -27,7 +27,6 @@ interface ClientLayoutProps {
 }
 
 const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refreshProfile }) => {
-  const location = useLocation();
   const navigate = useNavigate();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -281,7 +280,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
             collapsed={sidebarCollapsed}
             onToggle={handleToggleSidebar}
             navItems={navItems}
-            activePath={location.pathname}
             header={sidebarHeader}
             headerCollapsed={sidebarHeaderCollapsed}
             topSlot={sidebarTopSlot}
