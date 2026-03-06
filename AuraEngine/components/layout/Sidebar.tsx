@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useRef, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import PrefetchLink from '../PrefetchLink';
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
@@ -38,12 +38,21 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
 }) => {
   const { pathname: activePath } = useLocation();
   const isLight = variant === 'light';
+  const mountId = useRef(Math.random().toString(36).slice(2, 6)).current;
+  const renderCount = useRef(0);
+  renderCount.current++;
 
   return (
     <aside
       aria-label="Sidebar navigation"
       className={`hidden lg:flex flex-col fixed inset-y-0 z-30 transition-all duration-150 ease-out ${collapsed ? 'w-[88px]' : 'w-[272px]'} ${isLight ? 'bg-white border-r border-gray-200' : 'bg-slate-900 border-r border-slate-800'}`}
     >
+      {/* DEBUG — mount ID stays the same if sidebar is NOT remounting */}
+      {!collapsed && (
+        <div className="px-3 py-1 text-[9px] font-mono text-gray-300 bg-gray-50 border-b border-gray-100">
+          SB mount:{mountId} renders:{renderCount.current}
+        </div>
+      )}
       {/* Header */}
       <div className={`h-16 flex items-center shrink-0 ${collapsed ? 'justify-center px-3' : 'px-6'} border-b ${isLight ? 'border-gray-100' : 'border-slate-800'}`}>
         {collapsed ? (headerCollapsed || header) : header}
