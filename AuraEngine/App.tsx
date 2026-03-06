@@ -171,10 +171,10 @@ const App: React.FC = () => {
 
   return (
     <AuthGate phase={state.phase} error={state.error} onRetry={retry}>
-    <GuideProvider>
     <UIModeProvider userId={user?.id}>
     <SupportProvider user={user}>
     <ErrorBoundary queryClient={qc} onReset={handleErrorReset}>
+      <GuideProvider>
       <SupportBanner />
       <IdlePrefetcher />
       {/* Logout Confirmation Modal */}
@@ -317,13 +317,13 @@ const App: React.FC = () => {
 
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
+    </GuideProvider>
     </ErrorBoundary>
     {import.meta.env.DEV && (
       <Suspense fallback={null}><PerfPanel /></Suspense>
     )}
     </SupportProvider>
     </UIModeProvider>
-    </GuideProvider>
     </AuthGate>
   );
 };
