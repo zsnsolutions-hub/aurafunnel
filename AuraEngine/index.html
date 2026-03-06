@@ -46,77 +46,7 @@
 </head>
 <body class="bg-[#F8FAFC] text-slate-900">
     <div id="root"></div>
-    <!-- DEBUG: Crash detector — lives OUTSIDE React's root. -->
-    <div id="crash-detector" style="position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#111;color:#0f0;font:13px/2 monospace;padding:4px 12px;display:flex;gap:16px;align-items:center">
-      <span id="cd-status" style="font-weight:bold">⏳ LOADING</span>
-      <span id="cd-navcount">navs: 0</span>
-      <span id="cd-react" style="color:#0ff"></span>
-      <span id="cd-errors" style="color:#f55"></span>
-    </div>
-    <!-- DEBUG: Flash overlay — impossible to miss -->
-    <div id="cd-overlay" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99998;padding:12px 20px;font:bold 16px/1.4 monospace;text-align:center"></div>
     <script>
-        // Crash detector — outside React
-        (function() {
-          var navCount = 0;
-          var reactRootEmpty = 0;
-          var statusEl = document.getElementById('cd-status');
-          var navEl = document.getElementById('cd-navcount');
-          var reactEl = document.getElementById('cd-react');
-          var errEl = document.getElementById('cd-errors');
-          var overlayEl = document.getElementById('cd-overlay');
-
-          function showOverlay(msg, color) {
-            overlayEl.style.display = 'block';
-            overlayEl.style.background = color;
-            overlayEl.style.color = '#fff';
-            overlayEl.textContent = msg;
-            setTimeout(function() { overlayEl.style.display = 'none'; }, 5000);
-          }
-
-          // Track page load time
-          statusEl.textContent = '✅ LOADED ' + new Date().toLocaleTimeString();
-
-          // Count hash navigations
-          window.addEventListener('hashchange', function() {
-            navCount++;
-            navEl.textContent = 'navs: ' + navCount;
-            statusEl.style.color = '#0f0';
-            statusEl.textContent = '✅ NAV OK #' + navCount;
-          });
-
-          // Watch React root for emptiness (React crash unmounts tree)
-          setInterval(function() {
-            var root = document.getElementById('root');
-            if (root && root.children.length === 0) {
-              reactRootEmpty++;
-              if (reactRootEmpty > 2) {
-                reactEl.textContent = '🔴 ROOT EMPTY (React crashed)';
-                showOverlay('🔴 REACT CRASHED — #root is empty! Check console.', '#c00');
-              }
-            } else {
-              if (reactRootEmpty > 2) {
-                reactEl.textContent = '🟡 ROOT RECOVERED (was empty ' + reactRootEmpty + ' ticks)';
-              }
-              reactRootEmpty = 0;
-            }
-          }, 100);
-
-          // Catch uncaught JS errors
-          window.addEventListener('error', function(e) {
-            var msg = (e.message || e).toString().slice(0, 150);
-            errEl.textContent = '❌ ERR: ' + msg;
-            showOverlay('❌ JS ERROR: ' + msg, '#a00');
-          });
-
-          // Catch unhandled promise rejections
-          window.addEventListener('unhandledrejection', function(e) {
-            var msg = (e.reason ? (e.reason.message || e.reason) : 'unknown').toString().slice(0, 150);
-            errEl.textContent = '❌ REJ: ' + msg;
-            showOverlay('❌ PROMISE REJECTION: ' + msg, '#a00');
-          });
-        })();
-
         // Unregister any stale service workers to prevent caching issues
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(regs) {
