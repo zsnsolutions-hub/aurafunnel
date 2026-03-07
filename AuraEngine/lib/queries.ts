@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { Lead } from '../types';
+import { queryClient } from './queryClient';
+import { fetchBatchEmailSummary, type BatchEmailSummary } from './emailTracking';
 
 // Canonical columns used by the app — avoids SELECT *
 const LEAD_COLUMNS = 'id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,linkedin_url,location,title,industry,company_size,source,import_batch_id,imported_at,custom_fields' as const;
@@ -50,6 +52,75 @@ export function useLeads(userId: string | undefined) {
       return normalizeLeads(data || []);
     },
     enabled: !!userId,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Batch email summaries — keyed by userId, auto-derives leadIds from cached leads */
+export function useEmailSummaries(userId: string | undefined, leadIds: string[]) {
+  return useQuery<Map<string, BatchEmailSummary>>({
+    queryKey: ['emailSummaries', userId, leadIds.length],
+    queryFn: () => fetchBatchEmailSummary(leadIds),
+    enabled: !!userId && leadIds.length > 0,
+    staleTime: 2 * 60_000, // 2min — email events don't change fast
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Social post stats for dashboard */
+export function useSocialStats(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['socialStats', userId],
+    queryFn: async () => {
+      if (!userId) return { scheduled: 0, published: 0 };
+      const { data } = await supabase
+        .from('social_posts')
+        .select('status')
+        .eq('user_id', userId)
+        .in('status', ['scheduled', 'completed', 'published']);
+      const posts = data || [];
+      return {
+        scheduled: posts.filter(p => p.status === 'scheduled').length,
+        published: posts.filter(p => p.status === 'completed' || p.status === 'published').length,
+      };
+    },
+    enabled: !!userId,
+    staleTime: 2 * 60_000,
+  });
+}
+
+// ── Prefetch helpers (for sidebar hover) ──
+
+/** Prefetch leads + counts for a given user — call on sidebar hover */
+export function prefetchPortalData(userId: string | undefined) {
+  if (!userId) return;
+  queryClient.prefetchQuery({
+    queryKey: ['leads', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId).order('score', { ascending: false });
+      if (error) throw error;
+      return normalizeLeads(data || []);
+    },
+    staleTime: 60_000,
+  });
+  queryClient.prefetchQuery({
+    queryKey: ['leadCounts', userId],
+    queryFn: async () => {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+      const [todayRes, yesterdayRes, contentRes] = await Promise.all([
+        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId).gte('created_at', todayStart),
+        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId).gte('created_at', yesterdayStart).lt('created_at', todayStart),
+        supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+      ]);
+      return {
+        leadsToday: todayRes.count ?? 0,
+        leadsYesterday: yesterdayRes.count ?? 0,
+        contentCreated: contentRes.count ?? 0,
+      };
+    },
+    staleTime: 60_000,
   });
 }
 

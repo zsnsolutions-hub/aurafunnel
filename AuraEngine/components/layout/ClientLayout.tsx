@@ -19,6 +19,8 @@ import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
 const ActivityPanel = lazy(() => import('../activity/ActivityPanel').then(m => ({ default: m.ActivityPanel })));
 import VoiceAgentLauncher from '../voice/VoiceAgentLauncher';
+import { setDataPrefetchUser } from '../../lib/dataPrefetch';
+import { prefetchPortalData } from '../../lib/queries';
 
 interface ClientLayoutProps {
   user: User;
@@ -28,6 +30,13 @@ interface ClientLayoutProps {
 
 const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refreshProfile }) => {
   const navigate = useNavigate();
+
+  // Set user ID for data prefetching and pre-warm cache on mount
+  useEffect(() => {
+    setDataPrefetchUser(user.id);
+    prefetchPortalData(user.id);
+  }, [user.id]);
+
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsAutoShown, setNotificationsAutoShown] = useState(false);

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, type LinkProps } from 'react-router-dom';
 import { prefetchRoute } from '../lib/routePrefetchMap';
+import { prefetchDataForRoute } from '../lib/dataPrefetch';
 
 /**
  * Drop-in replacement for React Router's <Link> that prefetches
@@ -13,11 +14,13 @@ const PrefetchLink = React.forwardRef<HTMLAnchorElement, LinkProps>(
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLAnchorElement>) => {
       prefetchRoute(path);
+      prefetchDataForRoute(path);
       onMouseEnter?.(e);
     };
 
     const handleFocus = (e: React.FocusEvent<HTMLAnchorElement>) => {
       prefetchRoute(path);
+      prefetchDataForRoute(path);
       onFocus?.(e);
     };
 

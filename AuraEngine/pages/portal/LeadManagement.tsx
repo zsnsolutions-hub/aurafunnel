@@ -3,9 +3,8 @@ import { createPortal } from 'react-dom';
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon, TrashIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
-import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
+import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummaries } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchBatchEmailSummary } from '../../lib/emailTracking';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
@@ -140,9 +139,18 @@ const LeadManagement: React.FC = () => {
   const crmConnected = useMemo(() => integrationStatuses.some(i => (i.provider === 'hubspot' || i.provider === 'salesforce') && i.status === 'connected'), [integrationStatuses]);
   const [syncingCrm, setSyncingCrm] = useState<string | null>(null);
 
-  // ── Data State ──
+  // ── Data State (React Query cache seeds local state for instant render) ──
+  const { data: cachedLeads = [], isLoading: queryLoading, refetch: refetchLeads } = useLeads(user.id);
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Sync from React Query cache → local state (keeps optimistic updates working)
+  useEffect(() => {
+    if (cachedLeads.length > 0 || !queryLoading) {
+      setAllLeads(cachedLeads);
+      setLoading(false);
+    }
+  }, [cachedLeads, queryLoading]);
 
   // ── Filter State ──
   const [statusFilter, setStatusFilter] = useState<Lead['status'] | 'All'>('All');
@@ -199,8 +207,9 @@ const LeadManagement: React.FC = () => {
   const [deleteTargetIds, setDeleteTargetIds] = useState<string[]>([]);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // ── Email Summary Map ──
-  const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
+  // ── Email Summary Map (React Query — cached) ──
+  const leadIds = useMemo(() => allLeads.map(l => l.id), [allLeads]);
+  const { data: emailSummaryMap = new Map() } = useEmailSummaries(user.id, leadIds);
 
   // ── Inline Status Edit ──
   const [inlineStatusId, setInlineStatusId] = useState<string | null>(null);
@@ -262,35 +271,11 @@ const LeadManagement: React.FC = () => {
     }
   }, []);
 
-  // ── Fetch (leads + colors in parallel) ──
-  const fetchLeads = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('leads')
-      .select('id,client_id,first_name,last_name,primary_email,company,score,status,last_activity,insights,created_at,knowledgeBase,primary_phone,linkedin_url,location,title,industry,company_size,source')
-      .eq('client_id', user.id)
-      .order('score', { ascending: false });
-    if (error) {
-      console.error('LeadManagement fetch error:', error.message);
-    } else if (data) {
-      setAllLeads(normalizeLeads(data));
-    }
-    setLoading(false);
-  };
-
+  // ── Fetch colors on mount (leads + email summaries handled by React Query above) ──
   useEffect(() => {
-    // Fire all initial data fetches in parallel
-    fetchLeads();
     fetchStageColors().then(setStageColors);
     fetchColorOverrides().then(setColorOverrides);
   }, [user]);
-
-  // ── Batch email summary fetch ──
-  useEffect(() => {
-    if (allLeads.length === 0) return;
-    const leadIds = allLeads.map(l => l.id);
-    fetchBatchEmailSummary(leadIds).then(setEmailSummaryMap);
-  }, [allLeads]);
 
   // ── Filtering ──
   const filteredLeads = useMemo(() => {
@@ -2118,7 +2103,7 @@ const LeadManagement: React.FC = () => {
         onClose={() => setIsCSVOpen(false)}
         userId={user.id}
         planName={resolvePlanName(user.plan || 'Starter')}
-        onImportComplete={fetchLeads}
+        onImportComplete={() => refetchLeads()}
       />
 
       {/* Activity Log Modal */}

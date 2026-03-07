@@ -8,11 +8,11 @@ import {
   PhoneIcon, LinkedInIcon, InstagramIcon, FacebookIcon, TwitterIcon, YoutubeIcon,
   BellIcon, SendIcon, BoltIcon
 } from '../../components/Icons';
-import { fetchBatchEmailSummary, type BatchEmailSummary } from '../../lib/emailTracking';
+
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 
 import { supabase } from '../../lib/supabase';
-import { normalizeLeads } from '../../lib/queries';
+import { normalizeLeads, useLeads, useLeadCounts, useEmailSummaries, useSocialStats } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS, resolvePlanName } from '../../lib/credits';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
@@ -65,9 +65,27 @@ const generateTrendData = (leads: Lead[]) => {
 const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
   const navigate = useNavigate();
+
+  // ── Cached data (React Query — persists across tab switches) ──
+  const { data: cachedLeads = [], isLoading: queryLoading, refetch: refetchLeads } = useLeads(user.id);
+  const { data: leadCounts } = useLeadCounts(user.id);
+  const { data: socialStats = { scheduled: 0, published: 0 } } = useSocialStats(user.id);
+
+  // Local state seeded from cache (supports optimistic updates)
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
-  const [loadingLeads, setLoadingLeads] = useState(true);
+  const loadingLeads = queryLoading && leads.length === 0;
+
+  // Sync from React Query cache → local state
+  useEffect(() => {
+    if (cachedLeads.length > 0 || !queryLoading) {
+      setLeads(cachedLeads);
+      setFilteredLeads(cachedLeads);
+    }
+  }, [cachedLeads, queryLoading]);
+
+  const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
+  const { data: emailSummaryMap = new Map() } = useEmailSummaries(user.id, leadIds);
   const [selectedLeadForGen, setSelectedLeadForGen] = useState<Lead | null>(null);
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
@@ -87,21 +105,33 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     } catch { return []; }
   });
 
-  // Quick Stats
-  const [quickStats, setQuickStats] = useState<DashboardQuickStats>({
-    leadsToday: 0, hotLeads: 0, contentCreated: 0, avgAiScore: 0,
-    predictedConversions: 0, recommendations: 0, leadsYesterday: 0, hotLeadsYesterday: 0
-  });
-  const [statsLoading, setStatsLoading] = useState(true);
-
-  // Social Stats
-  const [socialStats, setSocialStats] = useState({ scheduled: 0, published: 0 });
-
   // AI Insights
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [deepAnalysisLoading, setDeepAnalysisLoading] = useState(false);
   const [deepAnalysisResult, setDeepAnalysisResult] = useState<string | null>(null);
+
+  // Quick Stats — derived from cached leads + counts
+  const quickStats = useMemo<DashboardQuickStats>(() => {
+    const hotLeads = leads.filter(l => l.score > 80).length;
+    const avgScore = leads.length > 0 ? Math.round(leads.reduce((a, b) => a + b.score, 0) / leads.length) : 0;
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const hotLeadsYesterday = leads.filter(l => {
+      if (!l.created_at) return false;
+      return new Date(l.created_at) < todayStart && l.score > 80;
+    }).length;
+    return {
+      leadsToday: leadCounts?.leadsToday ?? 0,
+      hotLeads,
+      contentCreated: leadCounts?.contentCreated ?? 0,
+      avgAiScore: avgScore,
+      predictedConversions: Math.round(hotLeads * 0.35),
+      recommendations: insights.length,
+      leadsYesterday: leadCounts?.leadsYesterday ?? 0,
+      hotLeadsYesterday: hotLeadsYesterday,
+    };
+  }, [leads, leadCounts, insights.length]);
+  const statsLoading = loadingLeads;
 
   // Funnel
 
@@ -113,8 +143,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const [isAddingLead, setIsAddingLead] = useState(false);
   const [researchingLeadIds, setResearchingLeadIds] = useState<Set<string>>(new Set());
 
-  // Email summary for follow-up detection
-  const [emailSummaryMap, setEmailSummaryMap] = useState<Map<string, BatchEmailSummary>>(new Map());
+  // Email summary for follow-up detection — provided by useEmailSummaries hook above
 
   // Content Generation States
   const [contentType, setContentType] = useState<ContentType>(ContentType.EMAIL);
@@ -125,11 +154,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   // Trend data
   const trendData = useMemo(() => generateTrendData(leads), [leads]);
 
-  // Fetch batch email summary for follow-up detection
-  useEffect(() => {
-    if (leads.length === 0) return;
-    fetchBatchEmailSummary(leads.map(l => l.id)).then(setEmailSummaryMap);
-  }, [leads]);
+  // (email summaries now fetched via useEmailSummaries hook above)
 
   // Leads that need follow-up (opened emails 2+ times)
   const followUpLeads = useMemo(() => {
@@ -365,103 +390,14 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showShortcuts, showPipelineHealth, showLeadVelocity, showGoalTracker, showEngagementAnalytics, showRevenueForecast, showContentPerformance, isGenModalOpen, isAddLeadOpen, isCSVOpen, isActionsOpen, leads]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Generate insights from cached leads
   useEffect(() => {
-    fetchLeads();
-    fetchQuickStats();
-    fetchSocialStats();
-  }, [user]);
-
-  const fetchLeads = async () => {
-    setLoadingLeads(true);
-    const { data } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('client_id', user.id)
-      .order('score', { ascending: false })
-      .order('updated_at', { ascending: false });
-
-    if (data) {
-      const normalized = normalizeLeads(data);
-      setLeads(normalized);
-      setFilteredLeads(normalized);
-      setActiveSegmentId(null);
-      setInsightsLoading(true);
-      const programmaticInsights = generateProgrammaticInsights(normalized);
-      setInsights(programmaticInsights);
-      setInsightsLoading(false);
-
-      // Calculate funnel stages
-      const statusCounts: Record<string, number> = { New: 0, Contacted: 0, Qualified: 0, Converted: 0 };
-      data.forEach(l => { if (statusCounts[l.status] !== undefined) statusCounts[l.status]++; });
-      const total = data.length || 1;
+    if (leads.length > 0) {
+      setInsights(generateProgrammaticInsights(leads));
     }
-    setLoadingLeads(false);
-  };
+  }, [leads]);
 
-  const fetchQuickStats = async () => {
-    setStatsLoading(true);
-    try {
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-      const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
-
-      const [
-        { data: allLeads },
-        { count: leadsToday },
-        { count: leadsYesterday },
-        { count: contentCreated }
-      ] = await Promise.all([
-        supabase.from('leads').select('*').eq('client_id', user.id),
-        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', user.id).gte('created_at', todayStart),
-        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', user.id).gte('created_at', yesterdayStart).lt('created_at', todayStart),
-        supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
-      ]);
-
-      const lds = normalizeLeads(allLeads || []);
-      const hotLeads = lds.filter(l => l.score > 80).length;
-      const hotLeadsYesterdayCount = lds.filter(l => {
-        if (!l.created_at) return false;
-        const d = new Date(l.created_at);
-        return d < new Date(todayStart) && l.score > 80;
-      }).length;
-      const avgScore = lds.length > 0
-        ? Math.round(lds.reduce((a, b) => a + b.score, 0) / lds.length)
-        : 0;
-      const predictedConversions = Math.round(hotLeads * 0.35);
-      const programmaticInsights = generateProgrammaticInsights(lds);
-
-      setQuickStats({
-        leadsToday: leadsToday || 0,
-        hotLeads,
-        contentCreated: contentCreated || 0,
-        avgAiScore: avgScore,
-        predictedConversions,
-        recommendations: programmaticInsights.length,
-        leadsYesterday: leadsYesterday || 0,
-        hotLeadsYesterday: hotLeadsYesterdayCount
-      });
-
-    } catch (err) {
-      console.error("Stats fetch error:", err);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
-
-  const fetchSocialStats = async () => {
-    try {
-      const { data } = await supabase
-        .from('social_posts')
-        .select('status')
-        .eq('user_id', user.id)
-        .in('status', ['scheduled', 'completed', 'published']);
-      const posts = data || [];
-      setSocialStats({
-        scheduled: posts.filter(p => p.status === 'scheduled').length,
-        published: posts.filter(p => p.status === 'completed' || p.status === 'published').length,
-      });
-    } catch { /* ignore */ }
-  };
+  // (quickStats and socialStats now derived from React Query hooks above)
 
   const openGenModal = (lead?: Lead) => {
     setSelectedLeadForGen(lead || leads[0] || null);
@@ -510,7 +446,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       });
 
       if (refreshProfile) await refreshProfile();
-      fetchQuickStats();
+      refetchLeads();
 
     } catch (err: unknown) {
       console.error("Quick Gen Error:", err);
@@ -552,7 +488,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     setNewLead({ name: '', email: '', company: '', phone: '', insights: '' });
     setNewLeadKB({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '', extraNotes: '' });
     setVisibleKbFields(new Set());
-    fetchQuickStats();
+    refetchLeads();
 
     // Fire background AI research if social URLs are present
     if (!kb) return;
@@ -695,7 +631,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     if (selectedLeadForActions?.id === leadId) {
       setSelectedLeadForActions({ ...selectedLeadForActions, status: newStatus, lastActivity: `Status changed to ${newStatus}` });
     }
-    fetchQuickStats();
+    refetchLeads();
 
     // Persist to Supabase
     const { error } = await supabase
@@ -751,8 +687,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   };
 
   const handleImportComplete = () => {
-    fetchLeads();
-    fetchQuickStats();
+    refetchLeads();
   };
 
   const copyResult = () => {
