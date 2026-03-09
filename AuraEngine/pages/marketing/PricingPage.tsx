@@ -30,7 +30,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   { label: 'AI credits / month',      values: [CREDIT_LIMITS.free.toLocaleString(), CREDIT_LIMITS.starter.toLocaleString(), CREDIT_LIMITS.growth.toLocaleString(), CREDIT_LIMITS.scale.toLocaleString()], section: 'AI Engine' },
   { label: 'AI drafts & rewrites',    values: [true, true, true, true] },
   { label: 'AI personalization',      values: [false, false, true, 'Advanced'] },
-  { label: 'Hard AI stop (no overages)', values: [true, true, true, true] },
+  { label: 'No surprise AI overages',    values: [true, true, true, true] },
   { label: 'Auto warm-up',            values: [false, false, true, true], section: 'Deliverability' },
   { label: 'Inbox health monitoring', values: [false, false, false, true] },
   { label: 'Enrichment',              values: [false, false, true, true], section: 'Intelligence' },
@@ -81,8 +81,8 @@ const FAQ_ITEMS = [
     a: 'No. Limits are per workspace, not per user. Adding seats gives your team collaboration access \u2014 it doesn\u2019t multiply volume. One engine, one set of controls.',
   },
   {
-    q: 'Why a hard stop on AI credits?',
-    a: 'Because surprise overages are unacceptable. You get a clear allocation every month. When it\u2019s spent, AI pauses until reset. No hidden charges. Upgrade when you\u2019re ready to scale.',
+    q: 'What happens when I run out of AI credits?',
+    a: 'AI features pause \u2014 no surprise charges. You can buy an add-on credit pack instantly from your dashboard (starting at $10 for 1,000 credits) or upgrade your plan for a higher monthly allocation. Credits never auto-charge. You\u2019re always in control.',
   },
   {
     q: 'Can I upgrade or downgrade instantly?',
@@ -90,7 +90,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'How do AI credits work?',
-    a: 'Each AI action has a fixed credit cost \u2014 for example, generating a personalized email costs 2 credits, a blog article costs 5. You always know exactly what you\u2019re spending. Credits reset monthly. You\u2019ll see your balance in the dashboard at all times.',
+    a: 'Each AI action has a fixed credit cost \u2014 for example, generating a personalized email costs 2 credits, a blog article costs 5, lead research costs 2. You always know exactly what you\u2019re spending. Credits reset monthly. Need more mid-cycle? Grab an add-on pack from your dashboard. Your balance is always visible.',
   },
   {
     q: 'Is there a free trial?',
@@ -308,8 +308,8 @@ const PricingPage: React.FC = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   ),
-                  title: 'AI hard stop',
-                  text: 'Clear allocation. No surprise overages. When credits run out, AI pauses. Upgrade when your pipeline demands it. No hidden charges, ever.',
+                  title: 'AI credit control',
+                  text: 'Clear monthly allocation. No auto-charges. When credits run out, AI pauses until you buy an add-on pack or upgrade your plan. You decide when to spend more.',
                 },
                 {
                   icon: (
@@ -351,8 +351,8 @@ const PricingPage: React.FC = () => {
                     Credits reset monthly. Hard stop when they&apos;re spent.
                   </p>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    <span className="text-white font-semibold">No overages. No surprises. No fine print.</span>{' '}
-                    You always see your remaining balance in the dashboard. When you need more, upgrade instantly.
+                    <span className="text-white font-semibold">No auto-charges. No surprises. No fine print.</span>{' '}
+                    You always see your remaining balance in the dashboard. Need more mid-cycle? Grab an add-on pack starting at $10 for 1,000 credits, or upgrade your plan.
                   </p>
                 </div>
               </div>
