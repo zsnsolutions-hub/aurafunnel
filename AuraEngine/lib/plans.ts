@@ -28,6 +28,7 @@ export interface DbPlan {
   price_monthly_cents: number;
   currency: string;
   stripe_price_id: string | null;
+  stripe_price_id_annual: string | null;
   credits: number;
   description: string | null;
   features: string[];
@@ -182,6 +183,7 @@ function normalizePlan(raw: Record<string, unknown>): DbPlan {
     price_monthly_cents: (raw.price_monthly_cents as number) ?? 0,
     currency: (raw.currency as string) ?? 'usd',
     stripe_price_id: (raw.stripe_price_id as string) ?? null,
+    stripe_price_id_annual: (raw.stripe_price_id_annual as string) ?? null,
     credits: (raw.credits as number) ?? 0,
     description: (raw.description as string) ?? null,
     features: (raw.features as string[]) ?? [],

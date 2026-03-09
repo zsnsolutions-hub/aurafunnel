@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   BoltIcon, CreditCardIcon, CheckIcon, SparklesIcon, ShieldIcon, RefreshIcon, DatabaseIcon,
   MailIcon, TargetIcon, KeyboardIcon, TrendUpIcon, TrendDownIcon, XIcon, ClockIcon,
@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabase';
 import { TIER_LIMITS, CREDIT_COSTS, PLANS, resolvePlanName } from '../../lib/credits';
 import { getAiCreditLimit } from '../../config/creditLimits';
 import { AI_CREDIT_COSTS } from '../../config/aiCreditCosts';
+import { openCustomerPortal } from '../../lib/stripe';
 import StripeCheckoutModal from '../../components/portal/StripeCheckoutModal';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
@@ -28,11 +29,14 @@ const COLOR_CLASSES: Record<string, { bg50: string; text600: string; bg500: stri
 
 const BillingPage: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [fetchError, setFetchError] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'credits' | 'cancelled' | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   const creditsTotal = user.credits_total ?? 500;
   const creditsUsed = user.credits_used ?? 0;
@@ -64,6 +68,36 @@ const BillingPage: React.FC = () => {
     storageUsedMb: 0, storageLimitMb: tierLimitsForPlan.storage,
     emailCreditsUsed: 0, emailCreditsLimit: tierLimitsForPlan.emails
   });
+
+  // Handle checkout return from Stripe
+  useEffect(() => {
+    const checkout = searchParams.get('checkout');
+    if (checkout === 'success' || checkout === 'credits') {
+      setCheckoutStatus(checkout);
+      refreshProfile();
+      // Clear URL params
+      setSearchParams({}, { replace: true });
+      // Auto-dismiss after 5 seconds
+      const timer = setTimeout(() => setCheckoutStatus(null), 5000);
+      return () => clearTimeout(timer);
+    } else if (checkout === 'cancelled') {
+      setCheckoutStatus('cancelled');
+      setSearchParams({}, { replace: true });
+      const timer = setTimeout(() => setCheckoutStatus(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams]);
+
+  const handleManageSubscription = async () => {
+    setPortalLoading(true);
+    try {
+      const { url } = await openCustomerPortal();
+      window.location.href = url;
+    } catch {
+      // If no Stripe customer exists, just ignore
+      setPortalLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchPlans();
@@ -309,6 +343,35 @@ const BillingPage: React.FC = () => {
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+      {/* Checkout status banner */}
+      {checkoutStatus === 'success' && (
+        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl animate-in slide-in-from-top duration-500">
+          <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center"><CheckIcon className="w-5 h-5 text-emerald-600" /></div>
+          <div>
+            <p className="text-sm font-bold text-emerald-800">Subscription activated!</p>
+            <p className="text-xs text-emerald-600">Your plan has been upgraded. All features are now available.</p>
+          </div>
+          <button onClick={() => setCheckoutStatus(null)} className="ml-auto text-emerald-300 hover:text-emerald-500"><XIcon className="w-4 h-4" /></button>
+        </div>
+      )}
+      {checkoutStatus === 'credits' && (
+        <div className="flex items-center gap-3 p-4 bg-violet-50 border border-violet-200 rounded-2xl animate-in slide-in-from-top duration-500">
+          <div className="w-9 h-9 bg-violet-100 rounded-lg flex items-center justify-center"><SparklesIcon className="w-5 h-5 text-violet-600" /></div>
+          <div>
+            <p className="text-sm font-bold text-violet-800">Credits added!</p>
+            <p className="text-xs text-violet-600">Your extra AI credits have been added to your account.</p>
+          </div>
+          <button onClick={() => setCheckoutStatus(null)} className="ml-auto text-violet-300 hover:text-violet-500"><XIcon className="w-4 h-4" /></button>
+        </div>
+      )}
+      {checkoutStatus === 'cancelled' && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl animate-in slide-in-from-top duration-500">
+          <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center"><AlertTriangleIcon className="w-5 h-5 text-amber-600" /></div>
+          <p className="text-sm font-bold text-amber-800">Checkout cancelled. No charges were made.</p>
+          <button onClick={() => setCheckoutStatus(null)} className="ml-auto text-amber-300 hover:text-amber-500"><XIcon className="w-4 h-4" /></button>
+        </div>
+      )}
+
       <PageHeader
         title="Subscription"
         description="Manage your subscription, AI Actions allocation, and payment methods."
@@ -598,9 +661,15 @@ const BillingPage: React.FC = () => {
             </div>
           </div>
 
-          <button className="mt-8 w-full py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-95 shadow-sm">
-            Modify Payment Details
-          </button>
+          {currentPlanName !== 'Free' && (
+            <button
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className="mt-8 w-full py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-95 shadow-sm disabled:opacity-50"
+            >
+              {portalLoading ? 'Opening Stripe...' : 'Manage Subscription'}
+            </button>
+          )}
         </div>
 
         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 flex flex-col group">

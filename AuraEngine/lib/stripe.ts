@@ -1,74 +1,77 @@
 import { supabase } from './supabase';
-import { resolvePlanName } from './credits';
 
-export interface CheckoutSessionParams {
-  planName: string;
-  amount: string;
-  credits: number;
-  userId: string;
-  paymentMethodId?: string;
-  billingInterval?: 'monthly' | 'annual';
-}
+// ── Stripe Checkout & Portal — Client-side API ──────────────────────────────
+//
+// All Stripe API calls go through the billing-checkout edge function.
+// The frontend only redirects to Stripe-hosted pages — no card data handled.
+// ──────────────────────────────────────────────────────────────────────────────
 
-export const getStripeConfig = async () => {
-  const { data, error } = await supabase
+/** Fetch publishable key from config_settings (fallback to env). */
+export async function getStripePublishableKey(): Promise<string> {
+  const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+  if (envKey) return envKey;
+
+  const { data } = await supabase
     .from('config_settings')
     .select('value')
     .eq('key', 'stripe_api_key')
     .maybeSingle();
-    
-  if (error || !data?.value) {
-    console.warn("Stripe API Key not found in config_settings. Using sandbox mode.");
-    return "pk_test_sample";
-  }
-  return data.value;
-};
 
-export const processStripePayment = async (params: CheckoutSessionParams): Promise<boolean> => {
-  // Simulate Stripe API Latency and Handshake
-  await new Promise(resolve => setTimeout(resolve, 2500));
+  return data?.value || '';
+}
 
-  const resolvedPlan = resolvePlanName(params.planName);
-  const periodMs = params.billingInterval === 'annual'
-    ? 365 * 24 * 60 * 60 * 1000
-    : 30 * 24 * 60 * 60 * 1000;
+/** Create a Stripe Checkout Session for a plan subscription. Redirects user to Stripe. */
+export async function createSubscriptionCheckout(params: {
+  planName: string;
+  stripePriceId: string;
+  billingInterval: 'monthly' | 'annual';
+}): Promise<{ url: string }> {
+  const { data, error } = await supabase.functions.invoke('billing-checkout', {
+    body: {
+      action: 'create_checkout_session',
+      plan_name: params.planName,
+      stripe_price_id: params.stripePriceId,
+      billing_interval: params.billingInterval,
+    },
+  });
 
-  try {
-    // 1. Update Profile Plan & Credits
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        plan: resolvedPlan,
-        credits_total: params.credits,
-        credits_used: 0 // Reset usage on upgrade
-      })
-      .eq('id', params.userId);
+  if (error) throw new Error(error.message || 'Failed to create checkout session');
+  if (!data?.url) throw new Error('No checkout URL returned');
+  return { url: data.url };
+}
 
-    if (profileError) throw profileError;
+/** Create a Stripe Checkout Session for a one-time credit package purchase. */
+export async function createCreditCheckout(params: {
+  credits: number;
+  priceCents: number;
+  label: string;
+}): Promise<{ url: string }> {
+  const { data, error } = await supabase.functions.invoke('billing-checkout', {
+    body: {
+      action: 'create_credit_checkout',
+      credits: params.credits,
+      price_cents: params.priceCents,
+      label: params.label,
+    },
+  });
 
-    // 2. Update Subscription Record
-    const { error: subError } = await supabase
-      .from('subscriptions')
-      .update({
-        plan_name: resolvedPlan,
-        status: 'active',
-        current_period_end: new Date(Date.now() + periodMs).toISOString(),
-        expires_at: new Date(Date.now() + periodMs).toISOString()
-      })
-      .eq('user_id', params.userId);
+  if (error) throw new Error(error.message || 'Failed to create credit checkout');
+  if (!data?.url) throw new Error('No checkout URL returned');
+  return { url: data.url };
+}
 
-    if (subError) throw subError;
+/** Open the Stripe Customer Portal for subscription management. */
+export async function openCustomerPortal(): Promise<{ url: string }> {
+  const { data, error } = await supabase.functions.invoke('billing-checkout', {
+    body: { action: 'create_portal_session' },
+  });
 
-    // 3. Log the Transaction in Audit Logs
-    await supabase.from('audit_logs').insert({
-      user_id: params.userId,
-      action: 'PAYMENT_SUCCESS',
-      details: `Stripe transaction verified for ${resolvedPlan} plan (${params.amount})`
-    });
+  if (error) throw new Error(error.message || 'Failed to open billing portal');
+  if (!data?.url) throw new Error('No portal URL returned');
+  return { url: data.url };
+}
 
-    return true;
-  } catch (err) {
-    console.error("Payment Processing Error:", err);
-    return false;
-  }
-};
+// ── Legacy compat ────────────────────────────────────────────────────────────
+
+/** @deprecated Use getStripePublishableKey instead */
+export const getStripeConfig = getStripePublishableKey;

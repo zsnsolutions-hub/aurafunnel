@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangleIcon, BoltIcon, ArrowRightIcon, XIcon, CheckIcon, SparklesIcon } from '../Icons';
 import { PLANS, resolvePlanName } from '../../lib/credits';
 import { AI_PLAN_CONFIG } from '../../lib/pricing.config';
 import { CREDIT_PACKAGES } from '../../config/creditLimits';
+import { createCreditCheckout } from '../../lib/stripe';
 import type { AiLimitError, AiUsageSnapshot } from '../../lib/aiUsage.service';
 
 interface AiUpgradeModalProps {
@@ -16,6 +17,8 @@ interface AiUpgradeModalProps {
 const AiUpgradeModal: React.FC<AiUpgradeModalProps> = ({ error, currentPlan, usage, onClose }) => {
   const navigate = useNavigate();
   const resolved = resolvePlanName(currentPlan);
+  const [buyingCredits, setBuyingCredits] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
 
   const isNoAI = error.code === 'AI_NOT_AVAILABLE';
   const title = isNoAI ? 'AI Features Unavailable' : 'AI Credits Exhausted';
@@ -57,6 +60,22 @@ const AiUpgradeModal: React.FC<AiUpgradeModalProps> = ({ error, currentPlan, usa
   const handleUpgrade = () => {
     onClose();
     navigate('/portal/billing');
+  };
+
+  const handleBuyCredits = async (pkg: typeof CREDIT_PACKAGES[number]) => {
+    setBuyingCredits(true);
+    setCreditError(null);
+    try {
+      const { url } = await createCreditCheckout({
+        credits: pkg.credits,
+        priceCents: pkg.priceCents,
+        label: pkg.label,
+      });
+      window.location.href = url;
+    } catch (err) {
+      setCreditError((err as Error).message || 'Failed to start checkout');
+      setBuyingCredits(false);
+    }
   };
 
   return (
@@ -133,12 +152,16 @@ const AiUpgradeModal: React.FC<AiUpgradeModalProps> = ({ error, currentPlan, usa
         {!isNoAI && (
           <div className="mx-8 mb-6">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Or buy extra credits</p>
+            {creditError && (
+              <p className="text-xs text-red-500 font-bold mb-2">{creditError}</p>
+            )}
             <div className="grid grid-cols-3 gap-2">
               {CREDIT_PACKAGES.map((pkg) => (
                 <button
                   key={pkg.credits}
-                  onClick={handleUpgrade}
-                  className="p-3 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 transition-all text-center"
+                  onClick={() => handleBuyCredits(pkg)}
+                  disabled={buyingCredits}
+                  className="p-3 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <p className="text-sm font-bold text-slate-900">{pkg.credits.toLocaleString()}</p>
                   <p className="text-[10px] text-slate-500">credits</p>
