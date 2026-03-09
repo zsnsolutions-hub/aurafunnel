@@ -8,7 +8,6 @@ export const AI_CREDIT_COSTS = {
   // Email & sequences
   email_generation: 2,
   email_sequence: 3,
-  follow_up_generation: 1,
 
   // Content
   content_generation: 2,
@@ -27,7 +26,6 @@ export const AI_CREDIT_COSTS = {
   business_analysis: 5,
 
   // Strategy & automation
-  sequence_strategy: 3,
   pipeline_strategy: 3,
   workflow_optimization: 2,
   command_center: 2,

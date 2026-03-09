@@ -5,9 +5,6 @@ import { CREDIT_LIMITS, getAiCreditLimit } from '../config/creditLimits';
 // ── Credit costs per AI operation (re-exported from config for backward compat) ──
 export const CREDIT_COSTS: Record<string, number> = { ...AI_CREDIT_COSTS } as Record<string, number>;
 
-// Legacy aliases for operations that were renamed
-CREDIT_COSTS['blog_content'] = AI_CREDIT_COSTS.blog_generation;
-
 // ── Tier limits (reads AI credits from config/creditLimits.ts) ────────────
 export const TIER_LIMITS: Record<string, { credits: number; aiCredits: number; contacts: number; seats: number; emails: number; storage: number }> = {
   Free:     { credits: CREDIT_LIMITS.free,    aiCredits: CREDIT_LIMITS.free,    contacts: 5,     seats: 1,  emails: 5,     storage: 200   },

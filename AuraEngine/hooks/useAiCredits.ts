@@ -3,7 +3,6 @@ import {
   checkAiAllowed,
   checkAiThreshold,
   getAiUsageSnapshot,
-  trackAiUsage,
 } from '../lib/aiUsage.service';
 import type {
   AiLimitError,
@@ -14,7 +13,7 @@ import type {
 interface UseAiCreditsReturn {
   /** Current AI usage snapshot. */
   usage: AiUsageSnapshot | null;
-  /** Active threshold warning (80%+). */
+  /** Active threshold warning (50%+). */
   warning: AiThresholdWarning | null;
   /** Set when an AI check fails — use to drive the AiUpgradeModal. */
   aiError: AiLimitError | null;
@@ -25,11 +24,6 @@ interface UseAiCreditsReturn {
    * Call before making a Gemini API call.
    */
   checkAi: () => Promise<boolean>;
-  /**
-   * Track usage after a Gemini response.
-   * Returns credits deducted.
-   */
-  recordUsage: (tokensUsed: number) => Promise<number>;
   /** Force-refresh usage snapshot and warnings. */
   refresh: () => void;
   /** Whether usage data is still loading. */
@@ -82,16 +76,9 @@ export function useAiCredits(
     return true;
   }, [workspaceId, planName, fetchData]);
 
-  const recordUsage = useCallback(async (tokensUsed: number): Promise<number> => {
-    if (!workspaceId || !planName) return 0;
-    const result = await trackAiUsage(workspaceId, planName, tokensUsed);
-    fetchData(); // refresh after deduction
-    return result.creditsDeducted;
-  }, [workspaceId, planName, fetchData]);
-
   const refresh = useCallback(() => {
     fetchData();
   }, [fetchData]);
 
-  return { usage, warning, aiError, clearAiError, checkAi, recordUsage, refresh, loading };
+  return { usage, warning, aiError, clearAiError, checkAi, refresh, loading };
 }

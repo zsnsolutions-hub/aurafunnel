@@ -5,8 +5,6 @@ import {
   CREDIT_CONVERSION_RATE,
 } from './pricing.config';
 import { resolvePlanName } from './credits';
-import { incrementUsage } from './usageTracker';
-import { getAiCreditLimit } from '../config/creditLimits';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,7 +24,8 @@ export interface AiUsageSnapshot {
 }
 
 export interface AiThresholdWarning {
-  level: 'warning' | 'critical';
+  level: 'info' | 'warning' | 'critical';
+  message: string;
   creditsUsed: number;
   creditsLimit: number;
   percent: number;
@@ -76,89 +75,11 @@ export async function checkAiAllowed(
       code: 'AI_LIMIT_REACHED',
       message: 'You\u2019ve used all your AI credits for this month. Upgrade your plan or wait for the monthly reset.',
       remaining: 0,
-      limit: config.aiCreditsMonthly,
+      limit: config.aiCredits,
     };
   }
 
   return null;
-}
-
-/**
- * Track AI usage after a successful Gemini response.
- * Deducts credits based on tokens used.
- *
- * Call this AFTER receiving the Gemini response.
- */
-export async function trackAiUsage(
-  workspaceId: string,
-  planName: string,
-  tokensUsed: number,
-): Promise<{ creditsDeducted: number; creditsRemaining: number }> {
-  const resolved = resolvePlanName(planName);
-  const config = getAiPlanConfig(resolved);
-  const creditsDeducted = tokensToCredits(tokensUsed);
-  const month = monthKey();
-
-  // Upsert usage row
-  const { data, error } = await supabase
-    .from('workspace_ai_usage')
-    .upsert(
-      {
-        workspace_id: workspaceId,
-        month_year: month,
-        credits_used: creditsDeducted,
-        tokens_used: tokensUsed,
-        credits_limit: config.aiCreditsMonthly,
-      },
-      { onConflict: 'workspace_id,month_year' },
-    )
-    .select('credits_used')
-    .single();
-
-  if (error) {
-    // Fallback: use RPC to atomically increment
-    const { data: rpcData, error: rpcErr } = await supabase.rpc(
-      'increment_ai_usage',
-      {
-        p_workspace_id: workspaceId,
-        p_month_year: month,
-        p_credits: creditsDeducted,
-        p_tokens: tokensUsed,
-        p_credits_limit: config.aiCreditsMonthly,
-      },
-    );
-    if (rpcErr) {
-      console.error('AI usage tracking failed:', rpcErr.message);
-    }
-    const newUsed = (rpcData as number) ?? creditsDeducted;
-
-    // Best-effort sync to workspace_usage_counters for dashboard consistency.
-    incrementUsage({
-      workspaceId,
-      eventType: 'ai_credit',
-      quantity: creditsDeducted,
-    }).catch(() => {});
-
-    return {
-      creditsDeducted,
-      creditsRemaining: Math.max(config.aiCreditsMonthly - newUsed, 0),
-    };
-  }
-
-  const newUsed = data?.credits_used ?? creditsDeducted;
-
-  // Best-effort sync to workspace_usage_counters for dashboard consistency.
-  // workspace_ai_usage remains authoritative for AI enforcement.
-  incrementUsage({
-    workspaceId,
-    eventType: 'ai_credit',
-    quantity: creditsDeducted,
-  }).catch(() => {});
-
-  return {
-    creditsDeducted,
-    creditsRemaining: Math.max(config.aiCreditsMonthly - newUsed, 0),
-  };
 }
 
 /**
@@ -180,8 +101,8 @@ export async function getRemainingCredits(
     .eq('month_year', monthKey())
     .maybeSingle();
 
-  if (error || !data) return config.aiCreditsMonthly; // No usage yet = full quota
-  return Math.max(config.aiCreditsMonthly - (data.credits_used ?? 0), 0);
+  if (error || !data) return config.aiCredits; // No usage yet = full quota
+  return Math.max(config.aiCredits - (data.credits_used ?? 0), 0);
 }
 
 /**
@@ -207,12 +128,12 @@ export async function getAiUsageSnapshot(
 
   const creditsUsed = data?.credits_used ?? 0;
   const tokensUsed = data?.tokens_used ?? 0;
-  const creditsRemaining = Math.max(config.aiCreditsMonthly - creditsUsed, 0);
-  const percentUsed = config.aiCreditsMonthly > 0
-    ? Math.min(Math.round((creditsUsed / config.aiCreditsMonthly) * 100), 100)
+  const creditsRemaining = Math.max(config.aiCredits - creditsUsed, 0);
+  const percentUsed = config.aiCredits > 0
+    ? Math.min(Math.round((creditsUsed / config.aiCredits) * 100), 100)
     : 0;
 
-  return { creditsUsed, creditsLimit: config.aiCreditsMonthly, creditsRemaining, tokensUsed, percentUsed };
+  return { creditsUsed, creditsLimit: config.aiCredits, creditsRemaining, tokensUsed, percentUsed };
 }
 
 /**
@@ -227,9 +148,12 @@ export async function checkAiThreshold(
 
   if (snapshot.creditsLimit === 0) return null;
 
+  const remaining = snapshot.creditsRemaining;
+
   if (snapshot.percentUsed >= 90) {
     return {
       level: 'critical',
+      message: `Almost out of AI credits — ${remaining.toLocaleString()} remaining`,
       creditsUsed: snapshot.creditsUsed,
       creditsLimit: snapshot.creditsLimit,
       percent: snapshot.percentUsed,
@@ -239,6 +163,7 @@ export async function checkAiThreshold(
   if (snapshot.percentUsed >= 75) {
     return {
       level: 'warning',
+      message: `${snapshot.percentUsed}% of AI credits used this month`,
       creditsUsed: snapshot.creditsUsed,
       creditsLimit: snapshot.creditsLimit,
       percent: snapshot.percentUsed,
@@ -247,7 +172,8 @@ export async function checkAiThreshold(
 
   if (snapshot.percentUsed >= 50) {
     return {
-      level: 'warning',
+      level: 'info',
+      message: `${snapshot.percentUsed}% of AI credits used this month. ${remaining.toLocaleString()} remaining.`,
       creditsUsed: snapshot.creditsUsed,
       creditsLimit: snapshot.creditsLimit,
       percent: snapshot.percentUsed,

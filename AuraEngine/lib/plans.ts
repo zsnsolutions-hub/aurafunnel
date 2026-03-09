@@ -190,7 +190,7 @@ function normalizePlan(raw: Record<string, unknown>): DbPlan {
     updated_at: (raw.updated_at as string) ?? new Date().toISOString(),
     limits: {
       credits:              dbLimits.credits ?? fallbackLimits.credits,
-      aiCredits:            dbLimits.aiCredits ?? (dbLimits as Record<string, unknown>).aiCreditsMonthly as number ?? fallbackLimits.aiCredits,
+      aiCredits:            dbLimits.aiCredits ?? ((dbLimits as Record<string, unknown>).aiCreditsMonthly as number | undefined) ?? fallbackLimits.aiCredits,
       contacts:             dbLimits.contacts ?? fallbackLimits.contacts,
       seats:                dbLimits.seats ?? fallbackLimits.seats,
       emails:               dbLimits.emails ?? fallbackLimits.emails,

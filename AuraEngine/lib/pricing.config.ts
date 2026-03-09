@@ -16,7 +16,7 @@ export const CREDIT_CONVERSION_RATE = 800; // tokens per 1 AI credit
 export interface AiPlanConfig {
   name: string;
   hasAI: boolean;
-  aiCreditsMonthly: number;
+  aiCredits: number;
   hardStopAI: boolean;
   aiFeatures: string[];
 }
@@ -27,28 +27,28 @@ export const AI_PLAN_CONFIG: Record<string, AiPlanConfig> = {
   Free: {
     name: 'Free',
     hasAI: true,
-    aiCreditsMonthly: CREDIT_LIMITS.free,
+    aiCredits: CREDIT_LIMITS.free,
     hardStopAI: true,
     aiFeatures: [],
   },
   Starter: {
     name: 'Starter',
     hasAI: true,
-    aiCreditsMonthly: CREDIT_LIMITS.starter,
+    aiCredits: CREDIT_LIMITS.starter,
     hardStopAI: true,
     aiFeatures: ['AI draft generation', 'AI rewrite'],
   },
   Growth: {
     name: 'Growth',
     hasAI: true,
-    aiCreditsMonthly: CREDIT_LIMITS.growth,
+    aiCredits: CREDIT_LIMITS.growth,
     hardStopAI: true,
     aiFeatures: ['AI draft generation', 'AI rewrite', 'AI personalization'],
   },
   Scale: {
     name: 'Scale',
     hasAI: true,
-    aiCreditsMonthly: CREDIT_LIMITS.scale,
+    aiCredits: CREDIT_LIMITS.scale,
     hardStopAI: true,
     aiFeatures: ['AI draft generation', 'AI rewrite', 'Advanced AI personalization'],
   },
@@ -67,7 +67,7 @@ export function getAiPlanConfig(planName: string): AiPlanConfig {
   return {
     name: planName,
     hasAI: limits.hasAI,
-    aiCreditsMonthly: limits.aiCredits ?? limits.aiCreditsMonthly,
+    aiCredits: limits.aiCredits,
     hardStopAI: true,
     aiFeatures: hardcoded.aiFeatures,
   };
@@ -89,7 +89,7 @@ export async function getAiPlanConfigAsync(planName: string): Promise<AiPlanConf
       return {
         name: plan.name,
         hasAI: plan.limits.hasAI,
-        aiCreditsMonthly: plan.limits.aiCredits ?? plan.limits.aiCreditsMonthly,
+        aiCredits: plan.limits.aiCredits ?? plan.limits.aiCredits,
         hardStopAI: true,
         aiFeatures: hardcoded.aiFeatures,
       };

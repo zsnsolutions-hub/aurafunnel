@@ -18,9 +18,8 @@ const AiWarningBanner: React.FC<AiWarningBannerProps> = ({ warning }) => {
   const isCritical = warning.level === 'critical';
   const isWarning = warning.level === 'warning';
   const remaining = warning.creditsLimit - warning.creditsUsed;
-  const hasMessage = 'message' in warning && warning.message;
   const hasUpgradePlan = 'upgradePlan' in warning && warning.upgradePlan;
-  const percent = 'percent' in warning ? warning.percent : 0;
+  const percent = warning.percent;
 
   const bgClass = isCritical
     ? 'bg-red-50 border border-red-200'
@@ -69,12 +68,7 @@ const AiWarningBanner: React.FC<AiWarningBannerProps> = ({ warning }) => {
         </div>
         <div className="min-w-0">
           <p className={`text-sm font-bold ${textClass}`}>
-            {hasMessage
-              ? (warning as CreditWarning).message
-              : isCritical
-                ? `Almost out of AI credits \u2014 ${remaining.toLocaleString()} remaining`
-                : `${percent}% of AI credits used this month`
-            }
+            {warning.message}
           </p>
           <p className={`text-xs mt-0.5 ${subTextClass}`}>
             {warning.creditsUsed.toLocaleString()} of {warning.creditsLimit.toLocaleString()} credits used.
