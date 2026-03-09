@@ -1,9 +1,5 @@
 import { supabase } from './supabase';
-import {
-  getAiPlanConfig,
-  tokensToCredits,
-  CREDIT_CONVERSION_RATE,
-} from './pricing.config';
+import { getAiPlanConfig } from './pricing.config';
 import { resolvePlanName } from './credits';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -38,11 +34,6 @@ function monthKey(): string {
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
-
-/** Convert token count to AI credits. */
-export function calculateCredits(tokens: number): number {
-  return tokensToCredits(tokens);
-}
 
 /**
  * Check whether AI actions are allowed for this workspace.
@@ -183,10 +174,3 @@ export async function checkAiThreshold(
   return null;
 }
 
-/** Estimate how many AI credits a token count will cost. Useful for pre-launch estimates. */
-export function estimateCredits(estimatedTokens: number): number {
-  return tokensToCredits(estimatedTokens);
-}
-
-/** Credit conversion rate constant, re-exported for UI tooltips. */
-export { CREDIT_CONVERSION_RATE };

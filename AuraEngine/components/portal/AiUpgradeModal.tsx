@@ -34,8 +34,8 @@ const AiUpgradeModal: React.FC<AiUpgradeModalProps> = ({ error, currentPlan, usa
   const comparisonRows = [
     {
       label: 'AI Credits / month',
-      currentVal: currentAi.hasAI ? currentAi.aiCreditsMonthly.toLocaleString() : 'None',
-      nextVal: nextAi ? nextAi.aiCreditsMonthly.toLocaleString() : null,
+      currentVal: currentAi.hasAI ? currentAi.aiCredits.toLocaleString() : 'None',
+      nextVal: nextAi ? nextAi.aiCredits.toLocaleString() : null,
     },
     {
       label: 'AI Drafts & Rewrites',

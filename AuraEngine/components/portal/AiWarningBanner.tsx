@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangleIcon, XIcon, SparklesIcon } from '../Icons';
-import type { CreditWarning } from '../../services/creditManager';
 import type { AiThresholdWarning } from '../../lib/aiUsage.service';
+
+/** Warning with optional upgrade suggestion. Compatible with AiThresholdWarning. */
+export interface CreditWarning extends AiThresholdWarning {
+  creditsRemaining: number;
+  upgradePlan?: string;
+}
 
 type WarningProp = CreditWarning | AiThresholdWarning;
 
