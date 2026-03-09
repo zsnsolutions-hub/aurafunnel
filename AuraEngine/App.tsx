@@ -99,12 +99,22 @@ function AuthRedirect() {
   return <Navigate to="/auth" state={{ from: location }} />;
 }
 
-/** Portal entry guard — checks onboarding + mobile, then renders ClientLayout. */
+/** Portal entry guard — checks onboarding + mobile + pending plan selection, then renders ClientLayout. */
 function PortalGuard({ user, onLogout, refreshProfile }: { user: User; onLogout: () => void; refreshProfile: () => Promise<void> }) {
   const isMobile = useIsMobile();
+  const location = useLocation();
+
   if (!user.businessProfile?.companyName && !localStorage.getItem('scaliyo_onboarding_complete')) {
     return <Navigate to="/onboarding" replace />;
   }
+
+  // If user selected a plan from pricing page, redirect to billing with that plan
+  const storedPlan = localStorage.getItem('scaliyo_selected_plan');
+  if (storedPlan && !location.pathname.includes('/billing')) {
+    localStorage.removeItem('scaliyo_selected_plan');
+    return <Navigate to={`/portal/billing?plan=${storedPlan}`} replace />;
+  }
+
   if (isMobile) {
     return <Navigate to="/portal/mobile" replace />;
   }
