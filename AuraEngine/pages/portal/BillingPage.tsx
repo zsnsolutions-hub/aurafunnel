@@ -104,16 +104,18 @@ const BillingPage: React.FC = () => {
     fetchUsage();
   }, []);
 
-  // Auto-open checkout when redirected from pricing page with ?plan=X
+  // Auto-open checkout when redirected from pricing page with ?plan=X or localStorage
   useEffect(() => {
-    const planParam = searchParams.get('plan');
+    const planParam = searchParams.get('plan') || localStorage.getItem('scaliyo_selected_plan');
     if (planParam && plans.length > 0) {
       const match = plans.find(p => p.name.toLowerCase() === planParam.toLowerCase());
       if (match && match.name !== currentPlanName && match.stripe_price_id) {
         setSelectedPlan(match);
         setIsCheckoutOpen(true);
-        setSearchParams({}, { replace: true });
       }
+      // Clear both sources
+      localStorage.removeItem('scaliyo_selected_plan');
+      setSearchParams({}, { replace: true });
     }
   }, [plans, searchParams]);
 

@@ -111,7 +111,7 @@ function PortalGuard({ user, onLogout, refreshProfile }: { user: User; onLogout:
   // If user selected a plan from pricing page, redirect to billing with that plan
   const storedPlan = localStorage.getItem('scaliyo_selected_plan');
   if (storedPlan && !location.pathname.includes('/billing')) {
-    localStorage.removeItem('scaliyo_selected_plan');
+    // Don't remove yet — BillingPage will clear it after opening checkout
     return <Navigate to={`/portal/billing?plan=${storedPlan}`} replace />;
   }
 
