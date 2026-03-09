@@ -217,6 +217,7 @@ function buildFallbackPlans(): DbPlan[] {
     price_monthly_cents: name === 'Free' ? 0 : name === 'Starter' ? 2900 : name === 'Growth' ? 7900 : 19900,
     currency: 'usd',
     stripe_price_id: null,
+    stripe_price_id_annual: null,
     credits: getAiCreditLimit(name),
     description: null,
     features: [],
