@@ -13,7 +13,7 @@ import { generateLeadContent, generateDashboardInsights, generateLeadResearch, p
 
 import { supabase } from '../../lib/supabase';
 import { normalizeLeads, useLeads, useLeadCounts, useEmailSummaries, useSocialStats } from '../../lib/queries';
-import { consumeCredits, CREDIT_COSTS, resolvePlanName } from '../../lib/credits';
+import { consumeCredits, resolvePlanName } from '../../lib/credits';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { generateProgrammaticInsights } from '../../lib/insights';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -419,7 +419,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     setGenError('');
 
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['content_generation']);
+      const creditResult = await consumeCredits(supabase, 'content_generation');
       if (!creditResult.success) {
         setGenError(creditResult.message || 'Insufficient credits.');
         setIsGenerating(false);
@@ -502,7 +502,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
     if (Object.keys(socialUrls).length === 0) return;
 
-    const researchCredit = await consumeCredits(supabase, CREDIT_COSTS['lead_research']);
+    const researchCredit = await consumeCredits(supabase, 'lead_research');
     if (!researchCredit.success) return;
 
     setResearchingLeadIds(prev => new Set(prev).add(createdLead.id));
@@ -718,7 +718,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
                 <h1 className="text-2xl md:text-3xl font-bold tracking-tight font-heading">{getGreeting()}, {user.name?.split(' ')[0] || 'there'}</h1>
                 <div className="flex items-center space-x-3 mt-1">
                   <span className="px-2 py-0.5 bg-indigo-500/20 rounded-md text-[9px] font-bold text-indigo-300 uppercase tracking-widest">
-                    {resolvePlanName(user.plan || 'Starter')} Plan
+                    {resolvePlanName(user.plan || 'Free')} Plan
                   </span>
                   <span className="text-xs text-slate-400">
                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
@@ -1255,7 +1255,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         isOpen={isCSVOpen}
         onClose={() => setIsCSVOpen(false)}
         userId={user.id}
-        planName={resolvePlanName(user.plan || 'Starter')}
+        planName={resolvePlanName(user.plan || 'Free')}
         onImportComplete={handleImportComplete}
       />
 

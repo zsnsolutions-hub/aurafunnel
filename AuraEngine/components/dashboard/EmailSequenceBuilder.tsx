@@ -73,7 +73,7 @@ const EmailSequenceBuilder: React.FC<EmailSequenceBuilderProps> = ({
     const finalConfig = { ...config, audienceLeadIds: selectedLeadIds };
 
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['email_sequence']);
+      const creditResult = await consumeCredits(supabase, 'email_sequence');
       if (!creditResult.success) {
         setError(creditResult.message || 'Insufficient credits.');
         setIsGenerating(false);

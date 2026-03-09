@@ -422,7 +422,7 @@ const UserManagement: React.FC = () => {
                 const creditsUsed = user.credits_used || 0;
                 const creditsTotal = user.credits_total || 500;
                 const usagePercent = Math.min((creditsUsed / creditsTotal) * 100, 100);
-                const currentPlan = user.subscription?.plan_name || user.plan || 'Starter';
+                const currentPlan = user.subscription?.plan_name || user.plan || 'Free';
                 const isSelected = idx === selectedIdx;
 
                 return (

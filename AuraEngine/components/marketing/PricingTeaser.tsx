@@ -2,11 +2,13 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import Reveal from './Reveal';
 import { track } from '../../lib/analytics';
+import { CREDIT_LIMITS } from '../../config/creditLimits';
 
 const plans = [
-  { name: 'Starter', price: 29, popular: false },
-  { name: 'Growth', price: 79, popular: true },
-  { name: 'Scale', price: 199, popular: false },
+  { name: 'Free', price: 0, popular: false, aiCredits: CREDIT_LIMITS.free },
+  { name: 'Starter', price: 29, popular: false, aiCredits: CREDIT_LIMITS.starter },
+  { name: 'Growth', price: 79, popular: true, aiCredits: CREDIT_LIMITS.growth },
+  { name: 'Scale', price: 199, popular: false, aiCredits: CREDIT_LIMITS.scale },
 ];
 
 const PricingTeaser: React.FC = () => (
@@ -35,9 +37,10 @@ const PricingTeaser: React.FC = () => (
               )}
               <h3 className="text-lg font-bold font-heading mb-2">{plan.name}</h3>
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-4xl font-black font-heading">${plan.price}</span>
-                <span className="text-sm text-slate-500">/mo</span>
+                <span className="text-4xl font-black font-heading">{plan.price === 0 ? 'Free' : `$${plan.price}`}</span>
+                {plan.price > 0 && <span className="text-sm text-slate-500">/mo</span>}
               </div>
+              <p className="text-xs text-slate-500 mt-2">{plan.aiCredits.toLocaleString()} AI credits</p>
             </div>
           </Reveal>
         ))}

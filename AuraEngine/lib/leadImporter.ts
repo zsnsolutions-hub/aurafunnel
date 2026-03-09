@@ -111,7 +111,7 @@ export async function checkContactsCapacity(
   planName: string
 ): Promise<ContactsCapacity> {
   const resolved = resolvePlanName(planName);
-  const max = TIER_LIMITS[resolved]?.contacts ?? TIER_LIMITS.Starter.contacts;
+  const max = TIER_LIMITS[resolved]?.contacts ?? TIER_LIMITS.Free.contacts;
 
   const { count, error } = await supabase
     .from('leads')

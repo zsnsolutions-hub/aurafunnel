@@ -1,6 +1,6 @@
 // ── AI Credit Pricing Configuration ──────────────────────────────────────────
 //
-// Single source of truth for AI credit allocations per plan.
+// AI credit allocations are defined in config/creditLimits.ts (single source of truth).
 // 1 AI credit = 800 tokens (Gemini).  Hard stop when credits reach 0.
 // Credits are per workspace, NOT per user — seats do not multiply credits.
 //
@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { getPlanByName, getPlanLimitsSync } from './plans';
+import { CREDIT_LIMITS, getAiCreditLimit } from '../config/creditLimits';
 
 export const CREDIT_CONVERSION_RATE = 800; // tokens per 1 AI credit
 
@@ -23,24 +24,31 @@ export interface AiPlanConfig {
 // ── Hardcoded fallback (used only when DB is unreachable) ───────────────────
 
 export const AI_PLAN_CONFIG: Record<string, AiPlanConfig> = {
-  Starter: {
-    name: 'Starter',
-    hasAI: false,
-    aiCreditsMonthly: 0,
+  Free: {
+    name: 'Free',
+    hasAI: true,
+    aiCreditsMonthly: CREDIT_LIMITS.free,
     hardStopAI: true,
     aiFeatures: [],
+  },
+  Starter: {
+    name: 'Starter',
+    hasAI: true,
+    aiCreditsMonthly: CREDIT_LIMITS.starter,
+    hardStopAI: true,
+    aiFeatures: ['AI draft generation', 'AI rewrite'],
   },
   Growth: {
     name: 'Growth',
     hasAI: true,
-    aiCreditsMonthly: 2_000,
+    aiCreditsMonthly: CREDIT_LIMITS.growth,
     hardStopAI: true,
     aiFeatures: ['AI draft generation', 'AI rewrite', 'AI personalization'],
   },
   Scale: {
     name: 'Scale',
     hasAI: true,
-    aiCreditsMonthly: 8_000,
+    aiCreditsMonthly: CREDIT_LIMITS.scale,
     hardStopAI: true,
     aiFeatures: ['AI draft generation', 'AI rewrite', 'Advanced AI personalization'],
   },
@@ -54,12 +62,12 @@ export function getAiPlanConfig(planName: string): AiPlanConfig {
 
   // Use sync fallback from plans.ts defaults
   const limits = getPlanLimitsSync(planName);
-  const hardcoded = AI_PLAN_CONFIG[planName] ?? AI_PLAN_CONFIG.Starter;
+  const hardcoded = AI_PLAN_CONFIG[planName] ?? AI_PLAN_CONFIG.Free;
 
   return {
     name: planName,
     hasAI: limits.hasAI,
-    aiCreditsMonthly: limits.aiCreditsMonthly,
+    aiCreditsMonthly: limits.aiCredits ?? limits.aiCreditsMonthly,
     hardStopAI: true,
     aiFeatures: hardcoded.aiFeatures,
   };
@@ -77,11 +85,11 @@ export async function getAiPlanConfigAsync(planName: string): Promise<AiPlanConf
   try {
     const plan = await getPlanByName(resolved);
     if (plan) {
-      const hardcoded = AI_PLAN_CONFIG[resolved] ?? AI_PLAN_CONFIG.Starter;
+      const hardcoded = AI_PLAN_CONFIG[resolved] ?? AI_PLAN_CONFIG.Free;
       return {
         name: plan.name,
         hasAI: plan.limits.hasAI,
-        aiCreditsMonthly: plan.limits.aiCreditsMonthly,
+        aiCreditsMonthly: plan.limits.aiCredits ?? plan.limits.aiCreditsMonthly,
         hardStopAI: true,
         aiFeatures: hardcoded.aiFeatures,
       };

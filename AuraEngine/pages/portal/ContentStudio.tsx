@@ -879,7 +879,7 @@ const ContentStudio: React.FC = () => {
 
     setSuggestionsRefreshing(true);
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['content_suggestions']);
+      const creditResult = await consumeCredits(supabase, 'content_suggestions');
       if (!creditResult.success) {
         setAiError(creditResult.message || 'Insufficient credits.');
         setSuggestionsRefreshing(false);
@@ -952,7 +952,7 @@ const ContentStudio: React.FC = () => {
 
     try {
       const creditType = contentMode === 'email' ? 'email_sequence' : 'content_generation';
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS[creditType]);
+      const creditResult = await consumeCredits(supabase, creditType);
       if (!creditResult.success) {
         setAiError(creditResult.message || 'Insufficient credits.');
         setAiGenerating(false);
@@ -1180,7 +1180,7 @@ const ContentStudio: React.FC = () => {
       if (item.status === 'done') continue;
       setBatchItems(prev => prev.map((b, i) => i === idx ? { ...b, status: 'generating' as const } : b));
       try {
-        const batchCredit = await consumeCredits(supabase, CREDIT_COSTS['batch_generation']);
+        const batchCredit = await consumeCredits(supabase, 'batch_generation');
         if (!batchCredit.success) {
           setBatchItems(prev => prev.map((b, i) => i === idx ? { ...b, status: 'done' as const } : b));
           break;

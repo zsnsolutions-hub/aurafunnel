@@ -2102,7 +2102,7 @@ const LeadManagement: React.FC = () => {
         isOpen={isCSVOpen}
         onClose={() => setIsCSVOpen(false)}
         userId={user.id}
-        planName={resolvePlanName(user.plan || 'Starter')}
+        planName={resolvePlanName(user.plan || 'Free')}
         onImportComplete={() => refetchLeads()}
       />
 

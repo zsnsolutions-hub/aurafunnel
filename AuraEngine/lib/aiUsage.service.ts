@@ -6,6 +6,7 @@ import {
 } from './pricing.config';
 import { resolvePlanName } from './credits';
 import { incrementUsage } from './usageTracker';
+import { getAiCreditLimit } from '../config/creditLimits';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -215,8 +216,8 @@ export async function getAiUsageSnapshot(
 }
 
 /**
- * Check threshold warnings (80% and 95%).
- * Returns null if under threshold, or a warning object.
+ * Check threshold warnings (50%, 75%, 90%).
+ * Returns null if under 50%, or a warning object.
  */
 export async function checkAiThreshold(
   workspaceId: string,
@@ -226,7 +227,7 @@ export async function checkAiThreshold(
 
   if (snapshot.creditsLimit === 0) return null;
 
-  if (snapshot.percentUsed >= 95) {
+  if (snapshot.percentUsed >= 90) {
     return {
       level: 'critical',
       creditsUsed: snapshot.creditsUsed,
@@ -235,7 +236,16 @@ export async function checkAiThreshold(
     };
   }
 
-  if (snapshot.percentUsed >= 80) {
+  if (snapshot.percentUsed >= 75) {
+    return {
+      level: 'warning',
+      creditsUsed: snapshot.creditsUsed,
+      creditsLimit: snapshot.creditsLimit,
+      percent: snapshot.percentUsed,
+    };
+  }
+
+  if (snapshot.percentUsed >= 50) {
     return {
       level: 'warning',
       creditsUsed: snapshot.creditsUsed,

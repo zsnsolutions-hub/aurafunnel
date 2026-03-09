@@ -359,7 +359,7 @@ const AdminCommandCenterPage: React.FC = () => {
                   <p className="text-xs font-bold text-slate-700 truncate">{u.name || 'Unnamed'}</p>
                   <p className="text-[10px] text-slate-400 font-mono truncate">{u.email}</p>
                 </div>
-                <span className="text-[9px] font-bold text-slate-400 uppercase">{u.plan || 'Starter'}</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase">{u.plan || 'Free'}</span>
                 <ChevronRight size={14} className="text-slate-300" />
               </button>
             ))}

@@ -1555,7 +1555,7 @@ const UserManualPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-slate-900">Welcome, {user?.name || 'User'}</p>
-                  <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Plan: {user?.plan || 'Starter'} \u2022 Role: {user?.role || 'CLIENT'}</p>
+                  <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Plan: {user?.plan || 'Free'} \u2022 Role: {user?.role || 'CLIENT'}</p>
                 </div>
               </div>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Manual v3.1 \u2022 Jan 2024</span>

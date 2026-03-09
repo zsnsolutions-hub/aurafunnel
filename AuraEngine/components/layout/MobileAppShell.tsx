@@ -59,8 +59,8 @@ const MobileAppShell: React.FC<MobileAppShellProps> = ({ user, onLogout, refresh
   const pageTitle = isSubPage ? 'Details' : TAB_LABELS[activeTab] || 'Scaliyo';
 
   // Credits
-  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
-  const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
+  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Free');
+  const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Free.credits);
   const creditsUsed = user.credits_used || 0;
   const creditsLeft = creditsTotal - creditsUsed;
 

@@ -36,7 +36,7 @@ const SenderAccountsPage: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
 
-  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
+  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Free');
   const limits = getOutboundLimits(currentPlan);
 
   const fetchAccounts = useCallback(async () => {

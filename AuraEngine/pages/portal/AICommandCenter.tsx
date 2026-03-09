@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
+import { consumeCredits } from '../../lib/credits';
 import { generateProgrammaticInsights, generateLeadInsights } from '../../lib/insights';
 import { generateDashboardInsights, generateCommandCenterResponse } from '../../lib/gemini';
 import {
@@ -696,7 +696,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       }]);
 
       try {
-        const creditResult = await consumeCredits(supabase, CREDIT_COSTS['dashboard_insights']);
+        const creditResult = await consumeCredits(supabase, 'dashboard_insights');
         if (!creditResult.success) {
           setMessages(prev => [...prev, {
             id: `credit-err-${Date.now()}`,
@@ -742,7 +742,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
 
     // ─── All other prompts: SSE stream via edge function, with template fallback ───
     try {
-      const cmdCredit = await consumeCredits(supabase, CREDIT_COSTS['command_center']);
+      const cmdCredit = await consumeCredits(supabase, 'command_center');
       if (!cmdCredit.success) {
         setMessages(prev => [...prev, {
           id: `credit-err-${Date.now()}`,

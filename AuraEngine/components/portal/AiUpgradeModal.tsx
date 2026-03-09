@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangleIcon, BoltIcon, ArrowRightIcon, XIcon, CheckIcon, SparklesIcon } from '../Icons';
 import { PLANS, resolvePlanName } from '../../lib/credits';
 import { AI_PLAN_CONFIG } from '../../lib/pricing.config';
+import { CREDIT_PACKAGES } from '../../config/creditLimits';
 import type { AiLimitError, AiUsageSnapshot } from '../../lib/aiUsage.service';
 
 interface AiUpgradeModalProps {
@@ -128,6 +129,26 @@ const AiUpgradeModal: React.FC<AiUpgradeModalProps> = ({ error, currentPlan, usa
           </div>
         )}
 
+        {/* Credit add-on packages (when credits exhausted) */}
+        {!isNoAI && (
+          <div className="mx-8 mb-6">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Or buy extra credits</p>
+            <div className="grid grid-cols-3 gap-2">
+              {CREDIT_PACKAGES.map((pkg) => (
+                <button
+                  key={pkg.credits}
+                  onClick={handleUpgrade}
+                  className="p-3 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 transition-all text-center"
+                >
+                  <p className="text-sm font-bold text-slate-900">{pkg.credits.toLocaleString()}</p>
+                  <p className="text-[10px] text-slate-500">credits</p>
+                  <p className="text-xs font-bold text-violet-600 mt-1">${(pkg.priceCents / 100).toFixed(0)}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="px-8 pb-8 space-y-3">
           {next ? (
@@ -145,7 +166,7 @@ const AiUpgradeModal: React.FC<AiUpgradeModalProps> = ({ error, currentPlan, usa
                 <CheckIcon className="w-5 h-5" />
                 <span className="font-bold text-sm">You&apos;re on our highest plan</span>
               </div>
-              <p className="text-slate-400 text-xs">Your credits will reset at the start of the next billing month.</p>
+              <p className="text-slate-400 text-xs">Your credits will reset at the start of the next billing month, or purchase extra credits above.</p>
             </div>
           )}
 

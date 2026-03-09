@@ -839,7 +839,7 @@ const StrategyHub: React.FC = () => {
     setIsGeneratingStrategy(true);
 
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['pipeline_strategy']);
+      const creditResult = await consumeCredits(supabase, 'pipeline_strategy');
       if (!creditResult.success) {
         setIsGeneratingStrategy(false);
         return;

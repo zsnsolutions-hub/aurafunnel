@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { TeamInvite } from '../types';
+import { getTeamSeatInfo } from '../lib/seatLimits';
 
 interface UseTeamInvitesResult {
   pendingInvites: TeamInvite[];
@@ -59,6 +60,25 @@ export function useTeamInvites(userEmail: string, userId: string): UseTeamInvite
   }, [userEmail, version]);
 
   const acceptInvite = useCallback(async (invite: TeamInvite) => {
+    // Seat limit check — pending invites are already counted, but guard against
+    // race conditions (e.g. owner downgraded or other accepts happened first)
+    try {
+      const seatInfo = await getTeamSeatInfo(supabase, invite.team_id);
+      // Pending invites are already counted in occupiedSeats, so accepting one
+      // converts a pending slot to a member slot (net zero). Only block if the
+      // team is over capacity (e.g. plan was downgraded after invite was sent).
+      if (seatInfo.currentMembers >= seatInfo.totalAllowedSeats) {
+        throw new Error(
+          seatInfo.canBuyExtraSeat
+            ? 'This team has reached its seat limit. Ask the team owner to purchase an extra seat before you can join.'
+            : `This team has reached the maximum of ${seatInfo.maxSeats} members allowed on the ${seatInfo.planName} plan. Ask the team owner to upgrade.`
+        );
+      }
+    } catch (err: any) {
+      // Re-throw seat limit errors, but don't block on RLS/network issues
+      if (err?.message?.includes('seat limit') || err?.message?.includes('maximum of')) throw err;
+    }
+
     const { error: memberErr } = await supabase
       .from('team_members')
       .insert({ team_id: invite.team_id, user_id: userId, role: invite.role || 'member' });

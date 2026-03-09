@@ -86,8 +86,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
 
         get_page_context: async () => {
           const u = userRef.current;
-          const planName = resolvePlanName(u?.subscription?.plan_name || u?.plan || 'Starter');
-          const creditsTotal = u?.credits_total || (TIER_LIMITS[planName]?.credits ?? TIER_LIMITS.Starter.credits);
+          const planName = resolvePlanName(u?.subscription?.plan_name || u?.plan || 'Free');
+          const creditsTotal = u?.credits_total || (TIER_LIMITS[planName]?.credits ?? TIER_LIMITS.Free.credits);
           const creditsUsed = u?.credits_used || 0;
           return JSON.stringify({
             currentRoute: locationRef.current.pathname,
@@ -210,8 +210,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({ user, agentId, autoConnect }) =
     };
 
     if (isPortal && u) {
-      const planName = resolvePlanName(u.subscription?.plan_name || u.plan || 'Starter');
-      const creditsTotal = u.credits_total || (TIER_LIMITS[planName]?.credits ?? TIER_LIMITS.Starter.credits);
+      const planName = resolvePlanName(u.subscription?.plan_name || u.plan || 'Free');
+      const creditsTotal = u.credits_total || (TIER_LIMITS[planName]?.credits ?? TIER_LIMITS.Free.credits);
       base.userPlan = planName;
       base.creditsRemaining = creditsTotal - (u.credits_used || 0);
       base.currentModule = getPageTitle(locationRef.current.pathname) || 'Dashboard';

@@ -36,7 +36,7 @@ const AIOperations: React.FC = () => {
 
       logs?.forEach(log => {
         const email = log.profiles?.email || 'Unknown';
-        let plan = log.profiles?.plan || 'Starter';
+        let plan = log.profiles?.plan || 'Free';
         if (plan === 'Professional') plan = 'Growth';
         if (plan === 'Enterprise' || plan === 'Business') plan = 'Scale';
         const cost = parseFloat(log.estimated_cost || 0);

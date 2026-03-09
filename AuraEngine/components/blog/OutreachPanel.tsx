@@ -205,7 +205,7 @@ const OutreachPanel: React.FC<Props> = ({ user, refreshProfile }) => {
     setPitchGenerating(true);
     setPitchResult(null);
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['guest_post_pitch']);
+      const creditResult = await consumeCredits(supabase, 'guest_post_pitch');
       if (!creditResult.success) {
         setError(creditResult.message || 'Insufficient credits.');
         setPitchGenerating(false);

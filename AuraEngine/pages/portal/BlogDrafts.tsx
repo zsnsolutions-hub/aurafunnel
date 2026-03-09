@@ -356,7 +356,7 @@ const BlogDrafts: React.FC = () => {
     setAiGenerating(true);
     setAiResult('');
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['blog_content']);
+      const creditResult = await consumeCredits(supabase, 'blog_content');
       if (!creditResult.success) {
         setAiResult(creditResult.message || 'Insufficient credits.');
         setAiGenerating(false);
@@ -453,7 +453,7 @@ const BlogDrafts: React.FC = () => {
     setCaptionGenerating(true);
     setCaptionText('');
     setCaptionCopied(false);
-    const creditResult = await consumeCredits(supabase, CREDIT_COSTS['social_caption']);
+    const creditResult = await consumeCredits(supabase, 'social_caption');
     if (!creditResult.success) {
       setCaptionText(creditResult.message || 'Insufficient credits.');
       setCaptionGenerating(false);

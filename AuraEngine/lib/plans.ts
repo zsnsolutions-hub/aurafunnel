@@ -1,9 +1,11 @@
 import { supabase } from './supabase';
+import { CREDIT_LIMITS, getAiCreditLimit } from '../config/creditLimits';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface PlanLimits {
   credits: number;
+  aiCredits: number;
   contacts: number;
   seats: number;
   emails: number;
@@ -13,6 +15,7 @@ export interface PlanLimits {
   emailsPerMonth: number;
   linkedInPerDay: number;
   linkedInPerMonth: number;
+  /** @deprecated Use aiCredits instead */
   aiCreditsMonthly: number;
   hasAI: boolean;
 }
@@ -37,20 +40,25 @@ export interface DbPlan {
 // ── Default limits (fallback when DB is unreachable) ─────────────────────────
 
 const DEFAULT_LIMITS: Record<string, PlanLimits> = {
+  Free: {
+    credits: CREDIT_LIMITS.free, aiCredits: CREDIT_LIMITS.free, contacts: 5, seats: 1, emails: 5, storage: 200,
+    maxInboxes: 1, emailsPerDayPerInbox: 5, emailsPerMonth: 5,
+    linkedInPerDay: 5, linkedInPerMonth: 50, aiCreditsMonthly: CREDIT_LIMITS.free, hasAI: true,
+  },
   Starter: {
-    credits: 1000, contacts: 1000, seats: 1, emails: 2000, storage: 1000,
+    credits: CREDIT_LIMITS.starter, aiCredits: CREDIT_LIMITS.starter, contacts: 1000, seats: 1, emails: 2000, storage: 1000,
     maxInboxes: 1, emailsPerDayPerInbox: 40, emailsPerMonth: 1000,
-    linkedInPerDay: 20, linkedInPerMonth: 600, aiCreditsMonthly: 0, hasAI: false,
+    linkedInPerDay: 20, linkedInPerMonth: 600, aiCreditsMonthly: CREDIT_LIMITS.starter, hasAI: true,
   },
   Growth: {
-    credits: 6000, contacts: 10000, seats: 3, emails: 15000, storage: 10000,
+    credits: CREDIT_LIMITS.growth, aiCredits: CREDIT_LIMITS.growth, contacts: 10000, seats: 3, emails: 15000, storage: 10000,
     maxInboxes: 5, emailsPerDayPerInbox: 60, emailsPerMonth: 10000,
-    linkedInPerDay: 40, linkedInPerMonth: 1200, aiCreditsMonthly: 2000, hasAI: true,
+    linkedInPerDay: 40, linkedInPerMonth: 1200, aiCreditsMonthly: CREDIT_LIMITS.growth, hasAI: true,
   },
   Scale: {
-    credits: 20000, contacts: 50000, seats: 10, emails: 40000, storage: 50000,
+    credits: CREDIT_LIMITS.scale, aiCredits: CREDIT_LIMITS.scale, contacts: 50000, seats: 10, emails: 40000, storage: 50000,
     maxInboxes: 15, emailsPerDayPerInbox: 80, emailsPerMonth: 50000,
-    linkedInPerDay: 100, linkedInPerMonth: 3000, aiCreditsMonthly: 8000, hasAI: true,
+    linkedInPerDay: 100, linkedInPerMonth: 3000, aiCreditsMonthly: CREDIT_LIMITS.scale, hasAI: true,
   },
 };
 
@@ -144,13 +152,13 @@ export async function getPlanLimits(planName: string): Promise<PlanLimits> {
   const plan = await getPlanByName(planName);
   if (plan) return plan.limits;
   const resolved = resolveNameCompat(planName);
-  return DEFAULT_LIMITS[resolved] ?? DEFAULT_LIMITS.Starter;
+  return DEFAULT_LIMITS[resolved] ?? DEFAULT_LIMITS.Free;
 }
 
 /** Synchronous fallback for plan limits — uses hardcoded defaults only. */
 export function getPlanLimitsSync(planName: string): PlanLimits {
   const resolved = resolveNameCompat(planName);
-  return DEFAULT_LIMITS[resolved] ?? DEFAULT_LIMITS.Starter;
+  return DEFAULT_LIMITS[resolved] ?? DEFAULT_LIMITS.Free;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -182,6 +190,7 @@ function normalizePlan(raw: Record<string, unknown>): DbPlan {
     updated_at: (raw.updated_at as string) ?? new Date().toISOString(),
     limits: {
       credits:              dbLimits.credits ?? fallbackLimits.credits,
+      aiCredits:            dbLimits.aiCredits ?? (dbLimits as Record<string, unknown>).aiCreditsMonthly as number ?? fallbackLimits.aiCredits,
       contacts:             dbLimits.contacts ?? fallbackLimits.contacts,
       seats:                dbLimits.seats ?? fallbackLimits.seats,
       emails:               dbLimits.emails ?? fallbackLimits.emails,
@@ -191,22 +200,22 @@ function normalizePlan(raw: Record<string, unknown>): DbPlan {
       emailsPerMonth:       dbLimits.emailsPerMonth ?? fallbackLimits.emailsPerMonth,
       linkedInPerDay:       dbLimits.linkedInPerDay ?? fallbackLimits.linkedInPerDay,
       linkedInPerMonth:     dbLimits.linkedInPerMonth ?? fallbackLimits.linkedInPerMonth,
-      aiCreditsMonthly:     dbLimits.aiCreditsMonthly ?? fallbackLimits.aiCreditsMonthly,
+      aiCreditsMonthly:     dbLimits.aiCreditsMonthly ?? dbLimits.aiCredits ?? fallbackLimits.aiCreditsMonthly,
       hasAI:                dbLimits.hasAI ?? fallbackLimits.hasAI,
     },
   };
 }
 
 function buildFallbackPlans(): DbPlan[] {
-  return ['Starter', 'Growth', 'Scale'].map((name, i) => ({
+  return ['Free', 'Starter', 'Growth', 'Scale'].map((name, i) => ({
     id: `fallback-${name.toLowerCase()}`,
     name,
     key: name.toLowerCase(),
-    price: name === 'Starter' ? '$29/mo' : name === 'Growth' ? '$79/mo' : '$199/mo',
-    price_monthly_cents: name === 'Starter' ? 2900 : name === 'Growth' ? 7900 : 19900,
+    price: name === 'Free' ? 'Free' : name === 'Starter' ? '$29/mo' : name === 'Growth' ? '$79/mo' : '$199/mo',
+    price_monthly_cents: name === 'Free' ? 0 : name === 'Starter' ? 2900 : name === 'Growth' ? 7900 : 19900,
     currency: 'usd',
     stripe_price_id: null,
-    credits: DEFAULT_LIMITS[name].credits,
+    credits: getAiCreditLimit(name),
     description: null,
     features: [],
     is_active: true,

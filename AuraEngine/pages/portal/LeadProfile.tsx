@@ -11,7 +11,7 @@ import {
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
-import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
+import { consumeCredits } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
 import { generateLeadContent, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 import { fetchLeadEmailEngagement, sendTrackedEmail } from '../../lib/emailTracking';
@@ -432,7 +432,7 @@ const LeadProfile: React.FC = () => {
 
     if (Object.keys(socialUrls).length === 0) return;
 
-    const creditResult = await consumeCredits(supabase, CREDIT_COSTS['lead_research']);
+    const creditResult = await consumeCredits(supabase, 'lead_research');
     if (!creditResult.success) return;
 
     setKbResearching(true);

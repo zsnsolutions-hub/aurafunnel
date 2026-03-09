@@ -9,6 +9,8 @@ import {
 import { User, Plan, UsageMetrics } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { TIER_LIMITS, CREDIT_COSTS, PLANS, resolvePlanName } from '../../lib/credits';
+import { getAiCreditLimit } from '../../config/creditLimits';
+import { AI_CREDIT_COSTS } from '../../config/aiCreditCosts';
 import StripeCheckoutModal from '../../components/portal/StripeCheckoutModal';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
@@ -34,7 +36,7 @@ const BillingPage: React.FC = () => {
 
   const creditsTotal = user.credits_total ?? 500;
   const creditsUsed = user.credits_used ?? 0;
-  const currentPlanName = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
+  const currentPlanName = resolvePlanName(user.subscription?.plan_name || user.plan || 'Free');
 
   const fetchPlans = async (isManual = false) => {
     if (isManual) setLoadingPlans(true);
@@ -56,7 +58,7 @@ const BillingPage: React.FC = () => {
     }
   };
 
-  const tierLimitsForPlan = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Starter;
+  const tierLimitsForPlan = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Free;
   const [usage, setUsage] = useState<UsageMetrics>({
     contactsUsed: 0, contactsLimit: tierLimitsForPlan.contacts,
     storageUsedMb: 0, storageLimitMb: tierLimitsForPlan.storage,
@@ -75,7 +77,7 @@ const BillingPage: React.FC = () => {
         supabase.from('audit_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('action', 'AI_CONTENT_GENERATED'),
       ]);
 
-      const limits = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Starter;
+      const limits = TIER_LIMITS[currentPlanName] || TIER_LIMITS.Free;
 
       setUsage({
         contactsUsed: contactsRes.count || 0,

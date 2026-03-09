@@ -58,8 +58,8 @@ const MobileHome: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [prospectPageSize, setProspectPageSize] = useState(10);
 
-  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
-  const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
+  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Free');
+  const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Free.credits);
   const creditsUsed = user.credits_used || 0;
   const creditsRemaining = creditsTotal - creditsUsed;
 

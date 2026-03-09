@@ -1,30 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { AI_CREDIT_COSTS, getOperationCost } from '../config/aiCreditCosts';
+import { CREDIT_LIMITS, getAiCreditLimit } from '../config/creditLimits';
 
-// ── Credit costs per AI operation ──────────────────────────────────────────
-export const CREDIT_COSTS: Record<string, number> = {
-  email_sequence:        3,
-  content_generation:    2,
-  content_suggestions:   1,
-  lead_research:         2,
-  lead_scoring:          1,
-  command_center:        2,
-  dashboard_insights:    1,
-  pipeline_strategy:     3,
-  blog_content:          3,
-  social_caption:        1,
-  business_analysis:     2,
-  workflow_optimization: 2,
-  guest_post_pitch:      2,
-  image_generation:      2,
-  follow_up_questions:   1,
-  batch_generation:      5,
-};
+// ── Credit costs per AI operation (re-exported from config for backward compat) ──
+export const CREDIT_COSTS: Record<string, number> = { ...AI_CREDIT_COSTS } as Record<string, number>;
 
-// ── Tier limits (single source of truth) ───────────────────────────────────
-export const TIER_LIMITS: Record<string, { credits: number; contacts: number; seats: number; emails: number; storage: number }> = {
-  Starter:  { credits: 1000,  contacts: 1000,  seats: 1,  emails: 2000,  storage: 1000  },
-  Growth:   { credits: 6000,  contacts: 10000, seats: 3,  emails: 15000, storage: 10000 },
-  Scale:    { credits: 20000, contacts: 50000, seats: 10, emails: 40000, storage: 50000 },
+// Legacy aliases for operations that were renamed
+CREDIT_COSTS['blog_content'] = AI_CREDIT_COSTS.blog_generation;
+
+// ── Tier limits (reads AI credits from config/creditLimits.ts) ────────────
+export const TIER_LIMITS: Record<string, { credits: number; aiCredits: number; contacts: number; seats: number; emails: number; storage: number }> = {
+  Free:     { credits: CREDIT_LIMITS.free,    aiCredits: CREDIT_LIMITS.free,    contacts: 5,     seats: 1,  emails: 5,     storage: 200   },
+  Starter:  { credits: CREDIT_LIMITS.starter, aiCredits: CREDIT_LIMITS.starter, contacts: 1000,  seats: 1,  emails: 2000,  storage: 1000  },
+  Growth:   { credits: CREDIT_LIMITS.growth,  aiCredits: CREDIT_LIMITS.growth,  contacts: 10000, seats: 3,  emails: 15000, storage: 10000 },
+  Scale:    { credits: CREDIT_LIMITS.scale,   aiCredits: CREDIT_LIMITS.scale,   contacts: 50000, seats: 10, emails: 40000, storage: 50000 },
 };
 
 // ── Backward-compat plan name resolver ─────────────────────────────────────
@@ -46,6 +35,7 @@ export interface PlanPackage {
   price: number;
   annualPrice: number;
   credits: number;
+  aiCredits: number;
   contacts: number;
   seats: number;
   emails: number;
@@ -62,12 +52,25 @@ export interface PlanPackage {
 
 export const PLANS: PlanPackage[] = [
   {
+    name: 'Free',
+    price: 0,
+    annualPrice: 0,
+    ...TIER_LIMITS.Free,
+    desc: 'Try Scaliyo free. See what AI-powered outbound can do.',
+    cta: 'Start Free',
+    overage: { credits: 0, contacts: 0, emails: 0 },
+    features: ['Manual warm-up guidance', 'Basic automation', 'Email + LinkedIn sequences', 'Deliverability protection'],
+    maxUsers: 1,
+    extraSeatPrice: 0,
+    warmup: 'Guidance',
+  },
+  {
     name: 'Starter',
     price: 29,
     annualPrice: Math.round(29 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
     ...TIER_LIMITS.Starter,
     desc: 'Your first outbound engine. One inbox. Real pipeline.',
-    cta: 'Start With 1,000 AI Credits',
+    cta: `Start With ${CREDIT_LIMITS.starter.toLocaleString()} AI Credits`,
     overage: { credits: 0.08, contacts: 0.05, emails: 0.02 },
     features: ['Manual warm-up guidance', 'Basic automation', 'Email + LinkedIn sequences', 'Deliverability protection'],
     maxUsers: 3,
@@ -81,7 +84,7 @@ export const PLANS: PlanPackage[] = [
     ...TIER_LIMITS.Growth,
     desc: 'The engine most teams actually need. Built to scale.',
     popular: true,
-    cta: 'Get 2,000 AI Credits',
+    cta: `Get ${CREDIT_LIMITS.growth.toLocaleString()} AI Credits`,
     overage: { credits: 0.06, contacts: 0.03, emails: 0.015 },
     features: ['Automated warm-up + ramp schedule', 'AI drafts, rewrites & personalization', 'Advanced automation & analytics', 'Enrichment', 'Everything in Starter'],
     maxUsers: 10,
@@ -94,7 +97,7 @@ export const PLANS: PlanPackage[] = [
     annualPrice: Math.round(199 * 12 * (1 - ANNUAL_DISCOUNT) / 12),
     ...TIER_LIMITS.Scale,
     desc: 'Full outbound infrastructure. Maximum volume. Maximum intelligence.',
-    cta: 'Unlock 8,000 AI Credits',
+    cta: `Unlock ${CREDIT_LIMITS.scale.toLocaleString()} AI Credits`,
     overage: { credits: 0.04, contacts: 0.02, emails: 0.01 },
     features: ['Advanced AI personalization', 'Advanced warm-up + inbox health monitoring', 'API & Webhooks', 'Flexible team seats', 'Everything in Growth'],
     maxUsers: undefined,
@@ -103,12 +106,68 @@ export const PLANS: PlanPackage[] = [
   },
 ];
 
-// ── Helper: consume credits via RPC ────────────────────────────────────────
+// ── Helper: consume credits for an AI operation ─────────────────────────────
+//
+// Uses the workspace_ai_usage table + increment_ai_usage RPC (the real system).
+// Accepts an operation name to look up the cost and log usage.
+//
 export async function consumeCredits(
   supabase: SupabaseClient,
-  amount: number,
+  operation: string,
 ): Promise<{ success: boolean; message: string }> {
-  const { data, error } = await supabase.rpc('consume_credits', { amount });
-  if (error) return { success: false, message: error.message };
-  return data as { success: boolean; message: string };
+  const cost = getOperationCost(operation);
+
+  // Get authenticated user
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, message: 'Not authenticated' };
+
+  // Get user plan
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('plan')
+    .eq('id', user.id)
+    .single();
+  const planName = resolvePlanName(profile?.plan || 'Free');
+  const limit = getAiCreditLimit(planName);
+
+  // Check remaining credits
+  const month = new Date().toISOString().slice(0, 7);
+  const { data: usageRow } = await supabase
+    .from('workspace_ai_usage')
+    .select('credits_used')
+    .eq('workspace_id', user.id)
+    .eq('month_year', month)
+    .maybeSingle();
+
+  const used = usageRow?.credits_used ?? 0;
+  const remaining = Math.max(limit - used, 0);
+
+  if (remaining < cost) {
+    return {
+      success: false,
+      message: `Insufficient AI credits (${remaining} remaining, ${cost} needed). Upgrade your plan for more capacity.`,
+    };
+  }
+
+  // Deduct via increment_ai_usage RPC (atomic)
+  const { error: rpcErr } = await supabase.rpc('increment_ai_usage', {
+    p_workspace_id: user.id,
+    p_month_year: month,
+    p_credits: cost,
+    p_tokens: 0,
+    p_credits_limit: limit,
+  });
+
+  if (rpcErr) return { success: false, message: rpcErr.message };
+
+  // Log to ai_credit_usage for analytics (best-effort)
+  supabase.from('ai_credit_usage').insert({
+    workspace_id: user.id,
+    operation,
+    credits_used: cost,
+  }).then(({ error }) => {
+    if (error) console.warn('[consumeCredits] usage log failed:', error.message);
+  });
+
+  return { success: true, message: `${cost} credits deducted` };
 }

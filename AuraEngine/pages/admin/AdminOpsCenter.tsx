@@ -1539,7 +1539,7 @@ function WorkspaceTab({
   const currentPlan = String(
     snapshot.subscription
       ? (snapshot.subscription as Record<string, unknown>).plan_name ?? (snapshot.subscription as Record<string, unknown>).plan
-      : p.plan || 'Starter'
+      : p.plan || 'Free'
   );
 
   const toggleStatus = async () => {

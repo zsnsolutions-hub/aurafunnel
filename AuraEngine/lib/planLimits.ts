@@ -12,6 +12,13 @@ export interface OutboundLimits {
 // ── Hardcoded fallback (used only when DB is unreachable) ───────────────────
 
 export const OUTBOUND_LIMITS: Record<string, OutboundLimits> = {
+  Free: {
+    maxInboxes: 1,
+    emailsPerDayPerInbox: 5,
+    emailsPerMonth: 5,
+    linkedInPerDay: 5,
+    linkedInPerMonth: 50,
+  },
   Starter: {
     maxInboxes: 1,
     emailsPerDayPerInbox: 40,
@@ -69,7 +76,7 @@ export async function getOutboundLimitsAsync(planName: string): Promise<Outbound
   } catch {
     // Fall through to hardcoded
   }
-  return OUTBOUND_LIMITS[resolved] ?? OUTBOUND_LIMITS.Starter;
+  return OUTBOUND_LIMITS[resolved] ?? OUTBOUND_LIMITS.Free;
 }
 
 /** Extract outbound limits from a PlanLimits object. */

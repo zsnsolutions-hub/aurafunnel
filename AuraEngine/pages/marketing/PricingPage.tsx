@@ -4,38 +4,39 @@ import Reveal from '../../components/marketing/Reveal';
 import { track } from '../../lib/analytics';
 import { PLANS, ANNUAL_DISCOUNT } from '../../lib/credits';
 import { OUTBOUND_LIMITS } from '../../lib/planLimits';
-import { CREDIT_CONVERSION_RATE } from '../../lib/pricing.config';
+import { CREDIT_LIMITS } from '../../config/creditLimits';
+import { estimateCreditUsage } from '../../config/aiCreditCosts';
 
 /* ── Comparison table data ────────────────────────────────────────────────── */
 type CellValue = string | boolean;
 interface ComparisonRow {
   label: string;
-  values: [CellValue, CellValue, CellValue];
+  values: [CellValue, CellValue, CellValue, CellValue];
   section?: string;
 }
 
 const COMPARISON_ROWS: ComparisonRow[] = [
-  { label: 'Price / month',           values: ['$29', '$79', '$199'], section: 'Plan' },
-  { label: 'Contacts',                values: ['1,000', '10,000', '50,000'] },
-  { label: 'Storage',                 values: ['1 GB', '10 GB', '50 GB'] },
-  { label: 'Team seats included',     values: ['1', '3', '10'] },
-  { label: 'Extra seats',             values: ['$15/seat', '$12/seat', '$8/seat'] },
-  { label: 'Email inboxes',           values: ['1', 'Up to 5', 'Up to 15'], section: 'Outbound Engine' },
-  { label: 'Emails / day',            values: ['40/day', '60/day per inbox', '80/day per inbox'] },
-  { label: 'Emails / month',          values: ['1,000', '10,000', '50,000'] },
-  { label: 'LinkedIn actions / day',  values: ['20', '40', '100'] },
-  { label: 'LinkedIn actions / month',values: ['600', '1,200', '3,000'] },
-  { label: 'Multi-channel sequences', values: [true, true, true] },
-  { label: 'AI credits / month',      values: ['\u2014', '2,000', '8,000'], section: 'AI Engine' },
-  { label: 'AI drafts & rewrites',    values: [false, true, true] },
-  { label: 'AI personalization',      values: [false, true, 'Advanced'] },
-  { label: 'Hard AI stop (no overages)', values: ['\u2014', true, true] },
-  { label: 'Auto warm-up',            values: [false, true, true], section: 'Deliverability' },
-  { label: 'Inbox health monitoring', values: [false, false, true] },
-  { label: 'Enrichment',              values: [false, true, true], section: 'Intelligence' },
-  { label: 'Advanced automation',     values: [false, true, true] },
-  { label: 'Analytics',               values: [false, true, 'Advanced'] },
-  { label: 'API & Webhooks',          values: [false, false, true] },
+  { label: 'Price / month',           values: ['Free', '$29', '$79', '$199'], section: 'Plan' },
+  { label: 'Contacts',                values: ['5', '1,000', '10,000', '50,000'] },
+  { label: 'Storage',                 values: ['200 MB', '1 GB', '10 GB', '50 GB'] },
+  { label: 'Team seats included',     values: ['1', '1', '3', '10'] },
+  { label: 'Extra seats',             values: ['\u2014', '$15/seat', '$12/seat', '$8/seat'] },
+  { label: 'Email inboxes',           values: ['1', '1', 'Up to 5', 'Up to 15'], section: 'Outbound Engine' },
+  { label: 'Emails / day',            values: ['5/day', '40/day', '60/day per inbox', '80/day per inbox'] },
+  { label: 'Emails / month',          values: ['5', '1,000', '10,000', '50,000'] },
+  { label: 'LinkedIn actions / day',  values: ['5', '20', '40', '100'] },
+  { label: 'LinkedIn actions / month',values: ['50', '600', '1,200', '3,000'] },
+  { label: 'Multi-channel sequences', values: [true, true, true, true] },
+  { label: 'AI credits / month',      values: [CREDIT_LIMITS.free.toLocaleString(), CREDIT_LIMITS.starter.toLocaleString(), CREDIT_LIMITS.growth.toLocaleString(), CREDIT_LIMITS.scale.toLocaleString()], section: 'AI Engine' },
+  { label: 'AI drafts & rewrites',    values: [true, true, true, true] },
+  { label: 'AI personalization',      values: [false, false, true, 'Advanced'] },
+  { label: 'Hard AI stop (no overages)', values: [true, true, true, true] },
+  { label: 'Auto warm-up',            values: [false, false, true, true], section: 'Deliverability' },
+  { label: 'Inbox health monitoring', values: [false, false, false, true] },
+  { label: 'Enrichment',              values: [false, false, true, true], section: 'Intelligence' },
+  { label: 'Advanced automation',     values: [false, false, true, true] },
+  { label: 'Analytics',               values: [false, false, true, 'Advanced'] },
+  { label: 'API & Webhooks',          values: [false, false, false, true] },
 ];
 
 const CheckSvg = () => (
@@ -63,9 +64,10 @@ function renderCell(v: CellValue) {
 const PLAN_CARD_META: Record<string, {
   maxUsers: string; extraSeat: string; warmup: string; tagline: string; aiCreditsDisplay: string;
 }> = {
-  Starter: { maxUsers: 'max 3', extraSeat: '+$15/seat', warmup: 'Manual warm-up guidance', tagline: 'Validate', aiCreditsDisplay: '1,000' },
-  Growth:  { maxUsers: 'max 10', extraSeat: '+$12/seat', warmup: 'Automated warm-up + ramp schedule', tagline: 'Compound', aiCreditsDisplay: '2,000' },
-  Scale:   { maxUsers: 'flexible', extraSeat: '+$8/seat', warmup: 'Advanced warm-up + inbox health monitoring', tagline: 'Dominate', aiCreditsDisplay: '8,000' },
+  Free:    { maxUsers: '1', extraSeat: '', warmup: 'Manual warm-up guidance', tagline: 'Explore', aiCreditsDisplay: CREDIT_LIMITS.free.toLocaleString() },
+  Starter: { maxUsers: 'max 3', extraSeat: '+$15/seat', warmup: 'Manual warm-up guidance', tagline: 'Validate', aiCreditsDisplay: CREDIT_LIMITS.starter.toLocaleString() },
+  Growth:  { maxUsers: 'max 10', extraSeat: '+$12/seat', warmup: 'Automated warm-up + ramp schedule', tagline: 'Compound', aiCreditsDisplay: CREDIT_LIMITS.growth.toLocaleString() },
+  Scale:   { maxUsers: 'flexible', extraSeat: '+$8/seat', warmup: 'Advanced warm-up + inbox health monitoring', tagline: 'Dominate', aiCreditsDisplay: CREDIT_LIMITS.scale.toLocaleString() },
 };
 
 /* ── FAQ data ─────────────────────────────────────────────────────────────── */
@@ -88,7 +90,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'How do AI credits work?',
-    a: `1 credit = up to ${CREDIT_CONVERSION_RATE.toLocaleString()} tokens. Every AI action \u2014 drafts, rewrites, personalization \u2014 consumes credits based on output length. Credits reset monthly. You\u2019ll see your balance in the dashboard at all times.`,
+    a: 'Each AI action has a fixed credit cost \u2014 for example, generating a personalized email costs 2 credits, a blog article costs 5. You always know exactly what you\u2019re spending. Credits reset monthly. You\u2019ll see your balance in the dashboard at all times.',
   },
   {
     q: 'Is there a free trial?',
@@ -145,7 +147,7 @@ const PricingPage: React.FC = () => {
 
         {/* ── Plan cards ──────────────────────────────────────────── */}
         <Reveal delay={200}>
-          <div className="grid max-w-5xl mx-auto grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          <div className="grid max-w-6xl mx-auto grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
             {PLANS.map((plan) => {
               const isHighlighted = !!plan.popular;
               const displayPrice = isAnnual ? plan.annualPrice : plan.price;
@@ -178,23 +180,35 @@ const PricingPage: React.FC = () => {
 
                     {/* Price */}
                     <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-4xl font-black font-heading">${displayPrice}</span>
-                      <span className="text-sm text-slate-500 font-semibold">/mo</span>
+                      <span className="text-4xl font-black font-heading">{displayPrice === 0 ? 'Free' : `$${displayPrice}`}</span>
+                      {displayPrice > 0 && <span className="text-sm text-slate-500 font-semibold">/mo</span>}
                     </div>
-                    {isAnnual && (
+                    {isAnnual && displayPrice > 0 && (
                       <p className="text-xs text-teal-400 font-bold mb-5">
                         ${(plan.annualPrice * 12).toLocaleString()}/yr &mdash; save ${((plan.price - plan.annualPrice) * 12).toLocaleString()}
                       </p>
                     )}
-                    {!isAnnual && <div className="mb-5" />}
+                    {(!isAnnual || displayPrice === 0) && <div className="mb-5" />}
 
                     {/* ── AI Credits — Primary Highlight ──── */}
-                    <div className={`rounded-xl p-4 mb-5 ${isHighlighted ? 'bg-teal-500/10 border border-teal-500/20' : 'bg-white/[0.03] border border-slate-700/60'}`}>
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">AI Credits</p>
-                      <p className="text-2xl font-black font-heading">
-                        {meta.aiCreditsDisplay}<span className="text-sm text-slate-400 font-semibold ml-1">/ month</span>
-                      </p>
-                    </div>
+                    {(() => {
+                      const est = estimateCreditUsage(plan.aiCredits);
+                      return (
+                        <div className={`rounded-xl p-4 mb-5 ${isHighlighted ? 'bg-teal-500/10 border border-teal-500/20' : 'bg-white/[0.03] border border-slate-700/60'}`}>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">AI Credits</p>
+                          <p className="text-2xl font-black font-heading">
+                            {meta.aiCreditsDisplay}<span className="text-sm text-slate-400 font-semibold ml-1">/ month</span>
+                          </p>
+                          {plan.aiCredits > 0 && (
+                            <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
+                              <p>&asymp; {est.personalizedEmails.toLocaleString()} personalized emails</p>
+                              <p>&asymp; {est.leadResearchReports.toLocaleString()} lead research reports</p>
+                              <p>&asymp; {est.blogArticles.toLocaleString()} blog articles</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* ── Core Capacity ──────────────────── */}
                     <div className="mb-4">
@@ -332,8 +346,8 @@ const PricingPage: React.FC = () => {
                 <div>
                   <h3 className="text-lg font-bold font-heading mb-2">AI that earns its keep</h3>
                   <p className="text-sm text-slate-400 leading-relaxed mb-4">
-                    Every AI action &mdash; drafts, rewrites, personalization &mdash; consumes credits based on output complexity.
-                    1 credit = up to {CREDIT_CONVERSION_RATE.toLocaleString()} tokens. Growth gets 2,000 credits/month. Scale gets 8,000.
+                    Every AI action has a fixed credit cost &mdash; an email draft costs 2 credits, a blog article costs 5, lead research costs 2.
+                    Free gets {CREDIT_LIMITS.free.toLocaleString()}, Starter gets {CREDIT_LIMITS.starter.toLocaleString()}, Growth gets {CREDIT_LIMITS.growth.toLocaleString()}, Scale gets {CREDIT_LIMITS.scale.toLocaleString()} credits/month.
                     Credits reset monthly. Hard stop when they&apos;re spent.
                   </p>
                   <p className="text-sm text-slate-400 leading-relaxed">
@@ -375,7 +389,7 @@ const PricingPage: React.FC = () => {
                     <React.Fragment key={row.label}>
                       {row.section && (
                         <tr>
-                          <td colSpan={4} className="px-6 pt-5 pb-2 text-[9px] font-black text-teal-400/60 uppercase tracking-[0.25em]">
+                          <td colSpan={5} className="px-6 pt-5 pb-2 text-[9px] font-black text-teal-400/60 uppercase tracking-[0.25em]">
                             {row.section}
                           </td>
                         </tr>

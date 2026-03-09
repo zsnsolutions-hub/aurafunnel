@@ -45,7 +45,7 @@ const Composer: React.FC<Props> = ({
     setGenerating(true);
     setAiError(null);
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS.social_caption);
+      const creditResult = await consumeCredits(supabase, 'social_caption');
       if (!creditResult.success) {
         setAiError(creditResult.message);
         return;

@@ -15,6 +15,7 @@ import { TaskStatus, TaskPriority } from '../../components/teamhub/TaskCard';
 import ContextMenu, { ContextMenuItem } from '../../components/teamhub/ContextMenu';
 import ColorPicker from '../../components/teamhub/ColorPicker';
 import { getColorClasses, ColorToken } from '../../lib/leadColors';
+import { getTeamSeatInfo, purchaseExtraSeat, type TeamSeatInfo } from '../../lib/seatLimits';
 
 interface LayoutContext {
   user: User;
@@ -114,6 +115,8 @@ const TeamHub: React.FC = () => {
   // Team invite tracking
   const [sentInvites, setSentInvites] = useState<{ id: string; email: string; name?: string; role?: string; status: string; created_at: string }[]>([]);
   const [inviteFeedback, setInviteFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [seatConfirm, setSeatConfirm] = useState<{ seatInfo: TeamSeatInfo; email: string; name: string; role: 'admin' | 'member' } | null>(null);
+  const [seatPurchasing, setSeatPurchasing] = useState(false);
   const [teamCreating, setTeamCreating] = useState(false);
   const [teamCreateError, setTeamCreateError] = useState<string | null>(null);
 
@@ -687,6 +690,22 @@ const TeamHub: React.FC = () => {
       return;
     }
 
+    // ── Seat limit check ──
+    try {
+      const seatInfo = await getTeamSeatInfo(supabase, team.id);
+      if (!seatInfo.canAddSeat) {
+        if (seatInfo.canBuyExtraSeat) {
+          setSeatConfirm({ seatInfo, email: emailLower, name: inviteName.trim(), role: inviteRole });
+          return;
+        }
+        const maxLabel = seatInfo.maxSeats ?? seatInfo.totalAllowedSeats;
+        setInviteFeedback({ type: 'error', message: `Your ${seatInfo.planName} plan allows a maximum of ${maxLabel} team members. Upgrade your plan to add more.` });
+        return;
+      }
+    } catch (err) {
+      console.warn('Seat check failed, allowing invite:', err);
+    }
+
     try {
       const { error } = await supabase.from('team_invites').insert({
         team_id: team.id,
@@ -721,6 +740,43 @@ const TeamHub: React.FC = () => {
       setInviteFeedback({ type: 'error', message: 'Failed to send invite. Please try again.' });
     }
   }, [inviteEmail, inviteName, inviteRole, team, user.id, teamMembers, sentInvites]);
+
+  const handleSeatPurchaseAndInvite = useCallback(async () => {
+    if (!seatConfirm || !team) return;
+    setSeatPurchasing(true);
+    try {
+      const result = await purchaseExtraSeat(supabase, team.id);
+      if (!result.success) {
+        setInviteFeedback({ type: 'error', message: result.message });
+        setSeatConfirm(null);
+        setSeatPurchasing(false);
+        return;
+      }
+
+      // Now send the invite
+      const { error } = await supabase.from('team_invites').insert({
+        team_id: team.id,
+        email: seatConfirm.email,
+        name: seatConfirm.name,
+        invited_by: user.id,
+        role: seatConfirm.role,
+      });
+      if (error) throw error;
+
+      setInviteEmail('');
+      setInviteName('');
+      setInviteRole('member');
+      setInviteFeedback({ type: 'success', message: `Extra seat purchased (+$${seatConfirm.seatInfo.extraSeatPrice}/mo). Invite sent to ${seatConfirm.name}.` });
+      setSentInvites(prev => [{ id: `temp-${Date.now()}`, email: seatConfirm.email, name: seatConfirm.name, role: seatConfirm.role, status: 'pending', created_at: new Date().toISOString() }, ...prev]);
+      setTimeout(() => setInviteFeedback(null), 5000);
+    } catch (err) {
+      console.error('Failed to purchase seat and invite:', err);
+      setInviteFeedback({ type: 'error', message: 'Failed to complete. Please try again.' });
+    } finally {
+      setSeatConfirm(null);
+      setSeatPurchasing(false);
+    }
+  }, [seatConfirm, team, user.id]);
 
   const handleRemoveMember = useCallback(async (userId: string) => {
     if (!team) return;
@@ -2183,6 +2239,47 @@ const TeamHub: React.FC = () => {
             />
           )}
         </>
+      )}
+      {/* Extra Seat Purchase Confirmation Modal */}
+      {seatConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900 font-heading">Extra Seat Required</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Your {seatConfirm.seatInfo.planName} plan includes {seatConfirm.seatInfo.includedSeats} seat{seatConfirm.seatInfo.includedSeats !== 1 ? 's' : ''}.
+                You currently have {seatConfirm.seatInfo.occupiedSeats} seat{seatConfirm.seatInfo.occupiedSeats !== 1 ? 's' : ''} in use.
+              </p>
+            </div>
+            <div className="px-6 py-5">
+              <div className="bg-indigo-50 rounded-xl p-4 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-indigo-900">Extra seat for {seatConfirm.name}</span>
+                  <span className="text-lg font-black text-indigo-600">+${seatConfirm.seatInfo.extraSeatPrice}/mo</span>
+                </div>
+                <p className="text-xs text-indigo-600/70">
+                  This will be added to your monthly bill. You'll have {seatConfirm.seatInfo.totalAllowedSeats + 1} total seats.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSeatConfirm(null)}
+                  disabled={seatPurchasing}
+                  className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSeatPurchaseAndInvite}
+                  disabled={seatPurchasing}
+                  className="flex-1 px-4 py-3 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-60"
+                >
+                  {seatPurchasing ? 'Processing...' : 'Add Seat & Invite'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

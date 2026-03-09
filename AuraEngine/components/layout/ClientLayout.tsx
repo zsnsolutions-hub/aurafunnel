@@ -98,8 +98,8 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
     });
   }, [activeIntegrationCount, isSimplified]);
 
-  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Starter');
-  const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Starter.credits);
+  const currentPlan = resolvePlanName(user.subscription?.plan_name || user.plan || 'Free');
+  const creditsTotal = user.credits_total || (TIER_LIMITS[currentPlan]?.credits ?? TIER_LIMITS.Free.credits);
   const creditsUsed = user.credits_used || 0;
   const usagePercentage = Math.min(Math.round((creditsUsed / creditsTotal) * 100), 100);
 

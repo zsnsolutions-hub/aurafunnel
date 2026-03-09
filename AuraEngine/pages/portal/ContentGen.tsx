@@ -783,7 +783,7 @@ const ContentGen: React.FC = () => {
 
     try {
       const creditType = contentType === ContentCategory.EMAIL_SEQUENCE ? 'email_sequence' : 'content_generation';
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS[creditType]);
+      const creditResult = await consumeCredits(supabase, creditType);
       if (!creditResult.success) {
         setError(creditResult.message || 'Insufficient credits.');
         setIsGenerating(false);

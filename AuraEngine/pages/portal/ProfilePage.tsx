@@ -10,7 +10,7 @@ import {
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import StageColorSettings from '../../components/leads/StageColorSettings';
-import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
+import { consumeCredits } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateFollowUpQuestions } from '../../lib/gemini';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
@@ -358,7 +358,7 @@ const ProfilePage: React.FC = () => {
     stageTimerRef.current = timers as any;
 
     try {
-      const creditResult = await consumeCredits(supabase, CREDIT_COSTS['business_analysis']);
+      const creditResult = await consumeCredits(supabase, 'business_analysis');
       if (!creditResult.success) {
         setAnalysisError(creditResult.message || 'Insufficient credits.');
         setTimeout(() => setWizardPhase('manual'), 1500);
@@ -446,7 +446,7 @@ const ProfilePage: React.FC = () => {
         const lowConfidenceFields = fields.filter(f => (result.analysis![f]?.confidence || 0) < 70);
         if (lowConfidenceFields.length > 0) {
           try {
-            const fqCredit = await consumeCredits(supabase, CREDIT_COSTS['follow_up_questions']);
+            const fqCredit = await consumeCredits(supabase, 'follow_up_questions');
             if (fqCredit.success) {
               const fqResult = await generateFollowUpQuestions(populated);
               setFollowUpQuestions(fqResult.questions);
