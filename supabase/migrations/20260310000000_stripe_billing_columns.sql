@@ -25,3 +25,23 @@ CREATE INDEX IF NOT EXISTS idx_plans_stripe_price_id
   ON plans(stripe_price_id);
 CREATE INDEX IF NOT EXISTS idx_plans_stripe_price_id_annual
   ON plans(stripe_price_id_annual);
+
+-- ── Set Stripe live price IDs ────────────────────────────────────────────────
+
+-- Starter
+UPDATE plans SET
+  stripe_price_id = 'price_1T8Z6nLugYH9PHutI2ZVFgW1',
+  stripe_price_id_annual = 'price_1T938VLugYH9PHutKGfR0VGP'
+WHERE name = 'Starter';
+
+-- Growth
+UPDATE plans SET
+  stripe_price_id = 'price_1T93BcLugYH9PHut31KENMNc',
+  stripe_price_id_annual = 'price_1T93BcLugYH9PHut9zoqhoVZ'
+WHERE name = 'Growth';
+
+-- Scale
+UPDATE plans SET
+  stripe_price_id = 'price_1T97heLugYH9PHutdRXdncm9',
+  stripe_price_id_annual = 'price_1T97zgLugYH9PHut35AcQhda'
+WHERE name = 'Scale';
