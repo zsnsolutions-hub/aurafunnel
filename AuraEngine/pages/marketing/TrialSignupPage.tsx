@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { createTrialAccount } from '../../lib/trialApi';
 import { supabase } from '../../lib/supabase';
 import { track } from '../../lib/analytics';
@@ -13,6 +13,7 @@ interface FormErrors {
 }
 
 const TrialSignupPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [company, setCompany] = useState('');
@@ -21,6 +22,12 @@ const TrialSignupPage: React.FC = () => {
   const [serverError, setServerError] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+
+  // Store selected plan from pricing page so it survives email verification
+  useEffect(() => {
+    const plan = searchParams.get('plan');
+    if (plan) localStorage.setItem('scaliyo_selected_plan', plan);
+  }, [searchParams]);
 
   const validate = useCallback((): boolean => {
     const next: FormErrors = {};
