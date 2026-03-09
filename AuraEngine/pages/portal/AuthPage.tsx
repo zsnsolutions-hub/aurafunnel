@@ -249,6 +249,16 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
   const authTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const selectedPlan = searchParams.get('plan');
+
+  // Store selected plan from pricing page so it survives email verification
+  useEffect(() => {
+    if (selectedPlan) {
+      localStorage.setItem('scaliyo_selected_plan', selectedPlan);
+      if (view === 'login') setView('signup');
+    }
+  }, [selectedPlan]);
 
   const passwordStrength = useMemo(() => {
     if (!password) return { score: 0, label: '', color: '', bars: 0 };
@@ -271,6 +281,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
 
   useEffect(() => {
     if (currentUser && !isSubmitting) {
+      // Check if user selected a plan from the pricing page
+      const storedPlan = localStorage.getItem('scaliyo_selected_plan');
+      if (storedPlan && currentUser.role !== UserRole.ADMIN) {
+        localStorage.removeItem('scaliyo_selected_plan');
+        navigate(`/portal/billing?plan=${storedPlan}`, { replace: true });
+        return;
+      }
+
       const roleHome = currentUser.role === UserRole.ADMIN ? '/admin' : '/portal';
       const from = (location.state as any)?.from?.pathname;
       // Only honour the "from" redirect if it matches the user's role area;

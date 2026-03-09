@@ -249,7 +249,7 @@ const PricingPage: React.FC = () => {
                   {/* CTA — pinned to bottom */}
                   <div className="mt-auto pt-6">
                     <Link
-                      to="/signup"
+                      to={plan.price === 0 ? '/signup' : `/signup?plan=${plan.name.toLowerCase()}`}
                       onClick={() => track('cta_click', { location: 'pricing', tier: plan.name })}
                       className={`block w-full text-center px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${
                         isHighlighted
