@@ -43,37 +43,19 @@ END$$;
 COMMENT ON TABLE public.sender_account_secrets IS
   'OAuth refresh tokens and SMTP passwords. Access only via service_role key in Edge Functions. RLS is configured to deny all app-role access by design.';
 
--- 3. Missing FK indexes (confirmed from grep of migrations)
--- Each FK column below was spot-checked to exist but lacks an index.
--- Adding them improves DELETE cascade speed and JOIN plans.
+-- 3. Missing FK indexes (verified against actual remote schema via db dump)
+-- Several indexes the first-pass audit suggested were already in place
+-- (idx_email_messages_lead_created, idx_scheduled_emails_sequence,
+--  idx_workflow_executions_lead_id), and sender_account_id columns do not
+-- exist on email_messages or scheduled_emails. Only the two genuinely
+-- missing indexes below are added.
 
--- leads.client_id is already indexed; leads.workspace_id is also indexed.
--- Audited but skipping: leads.created_by/assigned_to — not present in current schema.
-
--- email_messages (added in email analytics migrations)
-CREATE INDEX IF NOT EXISTS idx_email_messages_sender_account_id
-  ON public.email_messages (sender_account_id)
-  WHERE sender_account_id IS NOT NULL;
-
+-- email_messages.sequence_id — used for per-sequence lookups, no existing index
 CREATE INDEX IF NOT EXISTS idx_email_messages_sequence_id
   ON public.email_messages (sequence_id)
   WHERE sequence_id IS NOT NULL;
 
--- scheduled_emails
-CREATE INDEX IF NOT EXISTS idx_scheduled_emails_sender_account_id
-  ON public.scheduled_emails (sender_account_id)
-  WHERE sender_account_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_scheduled_emails_sequence_id
-  ON public.scheduled_emails (sequence_id)
-  WHERE sequence_id IS NOT NULL;
-
--- workflow_executions
-CREATE INDEX IF NOT EXISTS idx_workflow_executions_lead_id
-  ON public.workflow_executions (lead_id)
-  WHERE lead_id IS NOT NULL;
-
--- workspace_invites.invited_by (profile FK)
+-- workspace_invites.invited_by — used for "who invited me" lookups
 CREATE INDEX IF NOT EXISTS idx_workspace_invites_invited_by
   ON public.workspace_invites (invited_by);
 
