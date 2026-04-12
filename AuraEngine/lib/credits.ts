@@ -103,10 +103,34 @@ export const PLANS: PlanPackage[] = [
   },
 ];
 
+// ── Workspace resolution ────────────────────────────────────────────────────
+// MVP assumption: one workspace per user. If this ever changes, accept an
+// explicit workspaceId argument from callers (via a workspace context).
+async function resolveWorkspaceId(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn('[resolveWorkspaceId] lookup failed:', error.message);
+    return null;
+  }
+  return data?.workspace_id ?? null;
+}
+
 // ── Helper: consume credits for an AI operation ─────────────────────────────
 //
-// Uses the workspace_ai_usage table + increment_ai_usage RPC (the real system).
-// Accepts an operation name to look up the cost and log usage.
+// Uses the workspace_ai_usage table + increment_ai_usage RPC.
+// Resolves the real workspace id from workspace_members — previous versions
+// passed user.id directly, which only worked while the ai_credit_usage /
+// workspace_ai_usage FKs incorrectly pointed at profiles(id). Coordinated
+// with migration 20260413100000_credit_system_fk_fix.sql.
 //
 export async function consumeCredits(
   supabase: SupabaseClient,
@@ -114,11 +138,17 @@ export async function consumeCredits(
 ): Promise<{ success: boolean; message: string }> {
   const cost = getOperationCost(operation);
 
-  // Get authenticated user
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, message: 'Not authenticated' };
 
-  // Get user plan
+  const workspaceId = await resolveWorkspaceId(supabase, user.id);
+  if (!workspaceId) {
+    return {
+      success: false,
+      message: 'No workspace found for this account. Contact support if this persists.',
+    };
+  }
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('plan')
@@ -127,12 +157,11 @@ export async function consumeCredits(
   const planName = resolvePlanName(profile?.plan || 'Free');
   const limit = getAiCreditLimit(planName);
 
-  // Check remaining credits
   const month = new Date().toISOString().slice(0, 7);
   const { data: usageRow } = await supabase
     .from('workspace_ai_usage')
     .select('credits_used')
-    .eq('workspace_id', user.id)
+    .eq('workspace_id', workspaceId)
     .eq('month_year', month)
     .maybeSingle();
 
@@ -146,9 +175,8 @@ export async function consumeCredits(
     };
   }
 
-  // Deduct via increment_ai_usage RPC (atomic)
   const { error: rpcErr } = await supabase.rpc('increment_ai_usage', {
-    p_workspace_id: user.id,
+    p_workspace_id: workspaceId,
     p_month_year: month,
     p_credits: cost,
     p_tokens: 0,
@@ -157,9 +185,8 @@ export async function consumeCredits(
 
   if (rpcErr) return { success: false, message: rpcErr.message };
 
-  // Log to ai_credit_usage for analytics (best-effort)
   supabase.from('ai_credit_usage').insert({
-    workspace_id: user.id,
+    workspace_id: workspaceId,
     operation,
     credits_used: cost,
   }).then(({ error }) => {
