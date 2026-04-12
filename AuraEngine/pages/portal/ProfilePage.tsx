@@ -166,6 +166,25 @@ const ProfilePage: React.FC = () => {
   const [businessDescription, setBusinessDescription] = useState(user?.businessProfile?.businessDescription || '');
   const stageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Background enrichment state — lets us save first and scrape after
+  type EnrichmentStatus = 'idle' | 'running' | 'complete' | 'failed';
+  const [enrichmentStatus, setEnrichmentStatus] = useState<EnrichmentStatus>('idle');
+  const [enrichmentStartedAt, setEnrichmentStartedAt] = useState<number | null>(null);
+  const [enrichmentElapsed, setEnrichmentElapsed] = useState(0);
+  const [enrichmentFieldsAdded, setEnrichmentFieldsAdded] = useState(0);
+  const [enrichmentError, setEnrichmentError] = useState('');
+  const businessProfileRef = useRef<BusinessProfile>(businessProfile);
+  useEffect(() => { businessProfileRef.current = businessProfile; }, [businessProfile]);
+
+  // Live tick for the elapsed-time counter while enrichment runs
+  useEffect(() => {
+    if (enrichmentStatus !== 'running' || enrichmentStartedAt == null) return;
+    const id = setInterval(() => {
+      setEnrichmentElapsed(Math.floor((Date.now() - enrichmentStartedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [enrichmentStatus, enrichmentStartedAt]);
+
   // Logo upload
   const [logoUrl, setLogoUrl] = useState<string | null>(user?.businessProfile?.logoUrl || null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -311,11 +330,132 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // Wizard: run AI analysis
+  // Save whatever the user typed in the wizard input phase (URL/description/socials) to DB.
+  // Returns the merged profile so the caller can chain enrichment onto the same object.
+  const persistWizardInput = async (fullUrl: string | null): Promise<BusinessProfile> => {
+    const next: BusinessProfile = { ...businessProfile };
+    if (fullUrl) next.companyWebsite = fullUrl;
+    if (businessDescription.trim()) next.businessDescription = businessDescription.trim();
+    const enteredSocials = Object.entries(socialUrls).filter(([_, v]) => safeStr(v).trim().length > 0);
+    if (enteredSocials.length > 0) {
+      next.socialLinks = { ...(next.socialLinks || {}), ...Object.fromEntries(enteredSocials) };
+    }
+    setBusinessProfile(next);
+    try {
+      const cleaned = cleanProfileForSave(next as Record<string, unknown>);
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null })
+        .eq('id', user.id);
+      if (updateErr) throw updateErr;
+      if (refreshProfile) await refreshProfile();
+    } catch (err) {
+      // Non-fatal — the user has the data on screen and can re-save from the manual form.
+      console.warn('Initial profile save failed:', err);
+    }
+    return next;
+  };
+
+  // Runs analyzeBusinessFromWeb in the background and merges the result without
+  // overwriting any field the user has already filled in.
+  const startEnrichment = async (fullUrl: string, socials: typeof socialUrls) => {
+    setEnrichmentStatus('running');
+    setEnrichmentStartedAt(Date.now());
+    setEnrichmentElapsed(0);
+    setEnrichmentError('');
+    setEnrichmentFieldsAdded(0);
+    try {
+      const creditResult = await consumeCredits(supabase, 'business_analysis');
+      if (!creditResult.success) throw new Error(creditResult.message || 'Insufficient credits.');
+      const result = await analyzeBusinessFromWeb(fullUrl, socials);
+      if (!result.analysis) throw new Error('Could not analyze the website. Edit your fields manually or try a different URL.');
+
+      // Merge into whatever the user has now (they may have edited during the wait).
+      const current = businessProfileRef.current;
+      const populated: BusinessProfile = { ...current };
+      let fieldsAdded = 0;
+      const isEmpty = (v: unknown) => v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
+      const setIfEmpty = <K extends keyof BusinessProfile>(field: K, value: BusinessProfile[K] | undefined) => {
+        if (value != null && value !== '' && isEmpty((populated as any)[field])) {
+          (populated as any)[field] = value;
+          fieldsAdded++;
+        }
+      };
+
+      const stringFields = [
+        'companyName', 'industry', 'productsServices', 'targetAudience', 'valueProp',
+        'pricingModel', 'salesApproach', 'companyStory', 'foundedYear', 'teamSize',
+        'teamHighlights', 'testimonialsThemes', 'competitiveAdvantage', 'contentTone', 'keyClients',
+      ] as const;
+      stringFields.forEach(f => {
+        const deep = (result.analysis as any)[f];
+        if (deep?.value) setIfEmpty(f as any, deep.value);
+      });
+
+      if (result.analysis.services?.value?.length && isEmpty(populated.services)) {
+        populated.services = result.analysis.services.value;
+        setServicesList(result.analysis.services.value);
+        fieldsAdded++;
+      }
+      if (result.analysis.pricingTiers?.value?.length && isEmpty(populated.pricingTiers)) {
+        populated.pricingTiers = result.analysis.pricingTiers.value;
+        setPricingTiers(result.analysis.pricingTiers.value);
+        fieldsAdded++;
+      }
+      if (result.analysis.uniqueSellingPoints?.value?.length && isEmpty(populated.uniqueSellingPoints)) {
+        populated.uniqueSellingPoints = result.analysis.uniqueSellingPoints.value;
+        fieldsAdded++;
+      }
+      if (result.analysis.phone?.value && (result.analysis.phone.confidence || 0) > 0) setIfEmpty('phone', result.analysis.phone.value);
+      if (result.analysis.businessEmail?.value && (result.analysis.businessEmail.confidence || 0) > 0) setIfEmpty('businessEmail', result.analysis.businessEmail.value);
+      if (result.analysis.address?.value && (result.analysis.address.confidence || 0) > 0) setIfEmpty('address', result.analysis.address.value);
+
+      if (result.analysis.socialLinks) {
+        const discovered = result.analysis.socialLinks;
+        const existing = populated.socialLinks || {};
+        const merged: Record<string, string> = { ...existing };
+        (['linkedin', 'twitter', 'instagram', 'facebook'] as const).forEach(k => {
+          if (discovered[k] && !merged[k]) {
+            merged[k] = discovered[k]!;
+            fieldsAdded++;
+          }
+        });
+        populated.socialLinks = merged;
+        setSocialUrls(prev => ({
+          linkedin: discovered.linkedin || prev.linkedin,
+          twitter: discovered.twitter || prev.twitter,
+          instagram: discovered.instagram || prev.instagram,
+          facebook: discovered.facebook || prev.facebook,
+        }));
+      }
+
+      setBusinessProfile(populated);
+      setAnalysisResult(result.analysis);
+
+      const cleaned = cleanProfileForSave(populated as Record<string, unknown>);
+      await supabase
+        .from('profiles')
+        .update({ businessProfile: Object.keys(cleaned).length > 0 ? cleaned : null })
+        .eq('id', user.id);
+      if (refreshProfile) await refreshProfile();
+
+      setEnrichmentFieldsAdded(fieldsAdded);
+      setEnrichmentStatus('complete');
+      // Auto-dismiss the success banner after a short read window
+      setTimeout(() => {
+        setEnrichmentStatus(prev => (prev === 'complete' ? 'idle' : prev));
+      }, 8000);
+    } catch (err: unknown) {
+      setEnrichmentError(err instanceof Error ? err.message : 'Enrichment failed');
+      setEnrichmentStatus('failed');
+    }
+  };
+
+  // Wizard submit: save user input immediately, land on the manual form, then enrich in background.
   const handleAnalyze = async () => {
-    // Description-only flow: skip AI analysis, go straight to manual form
+    // Description-only flow: persist description, skip enrichment
     if (!websiteUrl.trim() && businessDescription.trim()) {
-      setBusinessProfile(p => ({ ...p, businessDescription: businessDescription.trim() }));
+      await persistWizardInput(null);
       setWizardPhase('manual');
       return;
     }
@@ -325,154 +465,16 @@ const ProfilePage: React.FC = () => {
     }
     setUrlError('');
     setAnalysisError('');
-    setWizardPhase('analyzing');
-    setAnalysisStage('searching');
-    setAnalysisProgress(0);
+    const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
 
-    // Animate stages with timeouts
-    const stages: { stage: AnalysisStage; progress: number; delay: number }[] = [
-      { stage: 'searching', progress: 15, delay: 0 },
-      { stage: 'reading', progress: 40, delay: 2500 },
-      { stage: 'extracting', progress: 65, delay: 5000 },
-      { stage: 'structuring', progress: 85, delay: 7500 },
-    ];
+    // 1) Persist what the user typed so they never lose it, even if enrichment fails.
+    await persistWizardInput(fullUrl);
 
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    stages.forEach(({ stage, progress, delay }) => {
-      const timer = setTimeout(() => {
-        setAnalysisStage(stage);
-        setAnalysisProgress(progress);
-      }, delay);
-      timers.push(timer);
-    });
+    // 2) Move to the manual form — user can edit freely while enrichment runs.
+    setWizardPhase('manual');
 
-    // After reaching 85%, slowly crawl toward 98% so it never looks stuck
-    const crawlInterval = setInterval(() => {
-      setAnalysisProgress(prev => {
-        if (prev >= 98) { clearInterval(crawlInterval); return prev; }
-        if (prev >= 85) return prev + 0.5;
-        return prev;
-      });
-    }, 500);
-    timers.push(crawlInterval as unknown as ReturnType<typeof setTimeout>);
-    stageTimerRef.current = timers as any;
-
-    try {
-      const creditResult = await consumeCredits(supabase, 'business_analysis');
-      if (!creditResult.success) {
-        setAnalysisError(creditResult.message || 'Insufficient credits.');
-        setTimeout(() => setWizardPhase('manual'), 1500);
-        return;
-      }
-      const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
-      const result = await analyzeBusinessFromWeb(fullUrl, socialUrls);
-
-      // Clear all animation timers
-      if (Array.isArray(stageTimerRef.current)) {
-        (stageTimerRef.current as any[]).forEach(t => { clearTimeout(t); clearInterval(t); });
-      } else if (stageTimerRef.current) {
-        clearTimeout(stageTimerRef.current);
-      }
-      setAnalysisStage('complete');
-      setAnalysisProgress(100);
-
-      if (result.analysis) {
-        setAnalysisResult(result.analysis);
-        // Auto-populate businessProfile from analysis
-        const populated: BusinessProfile = { ...businessProfile };
-        const fields = ['companyName', 'industry', 'productsServices', 'targetAudience', 'valueProp', 'pricingModel', 'salesApproach'] as const;
-        fields.forEach(f => {
-          const field = result.analysis![f];
-          if (field?.value) {
-            populated[f] = field.value;
-          }
-        });
-        populated.companyWebsite = fullUrl;
-        if (businessDescription.trim()) populated.businessDescription = businessDescription.trim();
-
-        // Structured services
-        if (result.analysis.services?.value?.length) {
-          populated.services = result.analysis.services.value;
-          setServicesList(result.analysis.services.value);
-        }
-        // Structured pricing tiers
-        if (result.analysis.pricingTiers?.value?.length) {
-          populated.pricingTiers = result.analysis.pricingTiers.value;
-          setPricingTiers(result.analysis.pricingTiers.value);
-        }
-        // Deep analysis string fields
-        for (const f of ['companyStory','foundedYear','teamSize','teamHighlights',
-          'testimonialsThemes','competitiveAdvantage','contentTone','keyClients'] as const) {
-          const deepField = (result.analysis as any)[f];
-          if (deepField?.value) (populated as any)[f] = deepField.value;
-        }
-        // USPs array
-        if (result.analysis.uniqueSellingPoints?.value?.length) {
-          populated.uniqueSellingPoints = result.analysis.uniqueSellingPoints.value;
-        }
-
-        // Apply contact info from analysis
-        if (result.analysis.phone?.value && result.analysis.phone.confidence > 0) {
-          populated.phone = result.analysis.phone.value;
-        }
-        if (result.analysis.businessEmail?.value && result.analysis.businessEmail.confidence > 0) {
-          populated.businessEmail = result.analysis.businessEmail.value;
-        }
-        if (result.analysis.address?.value && result.analysis.address.confidence > 0) {
-          populated.address = result.analysis.address.value;
-        }
-        // Merge discovered social links
-        if (result.analysis.socialLinks) {
-          const discovered = result.analysis.socialLinks;
-          populated.socialLinks = {
-            ...(populated.socialLinks || {}),
-            ...(discovered.linkedin ? { linkedin: discovered.linkedin } : {}),
-            ...(discovered.twitter ? { twitter: discovered.twitter } : {}),
-            ...(discovered.instagram ? { instagram: discovered.instagram } : {}),
-            ...(discovered.facebook ? { facebook: discovered.facebook } : {}),
-          };
-          // Also populate the social URL inputs for the wizard
-          setSocialUrls(prev => ({
-            linkedin: discovered.linkedin || prev.linkedin,
-            twitter: discovered.twitter || prev.twitter,
-            instagram: discovered.instagram || prev.instagram,
-            facebook: discovered.facebook || prev.facebook,
-          }));
-        }
-
-        setBusinessProfile(populated);
-
-        // Generate follow-up questions for low-confidence fields
-        const lowConfidenceFields = fields.filter(f => (result.analysis![f]?.confidence || 0) < 70);
-        if (lowConfidenceFields.length > 0) {
-          try {
-            const fqCredit = await consumeCredits(supabase, 'follow_up_questions');
-            if (fqCredit.success) {
-              const fqResult = await generateFollowUpQuestions(populated);
-              setFollowUpQuestions(fqResult.questions);
-            }
-          } catch {
-            // Follow-up question generation is optional
-            setFollowUpQuestions([]);
-          }
-        }
-
-        if (refreshProfile) await refreshProfile();
-        setTimeout(() => setWizardPhase('results'), 500);
-      } else {
-        setAnalysisError('Could not analyze the website. Please try again or use manual entry.');
-        setTimeout(() => setWizardPhase('manual'), 1500);
-      }
-    } catch (err: unknown) {
-      // Clear all animation timers on error
-      if (Array.isArray(stageTimerRef.current)) {
-        (stageTimerRef.current as any[]).forEach(t => { clearTimeout(t); clearInterval(t); });
-      } else if (stageTimerRef.current) {
-        clearTimeout(stageTimerRef.current);
-      }
-      setAnalysisError(err instanceof Error ? err.message : 'Analysis failed');
-      setTimeout(() => setWizardPhase('manual'), 1500);
-    }
+    // 3) Fire enrichment in the background (not awaited).
+    void startEnrichment(fullUrl, socialUrls);
   };
 
   // Wizard: save profile (reused for all phases)
@@ -1084,6 +1086,83 @@ const ProfilePage: React.FC = () => {
       {/* Business Profile Tab */}
       {activeTab === 'business_profile' && (
         <div className="space-y-6 animate-in fade-in duration-300">
+
+          {/* ─── Background enrichment status banner ─── */}
+          {enrichmentStatus !== 'idle' && (
+            <div className={`rounded-2xl p-4 flex items-center justify-between border shadow-sm ${
+              enrichmentStatus === 'running' ? 'bg-indigo-50 border-indigo-200' :
+              enrichmentStatus === 'complete' ? 'bg-emerald-50 border-emerald-200' :
+              'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center space-x-3 min-w-0">
+                {enrichmentStatus === 'running' && (
+                  <>
+                    <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center animate-pulse shrink-0">
+                      <SparklesIcon className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-indigo-900">AI is researching your business&hellip;</p>
+                      <p className="text-xs text-indigo-600 mt-0.5 truncate">
+                        Scanning website & socials. Fill fields below &mdash; we won't overwrite your edits.
+                      </p>
+                    </div>
+                  </>
+                )}
+                {enrichmentStatus === 'complete' && (
+                  <>
+                    <div className="w-9 h-9 bg-emerald-100 rounded-xl flex items-center justify-center shrink-0">
+                      <CheckIcon className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-900">Enrichment complete</p>
+                      <p className="text-xs text-emerald-600 mt-0.5">
+                        {enrichmentFieldsAdded === 0
+                          ? 'No new fields found — your profile was already up to date.'
+                          : `${enrichmentFieldsAdded} field${enrichmentFieldsAdded === 1 ? '' : 's'} filled in automatically.`}
+                      </p>
+                    </div>
+                  </>
+                )}
+                {enrichmentStatus === 'failed' && (
+                  <>
+                    <div className="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
+                      <AlertTriangleIcon className="w-4 h-4 text-red-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-red-900">Enrichment failed</p>
+                      <p className="text-xs text-red-600 mt-0.5 truncate">{enrichmentError}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center space-x-3 shrink-0 ml-4">
+                {enrichmentStatus === 'running' && (
+                  <span className="text-sm font-mono font-bold text-indigo-700 tabular-nums">
+                    {Math.floor(enrichmentElapsed / 60)}:{String(enrichmentElapsed % 60).padStart(2, '0')}
+                  </span>
+                )}
+                {enrichmentStatus === 'failed' && businessProfile.companyWebsite && (
+                  <button
+                    type="button"
+                    onClick={() => startEnrichment(businessProfile.companyWebsite!, socialUrls)}
+                    className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+                {(enrichmentStatus === 'complete' || enrichmentStatus === 'failed') && (
+                  <button
+                    type="button"
+                    onClick={() => setEnrichmentStatus('idle')}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                    aria-label="Dismiss"
+                  >
+                    <XIcon className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* ═══ Phase 1: URL Input ═══ */}
           {wizardPhase === 'input' && (
