@@ -27,7 +27,7 @@ const routeImportMap: Record<string, () => Promise<unknown>> = {
   '/portal/leads':          () => import('../pages/portal/LeadManagement'),
   '/portal/leads/apollo':   () => import('../pages/portal/ApolloSearchPage'),
   '/portal/content':        () => import('../pages/portal/ContentGen'),
-  '/portal/strategy':       () => import('../pages/portal/TeamHub'),
+  '/portal/strategy':       () => import('../pages/portal/team-hub/TeamHubPage'),
   '/portal/blog':           () => import('../pages/portal/BlogDrafts'),
   '/portal/analytics':      () => import('../pages/portal/AnalyticsPage'),
   '/portal/automation':     () => import('../pages/portal/AutomationPage'),

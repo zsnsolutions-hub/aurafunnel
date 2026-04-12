@@ -46,7 +46,6 @@ const ClientDashboard = lazy(() => import('./pages/portal/ClientDashboard'));
 const LeadManagement = lazy(() => import('./pages/portal/LeadManagement'));
 const LeadProfile = lazy(() => import('./pages/portal/LeadProfile'));
 const ContentGen = lazy(() => import('./pages/portal/ContentGen'));
-const TeamHub = lazy(() => import('./pages/portal/TeamHub'));
 const BlogDrafts = lazy(() => import('./pages/portal/BlogDrafts'));
 const AnalyticsPage = lazy(() => import('./pages/portal/AnalyticsPage'));
 const AutomationPage = lazy(() => import('./pages/portal/AutomationPage'));
@@ -278,7 +277,7 @@ const App: React.FC = () => {
             <Route path="leads/apollo" element={<ApolloSearchPage />} />
             <Route path="leads/:leadId" element={<LeadProfile />} />
             <Route path="content" element={<ContentGen />} />
-            <Route path="strategy" element={<TeamHub />} />
+            <Route path="strategy" element={<Navigate to="/portal/team-hub" replace />} />
             <Route path="blog" element={<BlogDrafts />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="automation" element={<AutomationPage />} />

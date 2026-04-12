@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Target, Users, Brain, Compass, Sparkles, PenSquare, GitBranch,
-  Send, PieChart, MessageSquare, Zap, LayoutGrid, Plug, Mail,
+  Send, PieChart, MessageSquare, Zap, Plug, Mail,
   SlidersHorizontal, CreditCard, FileText, Settings, BookOpen,
   HelpCircle,
 } from 'lucide-react';
@@ -142,22 +142,12 @@ export const NAV_CONFIG: NavConfigItem[] = [
     divider: true,
   },
   {
-    route: '/portal/strategy',
+    route: '/portal/team-hub',
     navLabel: 'Tasks',
     pageTitle: 'Tasks',
     icon: Zap,
     section: 'tools',
     order: 1,
-    children: [
-      {
-        route: '/portal/team-hub',
-        navLabel: 'Board View',
-        pageTitle: 'Board View',
-        icon: LayoutGrid,
-        section: 'tools',
-        order: 0,
-      },
-    ],
   },
 
   // ── Workspace (group) ──
