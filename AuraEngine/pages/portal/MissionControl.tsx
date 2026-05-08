@@ -15,7 +15,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Sparkles, Flame, ArrowRight, TrendingUp, TrendingDown, Brain,
-  Send, Target, Compass,
+  Send, Target, Compass, LayoutDashboard,
 } from 'lucide-react';
 import { User, Lead } from '../../types';
 import { useLeads } from '../../lib/queries';
@@ -230,12 +230,21 @@ const MissionControl: React.FC = () => {
             Your AI revenue operating system, briefing you on what matters today.
           </p>
         </div>
-        <button
-          onClick={() => navigate('/portal/ai')}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition shadow-lg shadow-slate-900/10"
-        >
-          <Brain size={16} /> Ask the AI
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/portal/dashboard')}
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition"
+            title="Full dashboard with charts and segments"
+          >
+            <LayoutDashboard size={16} /> Full dashboard
+          </button>
+          <button
+            onClick={() => navigate('/portal/ai')}
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition shadow-lg shadow-slate-900/10"
+          >
+            <Brain size={16} /> Ask the AI
+          </button>
+        </div>
       </header>
 
       {/* ── Today's recommendations ── */}

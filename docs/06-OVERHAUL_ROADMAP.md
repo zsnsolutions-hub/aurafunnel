@@ -23,6 +23,7 @@ This document tracks the phased rollout. Phase 1 is shipped in code on this bran
 | Email tracking → `lead_memory` writer | `supabase/migrations/20260508100000_lead_memory_email_tracking.sql` + 3 edge functions (`email-track`, `webhooks-sendgrid`, `webhooks-mailchimp`) | ✅ |
 | Sequence completion → `campaign_memory` outcome writer (cron-driven, 48h delay) | `supabase/migrations/20260508200000_campaign_memory_sequence_outcome.sql` | ✅ |
 | AI Command Center thumbs feedback → `workspace_memory` writer | `components/ai/MessageRow.tsx` + `pages/portal/AICommandCenter.tsx` | ✅ |
+| Mission Control becomes default `/portal` (legacy dashboard moved to `/portal/dashboard` + reachable via "Full dashboard" button) | `App.tsx` route swap + `MissionControl.tsx` header CTA | ✅ |
 
 **Why these and not others.** Phase 1 had to be additive and reversible. Memory is foundational (everything in Phase 2 builds on it). Navigation pillars set the product story. Mission Control proves the AI-native pattern without removing the existing dashboard. Centralised AI config removes the friction tax on every future model upgrade. Nothing here touches the email send path, billing, RLS posture, or existing user data.
 

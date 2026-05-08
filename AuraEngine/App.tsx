@@ -273,8 +273,10 @@ const App: React.FC = () => {
               <AuthRedirect />
             }
           >
-            <Route index element={<ClientDashboard user={user!} />} />
-            <Route path="mission" element={<MissionControl />} />
+            <Route index element={<MissionControl />} />
+            <Route path="dashboard" element={<ClientDashboard user={user!} />} />
+            {/* Legacy alias — old links to /portal/mission still resolve. */}
+            <Route path="mission" element={<Navigate to="/portal" replace />} />
             <Route path="leads" element={<LeadManagement />} />
             <Route path="leads/apollo" element={<ApolloSearchPage />} />
             <Route path="leads/:leadId" element={<LeadProfile />} />
