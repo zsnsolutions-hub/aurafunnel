@@ -463,18 +463,30 @@ serve(async (req) => {
       );
     }
 
-    // ── Phase 3.2.1: resolve workspace_id + sender_account_id ──
-    // We resolve these first so we can attempt the canonical credential
-    // path (sender_account_secrets) before falling back to the legacy
-    // email_provider_configs source. Lookups are best-effort — failures
-    // leave the IDs null and the legacy path runs.
+    // ── Phase 3.2.1 + 3.2.3: resolve workspace_id + sender_account_id ──
+    // Order:
+    //   A. Resolve workspaceId from workspace_members.
+    //   B. Phase 3.2.3 — if caller did not supply `provider`, auto-pick
+    //      via pick_outreach_sender(workspace_id). Lets us use the
+    //      healthiest available sender without making the caller decide.
+    //   C. If we still don't have a sender_account_id, look one up by
+    //      (workspace_id, provider, from_email) — original Phase 3.2.1
+    //      behaviour.
+    //   D. Phase 3.2.3 — pre-flight cap check. If the resolved sender is
+    //      quarantined (cap=0 from health<25) or at its daily cap, return
+    //      429 with explicit guidance. ONLY enforced when sender_account_id
+    //      was resolved — legacy email_provider_configs callers see no
+    //      behaviour change.
+    // Lookups are best-effort — failures leave the IDs null and the
+    // legacy credential path runs unobstructed.
+    const providerWasSpecified =
+      body && typeof body === "object" && body.provider != null && body.provider !== "";
+
     let workspaceId: string | null = null;
     let senderAccountId: string | null = null;
+    let senderAccountFromEmail: string | null = null;
 
-    // We need an early guess at senderEmail to look up the matching sender_account.
-    // Final senderEmail is computed once creds are loaded below.
-    const senderEmailHint = from_email ?? null;
-
+    // ── A. Resolve workspaceId ──
     try {
       const { data: wm } = await supabaseAdmin
         .from("workspace_members")
@@ -484,11 +496,35 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
       workspaceId = (wm?.workspace_id as string | undefined) ?? null;
+    } catch (e) {
+      console.warn("[send-email] workspace lookup failed:", (e as Error).message);
+    }
 
-      if (workspaceId) {
+    // ── B. Auto-pick when no provider supplied ──
+    if (!providerWasSpecified && workspaceId) {
+      try {
+        const { data: picked } = await supabaseAdmin.rpc("pick_outreach_sender", {
+          p_workspace_id: workspaceId,
+        });
+        const row = Array.isArray(picked) ? picked[0] : picked;
+        if (row?.sender_id) {
+          provider = row.provider;
+          senderAccountId = row.sender_id;
+          senderAccountFromEmail = row.from_email ?? null;
+          if (!from_email && senderAccountFromEmail) from_email = senderAccountFromEmail;
+        }
+      } catch (e) {
+        console.warn("[send-email] pick_outreach_sender failed:", (e as Error).message);
+      }
+    }
+
+    // ── C. Fallback lookup by (workspace_id, provider, from_email) ──
+    if (!senderAccountId && workspaceId) {
+      try {
+        const senderEmailHint = from_email ?? null;
         let q = supabaseAdmin
           .from("sender_accounts")
-          .select("id")
+          .select("id, from_email")
           .eq("workspace_id", workspaceId)
           .eq("provider", provider)
           .eq("status", "connected")
@@ -500,9 +536,50 @@ serve(async (req) => {
           .limit(1)
           .maybeSingle();
         senderAccountId = (sa?.id as string | undefined) ?? null;
+        senderAccountFromEmail = (sa?.from_email as string | undefined) ?? senderAccountFromEmail;
+      } catch (lookupErr) {
+        console.warn("[send-email] sender_account lookup failed:", (lookupErr as Error).message);
       }
-    } catch (lookupErr) {
-      console.warn("[send-email] sender_account lookup failed:", (lookupErr as Error).message);
+    }
+
+    // ── D. Pre-flight cap check (only when sender_account_id resolved) ──
+    if (senderAccountId) {
+      try {
+        const [{ data: capData }, { data: sentData }] = await Promise.all([
+          supabaseAdmin.rpc("sender_daily_cap", { p_sender_id: senderAccountId }),
+          supabaseAdmin.rpc("get_sender_daily_sent", { p_sender_id: senderAccountId }),
+        ]);
+        const cap = typeof capData === "number" ? capData : 0;
+        const sent = typeof sentData === "number" ? sentData : 0;
+
+        if (cap === 0) {
+          console.warn(`[send-email] sender ${senderAccountId} quarantined (health<25)`);
+          return new Response(
+            JSON.stringify({
+              error: "Sender quarantined due to low health score. Connect another sender or wait for health to recover.",
+              code: "sender_quarantined",
+              sender_account_id: senderAccountId,
+            }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        if (sent >= cap) {
+          console.warn(`[send-email] sender ${senderAccountId} at cap ${sent}/${cap}`);
+          return new Response(
+            JSON.stringify({
+              error: `Sender daily cap reached (${sent}/${cap}). Try again after midnight UTC or use a different sender.`,
+              code: "sender_at_cap",
+              sender_account_id: senderAccountId,
+              daily_sent: sent,
+              daily_cap: cap,
+            }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      } catch (capErr) {
+        // Cap-check failure must never block sending.
+        console.warn("[send-email] cap pre-flight failed (allowing send):", (capErr as Error).message);
+      }
     }
 
     // ── Phase 3.2.2: load credentials, preferring sender_account_secrets ──

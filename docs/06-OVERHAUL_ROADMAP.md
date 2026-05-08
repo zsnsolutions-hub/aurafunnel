@@ -29,6 +29,7 @@ This document tracks the phased rollout. Phase 1 is shipped in code on this bran
 | Phase 3.2.1 send-path data migration + counters + DLQ wiring (credential source still legacy) | `supabase/migrations/20260508500000_send_path_data_migration.sql` + 3 edge function updates | ✅ |
 | Phase 3.2.2 credential source swap — send-email reads from `sender_account_secrets` first, legacy `email_provider_configs` as defensive fallback | `supabase/functions/send-email/index.ts` (`loadSenderAccountCreds` helper) | ✅ |
 | DB refinement pass #2: re-point 8 `workspace_id` FKs from `profiles(id)` → `workspaces(id)` (canonical), add 5 missing `workspace_id` indexes | `supabase/migrations/20260509000000_db_refinement_pass2.sql` | ✅ |
+| Phase 3.2.3 send-path completion — auto-pick sender when no provider supplied + 429 hard-fail when daily cap reached or sender quarantined | `supabase/functions/send-email/index.ts` | ✅ |
 
 **Why these and not others.** Phase 1 had to be additive and reversible. Memory is foundational (everything in Phase 2 builds on it). Navigation pillars set the product story. Mission Control proves the AI-native pattern without removing the existing dashboard. Centralised AI config removes the friction tax on every future model upgrade. Nothing here touches the email send path, billing, RLS posture, or existing user data.
 
@@ -143,20 +144,47 @@ NOT in this ship (deferred to Phase 3.2.3):
 - Hard-fail pre-flight cap check (`daily_sent < daily_cap`)
 - `pick_outreach_sender` for requests that don't supply a provider
 
-### Phase 3.2.3 — caps + auto-pick (still owed)
+### Phase 3.2.3 — caps + auto-pick (✅ shipped 2026-05-09)
+
+`send-email` now auto-picks the best sender when the caller doesn't supply
+a `provider`, and hard-fails on a 429 when the resolved sender is at its
+daily cap or quarantined. Both behaviors only apply when a
+`sender_account_id` resolved — legacy `email_provider_configs` callers
+see no change.
+
+**Auto-pick.** If `body.provider` is null/empty, calls
+`pick_outreach_sender(workspace_id)` and uses the returned
+`provider` + `from_email` + `sender_account_id`. The RPC orders by
+`health_score DESC` and least utilisation, so the auto-picked sender
+is the healthiest workspace-bound sender that isn't quarantined.
+
+**Cap pre-flight.** When `sender_account_id` is resolved (whether via
+auto-pick or via the existing fallback lookup), `sender_daily_cap` and
+`get_sender_daily_sent` are queried in parallel. Two error paths:
+
+- `cap === 0` (sender quarantined, health < 25): 429 with code
+  `sender_quarantined` + the offending `sender_account_id`.
+- `daily_sent >= daily_cap`: 429 with code `sender_at_cap` plus
+  `daily_sent` + `daily_cap` for the caller to surface a clear UX.
+
+Cap-check failure (RPC errors) logs a warning and ALLOWS the send —
+observability over availability — so a transient Postgres issue can
+never silently block the revenue pipeline.
+
+### Phase 3.2.4+ — remaining cleanup (deferred)
 
 The high-blast piece. Until shipped, `send-email/index.ts` continues to
 read from legacy `email_provider_configs` and `email_messages.sender_account_id`
 remains null for new rows.
 
-**Required scope (3.2.1 + 3.2.2 done; 3.2.3 still owed):**
+**Required scope — all complete:**
 1. ✅ Migrate `email_provider_configs` → `sender_accounts` / `sender_account_secrets` (Phase 3.2.1)
 2. ✅ Read creds from `sender_account_secrets` via service role (Phase 3.2.2)
 3. ✅ `email_messages.sender_account_id` populated on insert (Phase 3.2.1)
 4. ✅ `email_dlq` writes wired in both webhook handlers (Phase 3.2.1)
 5. ✅ `consecutive_failures` reset/increment (Phase 3.2.1)
-6. ⏳ Use `pick_outreach_sender` when caller doesn't supply provider (Phase 3.2.3)
-7. ⏳ Pre-flight check `daily_sent < daily_cap` and bail with explicit error if all senders are capped (Phase 3.2.3)
+6. ✅ Use `pick_outreach_sender` when caller doesn't supply provider (Phase 3.2.3)
+7. ✅ Pre-flight check `daily_sent < daily_cap` and bail with explicit error if at cap (Phase 3.2.3)
 
 **Acceptance criteria:** Health scores trend with real bounce/spam rates;
 warmup ramp visible on freshly-enrolled accounts; one sender suspended
