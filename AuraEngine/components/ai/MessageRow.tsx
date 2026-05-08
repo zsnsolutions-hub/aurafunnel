@@ -7,9 +7,12 @@
  */
 
 import React, { memo, useState, useEffect, useRef, useCallback } from 'react';
+import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import {
   SparklesIcon, BoltIcon, CopyIcon, CheckIcon, StarIcon, DownloadIcon,
 } from '../Icons';
+
+export type MessageFeedback = 'up' | 'down' | null;
 
 interface MessageRowProps {
   id: string;
@@ -20,10 +23,12 @@ interface MessageRowProps {
   isStreaming?: boolean;
   isPinned?: boolean;
   copiedId?: string | null;
+  feedback?: MessageFeedback;
   onCopy?: (id: string, content: string) => void;
   onPin?: (id: string) => void;
   onExport?: () => void;
   onSavePrompt?: (content: string) => void;
+  onFeedback?: (id: string, kind: 'up' | 'down') => void;
   isSavedPrompt?: boolean;
 }
 
@@ -62,7 +67,8 @@ function renderMarkdownLine(line: string, li: number, totalLines: number) {
 
 const MessageRowInner: React.FC<MessageRowProps> = ({
   id, role, content, timestamp, confidence, isStreaming,
-  isPinned, copiedId, onCopy, onPin, onExport, onSavePrompt, isSavedPrompt,
+  isPinned, copiedId, feedback,
+  onCopy, onPin, onExport, onSavePrompt, onFeedback, isSavedPrompt,
 }) => {
   const [parsedContent, setParsedContent] = useState<React.ReactNode | null>(null);
   const idleRef = useRef<number>(0);
@@ -102,6 +108,14 @@ const MessageRowInner: React.FC<MessageRowProps> = ({
   const handlePin = useCallback(() => {
     onPin?.(id);
   }, [id, onPin]);
+
+  const handleThumbUp = useCallback(() => {
+    onFeedback?.(id, 'up');
+  }, [id, onFeedback]);
+
+  const handleThumbDown = useCallback(() => {
+    onFeedback?.(id, 'down');
+  }, [id, onFeedback]);
 
   // Render content: plain text while streaming, parsed markdown when done
   const displayContent = isStreaming || !parsedContent ? (
@@ -143,6 +157,35 @@ const MessageRowInner: React.FC<MessageRowProps> = ({
           <div className="mt-1.5 ml-1 flex items-center justify-between">
             <ConfidenceMeter confidence={confidence} />
             <div className="flex items-center space-x-1">
+              {/* Thumbs feedback — writes to workspace_memory (Phase 2.3) */}
+              {onFeedback && (
+                <>
+                  <button
+                    onClick={handleThumbUp}
+                    aria-pressed={feedback === 'up'}
+                    className={`p-1 rounded-lg transition-all ${
+                      feedback === 'up'
+                        ? 'text-emerald-600 bg-emerald-50'
+                        : 'text-slate-300 hover:text-emerald-600 hover:bg-emerald-50'
+                    }`}
+                    title="Helpful — teach the AI"
+                  >
+                    <ThumbsUp size={12} />
+                  </button>
+                  <button
+                    onClick={handleThumbDown}
+                    aria-pressed={feedback === 'down'}
+                    className={`p-1 rounded-lg transition-all ${
+                      feedback === 'down'
+                        ? 'text-rose-600 bg-rose-50'
+                        : 'text-slate-300 hover:text-rose-600 hover:bg-rose-50'
+                    }`}
+                    title="Not helpful — teach the AI"
+                  >
+                    <ThumbsDown size={12} />
+                  </button>
+                </>
+              )}
               <button onClick={handleCopy} className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Copy">
                 {copiedId === id ? <CheckIcon className="w-3 h-3 text-emerald-500" /> : <CopyIcon className="w-3 h-3" />}
               </button>
@@ -182,7 +225,8 @@ const MessageRow = memo(MessageRowInner, (prev, next) => {
     prev.content === next.content &&
     prev.isStreaming === next.isStreaming &&
     prev.isPinned === next.isPinned &&
-    prev.copiedId === next.copiedId
+    prev.copiedId === next.copiedId &&
+    prev.feedback === next.feedback
   );
 });
 

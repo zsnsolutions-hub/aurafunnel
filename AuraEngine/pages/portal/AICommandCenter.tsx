@@ -18,7 +18,8 @@ import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
 import { useAiStream } from '../../hooks/useAiStream';
 import { useAiThread } from '../../hooks/useAiThread';
 import AiErrorBoundary from '../../components/ai/AiErrorBoundary';
-import MessageRow from '../../components/ai/MessageRow';
+import MessageRow, { type MessageFeedback } from '../../components/ai/MessageRow';
+import { rememberWorkspace, resolveWorkspaceForUser } from '../../lib/memory';
 
 interface LayoutContext {
   user: User;
@@ -177,6 +178,7 @@ const AICommandCenter: React.FC = () => {
   const [showContext, setShowContext] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, MessageFeedback>>({});
   const [sessionStartTime] = useState(new Date());
   const [responseCount, setResponseCount] = useState(0);
 
@@ -379,6 +381,50 @@ const AICommandCenter: React.FC = () => {
       return next;
     });
   };
+
+  // ── Message feedback (Phase 2.3) ───────────────────────────────────────
+  // Thumbs up writes a workspace_memory(kind=winning_pattern) row.
+  // Thumbs down writes kind=avoid. The preceding user message is captured
+  // alongside so the AI can recall what prompt produced the rated answer.
+  const handleMessageFeedback = useCallback(async (msgId: string, kind: 'up' | 'down') => {
+    // Toggle: clicking the same thumb again clears the feedback locally only.
+    // (We don't delete from workspace_memory — historical signal is fine.)
+    const prev = messageFeedback[msgId];
+    if (prev === kind) {
+      setMessageFeedback(s => ({ ...s, [msgId]: null }));
+      return;
+    }
+    setMessageFeedback(s => ({ ...s, [msgId]: kind }));
+
+    const aiMsg = messages.find(m => m.id === msgId);
+    if (!aiMsg || aiMsg.role !== 'ai') return;
+    const aiIndex = messages.findIndex(m => m.id === msgId);
+    const userMsg = aiIndex > 0
+      ? [...messages.slice(0, aiIndex)].reverse().find(m => m.role === 'user')
+      : undefined;
+
+    try {
+      const workspaceId = await resolveWorkspaceForUser(user.id);
+      if (!workspaceId) return;
+      await rememberWorkspace({
+        workspaceId,
+        kind: kind === 'up' ? 'winning_pattern' : 'avoid',
+        value: {
+          ai_response: aiMsg.content,
+          user_prompt: userMsg?.content ?? null,
+          ai_mode: aiMode,
+          message_id: msgId,
+          rated_at: new Date().toISOString(),
+        },
+        source: 'user_feedback',
+        confidence: 0.9,
+        tags: ['user_feedback', 'ai_chat', aiMode, kind === 'up' ? 'liked' : 'disliked'],
+      });
+    } catch (err) {
+      // Memory write is best-effort — surface a warning, don't disrupt the UI.
+      console.warn('[memory] feedback write failed:', err);
+    }
+  }, [messageFeedback, messages, user.id, aiMode]);
 
   const handleSavePrompt = (prompt: string) => {
     const label = prompt.length > 30 ? prompt.slice(0, 30) + '...' : prompt;
@@ -1223,6 +1269,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
                   isStreaming={streamingMsgIdRef.current === msg.id}
                   isPinned={pinnedMessageIds.has(msg.id)}
                   copiedId={copiedMsgId}
+                  feedback={messageFeedback[msg.id] ?? null}
                   onCopy={(id, content) => {
                     navigator.clipboard.writeText(content.replace(/\*\*/g, ''));
                     setCopiedMsgId(id);
@@ -1231,6 +1278,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
                   onPin={handlePinMessage}
                   onExport={handleExportChat}
                   onSavePrompt={handleSavePrompt}
+                  onFeedback={handleMessageFeedback}
                   isSavedPrompt={savedPrompts.some(p => p.prompt === msg.content)}
                 />
               ))}
