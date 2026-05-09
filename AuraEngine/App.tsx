@@ -75,6 +75,8 @@ const SocialScheduler = lazy(() => import('./pages/portal/SocialScheduler'));
 const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
 const SenderAccountsPage = lazy(() => import('./pages/portal/SenderAccountsPage'));
 const ApiKeysPage = lazy(() => import('./pages/portal/ApiKeysPage'));
+const WebhooksPage = lazy(() => import('./pages/portal/WebhooksPage'));
+const BrandingPage = lazy(() => import('./pages/portal/BrandingPage'));
 
 // Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -316,6 +318,8 @@ const App: React.FC = () => {
             <Route path="team-hub" element={<TeamHubBoards />} />
             <Route path="sender-accounts" element={<SenderAccountsPage />} />
             <Route path="api-keys" element={<ApiKeysPage />} />
+            <Route path="webhooks" element={<WebhooksPage />} />
+            <Route path="branding" element={<BrandingPage />} />
           </Route>
 
           {/* Admin — layout has ErrorBoundary + Suspense around Outlet */}

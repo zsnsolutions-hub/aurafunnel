@@ -3,7 +3,7 @@ import {
   Compass, Users, Send, GitBranch, BarChart3, Brain,
   Sparkles, PenSquare, MessageSquare, Plug, Mail,
   SlidersHorizontal, CreditCard, FileText, Settings, BookOpen,
-  HelpCircle, Zap, Target, Key,
+  HelpCircle, Zap, Target, Key, Webhook, Palette,
 } from 'lucide-react';
 
 // ── Types ──
@@ -239,6 +239,24 @@ export const NAV_CONFIG: NavConfigItem[] = [
         icon: Key,
         section: 'workspace',
         order: 2,
+        simplifiedVisible: false,
+      },
+      {
+        route: '/portal/webhooks',
+        navLabel: 'Webhooks',
+        pageTitle: 'Webhooks',
+        icon: Webhook,
+        section: 'workspace',
+        order: 3,
+        simplifiedVisible: false,
+      },
+      {
+        route: '/portal/branding',
+        navLabel: 'Branding',
+        pageTitle: 'Branding',
+        icon: Palette,
+        section: 'workspace',
+        order: 4,
         simplifiedVisible: false,
       },
       {
