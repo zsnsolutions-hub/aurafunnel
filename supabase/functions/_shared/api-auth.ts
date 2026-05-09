@@ -17,23 +17,33 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// In-memory rate limit. Per-worker, not per-cluster — a future Phase 4.2
-// will move this to Postgres. 60 req/min mirrors gemini-proxy.
-const RATE_LIMIT = 60;
-const RATE_WINDOW_MS = 60_000;
-const rateMap = new Map<string, number[]>();
+// Phase 4.2 — Postgres-backed cluster-wide rate limit via consume_api_rate_limit
+// RPC. Fixed-window (1-min bucket), 60 req/min/key. Falls back to "allow"
+// on RPC failure so transient Postgres issues don't take the API offline.
+const RATE_LIMIT_PER_MIN = 60;
 
-function checkRateLimit(keyId: string): boolean {
-  const now = Date.now();
-  const ts = rateMap.get(keyId) ?? [];
-  const recent = ts.filter((t) => now - t < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) {
-    rateMap.set(keyId, recent);
-    return false;
+async function checkRateLimit(
+  admin: ReturnType<typeof createClient>,
+  keyId: string,
+): Promise<{ allowed: boolean; resetAt: string | null }> {
+  try {
+    const { data, error } = await admin.rpc("consume_api_rate_limit", {
+      p_key_id: keyId,
+      p_max_per_min: RATE_LIMIT_PER_MIN,
+    });
+    if (error) {
+      console.warn("[api-auth] rate-limit RPC error, allowing:", error.message);
+      return { allowed: true, resetAt: null };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      allowed: row?.allowed !== false,
+      resetAt: (row?.reset_at as string | undefined) ?? null,
+    };
+  } catch (e) {
+    console.warn("[api-auth] rate-limit threw, allowing:", (e as Error).message);
+    return { allowed: true, resetAt: null };
   }
-  recent.push(now);
-  rateMap.set(keyId, recent);
-  return true;
 }
 
 export interface ApiAuth {
@@ -106,15 +116,20 @@ export async function authenticateApiKey(
     };
   }
 
-  if (!checkRateLimit(row.api_key_id)) {
+  const rl = await checkRateLimit(admin, row.api_key_id);
+  if (!rl.allowed) {
+    const retryAfter = rl.resetAt
+      ? Math.max(1, Math.ceil((new Date(rl.resetAt).getTime() - Date.now()) / 1000))
+      : 60;
     return {
       ok: false,
       response: new Response(
         JSON.stringify({
-          error: "Rate limit exceeded (60 req/min per key)",
+          error: `Rate limit exceeded (${RATE_LIMIT_PER_MIN} req/min per key)`,
           code: "rate_limited",
+          reset_at: rl.resetAt,
         }),
-        { status: 429, headers: { ...headersJson, "Retry-After": "60" } },
+        { status: 429, headers: { ...headersJson, "Retry-After": String(retryAfter) } },
       ),
     };
   }
