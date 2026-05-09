@@ -7,11 +7,9 @@ const COLORS = ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff'];
 
 const AIOperations: React.FC = () => {
   const [usageLogs, setUsageLogs] = useState<any[]>([]);
-  const [prompts, setPrompts] = useState<any[]>([]);
   const [userStats, setUserStats] = useState<any[]>([]);
   const [planStats, setPlanStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -23,13 +21,6 @@ const AIOperations: React.FC = () => {
         .limit(200);
       if (logsError) console.error('AI usage logs fetch error:', logsError.message);
       if (logs) setUsageLogs(logs);
-
-      const { data: promptData, error: promptError } = await supabase
-        .from('ai_prompts')
-        .select('*')
-        .order('version', { ascending: false });
-      if (promptError) console.error('AI prompts fetch error:', promptError.message);
-      if (promptData) setPrompts(promptData);
 
       const userMap: Record<string, any> = {};
       const planMap: Record<string, any> = { 'Starter': 0, 'Growth': 0, 'Scale': 0 };
@@ -88,25 +79,6 @@ const AIOperations: React.FC = () => {
     a.click();
   };
 
-  const togglePrompt = async (id: string, name: string, currentStatus: boolean) => {
-    setIsSyncing(true);
-    try {
-      if (!currentStatus) {
-        await supabase.from('ai_prompts').update({ is_active: false }).eq('name', name);
-      }
-      const { error } = await supabase.from('ai_prompts').update({ is_active: !currentStatus }).eq('id', id);
-      if (!error) {
-        await supabase.from('audit_logs').insert({
-          action: 'AI_PROMPT_MODIFIED',
-          details: `Prompt ${name} updated.`
-        });
-        await fetchData();
-      }
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const totalCost = usageLogs.reduce((a, b) => a + parseFloat(b.estimated_cost || 0), 0);
   const avgCostPerGen = usageLogs.length > 0 ? (totalCost / usageLogs.length).toFixed(4) : '0';
   const errorRate = usageLogs.length > 0 
@@ -127,7 +99,7 @@ const AIOperations: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-heading">AI Operations Center</h1>
-          <p className="text-slate-500 mt-1">Real-time compute cost analysis and prompt version control.</p>
+          <p className="text-slate-500 mt-1">Real-time compute cost and AI usage analysis. Prompt version control lives in <a href="/admin/prompts" className="text-indigo-600 hover:underline">Prompt DNA</a>.</p>
         </div>
         <div className="flex items-center space-x-3">
           <button 

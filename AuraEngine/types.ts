@@ -773,8 +773,26 @@ export interface SenderAccount {
   warmup_daily_sent: number;
   last_health_check_at: string | null;
   health_score: number | null;
+  // Phase 3.1 health columns
+  bounce_rate_7d: number;
+  complaint_rate_7d: number;
+  consecutive_failures: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface EmailDlqEntry {
+  id: string;
+  workspace_id: string;
+  sender_account_id: string | null;
+  message_id: string | null;
+  to_email: string;
+  kind: 'hard_bounce' | 'spam_complaint' | 'rate_limited' | 'provider_error' | 'unsubscribed' | 'other';
+  reason: string | null;
+  retry_count: number;
+  first_failed_at: string;
+  last_failed_at: string;
+  metadata: Record<string, unknown>;
 }
 
 export interface WorkspaceUsageCounters {

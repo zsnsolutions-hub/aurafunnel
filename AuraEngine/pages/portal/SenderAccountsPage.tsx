@@ -15,6 +15,7 @@ import {
 import { resolvePlanName } from '../../lib/credits';
 import { getOutboundLimits } from '../../lib/planLimits';
 import AddSenderModal from '../../components/portal/AddSenderModal';
+import SenderHealthPanel from '../../components/portal/SenderHealthPanel';
 
 const STATUS_BADGE: Record<string, { className: string; label: string }> = {
   connected: { className: 'bg-emerald-100 text-emerald-700', label: 'Connected' },
@@ -279,6 +280,13 @@ const SenderAccountsPage: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Phase 3.x: Deliverability health + DLQ */}
+      {accounts.length > 0 && (
+        <div className="mt-8">
+          <SenderHealthPanel workspaceId={user.id} />
         </div>
       )}
 
