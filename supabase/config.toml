@@ -1,0 +1,39 @@
+# supabase/config.toml
+#
+# Per-function configuration. Without entries here, Supabase applies its
+# default "verify_jwt = true" which rejects any request without a Supabase
+# user JWT BEFORE our function code runs — that breaks endpoints that
+# authenticate with their own tokens (API keys, public webhooks, public
+# tracking pixels).
+#
+# IMPORTANT: every entry below has its own auth/rate-limit story handled
+# inside the function. Do not add a function here unless its handler
+# enforces authentication.
+
+[functions.v1-leads]
+verify_jwt = false  # Public REST API — auth via api_keys (Bearer scal_*)
+
+# Existing public endpoints whose handlers already do their own auth/rate
+# limit (mentioned here for completeness; CLI may already have them set
+# server-side from prior deploys).
+
+[functions.email-track]
+verify_jwt = false  # Tracking pixel + click redirect; no JWT possible
+
+[functions.webhooks-sendgrid]
+verify_jwt = false  # SendGrid signs payloads; verified inside the function
+
+[functions.webhooks-mailchimp]
+verify_jwt = false  # Mailchimp signs payloads; verified inside the function
+
+[functions.tracking-redirect]
+verify_jwt = false  # Public click redirect
+
+[functions.linkedin-oauth-callback]
+verify_jwt = false  # OAuth callback from LinkedIn
+
+[functions.meta-oauth-callback]
+verify_jwt = false  # OAuth callback from Meta
+
+[functions.auth-send-email]
+verify_jwt = false  # Custom Supabase auth email hook
