@@ -3,7 +3,7 @@ import {
   Compass, Users, Send, GitBranch, BarChart3, Brain,
   Sparkles, PenSquare, MessageSquare, Plug, Mail,
   SlidersHorizontal, CreditCard, FileText, Settings, BookOpen,
-  HelpCircle, Zap, Target,
+  HelpCircle, Zap, Target, Key,
 } from 'lucide-react';
 
 // ── Types ──
@@ -231,6 +231,15 @@ export const NAV_CONFIG: NavConfigItem[] = [
         icon: Mail,
         section: 'workspace',
         order: 1,
+      },
+      {
+        route: '/portal/api-keys',
+        navLabel: 'API Keys',
+        pageTitle: 'API Keys',
+        icon: Key,
+        section: 'workspace',
+        order: 2,
+        simplifiedVisible: false,
       },
       {
         route: '/portal/model-training',

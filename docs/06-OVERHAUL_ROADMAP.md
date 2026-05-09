@@ -32,6 +32,7 @@ This document tracks the phased rollout. Phase 1 is shipped in code on this bran
 | Phase 3.2.3 send-path completion — auto-pick sender when no provider supplied + 429 hard-fail when daily cap reached or sender quarantined | `supabase/functions/send-email/index.ts` | ✅ |
 | Cleanup pass — drop `strategy_tasks` / `strategy_notes` / `ai_prompts` tables; drop legacy `leads.name` / `email` / `lastActivity` columns; redefine `import_leads_batch` to omit legacy writes; correct inaccurate `ai_usage_logs` deprecation comment; remove dead `ai_prompts` code from `AIOperations.tsx` | `supabase/migrations/20260509100000_cleanup_pass.sql` + `pages/admin/AIOperations.tsx` | ✅ |
 | Sender health + DLQ visibility panel embedded in `/portal/sender-accounts` | `components/portal/SenderHealthPanel.tsx` (new) + `pages/portal/SenderAccountsPage.tsx` + `types.ts` (added Phase 3.1 columns to `SenderAccount`, new `EmailDlqEntry` type) | ✅ |
+| Phase 4.1 — Public API foundation: `api_keys` table + `create_api_key` / `verify_api_key` / `revoke_api_key` RPCs + `_shared/api-auth.ts` middleware + `v1-leads` first endpoint + `/portal/api-keys` UI (mint/list/revoke, plaintext shown once) | `supabase/migrations/20260509200000_api_keys.sql`, `supabase/functions/_shared/api-auth.ts`, `supabase/functions/v1-leads/`, `lib/apiKeys.ts`, `pages/portal/ApiKeysPage.tsx`, `App.tsx`, `lib/navConfig.ts`, `types.ts` | ✅ |
 
 **Why these and not others.** Phase 1 had to be additive and reversible. Memory is foundational (everything in Phase 2 builds on it). Navigation pillars set the product story. Mission Control proves the AI-native pattern without removing the existing dashboard. Centralised AI config removes the friction tax on every future model upgrade. Nothing here touches the email send path, billing, RLS posture, or existing user data.
 
@@ -220,6 +221,54 @@ warmup ramp visible on freshly-enrolled accounts; one sender suspended
 ---
 
 ## Phase 4 — Enterprise readiness (6–12 weeks)
+
+### Phase 4.1 — Public API foundation (✅ shipped 2026-05-09)
+
+Personal access tokens (PATs) for the public REST API. Plaintext is never
+stored at rest — only the SHA-256 hash and the first 12 chars (for UI
+display). Plaintext is returned to the user exactly once at create time.
+
+| Component | File / Object |
+|---|---|
+| `api_keys` table (workspace-scoped RLS) | `supabase/migrations/20260509200000_api_keys.sql` |
+| `create_api_key(workspace_id, label, plaintext, scopes, expires_at)` SECURITY DEFINER | same migration |
+| `verify_api_key(plaintext)` SECURITY DEFINER (service-role only) | same migration |
+| `revoke_api_key(id)` SECURITY DEFINER | same migration |
+| `_shared/api-auth.ts` — middleware for any `v1-*` edge function | `supabase/functions/_shared/api-auth.ts` |
+| `v1-leads` first endpoint (cursor-paginated, scope `leads.read`) | `supabase/functions/v1-leads/index.ts` |
+| `/portal/api-keys` page (mint / list / revoke, plaintext modal) | `pages/portal/ApiKeysPage.tsx` |
+
+**Token format:** `scal_<43-char base64url>` (32 random bytes, browser-side
+mint, sha-256 hashed before storage).
+
+**Auth flow:**
+```
+GET /functions/v1/v1-leads
+Authorization: Bearer scal_aBcDeF...
+
+→ _shared/api-auth.ts
+   1. Header parse + format check                        (401 invalid_key)
+   2. verify_api_key RPC (service-role hash lookup)      (401 invalid_key)
+   3. In-memory rate limit: 60 req/min/key               (429 rate_limited)
+   4. Required scope check                               (403 missing_scope)
+   → workspace_id + scopes returned to handler
+```
+
+**Scopes available:** `leads.read`, `leads.write`, `campaigns.read`,
+`campaigns.write`, `analytics.read` (only `leads.read` enforced today).
+
+### Phase 4.2+ — additional endpoints + key rotation UX (deferred)
+
+Adding more `v1-*` endpoints follows the same pattern: import
+`authenticateApiKey`, declare `requiredScope`, query the data scoped to
+`auth.workspaceId`. Patterns owed:
+
+- `v1-sequences`, `v1-campaigns`, `v1-analytics`, `v1-leads` (POST/PATCH)
+- OpenAPI 3.1 spec generation
+- Postgres-backed rate limiting (current is per-worker in-memory)
+- Webhook signing secret rotation flow when 4.3 ships
+
+### Phase 4.3+ — outbound webhooks (still owed)
 
 **Scope:**
 

@@ -72,6 +72,7 @@ const InvoicesPage = lazy(() => import('./pages/portal/InvoicesPage'));
 const SocialScheduler = lazy(() => import('./pages/portal/SocialScheduler'));
 const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
 const SenderAccountsPage = lazy(() => import('./pages/portal/SenderAccountsPage'));
+const ApiKeysPage = lazy(() => import('./pages/portal/ApiKeysPage'));
 
 // Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -298,6 +299,7 @@ const App: React.FC = () => {
             <Route path="social-scheduler" element={<SocialScheduler />} />
             <Route path="team-hub" element={<TeamHubBoards />} />
             <Route path="sender-accounts" element={<SenderAccountsPage />} />
+            <Route path="api-keys" element={<ApiKeysPage />} />
           </Route>
 
           {/* Admin — layout has ErrorBoundary + Suspense around Outlet */}
