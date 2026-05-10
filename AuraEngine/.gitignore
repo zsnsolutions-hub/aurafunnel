@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Compiled output of TypeScript files in lib/ — only the .ts source belongs in git.
+# A previous build accidentally left .js + .d.ts companions next to leadFieldMapper.ts;
+# this rule prevents recurrence.
+lib/**/*.js
+lib/**/*.d.ts
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
