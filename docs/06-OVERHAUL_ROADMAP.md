@@ -55,6 +55,7 @@ This document tracks the phased rollout. Phase 1 is shipped in code on this bran
 | `/portal/api-docs` in-app API reference page — bespoke renderer with curl-runnable examples, method-color badges, scope chips, copy-to-clipboard, error-code table. Cross-linked from `/portal/api-keys`. | `pages/portal/ApiDocsPage.tsx` + `App.tsx` route | ✅ |
 | Phase 6.1 — Goal-based AI automation: storage layer (`automation_goals` + versioned `automation_plans` + `store_plan_version` RPC), LLM planner (`generateGoalPlan` with 8 canonical primitives + JSON response schema + memory-context injection), `/portal/goals` UI with create modal, expandable plan panel, version history. Executor / Observer / Memory-feedback loop are 6.2+. | `supabase/migrations/20260511100000_automation_goals.sql` + `lib/goals.ts` + `pages/portal/GoalsPage.tsx` + `App.tsx` route + `lib/navConfig.ts` (added "Goals" under CONVERT pillar) | ✅ |
 | Phase 6.2.a — Dry-run executor: `automation_step_runs` table, `goal-executor` edge fn (topo-sort + per-step stub handlers, all 8 primitives simulated, `live` mode 403'd), `runPlanPreview` lib helper, "Run preview" button + per-step status pills in `/portal/goals`. Zero real side effects — Phase 6.2.b wires safe primitives for real. | `supabase/migrations/20260511200000_automation_step_runs.sql` + `supabase/functions/goal-executor/` + `lib/goals.ts` + `pages/portal/GoalsPage.tsx` | ✅ |
+| Phase 6.2.b — Live executor (partial): `workspace_feature_flags` table + `workspace_has_flag` RPC; goal-executor live mode gated on `goal_executor_live` flag; real Apollo search + checkpoint evaluation; other primitives stubbed with explicit "deferred" messages. UI: live toggle in header (with confirm) + "Run live" button on goal cards. | `supabase/migrations/20260511300000_workspace_feature_flags.sql` + `supabase/functions/goal-executor/index.ts` rewrite + `lib/goals.ts` + `pages/portal/GoalsPage.tsx` | ✅ |
 
 **Why these and not others.** Phase 1 had to be additive and reversible. Memory is foundational (everything in Phase 2 builds on it). Navigation pillars set the product story. Mission Control proves the AI-native pattern without removing the existing dashboard. Centralised AI config removes the friction tax on every future model upgrade. Nothing here touches the email send path, billing, RLS posture, or existing user data.
 
@@ -388,24 +389,42 @@ prospect-facing table. The only mutations are on
 (status + progress). Service-role-only writes prevent client-side
 fabrication of "this step succeeded".
 
-### Phase 6.2.b — Live executor (NOT YET — own session)
+### Phase 6.2.b — Live executor, partial (✅ shipped 2026-05-11)
 
-Replaces the safe primitive stubs with real invocations:
-  apollo_search   → existing apollo-search edge fn
-  enrich_leads    → AI research path
-  lead_score      → existing scoring
-  team_task       → team_hub_items insert
-  wait            → schedule next-run-after via cron
-  checkpoint      → query the metric, compare, pause goal on miss
+Gated live execution for the two safest primitives. Every other
+primitive remains stubbed in live mode with a clear "deferred to
+Phase 6.2.c" message so the goal status accurately reflects partial
+completion.
 
-`email_sequence` and `social_post` REMAIN STUBBED in 6.2.b — they
-go behind a per-workspace `workspace_memory feature_flag` row that
-the customer (not the planner) toggles. Live email sends from a
-plan are 6.2.c territory.
+| Component | File / Object |
+|---|---|
+| `workspace_feature_flags` table + `workspace_has_flag(workspace_id, flag_key)` SECURITY DEFINER lookup | `supabase/migrations/20260511300000_workspace_feature_flags.sql` |
+| `goal-executor` refactor: `mode='live'` gated on `goal_executor_live` flag; returns 403 `live_not_enabled` if off | `supabase/functions/goal-executor/index.ts` |
+| Live `apollo_search` handler: invokes existing apollo-search edge fn with the user's JWT (consumes their Apollo credits); stores top 5 results + pagination in step_run.output | same edge fn |
+| Live `checkpoint` handler: queries one of 5 supported metrics (`leads_total`, `leads_new_30d`, `qualified_leads`, `emails_sent_in_range`, `active_sequences`) and compares to threshold | same edge fn |
+| Live deferred stub for `wait`, `enrich_leads`, `lead_score`, `team_task`: status='skipped' with explicit "Phase 6.2.c" message | same edge fn |
+| Live always-gated for `email_sequence`, `social_post`: same skipped stub with "Phase 6.2.d" message | same edge fn |
+| `isLiveModeEnabled` / `setLiveModeEnabled` / `runPlanLive` lib helpers | `lib/goals.ts` |
+| `/portal/goals` Live toggle in header (with confirmation) + "Run live" button on goal cards (visible only when flag on) | `pages/portal/GoalsPage.tsx` |
 
-**Blast radius:** the moment 6.2.b ships, an active plan executes
-against real prospect data. Build behind a feature flag, opt-in
-only for design-partner customers.
+**Safety posture:** Live mode still NEVER writes to `leads`,
+`email_messages`, `email_sequence_runs`, or any prospect-facing
+table. The only side effects of running a plan in live mode today
+are: (1) one or more Apollo API calls (consuming the workspace's
+Apollo credits), and (2) read-only metric queries for checkpoint
+evaluation.
+
+### Phase 6.2.c — Remaining safe primitives (NOT YET)
+
+Wires real implementations for the four primitives still stubbed in
+live mode:
+  enrich_leads    Gemini-via-edge-fn for each lead batch
+  lead_score      Gemini ICP scoring
+  team_task       teamhub_cards insert (needs default board/list mapping)
+  wait            persistent scheduling via cron worker (the long-pole
+                  for plans spanning days/weeks)
+
+`email_sequence` and `social_post` STILL stubbed pending 6.2.d gates.
 
 ### Phase 6.3 — Observer + Replanner (NOT YET)
 

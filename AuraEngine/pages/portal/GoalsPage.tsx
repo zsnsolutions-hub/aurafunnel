@@ -10,13 +10,15 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Target, Plus, Trash2, Sparkles, Loader2, AlertCircle, CheckCircle,
   Clock, TrendingUp, ChevronDown, ChevronRight, RefreshCw, Play, XCircle,
+  Zap, ShieldAlert,
 } from 'lucide-react';
 import type { User } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
   listGoals, createGoal, deleteGoal, getActivePlan, listPlanVersions,
   planAndStoreFromGoal,
-  listStepRunsForPlan, runPlanPreview,
+  listStepRunsForPlan, runPlanPreview, runPlanLive,
+  isLiveModeEnabled, setLiveModeEnabled,
   type AutomationGoal, type AutomationPlanRow, type PlanStep,
   type AutomationStepRun,
 } from '../../lib/goals';
@@ -81,6 +83,8 @@ const GoalsPage: React.FC = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [planning, setPlanning] = useState<string | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveToggling, setLiveToggling] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!workspaceId) return;
@@ -91,12 +95,57 @@ const GoalsPage: React.FC = () => {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Auto-refresh while any goal is in 'planning' state.
+  // Auto-refresh while any goal is in 'planning' or 'running' state.
   useEffect(() => {
-    if (!goals.some((g) => g.status === 'planning')) return;
+    if (!goals.some((g) => g.status === 'planning' || g.status === 'running')) return;
     const id = setInterval(refresh, 3000);
     return () => clearInterval(id);
   }, [goals, refresh]);
+
+  // Load live-mode flag state on workspace change.
+  useEffect(() => {
+    if (!workspaceId) return;
+    isLiveModeEnabled(workspaceId).then(setLiveMode).catch(() => setLiveMode(false));
+  }, [workspaceId]);
+
+  const handleToggleLiveMode = async () => {
+    if (!workspaceId) return;
+    const next = !liveMode;
+    if (next) {
+      const ok = confirm(
+        'Enabling Live execution lets the AI run automation primitives against your real data. ' +
+        'In Phase 6.2.b only Apollo search and checkpoints actually execute; all other primitives ' +
+        'remain stubbed pending future phases. Apollo search WILL consume your Apollo credits.\n\n' +
+        'Enable Live mode for this workspace?'
+      );
+      if (!ok) return;
+    }
+    setLiveToggling(true);
+    try {
+      await setLiveModeEnabled(workspaceId, next);
+      setLiveMode(next);
+    } catch (e) {
+      alert(`Failed to ${next ? 'enable' : 'disable'} live mode: ${(e as Error).message}`);
+    } finally {
+      setLiveToggling(false);
+    }
+  };
+
+  const handleRunLive = async (g: AutomationGoal) => {
+    if (!confirm(
+      `Run "${g.statement}" in LIVE mode?\n\n` +
+      `This will perform real Apollo searches (consuming your Apollo credits) and read real workspace metrics. ` +
+      `Other primitives (enrich, score, sequence, social, team task, wait) will skip with a "deferred" status.`
+    )) return;
+    try {
+      const result = await runPlanLive(g.id);
+      await refresh();
+      setExpanded(g.id);
+      console.log('[goals] live result', result);
+    } catch (e) {
+      alert(`Live execution failed: ${(e as Error).message}`);
+    }
+  };
 
   const handlePlan = async (g: AutomationGoal) => {
     setPlanning(g.id);
@@ -144,18 +193,38 @@ const GoalsPage: React.FC = () => {
             State a sales outcome and let the AI plan how to get there.
             Plans use your workspace's memory of what's worked before.
           </p>
-          <p className="text-xs text-slate-500 mt-1 max-w-xl inline-flex items-center gap-1.5">
+          <p className="text-xs text-slate-500 mt-1 max-w-xl inline-flex items-center gap-1.5 flex-wrap">
             <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-wide">Preview</span>
-            Plans are generated and reviewable today; you run the steps manually. Automated execution is coming.
+            Plans are generated and reviewable today; you run the steps manually.
+            {liveMode && (
+              <span className="inline-flex items-center gap-1 text-emerald-700">
+                <Zap size={11} /> Live execution is on — Apollo search + checkpoints will run for real.
+              </span>
+            )}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          disabled={!workspaceId}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
-        >
-          <Plus size={16} /> New goal
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleToggleLiveMode}
+            disabled={!workspaceId || liveToggling}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition disabled:opacity-50 ${
+              liveMode
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+            }`}
+            title={liveMode ? 'Live execution is on for this workspace' : 'Live execution is off — only preview runs are allowed'}
+          >
+            {liveToggling ? <Loader2 size={12} className="animate-spin" /> : liveMode ? <Zap size={12} /> : <ShieldAlert size={12} />}
+            Live: {liveMode ? 'on' : 'off'}
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            disabled={!workspaceId}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+          >
+            <Plus size={16} /> New goal
+          </button>
+        </div>
       </header>
 
       {loading ? (
@@ -183,9 +252,11 @@ const GoalsPage: React.FC = () => {
               goal={g}
               expanded={expanded === g.id}
               planning={planning === g.id}
+              liveMode={liveMode}
               onExpand={() => setExpanded(expanded === g.id ? null : g.id)}
               onPlan={() => handlePlan(g)}
               onRunPreview={() => handleRunPreview(g)}
+              onRunLive={() => handleRunLive(g)}
               onDelete={() => handleDelete(g)}
             />
           ))}
@@ -214,12 +285,15 @@ const GoalCard: React.FC<{
   goal: AutomationGoal;
   expanded: boolean;
   planning: boolean;
+  liveMode: boolean;
   onExpand: () => void;
   onPlan: () => void;
   onRunPreview: () => void;
+  onRunLive: () => void;
   onDelete: () => void;
-}> = ({ goal: g, expanded, planning, onExpand, onPlan, onRunPreview, onDelete }) => {
+}> = ({ goal: g, expanded, planning, liveMode, onExpand, onPlan, onRunPreview, onRunLive, onDelete }) => {
   const [previewing, setPreviewing] = useState(false);
+  const [liveRunning, setLiveRunning] = useState(false);
   const tone = STATUS_TONE[g.status];
   const pct = g.target_value > 0
     ? Math.min(100, Math.round((g.progress_value / g.target_value) * 100))
@@ -273,15 +347,28 @@ const GoalCard: React.FC<{
             </button>
           )}
           {(g.status === 'planned' || g.status === 'completed' || g.status === 'failed') && (
-            <button
-              onClick={async () => { setPreviewing(true); try { await onRunPreview(); } finally { setPreviewing(false); } }}
-              disabled={previewing}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 disabled:opacity-50"
-              title="Simulate execution end-to-end (no real side effects)"
-            >
-              {previewing ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
-              Run preview
-            </button>
+            <>
+              <button
+                onClick={async () => { setPreviewing(true); try { await onRunPreview(); } finally { setPreviewing(false); } }}
+                disabled={previewing}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 disabled:opacity-50"
+                title="Simulate execution end-to-end (no real side effects)"
+              >
+                {previewing ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+                Preview
+              </button>
+              {liveMode && (
+                <button
+                  onClick={async () => { setLiveRunning(true); try { await onRunLive(); } finally { setLiveRunning(false); } }}
+                  disabled={liveRunning}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50"
+                  title="Execute the plan for real — consumes Apollo credits"
+                >
+                  {liveRunning ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                  Run live
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={onDelete}

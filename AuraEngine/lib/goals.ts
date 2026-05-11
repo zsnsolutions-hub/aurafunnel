@@ -427,23 +427,64 @@ export async function listStepRunsForPlan(planId: string): Promise<AutomationSte
 
 /**
  * Phase 6.2.a — invoke the goal-executor edge function in dry-run mode.
- * Walks the active plan, simulates each primitive, stores per-step output.
- * Returns the summary from the executor.
  */
-export async function runPlanPreview(goalId: string): Promise<{
+export async function runPlanPreview(goalId: string): Promise<ExecutorResponse> {
+  return invokeExecutor(goalId, 'dry_run');
+}
+
+/**
+ * Phase 6.2.b — invoke the goal-executor in live mode.
+ * Requires the workspace to have feature flag `goal_executor_live = true`.
+ * Throws if the flag is off.
+ */
+export async function runPlanLive(goalId: string): Promise<ExecutorResponse> {
+  return invokeExecutor(goalId, 'live');
+}
+
+export interface ExecutorResponse {
   goal_id: string;
   plan_id: string;
-  mode: 'dry_run';
+  mode: 'dry_run' | 'live';
   steps_total: number;
   steps_succeeded: number;
+  steps_skipped?: number;
   steps_failed: number;
   step_run_ids: string[];
   final_status: 'completed' | 'failed';
-}> {
+}
+
+async function invokeExecutor(goalId: string, mode: 'dry_run' | 'live'): Promise<ExecutorResponse> {
   const { data, error } = await supabase.functions.invoke('goal-executor', {
-    body: { goal_id: goalId, mode: 'dry_run' },
+    body: { goal_id: goalId, mode },
   });
   if (error) throw new Error(error.message ?? 'goal-executor invocation failed');
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
-  return data;
+  return data as ExecutorResponse;
+}
+
+// ── Workspace feature flags (Phase 6.2.b) ────────────────────────────────
+
+export const LIVE_MODE_FLAG = 'goal_executor_live';
+
+export async function isLiveModeEnabled(workspaceId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('workspace_feature_flags')
+    .select('enabled')
+    .eq('workspace_id', workspaceId)
+    .eq('flag_key', LIVE_MODE_FLAG)
+    .maybeSingle();
+  if (error) return false;
+  return data?.enabled === true;
+}
+
+export async function setLiveModeEnabled(workspaceId: string, enabled: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('workspace_feature_flags')
+    .upsert({
+      workspace_id: workspaceId,
+      flag_key:     LIVE_MODE_FLAG,
+      enabled,
+      set_at:       new Date().toISOString(),
+    }, { onConflict: 'workspace_id,flag_key' });
+  if (error) throw error;
 }
