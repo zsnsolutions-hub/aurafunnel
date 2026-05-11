@@ -76,6 +76,7 @@ const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
 const SenderAccountsPage = lazy(() => import('./pages/portal/SenderAccountsPage'));
 const ApiKeysPage = lazy(() => import('./pages/portal/ApiKeysPage'));
 const ApiDocsPage = lazy(() => import('./pages/portal/ApiDocsPage'));
+const GoalsPage = lazy(() => import('./pages/portal/GoalsPage'));
 const WebhooksPage = lazy(() => import('./pages/portal/WebhooksPage'));
 const BrandingPage = lazy(() => import('./pages/portal/BrandingPage'));
 
@@ -331,6 +332,7 @@ const App: React.FC = () => {
             <Route path="sender-accounts" element={<SenderAccountsPage />} />
             <Route path="api-keys" element={<ApiKeysPage />} />
             <Route path="api-docs" element={<ApiDocsPage />} />
+            <Route path="goals" element={<GoalsPage />} />
             <Route path="webhooks" element={<WebhooksPage />} />
             <Route path="branding" element={<BrandingPage />} />
           </Route>

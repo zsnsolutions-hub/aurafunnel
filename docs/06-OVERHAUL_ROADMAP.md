@@ -53,6 +53,7 @@ This document tracks the phased rollout. Phase 1 is shipped in code on this bran
 | Phase 4.2 write API expansion: `PATCH /v1-leads?id=<uuid>` + `POST /v1-sequences` + `PATCH /v1-sequences?id=<uuid>`, all with same idempotency pattern (sha256 of `METHOD:id:body`, 24h cache, replay-on-match, 409-on-conflict). Workspace-scoped via FK constraint in the UPDATE so cross-workspace UUID guessing is blocked. | `supabase/functions/v1-leads/index.ts`, `supabase/functions/v1-sequences/index.ts` | ✅ |
 | OpenAPI 3.1 spec extended with the new endpoints + `IdempotencyKey` parameter + `BadRequest`/`Conflict` responses + `LeadCreate`/`LeadPatch`/`SequenceCreate`/`SequencePatch` schemas | `docs/api/openapi.yaml` | ✅ |
 | `/portal/api-docs` in-app API reference page — bespoke renderer with curl-runnable examples, method-color badges, scope chips, copy-to-clipboard, error-code table. Cross-linked from `/portal/api-keys`. | `pages/portal/ApiDocsPage.tsx` + `App.tsx` route | ✅ |
+| Phase 6.1 — Goal-based AI automation: storage layer (`automation_goals` + versioned `automation_plans` + `store_plan_version` RPC), LLM planner (`generateGoalPlan` with 8 canonical primitives + JSON response schema + memory-context injection), `/portal/goals` UI with create modal, expandable plan panel, version history. Executor / Observer / Memory-feedback loop are 6.2+. | `supabase/migrations/20260511100000_automation_goals.sql` + `lib/goals.ts` + `pages/portal/GoalsPage.tsx` + `App.tsx` route + `lib/navConfig.ts` (added "Goals" under CONVERT pillar) | ✅ |
 
 **Why these and not others.** Phase 1 had to be additive and reversible. Memory is foundational (everything in Phase 2 builds on it). Navigation pillars set the product story. Mission Control proves the AI-native pattern without removing the existing dashboard. Centralised AI config removes the friction tax on every future model upgrade. Nothing here touches the email send path, billing, RLS posture, or existing user data.
 
@@ -336,6 +337,55 @@ Adding more `v1-*` endpoints follows the same pattern: import
 ---
 
 ## Phase 6 — Goal-based AI automation (depends on Phase 2 + Phase 5)
+
+### Phase 6.1 — Goal storage + Planner + UI (✅ shipped 2026-05-11)
+
+The first slice of the venture-scale moat. Customers can state a goal
+in plain language; the AI generates a structured plan grounded in
+workspace memory. Plans are versioned and stored. Execution is **not**
+wired yet — that's Phase 6.2.
+
+| Component | File / Object |
+|---|---|
+| `automation_goals` table (workspace-scoped RLS, status state machine) | `supabase/migrations/20260511100000_automation_goals.sql` |
+| `automation_plans` table (versioned, JSONB plan body, one active per goal) | same migration |
+| `store_plan_version()` SECURITY DEFINER RPC — atomic deactivate-prior + version-bump + insert + status advance | same migration |
+| 8 canonical primitives — `apollo_search`, `enrich_leads`, `lead_score`, `email_sequence`, `social_post`, `team_task`, `wait`, `checkpoint` | `lib/goals.ts` `PRIMITIVE_KINDS` |
+| `generateGoalPlan()` LLM planner — system prompt enforces primitive constraint, response is JSON, workspace memory injected from `buildMemoryContext` (winning_pattern + avoid + tone + preferences) | `lib/goals.ts` |
+| `planAndStoreFromGoal()` convenience — wraps status transitions (draft → planning → planned/draft on failure) | `lib/goals.ts` |
+| `/portal/goals` UI — list goals with progress bars + status pills, create modal (statement + metric + target + due + guardrails), per-goal expandable plan panel with step-by-step rendering, risks, assumptions, version history | `pages/portal/GoalsPage.tsx` |
+| Nav entry under CONVERT pillar | `lib/navConfig.ts` |
+
+What this earns: customers can today articulate a sales outcome in
+the UI, watch the AI decompose it into a plan with ~3-12 steps citing
+specific automation primitives, and review/replan if the plan looks
+off. The plan is descriptive only — no automation runs from it until
+6.2.
+
+### Phase 6.2 — Executor (NOT YET — own session)
+
+Walks an active plan, dispatches each step's `kind` to the
+corresponding existing primitive (Apollo search → /apollo-search edge
+fn; email_sequence → /start-email-sequence-run; etc). Persists step
+state, output references, and progress. Feeds `automation_goals.progress_value`.
+
+**Blast radius:** highest in the codebase — this is the orchestrator
+that runs against live customer data. Build behind a feature flag,
+opt-in only.
+
+### Phase 6.3 — Observer + Replanner (NOT YET)
+
+Periodic job that evaluates each active goal's checkpoints. If a
+checkpoint metric is missed, calls the LLM replanner to generate a
+new plan version (stored as `created_by_kind='replanner'`). The
+replanner gets the prior plan + actual outcomes + memory.
+
+### Phase 6.4 — Memory feedback loop (NOT YET)
+
+On goal completion: write `workspace_memory kind='winning_pattern'`
+with the successful plan and outcomes. On goal failure / cancellation:
+write `kind='avoid'` with reasons. Closes the loop so future planner
+runs get smarter automatically.
 
 **Premise:** Today's automations are `Trigger → Condition → Action`. Goal-based automations are `Goal → Plan → Execute → Observe → Replan`. This is the venture-scale moat — but it requires Phase 2 (memory) and ideally Phase 5 (extractable AI Engine) to be in place first.
 

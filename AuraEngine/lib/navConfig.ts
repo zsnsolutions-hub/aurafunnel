@@ -169,13 +169,21 @@ export const NAV_CONFIG: NavConfigItem[] = [
 
   // ── Pillar 3 — CONVERT ──
   {
+    route: '/portal/goals',
+    navLabel: 'Goals',
+    pageTitle: 'Goals',
+    icon: Target,
+    section: 'convert',
+    order: 0,
+    divider: true,
+  },
+  {
     route: '/portal/team-hub',
     navLabel: 'Pipeline',
     pageTitle: 'Pipeline',
     icon: Zap,
     section: 'convert',
-    order: 0,
-    divider: true,
+    order: 1,
   },
   {
     route: '/portal/invoices',
@@ -183,7 +191,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
     pageTitle: 'Invoices',
     icon: FileText,
     section: 'convert',
-    order: 1,
+    order: 2,
   },
 
   // ── Pillar 4 — INTELLIGENCE ──
