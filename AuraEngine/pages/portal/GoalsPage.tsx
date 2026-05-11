@@ -122,10 +122,12 @@ const GoalsPage: React.FC = () => {
             Goals
           </h1>
           <p className="text-slate-600 mt-2 max-w-xl">
-            State a sales outcome you want and let the AI plan how to get there.
+            State a sales outcome and let the AI plan how to get there.
             Plans use your workspace's memory of what's worked before.
-            <span className="text-amber-600 font-medium ml-1">Phase 6.1:</span>
-            <span className="text-slate-500"> plans are generated and stored but execution is manual.</span>
+          </p>
+          <p className="text-xs text-slate-500 mt-1 max-w-xl inline-flex items-center gap-1.5">
+            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-wide">Preview</span>
+            Plans are generated and reviewable today; you run the steps manually. Automated execution is coming.
           </p>
         </div>
         <button
