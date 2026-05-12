@@ -1,0 +1,27 @@
+-- ============================================================================
+-- 20260512230000_profiles_anon_role_grant.sql
+-- ----------------------------------------------------------------------------
+-- Follow-up to 20260512220000_profiles_pii_anon_lockdown.sql.
+--
+-- After lockdown, the marketing blog's anon-context query failed with
+-- `permission denied for table profiles`. Root cause: admin-check RLS
+-- policies on OTHER tables (blog_posts, leads, audit_logs) contain
+-- subqueries like:
+--
+--   exists (select 1 from profiles where id = auth.uid() and role = 'ADMIN')
+--
+-- PostgreSQL evaluates these policies for every reader (including anon),
+-- which requires ACL access on the referenced columns. Without anon
+-- access to profiles.role, the policy's planner phase fails before RLS
+-- can even return rows.
+--
+-- Adding `role` to the anon column grant fixes it. role is an enum
+-- (ADMIN | CLIENT | GUEST) — no PII surface.
+--
+-- (This grant was applied directly to the live DB at the same time the
+-- previous migration was reverted to ship the marketing blog; this
+-- migration captures the intent so a fresh DB restore from migrations
+-- alone reproduces the production grants.)
+-- ============================================================================
+
+grant select (role) on public.profiles to anon;

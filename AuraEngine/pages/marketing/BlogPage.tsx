@@ -76,7 +76,7 @@ const BlogPage: React.FC = () => {
                 </div>
                 <div className="relative mt-8 flex items-center gap-x-4">
                   <div className="h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center font-bold text-indigo-600 border border-indigo-100 uppercase">
-                    {post.profiles?.name?.charAt(0) || post.profiles?.email?.charAt(0) || 'A'}
+                    {post.profiles?.name?.charAt(0) || 'A'}
                   </div>
                   <div className="text-sm leading-6">
                     <p className="font-bold text-slate-900">

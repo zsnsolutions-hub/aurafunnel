@@ -27,7 +27,7 @@ const BlogPostPage: React.FC = () => {
       setLoading(true);
       const { data } = await supabase
         .from('blog_posts')
-        .select('*, blog_categories(name), profiles(name, email)')
+        .select('*, blog_categories(name), profiles(name, avatar_url)')
         .eq('slug', slug)
         .eq('status', 'published')
         .maybeSingle();
