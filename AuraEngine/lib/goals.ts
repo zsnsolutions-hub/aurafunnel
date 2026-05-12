@@ -488,3 +488,94 @@ export async function setLiveModeEnabled(workspaceId: string, enabled: boolean):
     }, { onConflict: 'workspace_id,flag_key' });
   if (error) throw error;
 }
+
+// ── Observations + auto-replanner (Phase 6.3 + 6.3.b) ───────────────────
+
+export interface GoalObservation {
+  created_at: string;
+  kind: string;                            // 'past_due_with_unmet_target' | 'paused_too_long' | 'stalled_running' | ...
+  value: Record<string, unknown>;          // full observation body
+}
+
+export interface GoalObservationCount {
+  goal_id: string;
+  observation_count: number;
+  latest_kind: string | null;
+  latest_at: string;
+}
+
+/**
+ * Observations are written workspace-wide by the goal observer cron with
+ * key='goal:<id>'. This helper filters to one goal's observations within
+ * the last `sinceHours` window (defaulting to 7 days for context, since
+ * the UI's drift chip only cares about the freshest one).
+ */
+export async function listGoalObservations(
+  workspaceId: string,
+  goalId: string,
+  sinceHours = 168,
+): Promise<GoalObservation[]> {
+  const cutoff = new Date(Date.now() - sinceHours * 3600_000).toISOString();
+  const { data, error } = await supabase
+    .from('workspace_memory')
+    .select('created_at, value')
+    .eq('workspace_id', workspaceId)
+    .eq('kind', 'observation')
+    .eq('key', `goal:${goalId}`)
+    .gte('created_at', cutoff)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    created_at: r.created_at as string,
+    kind: ((r.value as { kind?: string })?.kind) ?? 'unknown',
+    value: (r.value as Record<string, unknown>) ?? {},
+  }));
+}
+
+/**
+ * Workspace-wide aggregate via the SECURITY DEFINER RPC. Used by the
+ * goals list to badge cards with drift chips without round-tripping per
+ * goal.
+ */
+export async function getGoalObservationCounts(workspaceId: string): Promise<Record<string, GoalObservationCount>> {
+  const { data, error } = await supabase.rpc('recent_goal_observation_counts', { p_workspace_id: workspaceId });
+  if (error) throw error;
+  const byId: Record<string, GoalObservationCount> = {};
+  for (const row of (data ?? []) as GoalObservationCount[]) {
+    byId[row.goal_id] = row;
+  }
+  return byId;
+}
+
+export interface ReplannerResponse {
+  goal_id: string;
+  plan_id: string;
+  version: number;
+  superseded_reason: string;
+  observations_used: number;
+  tokens_used: number;
+  triggered_by: 'user' | 'cron';
+}
+
+/**
+ * Phase 6.3.b — manually trigger the LLM replanner for a goal. The
+ * goal-replanner edge function reads observations + outcomes, calls
+ * Gemini for a revised plan, and persists it via store_plan_version.
+ * Pass `force=true` to bypass the 6h cooldown and the no-observations
+ * guard.
+ */
+export async function runReplan(goalId: string, force = false): Promise<ReplannerResponse> {
+  const { data, error } = await supabase.functions.invoke('goal-replanner', {
+    body: { goal_id: goalId, force },
+  });
+  if (error) throw new Error(error.message ?? 'goal-replanner invocation failed');
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  return data as ReplannerResponse;
+}
+
+export const OBSERVATION_LABELS: Record<string, { label: string; tone: string }> = {
+  past_due_with_unmet_target: { label: 'Past due, target unmet',          tone: 'rose'   },
+  paused_too_long:            { label: 'Paused over 12h',                  tone: 'amber'  },
+  stalled_running:            { label: 'No step progress for 6h',          tone: 'amber'  },
+};

@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Target, Plus, Trash2, Sparkles, Loader2, AlertCircle, CheckCircle,
   Clock, TrendingUp, ChevronDown, ChevronRight, RefreshCw, Play, XCircle,
-  Zap, ShieldAlert,
+  Zap, ShieldAlert, Wand2, Activity,
 } from 'lucide-react';
 import type { User } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -19,8 +19,10 @@ import {
   planAndStoreFromGoal,
   listStepRunsForPlan, runPlanPreview, runPlanLive,
   isLiveModeEnabled, setLiveModeEnabled,
+  listGoalObservations, getGoalObservationCounts, runReplan,
+  OBSERVATION_LABELS,
   type AutomationGoal, type AutomationPlanRow, type PlanStep,
-  type AutomationStepRun,
+  type AutomationStepRun, type GoalObservation, type GoalObservationCount,
 } from '../../lib/goals';
 
 interface LayoutContext { user: User }
@@ -86,11 +88,19 @@ const GoalsPage: React.FC = () => {
   const [liveMode, setLiveMode] = useState(false);
   const [liveToggling, setLiveToggling] = useState(false);
 
+  const [observationCounts, setObservationCounts] = useState<Record<string, GoalObservationCount>>({});
+
   const refresh = useCallback(async () => {
     if (!workspaceId) return;
     setLoading(true);
-    try { setGoals(await listGoals(workspaceId)); }
-    finally { setLoading(false); }
+    try {
+      const [list, counts] = await Promise.all([
+        listGoals(workspaceId),
+        getGoalObservationCounts(workspaceId).catch(() => ({} as Record<string, GoalObservationCount>)),
+      ]);
+      setGoals(list);
+      setObservationCounts(counts);
+    } finally { setLoading(false); }
   }, [workspaceId]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -250,14 +260,17 @@ const GoalsPage: React.FC = () => {
             <GoalCard
               key={g.id}
               goal={g}
+              workspaceId={workspaceId ?? ''}
               expanded={expanded === g.id}
               planning={planning === g.id}
               liveMode={liveMode}
+              observationCount={observationCounts[g.id]}
               onExpand={() => setExpanded(expanded === g.id ? null : g.id)}
               onPlan={() => handlePlan(g)}
               onRunPreview={() => handleRunPreview(g)}
               onRunLive={() => handleRunLive(g)}
               onDelete={() => handleDelete(g)}
+              onReplanned={refresh}
             />
           ))}
         </div>
@@ -283,21 +296,51 @@ const GoalsPage: React.FC = () => {
 
 const GoalCard: React.FC<{
   goal: AutomationGoal;
+  workspaceId: string;
   expanded: boolean;
   planning: boolean;
   liveMode: boolean;
+  observationCount?: GoalObservationCount;
   onExpand: () => void;
   onPlan: () => void;
   onRunPreview: () => void;
   onRunLive: () => void;
   onDelete: () => void;
-}> = ({ goal: g, expanded, planning, liveMode, onExpand, onPlan, onRunPreview, onRunLive, onDelete }) => {
+  onReplanned: () => void;
+}> = ({ goal: g, workspaceId, expanded, planning, liveMode, observationCount, onExpand, onPlan, onRunPreview, onRunLive, onDelete, onReplanned }) => {
   const [previewing, setPreviewing] = useState(false);
   const [liveRunning, setLiveRunning] = useState(false);
+  const [replanning, setReplanning] = useState(false);
   const tone = STATUS_TONE[g.status];
   const pct = g.target_value > 0
     ? Math.min(100, Math.round((g.progress_value / g.target_value) * 100))
     : 0;
+
+  const handleReplan = async () => {
+    if (!observationCount) return;
+    const label = observationCount.latest_kind && OBSERVATION_LABELS[observationCount.latest_kind]
+      ? OBSERVATION_LABELS[observationCount.latest_kind].label
+      : 'drift detected';
+    if (!confirm(
+      `The observer flagged: ${label}.\n\n` +
+      `Replan now? The AI will read your observations + actual step outcomes and produce a revised plan version. ` +
+      `Auto-replan also runs hourly when drift is detected, so you can wait if you'd prefer.`
+    )) return;
+    setReplanning(true);
+    try {
+      const r = await runReplan(g.id);
+      onReplanned();
+      console.log('[goals] replan', r);
+    } catch (e) {
+      alert(`Replan failed: ${(e as Error).message}`);
+    } finally {
+      setReplanning(false);
+    }
+  };
+  void workspaceId;
+  const driftBadge = observationCount && observationCount.latest_kind
+    ? (OBSERVATION_LABELS[observationCount.latest_kind] ?? { label: observationCount.latest_kind, tone: 'amber' })
+    : null;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white">
@@ -325,6 +368,20 @@ const GoalCard: React.FC<{
             {g.guardrails && (
               <span className="inline-flex items-center gap-1 text-amber-600">
                 <AlertCircle size={11} /> guardrails
+              </span>
+            )}
+            {driftBadge && (
+              <span
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-${driftBadge.tone}-50 text-${driftBadge.tone}-700 border border-${driftBadge.tone}-200`}
+                title={
+                  `${observationCount?.observation_count ?? 0} observation(s) in last 24h. ` +
+                  `Latest at ${observationCount ? new Date(observationCount.latest_at).toLocaleString() : ''}`
+                }
+              >
+                <Activity size={10} /> {driftBadge.label}
+                {observationCount && observationCount.observation_count > 1 && (
+                  <span className="opacity-70">·{observationCount.observation_count}</span>
+                )}
               </span>
             )}
           </div>
@@ -370,6 +427,17 @@ const GoalCard: React.FC<{
               )}
             </>
           )}
+          {driftBadge && (
+            <button
+              onClick={handleReplan}
+              disabled={replanning || planning}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200 hover:bg-amber-100 disabled:opacity-50"
+              title="Generate a revised plan that addresses the drift signal(s) from the observer"
+            >
+              {replanning ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
+              Replan now
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
@@ -378,14 +446,14 @@ const GoalCard: React.FC<{
         </div>
       </div>
 
-      {expanded && <PlanPanel goalId={g.id} />}
+      {expanded && <PlanPanel goalId={g.id} workspaceId={workspaceId} />}
     </div>
   );
 };
 
 // ── Plan rendering ──────────────────────────────────────────────────────
 
-const PlanPanel: React.FC<{ goalId: string }> = ({ goalId }) => {
+const PlanPanel: React.FC<{ goalId: string; workspaceId: string }> = ({ goalId, workspaceId }) => {
   const { data: plan, isLoading } = useQuery<AutomationPlanRow | null>({
     queryKey: ['active-plan', goalId],
     queryFn: () => getActivePlan(goalId),
@@ -402,6 +470,14 @@ const PlanPanel: React.FC<{ goalId: string }> = ({ goalId }) => {
     queryFn: () => plan ? listStepRunsForPlan(plan.id) : Promise.resolve([]),
     enabled: !!plan?.id,
     staleTime: 5_000,
+  });
+  // Drift observations written by cron_observe_goal_drift; surfaced inline
+  // so the user understands why the auto-replanner is firing.
+  const { data: observations = [] } = useQuery<GoalObservation[]>({
+    queryKey: ['goal-observations', workspaceId, goalId],
+    queryFn: () => listGoalObservations(workspaceId, goalId),
+    enabled: !!workspaceId,
+    staleTime: 30_000,
   });
   // Index by step_id for fast lookup inside StepRow
   const runsByStep = useMemo(() => {
@@ -437,6 +513,48 @@ const PlanPanel: React.FC<{ goalId: string }> = ({ goalId }) => {
           )}
         </div>
       </header>
+
+      {observations.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+          <p className="text-[11px] font-bold text-amber-900 uppercase tracking-wide inline-flex items-center gap-1.5">
+            <Activity size={12} /> Observer notes ({observations.length})
+          </p>
+          <ul className="space-y-1.5">
+            {observations.slice(0, 5).map((o, i) => {
+              const label = OBSERVATION_LABELS[o.kind]?.label ?? o.kind;
+              return (
+                <li key={i} className="text-[11px] text-amber-900 flex items-start gap-2">
+                  <span className="font-mono text-amber-700 shrink-0">
+                    {new Date(o.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="font-semibold">{label}</span>
+                  {o.value.progress != null && o.value.target != null && (
+                    <span className="text-amber-700 font-mono">
+                      {String(o.value.progress)}/{String(o.value.target)}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+            {observations.length > 5 && (
+              <li className="text-[10px] text-amber-700 italic">…and {observations.length - 5} earlier observation(s)</li>
+            )}
+          </ul>
+          <p className="text-[10px] text-amber-800/80">
+            The auto-replanner runs hourly. Or use <span className="font-semibold">Replan now</span> on the goal header to revise immediately.
+          </p>
+        </div>
+      )}
+
+      {plan.created_by_kind === 'replanner' && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-[11px] text-indigo-900 inline-flex items-start gap-2">
+          <Wand2 size={12} className="mt-0.5 shrink-0" />
+          <span>
+            This is a revised plan generated in response to observer notes
+            {plan.rationale ? <> — {plan.rationale.slice(0, 200)}{plan.rationale.length > 200 ? '…' : ''}</> : null}.
+          </span>
+        </div>
+      )}
 
       <ol className="space-y-2">
         {plan.plan.steps.map((s, i) => (
