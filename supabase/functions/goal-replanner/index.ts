@@ -37,7 +37,7 @@ const MIN_STEPS = 3;
 const MAX_STEPS = 12;
 
 const PRIMITIVE_KINDS = [
-  "apollo_search", "enrich_leads", "lead_score", "email_sequence",
+  "enrich_leads", "lead_score", "email_sequence",
   "social_post", "team_task", "wait", "checkpoint",
 ] as const;
 
@@ -81,7 +81,7 @@ Produce a REVISED plan as JSON. Schema is identical to the original planner outp
     "steps": [
       {
         "id": "s1",
-        "kind": one of [apollo_search, enrich_leads, lead_score, email_sequence, social_post, team_task, wait, checkpoint],
+        "kind": one of [enrich_leads, lead_score, email_sequence, social_post, team_task, wait, checkpoint],
         "title": "short label",
         "rationale": "why this step now, given the drift",
         "params": { ... },
@@ -96,7 +96,7 @@ Produce a REVISED plan as JSON. Schema is identical to the original planner outp
 
 REVISION RULES:
 - Address the OBSERVATIONS explicitly. If 'stalled_running' was observed, the revised plan should remove or fix the stalled step.
-- DON'T redo work that already succeeded. If apollo_search produced 50 leads, the revised plan shouldn't include another apollo_search unless that's the actual issue.
+- DON'T redo work that already succeeded. If enrich_leads produced research on 50 leads, the revised plan shouldn't include another enrich_leads unless that's the actual issue.
 - Lean on workspace learning: winning_pattern rows describe what's worked; avoid rows describe what hasn't.
 - Between 3 and 12 steps. Same primitive constraints as the original planner.
 - Output ONLY JSON. No prose preamble. No code-fence wrappers.`;

@@ -22,7 +22,6 @@ import type { BusinessProfile } from '../types';
 // this enum.
 
 export const PRIMITIVE_KINDS = [
-  'apollo_search',       // Find prospects matching ICP filters
   'enrich_leads',        // Run AI research on a set of leads
   'lead_score',          // Score leads against ICP fit
   'email_sequence',      // Start an outreach sequence
@@ -173,10 +172,6 @@ EXECUTABLE PLAN as a JSON object. The plan must be realistic, sequenced,
 and grounded in B2B outbound best practices.
 
 AVAILABLE PRIMITIVES — use ONLY these kinds:
-
-  apollo_search    Find prospects matching ICP filters.
-                   params: { filters: { titles[], industries[], company_sizes[], locations[], ... } }
-                   typical_duration_hours: 1
 
   enrich_leads     Run AI lead research on a set of leads.
                    params: { lead_filter: '<step-id of upstream>' | 'workspace.new' }

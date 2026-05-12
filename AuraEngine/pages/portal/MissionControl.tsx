@@ -102,10 +102,10 @@ function buildRecommendations(leads: Lead[]): Recommendation[] {
   if (recs.length === 0) {
     recs.push({
       id: 'rec-empty',
-      title: 'Pipeline is quiet — let’s find new prospects',
-      rationale: 'No urgent actions. Use Apollo to sweep your ICP.',
-      cta: 'Find prospects',
-      href: '/portal/leads/apollo',
+      title: 'Pipeline is quiet — import your next batch of leads',
+      rationale: 'No urgent actions. Bring leads in via CSV, then let the AI score and enrich them.',
+      cta: 'Open leads',
+      href: '/portal/leads',
       pillar: 'acquire',
       urgency: 'low',
     });
@@ -130,7 +130,7 @@ function buildPillarCards(leads: Lead[], emailRunsCount: number): PillarCard[] {
   return [
     {
       pillar: 'acquire',
-      primary: { label: 'Find prospects', href: '/portal/leads/apollo' },
+      primary: { label: 'Open leads', href: '/portal/leads' },
       metric: { label: 'Leads in workspace', value: total },
     },
     {
@@ -333,7 +333,7 @@ const MissionControl: React.FC = () => {
             </button>
           </div>
           {intentLeads.length === 0 ? (
-            <EmptyState icon={Compass} title="No high-intent leads yet" cta="Find prospects" onClick={() => navigate('/portal/leads/apollo')} />
+            <EmptyState icon={Compass} title="No high-intent leads yet" cta="Open leads" onClick={() => navigate('/portal/leads')} />
           ) : (
             <ul className="divide-y divide-slate-100">
               {intentLeads.map((l) => (

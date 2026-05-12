@@ -15,7 +15,6 @@ export function setDataPrefetchUser(userId: string | undefined) {
 const LEADS_DATA_ROUTES = new Set([
   '/portal',
   '/portal/leads',
-  '/portal/leads/apollo',
   '/portal/intelligence',
   '/portal/content',
   '/portal/content-studio',

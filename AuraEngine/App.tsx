@@ -69,7 +69,6 @@ const MobileActivity = lazy(() => import('./pages/portal/mobile/MobileActivity')
 const MobileMore = lazy(() => import('./pages/portal/mobile/MobileMore'));
 const ModelTraining = lazy(() => import('./pages/portal/ModelTraining'));
 const IntegrationHub = lazy(() => import('./pages/portal/IntegrationHub'));
-const ApolloSearchPage = lazy(() => import('./pages/portal/ApolloSearchPage'));
 const InvoicesPage = lazy(() => import('./pages/portal/InvoicesPage'));
 const SocialScheduler = lazy(() => import('./pages/portal/SocialScheduler'));
 const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
@@ -310,7 +309,8 @@ const App: React.FC = () => {
             {/* Legacy alias — old links to /portal/mission still resolve. */}
             <Route path="mission" element={<Navigate to="/portal" replace />} />
             <Route path="leads" element={<LeadManagement />} />
-            <Route path="leads/apollo" element={<ApolloSearchPage />} />
+            {/* Legacy alias — Apollo search was retired; route any deep link back to leads. */}
+            <Route path="leads/apollo" element={<Navigate to="/portal/leads" replace />} />
             <Route path="leads/:leadId" element={<LeadProfile />} />
             <Route path="content" element={<ContentGen />} />
             <Route path="strategy" element={<Navigate to="/portal/team-hub" replace />} />

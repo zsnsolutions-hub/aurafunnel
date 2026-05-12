@@ -14,7 +14,9 @@
 //               `goal_executor_live = true`. Returns 403 otherwise.
 //
 // Live-mode primitives:
-//   apollo_search   real Apollo API call via existing apollo-search edge fn
+//   apollo_search   DISABLED — Apollo integration is hidden from this build.
+//                   Legacy plan rows that still reference this kind return
+//                   a 'skipped' result without invoking the apollo edge fn.
 //   checkpoint      reads the named workspace metric, compares to threshold
 //   enrich_leads    Gemini-per-lead insights (capped ENRICH_MAX_LEADS)
 //   lead_score      Gemini-per-lead ICP scoring (capped SCORE_MAX_LEADS)
@@ -71,7 +73,11 @@ function dryRunStub(step: PlanStep): StepResult {
   const p = step.params ?? {};
   switch (step.kind) {
     case "apollo_search":
-      return { status: "succeeded", output: { dry_run: true, summary: `Would search Apollo with filters and return up to N leads.`, filters: p.filters ?? p, simulated_lead_count: 42 } };
+      return {
+        status: "skipped",
+        output: { dry_run: true, summary: "Apollo prospecting is disabled in this workspace; this step would be skipped at run time." },
+        error: "Apollo integration is disabled.",
+      };
     case "enrich_leads":
       return { status: "succeeded", output: { dry_run: true, summary: `Would run AI research on leads from ${p.lead_filter ?? "upstream step"} (~2-4 hours typical wall time).`, simulated_enriched: 38, simulated_failed: 4 } };
     case "lead_score":
@@ -98,57 +104,19 @@ function dryRunStub(step: PlanStep): StepResult {
 // a "deferred to 6.2.c" stub with status='skipped' so the goal status
 // later reflects the partial execution.
 
-async function liveApolloSearch(
-  admin: ReturnType<typeof createClient>,
-  userToken: string,
-  step: PlanStep,
-): Promise<StepResult> {
-  const params = (step.params?.filters as Record<string, unknown>) ?? step.params ?? {};
-  try {
-    // Invoke the existing apollo-search edge fn with the user's JWT so it
-    // attributes the search + log row to the right user.
-    const url = `${SUPABASE_URL}/functions/v1/apollo-search`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        Authorization:   `Bearer ${userToken}`,
-      },
-      body: JSON.stringify({
-        person_titles:        params.person_titles        ?? params.titles        ?? [],
-        q_keywords:           params.q_keywords           ?? params.keywords      ?? "",
-        person_locations:     params.person_locations     ?? params.locations     ?? [],
-        organization_locations: params.organization_locations ?? [],
-        employee_ranges:      params.employee_ranges      ?? params.company_sizes ?? [],
-        person_seniorities:   params.person_seniorities   ?? [],
-        person_departments:   params.person_departments   ?? [],
-        per_page:             Number(params.per_page ?? params.limit ?? 25),
-      }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      return { status: "failed", output: { live: true }, error: `apollo-search HTTP ${res.status}: ${text.slice(0, 200)}` };
-    }
-    const data = await res.json();
-    return {
-      status: "succeeded",
-      output: {
-        live: true,
-        summary: `Apollo returned ${data.pagination?.total_entries ?? 0} matching prospects (showing top ${data.people?.length ?? 0}).`,
-        total_entries: data.pagination?.total_entries ?? 0,
-        results_returned: data.people?.length ?? 0,
-        search_log_id: data.search_log_id ?? null,
-        // First 5 only — we don't want huge JSONB payloads in step_runs.
-        sample: (data.people ?? []).slice(0, 5).map((p: Record<string, unknown>) => ({
-          name:    p.name,
-          title:   p.title,
-          company: (p.organization as Record<string, unknown>)?.name,
-        })),
-      },
-    };
-  } catch (e) {
-    return { status: "failed", output: { live: true }, error: `apollo-search threw: ${(e as Error).message}` };
-  }
+// Apollo integration is disabled in this build. Legacy plan rows that
+// still carry kind='apollo_search' resolve to a skipped result so the
+// rest of the plan continues to execute.
+function liveApolloDisabled(): StepResult {
+  return {
+    status: "skipped",
+    output: {
+      live: true,
+      disabled: true,
+      summary: "Apollo prospecting is disabled in this workspace. Plan generated before this change — the step was skipped.",
+    },
+    error: "Apollo integration is disabled.",
+  };
 }
 
 // ── Gemini call (server-side, uses GEMINI_API_KEY directly) ─────────────
@@ -901,7 +869,7 @@ async function executeStepLive(
   stepOutputs: Record<string, Record<string, unknown>>,
 ): Promise<StepResult | PausedSentinel> {
   switch (step.kind) {
-    case "apollo_search":  return await liveApolloSearch(admin, userToken, step);
+    case "apollo_search":  return liveApolloDisabled();
     case "checkpoint":     return await liveCheckpoint(admin, workspaceId, goal.target_metric, step);
     case "enrich_leads":   return await liveEnrichLeads(admin, workspaceId, step);
     case "lead_score":     return await liveLeadScore(admin, workspaceId, step);

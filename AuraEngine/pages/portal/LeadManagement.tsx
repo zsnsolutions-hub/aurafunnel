@@ -987,13 +987,6 @@ const LeadManagement: React.FC = () => {
         actions={
           <>
             <button
-              onClick={() => navigate('/portal/leads/apollo')}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
-            >
-              <GlobeIcon className="w-4 h-4" />
-              <span>Apollo</span>
-            </button>
-            <button
               onClick={() => setIsCSVOpen(true)}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
             >

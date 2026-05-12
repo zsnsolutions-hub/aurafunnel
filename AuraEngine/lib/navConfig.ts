@@ -102,20 +102,12 @@ export const NAV_CONFIG: NavConfigItem[] = [
     divider: true,
     children: [
       {
-        route: '/portal/leads/apollo',
-        navLabel: 'Find Prospects',
-        pageTitle: 'Find Prospects',
-        icon: Compass,
-        section: 'acquire',
-        order: 0,
-      },
-      {
         route: '/portal/intelligence',
         navLabel: 'Lead Insights',
         pageTitle: 'Lead Insights',
         icon: Brain,
         section: 'acquire',
-        order: 1,
+        order: 0,
       },
     ],
   },

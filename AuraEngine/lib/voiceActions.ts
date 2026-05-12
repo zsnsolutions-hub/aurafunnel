@@ -4,7 +4,6 @@
 export const VOICE_ROUTE_MAP: Record<string, string> = {
   dashboard: '/portal',
   leads: '/portal/leads',
-  find_prospects: '/portal/leads/apollo',
   lead_insights: '/portal/intelligence',
   campaigns: '/portal/content',
   content_studio: '/portal/content-studio',
@@ -29,7 +28,6 @@ export const VOICE_ROUTE_MAP: Record<string, string> = {
 export const VOICE_ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   leads: 'Leads',
-  find_prospects: 'Find Prospects',
   lead_insights: 'Lead Insights',
   campaigns: 'Campaigns',
   content_studio: 'Content Studio',
