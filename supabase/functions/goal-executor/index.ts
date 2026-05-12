@@ -1,30 +1,29 @@
 // supabase/functions/goal-executor/index.ts
 //
-// Phase 6.2.a (dry-run) + Phase 6.2.b (live, partial).
+// Phase 6.2.a (dry-run) + 6.2.b (live, partial) + 6.2.c (resumable waits +
+// remaining safe primitives) + 6.2.d (email + social wired live, gated).
 //
 //   POST /functions/v1/goal-executor
-//   body: { goal_id: <uuid>, mode?: "dry_run" | "live" }
+//   body: { goal_id: <uuid>, mode?: "dry_run" | "live", resume?: boolean }
 //   Auth: Supabase user JWT (caller must be a member of the goal's workspace).
+//         Cron-resume path uses the service-role token.
 //
 // Mode gating:
 //   dry_run     ALWAYS allowed. All primitives return "would have done X" stubs.
 //   live        Requires the workspace to have feature flag
 //               `goal_executor_live = true`. Returns 403 otherwise.
 //
-// Live-mode primitives implemented THIS SESSION (6.2.b):
+// Live-mode primitives:
 //   apollo_search   real Apollo API call via existing apollo-search edge fn
-//                   (consumes the workspace's Apollo credits)
 //   checkpoint      reads the named workspace metric, compares to threshold
-//
-// Live-mode primitives that remain stubbed in 6.2.b (with explicit reason):
-//   wait            scheduling deferred to Phase 6.2.c (cron worker)
-//   enrich_leads    Gemini integration deferred to 6.2.c
-//   lead_score      Gemini integration deferred to 6.2.c
-//   team_task       team_hub board-mapping deferred to 6.2.c
-//
-// Live-mode primitives gated UNCONDITIONALLY (require their own flags):
-//   email_sequence  needs goal_executor_send_email flag (6.2.d)
-//   social_post     needs goal_executor_send_social flag (6.2.d)
+//   enrich_leads    Gemini-per-lead insights (capped ENRICH_MAX_LEADS)
+//   lead_score      Gemini-per-lead ICP scoring (capped SCORE_MAX_LEADS)
+//   team_task       creates a card on the auto-provisioned "AI Goals" board
+//   wait            ≤30s inline; >30s persists not_before and pauses the goal
+//   email_sequence  gated on goal_executor_send_email; resolves leads + templates,
+//                   generates AI copy, POSTs to start-email-sequence-run (6.2.d)
+//   social_post     gated on goal_executor_send_social; resolves channel,
+//                   generates AI copy, POSTs to social-post-now (6.2.d)
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -399,44 +398,422 @@ async function liveWait(step: PlanStep): Promise<StepResult | PausedSentinel> {
   return { paused: true, not_before: notBefore };
 }
 
-// ── Live: gated email_sequence / social_post ──────────────────────────
+// ── Live: gating + email_sequence + social_post (Phase 6.2.d) ─────────
 
-async function liveGatedStub(
+async function flagEnabled(
   admin: ReturnType<typeof createClient>,
   workspaceId: string,
-  step: PlanStep,
   flagKey: string,
-  phaseLabel: string,
-): Promise<StepResult> {
-  const { data: flagOn } = await admin.rpc("workspace_has_flag", {
+): Promise<boolean> {
+  const { data } = await admin.rpc("workspace_has_flag", {
     p_workspace_id: workspaceId,
     p_flag_key:     flagKey,
   });
-  if (!flagOn) {
-    return {
-      status: "skipped",
-      output: {
-        live: true,
-        gated: true,
-        summary: `"${step.kind}" requires workspace flag "${flagKey}" — not enabled. Skipped.`,
-        flag_key: flagKey,
-      },
-      error: `"${step.kind}" is gated behind the ${flagKey} workspace flag (${phaseLabel}). Enable it explicitly before this primitive will execute.`,
-    };
-  }
+  return data === true;
+}
 
-  // Flag is on, but actual send wiring is the responsibility of a future
-  // ship — for now, log clearly that we *would* fire and ack the flag.
+function gatedSkip(stepKind: string, flagKey: string): StepResult {
   return {
     status: "skipped",
     output: {
       live: true,
-      gated: false,
-      summary: `Flag "${flagKey}" is enabled but the send wiring is not yet implemented. Would have invoked: ${step.kind} with the planner's params.`,
-      params: step.params ?? {},
+      gated: true,
+      summary: `"${stepKind}" requires workspace flag "${flagKey}" — not enabled. Skipped.`,
+      flag_key: flagKey,
     },
-    error: `Flag enabled but send wiring not yet shipped (${phaseLabel}).`,
+    error: `"${stepKind}" is gated behind the ${flagKey} workspace flag. Enable it explicitly before this primitive will execute.`,
   };
+}
+
+// ── lead filter resolution ─────────────────────────────────────────────
+//
+// The planner emits `lead_filter` as one of:
+//   - 'workspace.hot'   (score ≥ 70)
+//   - 'workspace.warm'  (40 ≤ score < 70)
+//   - 'workspace.new'   (most recently created with primary_email NOT NULL)
+//   - 'workspace.cold'  (score < 40 OR null)
+//   - 'step:<id>' or '<id>'  (lead_ids from a prior step's output)
+//
+// When a step output carries `lead_ids: string[]`, downstream steps can
+// reference it directly. apollo_search doesn't yet persist into the
+// leads table (TODO Phase 6.5), so chained apollo→email today falls
+// back to workspace.new heuristically — flagged in the step output so
+// the user knows what was actually used.
+
+const EMAIL_LEADS_CAP = 100;
+
+async function resolveLeads(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  filter: string | undefined,
+  stepOutputs: Record<string, Record<string, unknown>>,
+): Promise<{ leads: Array<{ id: string; primary_email: string; first_name: string | null; last_name: string | null; company: string | null; title: string | null; industry: string | null; insights: string | null; score: number | null; status: string | null }>; source: string }> {
+  const cleaned = (filter ?? "workspace.hot").trim();
+  let source = cleaned;
+
+  // Step-reference lookup: 'step:s1' or 's1'
+  const stepRefMatch = cleaned.match(/^(?:step:)?(s\d+)$/i);
+  if (stepRefMatch) {
+    const refId = stepRefMatch[1];
+    const upstream = stepOutputs[refId];
+    const ids = (upstream?.lead_ids as string[] | undefined) ?? [];
+    if (ids.length > 0) {
+      const { data } = await admin
+        .from("leads")
+        .select("id, primary_email, first_name, last_name, company, title, industry, insights, score, status")
+        .eq("workspace_id", workspaceId)
+        .in("id", ids.slice(0, EMAIL_LEADS_CAP))
+        .not("primary_email", "is", null);
+      return { leads: (data ?? []) as never, source: `step:${refId}` };
+    }
+    // Fall through to workspace.new — upstream step doesn't yet expose lead_ids.
+    source = `step:${refId} (fallback workspace.new)`;
+  }
+
+  let q = admin
+    .from("leads")
+    .select("id, primary_email, first_name, last_name, company, title, industry, insights, score, status")
+    .eq("workspace_id", workspaceId)
+    .not("primary_email", "is", null)
+    .limit(EMAIL_LEADS_CAP);
+
+  if (cleaned === "workspace.hot") {
+    q = q.gte("score", 70).order("score", { ascending: false });
+  } else if (cleaned === "workspace.warm") {
+    q = q.gte("score", 40).lt("score", 70).order("score", { ascending: false });
+  } else if (cleaned === "workspace.cold") {
+    q = q.or("score.is.null,score.lt.40").order("created_at", { ascending: false });
+  } else {
+    // workspace.new (default + fallback)
+    q = q.order("created_at", { ascending: false });
+  }
+  const { data } = await q;
+  return { leads: (data ?? []) as never, source };
+}
+
+// ── Live: email_sequence (Phase 6.2.d) ─────────────────────────────────
+
+const TEMPLATE_CATEGORY_MAP: Record<string, string> = {
+  cold_intro:   "welcome",
+  intro:        "welcome",
+  welcome:      "welcome",
+  demo_invite:  "demo_invite",
+  demo:         "demo_invite",
+  case_study:   "case_study",
+  case_studies: "case_study",
+  follow_up:    "follow_up",
+  followup:     "follow_up",
+  nurture:      "nurture",
+  reengage:     "nurture",
+  re_engage:    "nurture",
+  reactivation: "nurture",
+};
+
+interface GeneratedStep { stepIndex: number; delayDays: number; subject: string; body: string; }
+
+async function generateSequenceSteps(opts: {
+  totalEmails: number;
+  cadenceDays: number;
+  templateCategory: string;
+  goalStatement: string;
+  audienceHint: string;
+}): Promise<GeneratedStep[]> {
+  const { totalEmails, cadenceDays, templateCategory, goalStatement, audienceHint } = opts;
+  const system = `You are a senior B2B outbound copywriter. Produce a tight cold-outreach sequence with deliberate variety across touches — first message hooks, follow-ups remind/add value, final message proposes next step. No "Hope this email finds you well." No emojis. Subject lines under 60 chars. Bodies under 140 words. Use {{first_name}} and {{company}} merge tokens where natural.`;
+  const prompt = `Write a ${totalEmails}-step ${templateCategory} sequence targeting: ${audienceHint}.
+Goal of the sequence: ${goalStatement}.
+Cadence: ${cadenceDays} day(s) between sends.
+
+Return JSON ONLY in this shape:
+{"steps": [{"stepIndex": 1, "delayDays": 0, "subject": "...", "body": "..."}, ...]}
+
+Rules:
+- stepIndex starts at 1
+- step 1 has delayDays=0; subsequent steps have delayDays=${cadenceDays}
+- exactly ${totalEmails} entries
+- plain text body (no HTML); use \\n for line breaks`;
+
+  const { text } = await geminiGenerate(prompt, system, { responseMimeType: "application/json" });
+  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  const parsed = JSON.parse(cleaned) as { steps: GeneratedStep[] };
+  if (!Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+    throw new Error("Gemini returned no sequence steps");
+  }
+  return parsed.steps
+    .slice(0, totalEmails)
+    .map((s, i) => ({
+      stepIndex: i + 1,
+      delayDays: i === 0 ? 0 : (s.delayDays ?? cadenceDays),
+      subject: String(s.subject ?? "").slice(0, 200),
+      body:    String(s.body ?? "").slice(0, 4000),
+    }));
+}
+
+async function liveEmailSequence(
+  admin: ReturnType<typeof createClient>,
+  userToken: string,
+  workspaceId: string,
+  goal: { statement: string; target_metric: string },
+  step: PlanStep,
+  stepOutputs: Record<string, Record<string, unknown>>,
+): Promise<StepResult> {
+  if (!await flagEnabled(admin, workspaceId, SEND_EMAIL_FLAG)) {
+    return gatedSkip(step.kind, SEND_EMAIL_FLAG);
+  }
+
+  // Cron-resume path can't authenticate to start-email-sequence-run as a user.
+  if (userToken === SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      status: "skipped",
+      output: { live: true, summary: "email_sequence step skipped on cron-resume path (requires user-initiated run for plan-limit checks)." },
+      error: "Email sequences need a user-initiated run; trigger the goal from /portal/goals to send.",
+    };
+  }
+
+  const p = step.params ?? {};
+  const totalEmails = Math.max(1, Math.min(7, Number(p.total_emails ?? 3)));
+  const cadenceDays = Math.max(1, Math.min(14, Number(p.cadence_days ?? 3)));
+  const rawTemplate = String(p.sequence_template ?? "welcome").toLowerCase().replace(/[\s-]+/g, "_");
+  const templateCategory = TEMPLATE_CATEGORY_MAP[rawTemplate] ?? "custom";
+  const filterRaw = typeof p.lead_filter === "string" ? p.lead_filter : "workspace.hot";
+
+  const { leads, source } = await resolveLeads(admin, workspaceId, filterRaw, stepOutputs);
+  if (leads.length === 0) {
+    return {
+      status: "skipped",
+      output: {
+        live: true,
+        summary: `No leads matched filter "${filterRaw}". Resolved as: ${source}. Add leads or run upstream prospecting first.`,
+        lead_filter: filterRaw,
+        resolved_source: source,
+        total_emails: totalEmails,
+        cadence_days: cadenceDays,
+      },
+      error: `No leads matched lead_filter="${filterRaw}".`,
+    };
+  }
+
+  // Generate sequence body once; subject/body strings include merge tokens
+  // that start-email-sequence-run's downstream items resolve per-lead.
+  let generated: GeneratedStep[];
+  try {
+    const sampleTitle  = leads[0]?.title ?? "";
+    const sampleIndustry = leads.find((l) => !!l.industry)?.industry ?? "";
+    generated = await generateSequenceSteps({
+      totalEmails,
+      cadenceDays,
+      templateCategory,
+      goalStatement: goal.statement,
+      audienceHint: [sampleTitle, sampleIndustry, source].filter(Boolean).join(", "),
+    });
+  } catch (e) {
+    return { status: "failed", output: { live: true }, error: `Sequence generation failed: ${(e as Error).message}` };
+  }
+
+  // POST to start-email-sequence-run with the user JWT pass-through.
+  const url = `${SUPABASE_URL}/functions/v1/start-email-sequence-run`;
+  const payload = {
+    leads: leads.map((l) => ({
+      id:      l.id,
+      email:   l.primary_email,
+      name:    [l.first_name, l.last_name].filter(Boolean).join(" ") || l.primary_email,
+      company: l.company ?? "",
+      score:   l.score ?? undefined,
+      status:  l.status ?? undefined,
+      insights: l.insights ?? undefined,
+      industry: l.industry ?? undefined,
+      title:    l.title ?? undefined,
+    })),
+    steps: generated,
+    config: {
+      tone:             "professional",
+      goal:             goal.statement,
+      cadence:          `${cadenceDays}d`,
+      templateCategory,
+      sendMode:         "auto",
+    },
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        Authorization:   `Bearer ${userToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return {
+        status: "failed",
+        output: { live: true, summary: `start-email-sequence-run HTTP ${res.status}`, http_status: res.status },
+        error: `start-email-sequence-run ${res.status}: ${text.slice(0, 200)}`,
+      };
+    }
+    const data = await res.json() as { run_id: string; items_total: number };
+    return {
+      status: "succeeded",
+      output: {
+        live: true,
+        summary: `Started ${totalEmails}-step "${templateCategory}" sequence for ${leads.length} lead(s). ${data.items_total} scheduled sends.`,
+        run_id: data.run_id,
+        items_total: data.items_total,
+        leads_targeted: leads.length,
+        template_category: templateCategory,
+        cadence_days: cadenceDays,
+        lead_filter_used: source,
+      },
+    };
+  } catch (e) {
+    return { status: "failed", output: { live: true }, error: `email_sequence threw: ${(e as Error).message}` };
+  }
+}
+
+// ── Live: social_post (Phase 6.2.d) ────────────────────────────────────
+
+interface SocialTarget { channel: string; target_id: string; target_label: string | null; }
+
+async function resolveSocialTarget(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  plannerChannel: string,
+): Promise<{ target: SocialTarget | null; reason: string }> {
+  const ch = plannerChannel.toLowerCase().trim();
+  const { data: accounts } = await admin
+    .from("social_accounts")
+    .select("provider, meta_page_id, meta_page_name, meta_ig_user_id, meta_ig_username, linkedin_member_urn, linkedin_org_urn, linkedin_org_name")
+    .eq("user_id", userId);
+  const list = accounts ?? [];
+
+  if (ch === "twitter" || ch === "x") {
+    return { target: null, reason: "Twitter/X publishing is not yet implemented in this workspace." };
+  }
+  if (ch === "linkedin") {
+    const org = list.find((a) => a.linkedin_org_urn);
+    if (org) return { target: { channel: "linkedin_org", target_id: org.linkedin_org_urn as string, target_label: (org.linkedin_org_name as string) ?? null }, reason: "linkedin_org" };
+    const member = list.find((a) => a.linkedin_member_urn);
+    if (member) return { target: { channel: "linkedin_member", target_id: member.linkedin_member_urn as string, target_label: null }, reason: "linkedin_member" };
+    return { target: null, reason: "No connected LinkedIn account. Connect one in Integrations first." };
+  }
+  if (ch === "meta" || ch === "facebook") {
+    const fb = list.find((a) => a.meta_page_id);
+    if (fb) return { target: { channel: "facebook_page", target_id: fb.meta_page_id as string, target_label: (fb.meta_page_name as string) ?? null }, reason: "facebook_page" };
+    return { target: null, reason: "No connected Facebook Page. Connect one in Integrations first." };
+  }
+  if (ch === "instagram") {
+    const ig = list.find((a) => a.meta_ig_user_id);
+    if (ig) return { target: { channel: "instagram", target_id: ig.meta_ig_user_id as string, target_label: (ig.meta_ig_username as string) ?? null }, reason: "instagram" };
+    return { target: null, reason: "No connected Instagram account. Connect one in Integrations first." };
+  }
+  return { target: null, reason: `Unknown channel "${plannerChannel}".` };
+}
+
+const CHANNEL_COPY_CONSTRAINTS: Record<string, string> = {
+  linkedin_org:    "LinkedIn organization post. 800-1200 chars. 2-3 short paragraphs, no hashtags spam — at most 3 relevant hashtags at the end. No emojis.",
+  linkedin_member: "LinkedIn personal post. 600-1000 chars. Conversational, first-person, 2-3 paragraphs. At most 3 hashtags. No emojis.",
+  facebook_page:   "Facebook Page post. 400-800 chars. Friendly, includes a clear CTA at the end.",
+  instagram:       "Instagram caption. Under 500 chars. Catchy first line, then context, then 4-7 trailing hashtags on a new line.",
+};
+
+async function generateSocialCopy(channel: string, topic: string, goalStatement: string): Promise<string> {
+  const constraint = CHANNEL_COPY_CONSTRAINTS[channel] ?? "Concise social post under 800 chars.";
+  const system = "You write high-engagement B2B social copy. Output ONLY the post body — no preamble, no commentary, no quotes around the post.";
+  const prompt = `Write one ${channel.replace("_", " ")} post about: "${topic}".
+Broader goal this post serves: ${goalStatement}.
+
+Channel constraints: ${constraint}
+
+Output: the post body, nothing else.`;
+  const { text } = await geminiGenerate(prompt, system);
+  return text.trim().replace(/^["']|["']$/g, "");
+}
+
+async function liveSocialPost(
+  admin: ReturnType<typeof createClient>,
+  userToken: string,
+  userId: string,
+  workspaceId: string,
+  goal: { statement: string },
+  step: PlanStep,
+): Promise<StepResult> {
+  if (!await flagEnabled(admin, workspaceId, SEND_SOCIAL_FLAG)) {
+    return gatedSkip(step.kind, SEND_SOCIAL_FLAG);
+  }
+  if (userToken === SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      status: "skipped",
+      output: { live: true, summary: "social_post step skipped on cron-resume path (requires user-initiated run for publish auth)." },
+      error: "Social posts need a user-initiated run; trigger the goal from /portal/goals.",
+    };
+  }
+
+  const p = step.params ?? {};
+  const plannerChannel = String(p.channel ?? "linkedin");
+  const topic = String(p.topic ?? step.title ?? "").trim();
+  if (!topic) {
+    return { status: "failed", output: { live: true }, error: "social_post requires params.topic." };
+  }
+
+  const { target, reason } = await resolveSocialTarget(admin, userId, plannerChannel);
+  if (!target) {
+    return {
+      status: "skipped",
+      output: { live: true, summary: `Cannot publish ${plannerChannel}: ${reason}`, planner_channel: plannerChannel },
+      error: reason,
+    };
+  }
+
+  let copy: string;
+  try {
+    copy = await generateSocialCopy(target.channel, topic, goal.statement);
+    if (!copy) throw new Error("empty copy");
+  } catch (e) {
+    return { status: "failed", output: { live: true }, error: `Copy generation failed: ${(e as Error).message}` };
+  }
+
+  const url = `${SUPABASE_URL}/functions/v1/social-post-now`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        Authorization:   `Bearer ${userToken}`,
+      },
+      body: JSON.stringify({
+        content_text: copy,
+        targets: [target],
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return {
+        status: "failed",
+        output: { live: true, summary: `social-post-now HTTP ${res.status}`, channel: target.channel, copy_preview: copy.slice(0, 200) },
+        error: `social-post-now ${res.status}: ${text.slice(0, 200)}`,
+      };
+    }
+    const data = await res.json();
+    const tgts = (data?.targets ?? []) as Array<{ status?: string; error?: string }>;
+    const anyFailed = tgts.some((t) => t.status === "failed" || t.error);
+    return {
+      status: anyFailed ? "failed" : "succeeded",
+      output: {
+        live: true,
+        summary: anyFailed
+          ? `Posted to ${target.channel}, but at least one target reported an error.`
+          : `Published to ${target.channel}${target.target_label ? ` (${target.target_label})` : ""}.`,
+        channel: target.channel,
+        target_label: target.target_label,
+        copy_length: copy.length,
+        post_id: (data as { id?: string }).id ?? null,
+        per_target: tgts,
+      },
+      error: anyFailed ? "One or more target publishes failed — see per_target." : undefined,
+    };
+  } catch (e) {
+    return { status: "failed", output: { live: true }, error: `social_post threw: ${(e as Error).message}` };
+  }
 }
 
 async function liveCheckpoint(
@@ -519,18 +896,19 @@ async function executeStepLive(
   userToken: string,
   userId: string,
   workspaceId: string,
-  goalTargetMetric: string,
+  goal: { statement: string; target_metric: string },
   step: PlanStep,
+  stepOutputs: Record<string, Record<string, unknown>>,
 ): Promise<StepResult | PausedSentinel> {
   switch (step.kind) {
     case "apollo_search":  return await liveApolloSearch(admin, userToken, step);
-    case "checkpoint":     return await liveCheckpoint(admin, workspaceId, goalTargetMetric, step);
+    case "checkpoint":     return await liveCheckpoint(admin, workspaceId, goal.target_metric, step);
     case "enrich_leads":   return await liveEnrichLeads(admin, workspaceId, step);
     case "lead_score":     return await liveLeadScore(admin, workspaceId, step);
     case "team_task":      return await liveTeamTask(admin, userId, workspaceId, step);
     case "wait":           return await liveWait(step);
-    case "email_sequence": return await liveGatedStub(admin, workspaceId, step, SEND_EMAIL_FLAG, "Phase 6.2.d");
-    case "social_post":    return await liveGatedStub(admin, workspaceId, step, SEND_SOCIAL_FLAG, "Phase 6.2.d");
+    case "email_sequence": return await liveEmailSequence(admin, userToken, workspaceId, goal, step, stepOutputs);
+    case "social_post":    return await liveSocialPost(admin, userToken, userId, workspaceId, goal, step);
     default: return {
       status: "skipped",
       output: { live: true, summary: `Unknown step kind "${step.kind}" — no-op.` },
@@ -666,6 +1044,23 @@ serve(async (req) => {
   let skipped = 0;
   let pausedAt: { step_id: string; not_before: string } | null = null;
 
+  // Step-output passing: downstream primitives (currently email_sequence)
+  // can reference upstream step outputs by id via `lead_filter: 'step:s1'`.
+  // We preload completed step outputs on resume so the chain stays intact.
+  const stepOutputs: Record<string, Record<string, unknown>> = {};
+  if (resume) {
+    const { data: priorRuns } = await admin
+      .from("automation_step_runs")
+      .select("step_id, output, status")
+      .eq("plan_id", planRow.id)
+      .eq("status", "succeeded");
+    for (const r of priorRuns ?? []) {
+      if (r.output && typeof r.output === "object") {
+        stepOutputs[r.step_id as string] = r.output as Record<string, unknown>;
+      }
+    }
+  }
+
   for (const step of ordered) {
     if (alreadyDoneStepIds.has(step.id)) continue;
 
@@ -713,7 +1108,7 @@ serve(async (req) => {
 
     let result: StepResult | PausedSentinel;
     if (mode === "live") {
-      result = await executeStepLive(admin, userToken, userId, goal.workspace_id, goal.target_metric, step);
+      result = await executeStepLive(admin, userToken, userId, goal.workspace_id, { statement: goal.statement, target_metric: goal.target_metric }, step, stepOutputs);
     } else {
       result = dryRunStub(step);
     }
@@ -730,6 +1125,7 @@ serve(async (req) => {
 
     if (result.status === "failed") failures++;
     if (result.status === "skipped") skipped++;
+    if (result.status === "succeeded") stepOutputs[step.id] = result.output;
 
     await admin
       .from("automation_step_runs")

@@ -462,31 +462,41 @@ async function invokeExecutor(goalId: string, mode: 'dry_run' | 'live'): Promise
   return data as ExecutorResponse;
 }
 
-// ── Workspace feature flags (Phase 6.2.b) ────────────────────────────────
+// ── Workspace feature flags (Phase 6.2.b + 6.2.d) ────────────────────────
 
-export const LIVE_MODE_FLAG = 'goal_executor_live';
+export const LIVE_MODE_FLAG   = 'goal_executor_live';
+export const SEND_EMAIL_FLAG  = 'goal_executor_send_email';
+export const SEND_SOCIAL_FLAG = 'goal_executor_send_social';
 
-export async function isLiveModeEnabled(workspaceId: string): Promise<boolean> {
+export async function isFlagEnabled(workspaceId: string, flagKey: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('workspace_feature_flags')
     .select('enabled')
     .eq('workspace_id', workspaceId)
-    .eq('flag_key', LIVE_MODE_FLAG)
+    .eq('flag_key', flagKey)
     .maybeSingle();
   if (error) return false;
   return data?.enabled === true;
 }
 
-export async function setLiveModeEnabled(workspaceId: string, enabled: boolean): Promise<void> {
+export async function setFlagEnabled(workspaceId: string, flagKey: string, enabled: boolean): Promise<void> {
   const { error } = await supabase
     .from('workspace_feature_flags')
     .upsert({
       workspace_id: workspaceId,
-      flag_key:     LIVE_MODE_FLAG,
+      flag_key:     flagKey,
       enabled,
       set_at:       new Date().toISOString(),
     }, { onConflict: 'workspace_id,flag_key' });
   if (error) throw error;
+}
+
+// Back-compat thin wrappers for existing callers.
+export async function isLiveModeEnabled(workspaceId: string): Promise<boolean> {
+  return isFlagEnabled(workspaceId, LIVE_MODE_FLAG);
+}
+export async function setLiveModeEnabled(workspaceId: string, enabled: boolean): Promise<void> {
+  return setFlagEnabled(workspaceId, LIVE_MODE_FLAG, enabled);
 }
 
 // ── Observations + auto-replanner (Phase 6.3 + 6.3.b) ───────────────────

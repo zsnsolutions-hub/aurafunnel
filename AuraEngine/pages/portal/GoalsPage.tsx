@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Target, Plus, Trash2, Sparkles, Loader2, AlertCircle, CheckCircle,
   Clock, TrendingUp, ChevronDown, ChevronRight, RefreshCw, Play, XCircle,
-  Zap, ShieldAlert, Wand2, Activity,
+  Zap, ShieldAlert, Wand2, Activity, Mail, Share2,
 } from 'lucide-react';
 import type { User } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -19,6 +19,7 @@ import {
   planAndStoreFromGoal,
   listStepRunsForPlan, runPlanPreview, runPlanLive,
   isLiveModeEnabled, setLiveModeEnabled,
+  isFlagEnabled, setFlagEnabled, SEND_EMAIL_FLAG, SEND_SOCIAL_FLAG,
   listGoalObservations, getGoalObservationCounts, runReplan,
   OBSERVATION_LABELS,
   type AutomationGoal, type AutomationPlanRow, type PlanStep,
@@ -87,6 +88,9 @@ const GoalsPage: React.FC = () => {
   const [planning, setPlanning] = useState<string | null>(null);
   const [liveMode, setLiveMode] = useState(false);
   const [liveToggling, setLiveToggling] = useState(false);
+  const [sendEmail, setSendEmail] = useState(false);
+  const [sendSocial, setSendSocial] = useState(false);
+  const [sendToggling, setSendToggling] = useState<'' | 'email' | 'social'>('');
 
   const [observationCounts, setObservationCounts] = useState<Record<string, GoalObservationCount>>({});
 
@@ -112,20 +116,51 @@ const GoalsPage: React.FC = () => {
     return () => clearInterval(id);
   }, [goals, refresh]);
 
-  // Load live-mode flag state on workspace change.
+  // Load live-mode + send flag state on workspace change.
   useEffect(() => {
     if (!workspaceId) return;
     isLiveModeEnabled(workspaceId).then(setLiveMode).catch(() => setLiveMode(false));
+    isFlagEnabled(workspaceId, SEND_EMAIL_FLAG).then(setSendEmail).catch(() => setSendEmail(false));
+    isFlagEnabled(workspaceId, SEND_SOCIAL_FLAG).then(setSendSocial).catch(() => setSendSocial(false));
   }, [workspaceId]);
+
+  const handleToggleSendFlag = async (kind: 'email' | 'social') => {
+    if (!workspaceId) return;
+    const current = kind === 'email' ? sendEmail : sendSocial;
+    const next = !current;
+    const flagKey = kind === 'email' ? SEND_EMAIL_FLAG : SEND_SOCIAL_FLAG;
+    if (next) {
+      const ok = confirm(
+        kind === 'email'
+          ? 'Enable real email sending from AI-driven goals?\n\nAny "email_sequence" step in a live run will create and schedule a real outreach sequence against your workspace leads. This consumes your monthly send quota.'
+          : 'Enable real social publishing from AI-driven goals?\n\nAny "social_post" step in a live run will publish a Gemini-generated post to your connected LinkedIn or Facebook accounts. Twitter is not supported yet.'
+      );
+      if (!ok) return;
+    }
+    setSendToggling(kind);
+    try {
+      await setFlagEnabled(workspaceId, flagKey, next);
+      if (kind === 'email') setSendEmail(next); else setSendSocial(next);
+    } catch (e) {
+      alert(`Failed to ${next ? 'enable' : 'disable'} ${kind} send: ${(e as Error).message}`);
+    } finally {
+      setSendToggling('');
+    }
+  };
 
   const handleToggleLiveMode = async () => {
     if (!workspaceId) return;
     const next = !liveMode;
     if (next) {
       const ok = confirm(
-        'Enabling Live execution lets the AI run automation primitives against your real data. ' +
-        'In Phase 6.2.b only Apollo search and checkpoints actually execute; all other primitives ' +
-        'remain stubbed pending future phases. Apollo search WILL consume your Apollo credits.\n\n' +
+        'Enabling Live execution lets the AI run automation primitives against your real data:\n\n' +
+        '• apollo_search — real Apollo API call (consumes Apollo credits)\n' +
+        '• enrich_leads / lead_score — Gemini calls per lead\n' +
+        '• team_task — creates real cards on the AI Goals board\n' +
+        '• checkpoint — reads workspace metrics\n' +
+        '• wait — schedules longer waits via cron\n\n' +
+        'Email sending and social publishing remain off by default — turn them on separately ' +
+        'with the per-channel toggles after Live is enabled.\n\n' +
         'Enable Live mode for this workspace?'
       );
       if (!ok) return;
@@ -208,7 +243,10 @@ const GoalsPage: React.FC = () => {
             Plans are generated and reviewable today; you run the steps manually.
             {liveMode && (
               <span className="inline-flex items-center gap-1 text-emerald-700">
-                <Zap size={11} /> Live execution is on — Apollo search + checkpoints will run for real.
+                <Zap size={11} /> Live execution is on
+                {(sendEmail || sendSocial) && (
+                  <> — sending via {[sendEmail && 'email', sendSocial && 'social'].filter(Boolean).join(' + ')} is enabled.</>
+                )}
               </span>
             )}
           </p>
@@ -227,6 +265,40 @@ const GoalsPage: React.FC = () => {
             {liveToggling ? <Loader2 size={12} className="animate-spin" /> : liveMode ? <Zap size={12} /> : <ShieldAlert size={12} />}
             Live: {liveMode ? 'on' : 'off'}
           </button>
+          {liveMode && (
+            <>
+              <button
+                onClick={() => handleToggleSendFlag('email')}
+                disabled={!workspaceId || sendToggling !== ''}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition disabled:opacity-50 ${
+                  sendEmail
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                }`}
+                title={sendEmail
+                  ? 'AI-driven goal runs can start real email sequences against your leads.'
+                  : 'Off — email_sequence steps will skip until you opt in.'}
+              >
+                {sendToggling === 'email' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+                Send email: {sendEmail ? 'on' : 'off'}
+              </button>
+              <button
+                onClick={() => handleToggleSendFlag('social')}
+                disabled={!workspaceId || sendToggling !== ''}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition disabled:opacity-50 ${
+                  sendSocial
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                }`}
+                title={sendSocial
+                  ? 'AI-driven goal runs can publish to your connected LinkedIn / Facebook accounts.'
+                  : 'Off — social_post steps will skip until you opt in.'}
+              >
+                {sendToggling === 'social' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
+                Send social: {sendSocial ? 'on' : 'off'}
+              </button>
+            </>
+          )}
           <button
             onClick={() => setShowCreate(true)}
             disabled={!workspaceId}
