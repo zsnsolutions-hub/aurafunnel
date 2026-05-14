@@ -284,7 +284,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
       // Check if user selected a plan from the pricing page
       const storedPlan = localStorage.getItem('scaliyo_selected_plan');
       if (storedPlan && currentUser.role !== UserRole.ADMIN) {
-        localStorage.removeItem('scaliyo_selected_plan');
+        // Don't remove from localStorage here — PortalGuard may redirect to
+        // /onboarding first, losing the URL param. BillingPage clears it
+        // after actually opening checkout.
         navigate(`/portal/billing?plan=${storedPlan}`, { replace: true });
         return;
       }

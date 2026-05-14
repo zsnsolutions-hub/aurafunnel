@@ -29,7 +29,9 @@ const ConfirmEmailPage: React.FC = () => {
           if (type === 'recovery') {
             setTimeout(() => navigate('/reset-password'), 2000);
           } else {
-            setTimeout(() => navigate('/auth'), 3000);
+            // verifyOtp already establishes a session — go straight to the
+            // portal so the auth machine picks it up without showing login.
+            setTimeout(() => navigate('/portal'), 3000);
           }
         }
       } catch (err) {
@@ -67,7 +69,7 @@ const ConfirmEmailPage: React.FC = () => {
                 </svg>
               </div>
               <h3 className="text-lg font-bold text-white">Email confirmed!</h3>
-              <p className="text-slate-400 text-sm">Your email has been verified. Redirecting you to sign in...</p>
+              <p className="text-slate-400 text-sm">Your email has been verified. Redirecting you to your dashboard...</p>
             </div>
           )}
 
