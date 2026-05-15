@@ -143,7 +143,7 @@ const BillingPage: React.FC = () => {
 
   const invoices = useMemo(() => {
     const history = [];
-    const subscriptionDate = user.subscription?.created_at ? new Date(user.subscription.created_at) : new Date(user.createdAt || Date.now());
+    const subscriptionDate = user.subscription?.created_at ? new Date(user.subscription.created_at) : new Date(user.created_at || Date.now());
     const now = new Date();
     
     let currentIter = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -160,7 +160,7 @@ const BillingPage: React.FC = () => {
       });
     }
     return history;
-  }, [currentPlanName, user.subscription, user.createdAt]);
+  }, [currentPlanName, user.subscription, user.created_at]);
 
   // ─── Enhanced Wireframe State ───
   const [showShortcuts, setShowShortcuts] = useState(false);

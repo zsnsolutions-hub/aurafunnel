@@ -902,8 +902,8 @@ function GlobalUsers({ adminId, plans, runAction }: {
   const [bulkCredits, setBulkCredits] = useState(0);
 
   useEffect(() => {
-    supabase.from('profiles').select('id, email, name, plan, status, credits_total, credits_used, createdAt')
-      .order('createdAt', { ascending: false }).limit(200)
+    supabase.from('profiles').select('id, email, name, plan, status, credits_total, credits_used, created_at')
+      .order('created_at', { ascending: false }).limit(200)
       .then(({ data }) => { if (data) setUsers(data); setLoading(false); });
   }, []);
 
@@ -928,8 +928,8 @@ function GlobalUsers({ adminId, plans, runAction }: {
       );
     }
     // Refresh
-    supabase.from('profiles').select('id, email, name, plan, status, credits_total, credits_used, createdAt')
-      .order('createdAt', { ascending: false }).limit(200)
+    supabase.from('profiles').select('id, email, name, plan, status, credits_total, credits_used, created_at')
+      .order('created_at', { ascending: false }).limit(200)
       .then(({ data }) => { if (data) setUsers(data); });
   };
 

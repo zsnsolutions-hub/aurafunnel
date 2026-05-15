@@ -16,7 +16,7 @@ interface UserRow {
   credits_total: number;
   credits_used: number;
   is_super_admin: boolean;
-  createdAt: string;
+  created_at: string;
   subscription?: { plan_name?: string; status?: string } | null;
 }
 
@@ -35,8 +35,8 @@ const UsersTab: React.FC<Props> = ({ adminId, isSuperAdmin }) => {
     setLoading(true);
     const { data } = await supabase
       .from('profiles')
-      .select('id, email, name, role, status, plan, credits_total, credits_used, is_super_admin, createdAt, subscription:subscriptions(*)')
-      .order('createdAt', { ascending: false });
+      .select('id, email, name, role, status, plan, credits_total, credits_used, is_super_admin, created_at, subscription:subscriptions(*)')
+      .order('created_at', { ascending: false });
 
     setUsers(
       (data ?? []).map((u: any) => ({
@@ -121,7 +121,7 @@ const UsersTab: React.FC<Props> = ({ adminId, isSuperAdmin }) => {
   const exportCsv = () => {
     const rows = [['Email', 'Name', 'Role', 'Status', 'Plan', 'Credits Total', 'Credits Used', 'Created']];
     for (const u of filtered) {
-      rows.push([u.email, u.name, u.role, u.status, u.plan || '', String(u.credits_total ?? 0), String(u.credits_used ?? 0), u.createdAt || '']);
+      rows.push([u.email, u.name, u.role, u.status, u.plan || '', String(u.credits_total ?? 0), String(u.credits_used ?? 0), u.created_at || '']);
     }
     const csv = rows.map(r => r.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -253,7 +253,7 @@ const UsersTab: React.FC<Props> = ({ adminId, isSuperAdmin }) => {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
-                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      {u.created_at ? new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {processing === u.id && (

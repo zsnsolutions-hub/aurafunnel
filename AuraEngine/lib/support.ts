@@ -25,7 +25,7 @@ export interface TargetProfile {
   plan: string;
   credits_total: number;
   credits_used: number;
-  createdAt: string;
+  created_at: string;
 }
 
 // ── Session management ───────────────────────────────────────
@@ -107,7 +107,7 @@ export async function getSessionHistory(adminId: string, limit = 50): Promise<Su
 export async function searchUsers(query: string): Promise<TargetProfile[]> {
   const { data } = await supabase
     .from('profiles')
-    .select('id, email, name, role, status, plan, credits_total, credits_used, createdAt:created_at')
+    .select('id, email, name, role, status, plan, credits_total, credits_used, created_at')
     .or(`email.ilike.%${query}%,name.ilike.%${query}%`)
     .order('created_at', { ascending: false })
     .limit(25);
@@ -118,7 +118,7 @@ export async function searchUsers(query: string): Promise<TargetProfile[]> {
 export async function getTargetProfile(userId: string): Promise<TargetProfile | null> {
   const { data } = await supabase
     .from('profiles')
-    .select('id, email, name, role, status, plan, credits_total, credits_used, createdAt:created_at')
+    .select('id, email, name, role, status, plan, credits_total, credits_used, created_at')
     .eq('id', userId)
     .single();
 

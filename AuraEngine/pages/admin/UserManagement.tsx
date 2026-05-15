@@ -42,8 +42,6 @@ const UserManagement: React.FC = () => {
       if (data) {
         setUsers(data.map(u => ({
           ...u,
-          // User type uses camelCase createdAt; alias from the snake_case DB column.
-          createdAt: (u as { createdAt?: string; created_at?: string }).createdAt ?? (u as { created_at?: string }).created_at,
           subscription: Array.isArray(u.subscription) ? u.subscription[0] : u.subscription
         })));
       }
@@ -150,8 +148,8 @@ const UserManagement: React.FC = () => {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const thisWeek = users.filter(u => u.createdAt && new Date(u.createdAt) >= weekAgo).length;
-    const thisMonth = users.filter(u => u.createdAt && new Date(u.createdAt) >= monthAgo).length;
+    const thisWeek = users.filter(u => u.created_at && new Date(u.created_at) >= weekAgo).length;
+    const thisMonth = users.filter(u => u.created_at && new Date(u.created_at) >= monthAgo).length;
 
     const avgCreditsUsed = total > 0 ? Math.round(users.reduce((a, u) => a + (u.credits_used || 0), 0) / total) : 0;
     const totalCreditsUsed = users.reduce((a, u) => a + (u.credits_used || 0), 0);
@@ -164,8 +162,8 @@ const UserManagement: React.FC = () => {
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const dayEnd = new Date(dayStart.getTime() + 86400000);
       const count = users.filter(u => {
-        if (!u.createdAt) return false;
-        const created = new Date(u.createdAt);
+        if (!u.created_at) return false;
+        const created = new Date(u.created_at);
         return created >= dayStart && created < dayEnd;
       }).length;
       return { day: d.toLocaleDateString('en-US', { weekday: 'short' }), count };
@@ -478,7 +476,7 @@ const UserManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <span className="text-xs text-slate-500">{formatRelativeTime(user.createdAt)}</span>
+                      <span className="text-xs text-slate-500">{formatRelativeTime(user.created_at)}</span>
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end space-x-2">

@@ -417,7 +417,7 @@ const AdminOpsCenter: React.FC = () => {
           // Recent workspaces for picker
           opsQuery('global:recent_profiles', () =>
             Promise.resolve(supabase.from('profiles')
-              .select('id, email, name, role, status, plan, credits_total, credits_used, createdAt:created_at')
+              .select('id, email, name, role, status, plan, credits_total, credits_used, created_at')
               .order('updated_at', { ascending: false })
               .limit(10))
           ),
@@ -1604,7 +1604,7 @@ function WorkspaceTab({
         <StatRow label="Status" value={p.status} />
         <StatRow label="Plan" value={p.plan} />
         <StatRow label="Credits" value={`${p.credits_used} / ${p.credits_total}`} />
-        <StatRow label="Created" value={p.createdAt} />
+        <StatRow label="Created" value={p.created_at} />
       </SectionCard>
 
       <SectionCard title="Subscription">

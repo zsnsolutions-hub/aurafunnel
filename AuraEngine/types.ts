@@ -26,7 +26,7 @@ export interface User {
   plan: string;
   credits_total: number;
   credits_used: number;
-  createdAt: string;
+  created_at: string;
   subscription?: Subscription;
   businessProfile?: BusinessProfile;
   is_super_admin?: boolean;

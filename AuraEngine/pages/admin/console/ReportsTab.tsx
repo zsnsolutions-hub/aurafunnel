@@ -85,14 +85,14 @@ const ReportsTab: React.FC = () => {
     setLoading(true);
     const { data } = await supabase
       .from('profiles')
-      .select('createdAt')
-      .order('createdAt', { ascending: true });
+      .select('created_at')
+      .order('created_at', { ascending: true });
 
     // Group by month
     const months: Record<string, number> = {};
     for (const p of (data ?? [])) {
-      if (!p.createdAt) continue;
-      const month = p.createdAt.slice(0, 7); // YYYY-MM
+      if (!p.created_at) continue;
+      const month = p.created_at.slice(0, 7); // YYYY-MM
       months[month] = (months[month] || 0) + 1;
     }
     setUserGrowth(Object.entries(months).map(([period, count]) => ({ period, count })));

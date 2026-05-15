@@ -40,7 +40,7 @@ const OverviewTab: React.FC<Props> = ({ adminId }) => {
         supabase.from('scheduled_emails').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('email_messages').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
         supabase.from('audit_logs').select('id, action, entity_type, created_at, profiles(email)').order('created_at', { ascending: false }).limit(10),
-        supabase.from('profiles').select('id, email, name, plan, createdAt').order('createdAt', { ascending: false }).limit(5),
+        supabase.from('profiles').select('id, email, name, plan, created_at').order('created_at', { ascending: false }).limit(5),
       ]);
 
       if (cancelled) return;
@@ -74,7 +74,7 @@ const OverviewTab: React.FC<Props> = ({ adminId }) => {
           email: p.email,
           name: p.name || '',
           plan: p.plan || 'free',
-          created_at: p.createdAt,
+          created_at: p.created_at,
         }))
       );
 

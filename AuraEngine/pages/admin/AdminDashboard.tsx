@@ -22,7 +22,7 @@ interface RecentUser {
   name: string;
   email: string;
   plan: string;
-  createdAt: string;
+  created_at: string;
 }
 
 const AdminDashboard: React.FC = () => {
@@ -255,10 +255,10 @@ const AdminDashboard: React.FC = () => {
         supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', yesterdayStart).lt('created_at', todayStart),
         supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }),
         supabase.from('subscriptions').select('plan_name').eq('status', 'active'),
-        supabase.from('profiles').select('id, plan, createdAt:created_at').gte('created_at', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+        supabase.from('profiles').select('id, plan, created_at').gte('created_at', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()),
         supabase.auth.getSession(),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
-        supabase.from('profiles').select('id, name, email, plan, createdAt:created_at').order('created_at', { ascending: false }).limit(5),
+        supabase.from('profiles').select('id, name, email, plan, created_at').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getSession().then(async ({ data: s }) => {
           if (s?.session?.user?.id) {
             const { data } = await supabase.from('profiles').select('name').eq('id', s.session.user.id).single();
@@ -306,7 +306,7 @@ const AdminDashboard: React.FC = () => {
           name: u.name || 'Unnamed',
           email: u.email || '',
           plan: u.plan || 'Free',
-          createdAt: u.createdAt
+          created_at: u.created_at
         })));
       }
 
@@ -379,7 +379,7 @@ const AdminDashboard: React.FC = () => {
         trendMap[dateStr] = { name: dayName, users: 0, revenue: 0 };
       }
       (recentUsersData || []).forEach((u: any) => {
-        const dateStr = u.createdAt.split('T')[0];
+        const dateStr = u.created_at.split('T')[0];
         if (trendMap[dateStr]) {
           trendMap[dateStr].users += 1;
           const price = (u.plan === 'Growth' || u.plan === 'Professional') ? 79 : (u.plan === 'Scale' || u.plan === 'Business' || u.plan === 'Enterprise') ? 199 : u.plan === 'Starter' ? 29 : 0;
@@ -829,7 +829,7 @@ const AdminDashboard: React.FC = () => {
                     }`}>
                       {u.plan}
                     </span>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{formatRelativeTime(u.createdAt)}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{formatRelativeTime(u.created_at)}</p>
                   </div>
                 </div>
               ))
