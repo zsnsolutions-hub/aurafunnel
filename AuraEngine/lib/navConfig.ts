@@ -3,7 +3,7 @@ import {
   Compass, Users, Send, GitBranch, BarChart3, Brain,
   Sparkles, PenSquare, MessageSquare, Plug, Mail,
   SlidersHorizontal, CreditCard, FileText, Settings, BookOpen,
-  HelpCircle, Zap, Target, Key, Webhook, Palette,
+  HelpCircle, Zap, Target, Key, Webhook, Palette, Rocket,
 } from 'lucide-react';
 
 // ── Types ──
@@ -89,6 +89,14 @@ export const NAV_CONFIG: NavConfigItem[] = [
     icon: Sparkles,
     section: 'mission',
     order: 0,
+  },
+  {
+    route: '/portal/quick-launch',
+    navLabel: 'Quick Launch',
+    pageTitle: 'Quick Launch',
+    icon: Rocket,
+    section: 'mission',
+    order: 1,
   },
 
   // ── Pillar 1 — ACQUIRE ──

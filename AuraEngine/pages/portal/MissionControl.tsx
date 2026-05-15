@@ -102,10 +102,10 @@ function buildRecommendations(leads: Lead[]): Recommendation[] {
   if (recs.length === 0) {
     recs.push({
       id: 'rec-empty',
-      title: 'Pipeline is quiet — import your next batch of leads',
-      rationale: 'No urgent actions. Bring leads in via CSV, then let the AI score and enrich them.',
-      cta: 'Open leads',
-      href: '/portal/leads',
+      title: 'Pipeline is quiet — launch a campaign in 60 seconds',
+      rationale: 'Quick Launch walks you from import to live sequence in one screen. Start with sample data to see the flow.',
+      cta: 'Try Quick Launch',
+      href: '/portal/quick-launch',
       pillar: 'acquire',
       urgency: 'low',
     });
