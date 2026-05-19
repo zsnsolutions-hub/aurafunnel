@@ -24,6 +24,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// Project migrated to new sb_secret_* key format; pg_cron callers still
+// send the legacy JWT held in vault. Accept either.
+const LEGACY_SERVICE_ROLE_KEY = Deno.env.get("LEGACY_SERVICE_ROLE_KEY") ?? "";
+const ACCEPTED_SERVICE_TOKENS = [SUPABASE_SERVICE_ROLE_KEY, LEGACY_SERVICE_ROLE_KEY].filter(Boolean);
 
 const BATCH_SIZE = 50;
 const TIMEOUT_MS = 8_000;
@@ -89,7 +93,7 @@ serve(async (req) => {
   // Service-role only. Reject everything else with 401.
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token || token !== SUPABASE_SERVICE_ROLE_KEY) {
+  if (!token || !ACCEPTED_SERVICE_TOKENS.includes(token)) {
     return new Response(JSON.stringify({ error: "service-role only" }), { status: 401 });
   }
 
