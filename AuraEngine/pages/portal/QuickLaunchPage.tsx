@@ -17,13 +17,13 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Rocket, Users, Upload, Clipboard, Sparkles, Loader2, Mail, Send,
   RefreshCw, Check, Info, AlertCircle, ArrowRight, Zap,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { resolveWorkspaceForUser } from '../../lib/memory';
+import { resolveWorkspaceForUser, createMyWorkspace } from '../../lib/memory';
 import {
   generateEmailSequence, parseEmailSequenceResponse,
 } from '../../lib/gemini';
@@ -86,12 +86,31 @@ const SAMPLE_STEPS: SequenceStep[] = [
 const QuickLaunchPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  const { data: workspaceId = null } = useQuery<string | null>({
+  const { data: workspaceId = null, refetch: refetchWorkspace } = useQuery<string | null>({
     queryKey: ['quick-launch-workspace', user.id],
     queryFn: () => resolveWorkspaceForUser(user.id),
     staleTime: 5 * 60_000,
   });
+
+  // ─── Workspace recovery (for accounts that pre-date the signup trigger) ─
+  const [creatingWs, setCreatingWs] = useState(false);
+  const [createWsError, setCreateWsError] = useState<string | null>(null);
+  const handleCreateWorkspace = useCallback(async () => {
+    setCreatingWs(true); setCreateWsError(null);
+    try {
+      await createMyWorkspace(user.id);
+      await refetchWorkspace();
+      // Existing-mode lead query is keyed on workspaceId; invalidate so it
+      // re-fires with the new value once the workspace query settles.
+      qc.invalidateQueries({ queryKey: ['quick-launch-leads'] });
+    } catch (e) {
+      setCreateWsError((e as Error).message);
+    } finally {
+      setCreatingWs(false);
+    }
+  }, [user.id, refetchWorkspace, qc]);
 
   // ─── Audience state ─────────────────────────────────────────────────
   const [mode, setMode] = useState<AudienceMode>('sample');
@@ -290,9 +309,23 @@ const QuickLaunchPage: React.FC = () => {
           workspaceId === null ? (
             <div className="mt-4 flex items-start gap-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3">
               <AlertCircle size={14} className="mt-0.5 shrink-0" />
-              <div>
+              <div className="flex-1">
                 <p className="font-semibold">No workspace found for your account</p>
-                <p className="mt-0.5">You're signed in but not a member of any workspace. Use <span className="font-semibold">Paste</span> or <span className="font-semibold">Import CSV</span> to bring leads in directly.</p>
+                <p className="mt-0.5">Your account predates the auto-provisioning flow. Click below to create one now — it's a one-click fix.</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={handleCreateWorkspace}
+                    disabled={creatingWs}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {creatingWs ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                    {creatingWs ? 'Creating…' : 'Create my workspace'}
+                  </button>
+                  <span className="text-[10px] text-amber-700/70">or use Paste / Import CSV to start without one</span>
+                </div>
+                {createWsError && (
+                  <p className="mt-1.5 text-[11px] text-red-700">Couldn't create workspace: {createWsError}</p>
+                )}
               </div>
             </div>
           ) : existingEmailable.length === 0 ? (
