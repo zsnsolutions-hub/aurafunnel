@@ -137,8 +137,17 @@ export async function consumeCredits(
 ): Promise<{ success: boolean; message: string }> {
   const cost = getOperationCost(operation);
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, message: 'Not authenticated' };
+  // Prefer the locally-cached session — getUser() hits the server and can
+  // transiently return null even when the user is clearly authenticated
+  // (e.g. while the access token is mid-refresh). Fall back to getUser
+  // only if there's no local session at all.
+  const { data: { session } } = await supabase.auth.getSession();
+  let user = session?.user ?? null;
+  if (!user) {
+    const { data: { user: serverUser } } = await supabase.auth.getUser();
+    user = serverUser;
+  }
+  if (!user) return { success: false, message: 'Your session has expired. Please sign in again.' };
 
   const workspaceId = await resolveWorkspaceId(supabase, user.id);
   if (!workspaceId) {
