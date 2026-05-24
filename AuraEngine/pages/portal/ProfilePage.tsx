@@ -565,6 +565,54 @@ const ProfilePage: React.FC = () => {
     setWizardPhase('manual');
   }, []);
 
+  // ─── Clear & start over ────────────────────────────────────────────
+  // Wipes the saved business profile from DB + local state, then drops the
+  // user on the wizard input phase to enter a fresh URL. Costs 2 credits.
+  const [clearingProfile, setClearingProfile] = useState(false);
+  const [clearError, setClearError] = useState<string | null>(null);
+  const handleClearAndStartOver = useCallback(async () => {
+    const ok = confirm(
+      'Clear your business profile and start over?\n\n' +
+      'This will:\n' +
+      '• Remove every field currently saved (company name, services, ' +
+      'pricing, social links, everything).\n' +
+      '• Charge 2 AI credits.\n' +
+      '• Drop you on the AI setup screen so you can enter a new URL.\n\n' +
+      'You can\'t undo this. Continue?'
+    );
+    if (!ok) return;
+    setClearingProfile(true); setClearError(null);
+    try {
+      const creditResult = await consumeCredits(supabase, 'clear_business_profile');
+      if (!creditResult.success) throw new Error(creditResult.message || 'Could not deduct credits.');
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ businessProfile: null })
+        .eq('id', user.id);
+      if (updateError) throw new Error(`Failed to clear profile: ${updateError.message}`);
+
+      // Reset every piece of in-memory state that mirrors the profile.
+      setBusinessProfile({} as BusinessProfile);
+      setServicesList([]);
+      setPricingTiers([]);
+      setWebsiteUrl('');
+      setSocialUrls({ linkedin: '', twitter: '', instagram: '', facebook: '' });
+      setBusinessDescription('');
+      setAnalysisResult(null);
+      setAnalysisError('');
+      setEnrichmentStatus('idle');
+      setEnrichmentError('');
+      setEnrichmentFieldsAdded(0);
+      if (refreshProfile) await refreshProfile();
+      setWizardPhase('input');
+    } catch (err) {
+      setClearError((err as Error).message ?? 'Failed to clear profile.');
+    } finally {
+      setClearingProfile(false);
+    }
+  }, [user.id, refreshProfile]);
+
   // Wizard: save profile (reused for all phases)
   const handleWizardSave = async () => {
     setIsSavingBusiness(true);
@@ -1840,19 +1888,36 @@ const ProfilePage: React.FC = () => {
           {wizardPhase === 'manual' && (
             <div className="space-y-6">
               {/* AI setup banner */}
-              <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
-                <div className="flex items-center space-x-3">
-                  <SparklesIcon className="w-5 h-5 text-indigo-600" />
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <SparklesIcon className="w-5 h-5 text-indigo-600 shrink-0" />
                   <p className="text-xs font-bold text-indigo-700">Want AI to fill this out for you? Try the AI-powered setup instead.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setWizardPhase('input')}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors whitespace-nowrap"
-                >
-                  Try AI Setup
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setWizardPhase('input')}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors whitespace-nowrap"
+                  >
+                    Try AI Setup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearAndStartOver}
+                    disabled={clearingProfile}
+                    title="Wipe all saved fields, refund-proof — 2 credits"
+                    className="px-3 py-2 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-bold hover:bg-red-50 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {clearingProfile ? 'Clearing…' : 'Clear & start over · 2 cr'}
+                  </button>
+                </div>
               </div>
+              {clearError && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+                  <AlertTriangleIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{clearError}</span>
+                </div>
+              )}
 
               <form onSubmit={handleBusinessProfileUpdate} className="space-y-6">
                 {/* Logo Upload — Manual Phase */}
