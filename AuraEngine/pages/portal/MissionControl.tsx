@@ -167,7 +167,7 @@ const MissionControl: React.FC = () => {
         .from('workspace_members')
         .select('workspace_id')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
+        .order('joined_at', { ascending: true })
         .limit(1)
         .maybeSingle();
       if (error) return null;
@@ -189,7 +189,7 @@ const MissionControl: React.FC = () => {
       const { count } = await supabase
         .from('email_sequence_runs')
         .select('*', { count: 'exact', head: true })
-        .eq('client_id', user.id)
+        .eq('owner_id', user.id)
         .eq('status', 'running');
       return count ?? 0;
     },

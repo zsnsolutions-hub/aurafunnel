@@ -113,7 +113,7 @@ async function resolveWorkspaceId(
     .from('workspace_members')
     .select('workspace_id')
     .eq('user_id', userId)
-    .order('created_at', { ascending: true })
+    .order('joined_at', { ascending: true })
     .limit(1)
     .maybeSingle();
   if (error) {
