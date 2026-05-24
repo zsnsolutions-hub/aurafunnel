@@ -6,7 +6,11 @@
 
 export const AI_MODELS = {
   /** Default text generation model used by lead/content/email/dashboard flows. */
-  text: 'gemini-3-flash-preview',
+  // Switched from 'gemini-3-flash-preview' — preview tags get retired without
+  // notice; 2.5-flash is the latest GA-stable text model and is what every
+  // AI surface (analyze-website, content gen, email personalization, chat)
+  // routes to via gemini-proxy.
+  text: 'gemini-2.5-flash',
   /** Image generation model (Imagen via gemini-proxy kind:"images"). */
   image: 'imagen-4.0-generate-001',
   /** Lightweight model used for prompt-lab test runs in ModelTraining. */

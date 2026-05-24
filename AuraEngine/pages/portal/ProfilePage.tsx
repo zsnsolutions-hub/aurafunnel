@@ -446,8 +446,11 @@ const ProfilePage: React.FC = () => {
         setEnrichmentStatus(prev => (prev === 'complete' ? 'idle' : prev));
       }, 8000);
     } catch (err: unknown) {
-      setEnrichmentError(err instanceof Error ? err.message : 'Enrichment failed');
+      const msg = err instanceof Error ? err.message : 'Enrichment failed';
+      setEnrichmentError(msg);
       setEnrichmentStatus('failed');
+      // Re-throw so callers that want to drive the wizard flow can react.
+      throw err instanceof Error ? err : new Error(msg);
     }
   };
 
@@ -467,14 +470,41 @@ const ProfilePage: React.FC = () => {
     setAnalysisError('');
     const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
 
-    // 1) Persist what the user typed so they never lose it, even if enrichment fails.
-    await persistWizardInput(fullUrl);
+    // Immediate feedback: flip to the analyzing screen so the click never
+    // feels dead. The progress + stages tick during the wait.
+    setAnalysisStage('searching');
+    setAnalysisProgress(8);
+    setWizardPhase('analyzing');
 
-    // 2) Move to the manual form — user can edit freely while enrichment runs.
-    setWizardPhase('manual');
+    // Best-effort persistence — don't block the visible transition behind
+    // a Supabase round-trip. If it fails the user still gets the same
+    // wizard UI; we'll surface any error via the enrichment banner.
+    void persistWizardInput(fullUrl);
 
-    // 3) Fire enrichment in the background (not awaited).
-    void startEnrichment(fullUrl, socialUrls);
+    // Tick the progress UI optimistically while Gemini works. Real progress
+    // signals from grounding chunks would be ideal, but until then this at
+    // least proves the click did something.
+    const stageOrder: AnalysisStage[] = ['searching', 'reading', 'extracting', 'structuring'];
+    const ticker = setInterval(() => {
+      setAnalysisProgress((p) => Math.min(92, p + 3));
+      setAnalysisStage((s) => {
+        const i = stageOrder.indexOf(s);
+        return i < stageOrder.length - 1 ? stageOrder[i + 1] : s;
+      });
+    }, 1200);
+
+    try {
+      await startEnrichment(fullUrl, socialUrls);
+      setAnalysisProgress(100);
+      setAnalysisStage('complete');
+      // Settle on the manual form so the user can review the merged data.
+      setTimeout(() => setWizardPhase('manual'), 500);
+    } catch (err) {
+      setAnalysisError((err as Error).message ?? 'Analysis failed.');
+      // Leave the user on the analyzing screen — the error banner is right there.
+    } finally {
+      clearInterval(ticker);
+    }
   };
 
   // Wizard: save profile (reused for all phases)
@@ -1347,8 +1377,24 @@ const ProfilePage: React.FC = () => {
               </div>
 
               {analysisError && (
-                <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
-                  <p className="text-xs font-bold text-red-600">{analysisError}</p>
+                <div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-2">
+                  <p className="text-xs font-bold text-red-700">{analysisError}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setAnalysisError(''); setWizardPhase('input'); }}
+                      className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700"
+                    >
+                      Try again
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAnalysisError(''); setWizardPhase('manual'); }}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-bold hover:bg-slate-50"
+                    >
+                      Skip to manual entry
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
