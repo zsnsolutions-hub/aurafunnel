@@ -11,7 +11,7 @@ import FAQ from '../../components/marketing/FAQ';
 import FinalCTA from '../../components/marketing/FinalCTA';
 
 const LandingPage: React.FC = () => (
-  <div className="bg-[#0A1628] text-white">
+  <div className="bg-[#FBFAF7] text-[#1C1A17]">
     <Hero />
     <Logos />
     <Problem />

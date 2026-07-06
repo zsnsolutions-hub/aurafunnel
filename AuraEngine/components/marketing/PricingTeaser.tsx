@@ -12,51 +12,52 @@ const plans = [
 ];
 
 const PricingTeaser: React.FC = () => (
-  <section id="pricing" className="py-24 lg:py-32 border-y border-slate-800/60">
-    <div className="max-w-[1400px] mx-auto px-6">
+  <section id="pricing" className="py-24 lg:py-32 bg-[#F5F2EB] border-y border-[#EDE7DB]">
+    <div className="max-w-[1180px] mx-auto px-6">
       <Reveal>
-        <h2 className="text-4xl lg:text-5xl font-bold tracking-tight font-heading text-center mb-16">
-          Invest in Revenue, Not Overhead
-        </h2>
+        <div className="text-center max-w-2xl mx-auto mb-14">
+          <p className="eyebrow text-teal-700 mb-5">Pricing</p>
+          <h2 className="font-display text-4xl lg:text-[3.25rem] leading-[1.06] font-medium tracking-[-0.02em] text-[#1C1A17]">
+            Start free. Scale when it&rsquo;s working.
+          </h2>
+        </div>
       </Reveal>
 
-      <div className="flex flex-col sm:flex-row items-stretch justify-center gap-5 max-w-3xl mx-auto mb-10">
+      <div className="flex flex-col sm:flex-row items-stretch justify-center gap-4 max-w-4xl mx-auto mb-10">
         {plans.map((plan, i) => (
-          <Reveal key={plan.name} delay={i * 100}>
+          <Reveal key={plan.name} delay={i * 100} className="flex-1">
             <div
-              className={`flex-1 min-w-[200px] rounded-2xl p-8 text-center transition-all duration-500 ${
+              className={`h-full rounded-[1.5rem] p-7 text-center transition-all duration-300 ${
                 plan.popular
-                  ? 'bg-gradient-to-b from-teal-500/10 to-[#0F1D32] border-2 border-teal-500/30 shadow-xl shadow-teal-500/10 -translate-y-1'
-                  : 'bg-[#0F1D32] border border-slate-800'
+                  ? 'bg-white border-2 border-teal-600/40 shadow-chic -translate-y-1'
+                  : 'bg-white/70 border border-[#EAE3D6] shadow-chic-sm'
               }`}
             >
               {plan.popular && (
-                <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest mb-3 block">
-                  Most Popular
-                </span>
+                <span className="inline-block eyebrow text-teal-700 mb-3">Most popular</span>
               )}
-              <h3 className="text-lg font-bold font-heading mb-2">{plan.name}</h3>
+              <h3 className="font-display text-lg font-medium text-[#1C1A17] mb-2">{plan.name}</h3>
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-4xl font-black font-heading">{plan.price === 0 ? 'Free' : `$${plan.price}`}</span>
-                {plan.price > 0 && <span className="text-sm text-slate-500">/mo</span>}
+                <span className="font-display text-4xl font-medium text-[#1C1A17]">{plan.price === 0 ? 'Free' : `$${plan.price}`}</span>
+                {plan.price > 0 && <span className="text-sm text-[#9A9189]">/mo</span>}
               </div>
-              <p className="text-xs text-slate-500 mt-2">{plan.aiCredits.toLocaleString()} AI credits</p>
+              <p className="text-xs text-[#9A9189] mt-2">{plan.aiCredits.toLocaleString()} AI credits</p>
             </div>
           </Reveal>
         ))}
       </div>
 
       <Reveal delay={400}>
-        <p className="text-center text-slate-400 text-sm mb-8">
-          All plans include AI-powered outreach. Upgrade anytime.
+        <p className="text-center text-[#6F6860] text-sm mb-7">
+          Every plan includes AI-powered outreach. Upgrade or cancel anytime.
         </p>
         <div className="text-center">
           <Link
             to="/pricing"
             onClick={() => track('cta_click', { location: 'pricing_teaser', label: 'view_pricing' })}
-            className="text-sm font-bold text-teal-400 hover:text-teal-300 transition-colors"
+            className="text-sm font-semibold text-teal-700 hover:text-teal-800 transition-colors"
           >
-            View Pricing &rarr;
+            Compare plans &rarr;
           </Link>
         </div>
       </Reveal>

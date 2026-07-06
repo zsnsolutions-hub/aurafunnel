@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 const STORAGE_KEY = 'scaliyo_announcement_dismissed';
 
@@ -23,19 +24,21 @@ const AnnouncementBar: React.FC = () => {
 
   return (
     <div
-      className={`fixed top-0 left-0 right-0 z-[60] h-10 bg-gradient-to-r from-teal-600 to-cyan-600 flex items-center justify-center transition-transform duration-300 ${
+      className={`fixed top-0 left-0 right-0 z-[60] h-10 bg-[#1C1A17] flex items-center justify-center px-10 transition-transform duration-300 ${
         hidden ? '-translate-y-full' : 'translate-y-0'
       }`}
     >
-      <a
-        href="#deep-research"
-        className="text-sm font-semibold text-white hover:text-white/90 transition-colors"
+      <Link
+        to="/signup"
+        className="group flex items-center gap-2 text-[13px] font-medium text-[#F5F1EA] hover:text-white transition-colors"
       >
-        New: AI Deep Research is here — See how it works →
-      </a>
+        <span className="text-teal-300">✦</span>
+        <span>Scaliyo is now in early access — join the first cohort</span>
+        <span className="transition-transform duration-300 group-hover:translate-x-0.5">→</span>
+      </Link>
       <button
         onClick={handleDismiss}
-        className="absolute right-4 text-white/70 hover:text-white transition-colors"
+        className="absolute right-4 text-white/50 hover:text-white transition-colors"
         aria-label="Dismiss announcement"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

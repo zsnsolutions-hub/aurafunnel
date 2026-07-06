@@ -36,6 +36,26 @@
   background-size: 24px 24px;
 }
 
+/* ── "Light & airy chic" marketing utilities ── */
+/* Soft, warm elevation for cards on the cream landing page. */
+.shadow-chic {
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 18px 48px -20px rgba(28, 25, 23, 0.18);
+}
+.shadow-chic-sm {
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 8px 24px -14px rgba(28, 25, 23, 0.14);
+}
+/* Very subtle paper grain overlay — layer over cream sections at low opacity. */
+.chic-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+/* Small-caps editorial eyebrow. */
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
 /* Custom scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;

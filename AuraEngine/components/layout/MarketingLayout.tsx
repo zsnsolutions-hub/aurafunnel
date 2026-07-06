@@ -15,11 +15,11 @@ const MarketingLayout: React.FC = () => {
   const location = useLocation();
 
   const isLightPage = LIGHT_BG_PAGES.includes(location.pathname);
-  // On light pages: use coloured logo until user scrolls (nav turns dark)
-  // On dark pages: always use the dark-bg logo
-  const logoSrc = isLightPage && !scrolled
-    ? '/scaliyo-logo-light.webp'
-    : '/scaliyo-logo-dark.webp';
+  // The landing page ('/') is now a light, cream-toned page end-to-end.
+  const isLanding = location.pathname === '/';
+  // Dark ink text/logo whenever the nav sits on a light background.
+  const onLight = isLanding || (isLightPage && !scrolled);
+  const logoSrc = onLight ? '/scaliyo-logo-light.webp' : '/scaliyo-logo-dark.webp';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -40,11 +40,15 @@ const MarketingLayout: React.FC = () => {
       >
         <div className="max-w-[1400px] mx-auto">
           <div className={`border rounded-2xl px-6 flex items-center justify-between transition-all duration-300 ${
-            scrolled
-              ? 'h-14 bg-[#0A1628]/90 backdrop-blur-xl border-slate-700/50 shadow-lg shadow-black/20'
-              : isLightPage
-                ? 'h-16 bg-white/80 backdrop-blur-md border-slate-200'
-                : 'h-16 bg-white/5 backdrop-blur-md border-white/10'
+            isLanding
+              ? scrolled
+                ? 'h-14 bg-[#FBFAF7]/85 backdrop-blur-xl border-[#EAE3D6] shadow-chic-sm'
+                : 'h-16 bg-white/55 backdrop-blur-md border-[#EAE3D6]'
+              : scrolled
+                ? 'h-14 bg-[#0A1628]/90 backdrop-blur-xl border-slate-700/50 shadow-lg shadow-black/20'
+                : isLightPage
+                  ? 'h-16 bg-white/80 backdrop-blur-md border-slate-200'
+                  : 'h-16 bg-white/5 backdrop-blur-md border-white/10'
           }`}>
             <PrefetchLink to="/" className="flex items-center group" aria-label="Scaliyo home">
               <img src={logoSrc} alt="Scaliyo" width={106} height={40} className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" fetchPriority="high" />
@@ -56,8 +60,8 @@ const MarketingLayout: React.FC = () => {
                   key={item}
                   to={`/${item.toLowerCase()}`}
                   className={`relative text-sm font-semibold transition-colors duration-300 group ${
-                    isLightPage && !scrolled
-                      ? 'text-slate-600 hover:text-slate-900'
+                    onLight
+                      ? 'text-[#6F6860] hover:text-[#1C1A17]'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -66,28 +70,30 @@ const MarketingLayout: React.FC = () => {
                 </PrefetchLink>
               ))}
               <span className={`hidden xl:inline-flex items-center gap-1.5 text-xs font-medium ${
-                isLightPage && !scrolled ? 'text-slate-500' : 'text-slate-500'
+                onLight ? 'text-[#9A9189]' : 'text-slate-500'
               }`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Trusted by 2,400+ teams
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                Now in early access
               </span>
             </div>
 
             <div className="flex items-center space-x-3">
               <PrefetchLink to="/auth" className={`hidden sm:block text-sm font-semibold px-4 py-2 transition-colors duration-300 ${
-                isLightPage && !scrolled ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                onLight ? 'text-[#6F6860] hover:text-[#1C1A17]' : 'text-slate-400 hover:text-white'
               }`}>Log in</PrefetchLink>
               <PrefetchLink
                 to="/signup"
                 onClick={() => track('cta_click', { location: 'navbar', label: 'start_free_trial' })}
-                className="bg-teal-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-teal-400 hover:scale-105 transition-all duration-300 shadow-lg shadow-teal-500/20 active:scale-95"
+                className="bg-teal-500 text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-teal-400 hover:scale-105 transition-all duration-300 shadow-lg shadow-teal-500/20 active:scale-95"
               >
-                Start Free Trial
+                Start free
               </PrefetchLink>
               {/* Mobile hamburger */}
               <button
                 onClick={() => setMobileOpen(!mobileOpen)}
-                className="lg:hidden w-10 h-10 flex items-center justify-center text-slate-400 hover:text-white"
+                className={`lg:hidden w-10 h-10 flex items-center justify-center transition-colors ${
+                  onLight ? 'text-[#6F6860] hover:text-[#1C1A17]' : 'text-slate-400 hover:text-white'
+                }`}
                 aria-label="Toggle menu"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -103,26 +109,30 @@ const MarketingLayout: React.FC = () => {
 
           {/* Mobile menu */}
           {mobileOpen && (
-            <div className="lg:hidden mt-2 bg-[#0F1D32]/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
+            <div className={`lg:hidden mt-2 backdrop-blur-xl border rounded-2xl p-6 shadow-2xl ${
+              isLanding ? 'bg-[#FBFAF7]/98 border-[#EAE3D6]' : 'bg-[#0F1D32]/95 border-slate-700/50'
+            }`}>
               <div className="space-y-4">
                 {['Features', 'Pricing', 'Blog', 'About', 'Contact'].map((item) => (
                   <PrefetchLink
                     key={item}
                     to={`/${item.toLowerCase()}`}
                     onClick={() => setMobileOpen(false)}
-                    className="block text-lg font-semibold text-slate-300 hover:text-teal-400 transition-colors"
+                    className={`block text-lg font-semibold transition-colors ${
+                      isLanding ? 'text-[#4B453E] hover:text-teal-700' : 'text-slate-300 hover:text-teal-400'
+                    }`}
                   >
                     {item}
                   </PrefetchLink>
                 ))}
-                <hr className="border-slate-700/50" />
-                <PrefetchLink to="/auth" onClick={() => setMobileOpen(false)} className="block text-lg font-semibold text-slate-400">Log in</PrefetchLink>
+                <hr className={isLanding ? 'border-[#EAE3D6]' : 'border-slate-700/50'} />
+                <PrefetchLink to="/auth" onClick={() => setMobileOpen(false)} className={`block text-lg font-semibold ${isLanding ? 'text-[#6F6860]' : 'text-slate-400'}`}>Log in</PrefetchLink>
                 <PrefetchLink
                   to="/signup"
                   onClick={() => { setMobileOpen(false); track('cta_click', { location: 'navbar_mobile', label: 'start_free_trial' }); }}
-                  className="block text-center bg-teal-500 text-white px-5 py-3 rounded-xl text-base font-bold hover:bg-teal-400 transition-all"
+                  className="block text-center bg-teal-500 text-white px-5 py-3 rounded-full text-base font-semibold hover:bg-teal-400 transition-all"
                 >
-                  Start Free Trial
+                  Start free
                 </PrefetchLink>
               </div>
             </div>

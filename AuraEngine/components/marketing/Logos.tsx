@@ -1,18 +1,23 @@
 import React from 'react';
 import Reveal from './Reveal';
 
-const companies = ['Stackline', 'Nuvio', 'Meridian', 'DataSync', 'TechFlow', 'Cloudshift'];
+// Honest new-startup framing: instead of borrowed customer logos, show the
+// stack Scaliyo plugs into — real, verifiable, and it signals capability.
+const integrations = ['Salesforce', 'HubSpot', 'Pipedrive', 'Gmail', 'LinkedIn', 'Slack'];
 
 const Logos: React.FC = () => (
-  <section id="logos" className="py-14 lg:py-20">
-    <div className="max-w-[1400px] mx-auto px-6">
+  <section id="logos" className="py-16 lg:py-20 border-y border-[#EDE7DB]">
+    <div className="max-w-[1180px] mx-auto px-6">
       <Reveal>
-        <p className="text-center text-xs font-bold text-slate-600 uppercase tracking-[0.25em] mb-8">
-          Trusted by 2,400+ revenue teams
+        <p className="text-center eyebrow text-[#B0A798] mb-9">
+          Works with the tools your team already lives in
         </p>
-        <div className="flex items-center gap-8 lg:gap-16 flex-wrap justify-center opacity-40">
-          {companies.map((name) => (
-            <span key={name} className="text-sm font-bold text-slate-400 tracking-wide">
+        <div className="flex items-center gap-x-10 gap-y-5 lg:gap-x-16 flex-wrap justify-center">
+          {integrations.map((name) => (
+            <span
+              key={name}
+              className="text-base font-display font-medium text-[#8A8178] tracking-tight hover:text-[#1C1A17] transition-colors duration-300"
+            >
               {name}
             </span>
           ))}
