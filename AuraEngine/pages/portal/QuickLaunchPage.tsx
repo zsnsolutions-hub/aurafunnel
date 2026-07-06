@@ -47,6 +47,29 @@ interface LayoutContext { user: User }
 
 type AudienceMode = 'sample' | 'existing' | 'paste' | 'import';
 
+const DEFAULT_OFFER = 'Show how AI-personalized outbound books more meetings.';
+
+// Shape persisted to localStorage so a half-built campaign survives navigation.
+interface QuickLaunchDraft {
+  mode?: AudienceMode;
+  offer?: string;
+  goal?: EmailSequenceConfig['goal'];
+  tone?: ToneType;
+  cadence?: EmailSequenceConfig['cadence'];
+  sequenceLength?: number;
+  steps?: SequenceStep[];
+  pasteText?: string;
+  pasteLeads?: Lead[];
+}
+
+// Lead statuses that mean "never contact" — filtered out at launch.
+const SUPPRESSED_STATUS = /unsub|bounce|complain|spam|do.?not|opt.?out/i;
+
+// Resolve a step's cumulative send-day (days from launch) to a real date label.
+const fmtSendDate = (delayDays: number): string =>
+  new Date(Date.now() + delayDays * 86_400_000)
+    .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
 const SAMPLE_LEADS: Lead[] = [
   {
     id: 'sample-1', client_id: '', first_name: 'Maya', last_name: 'Reyes',
@@ -91,6 +114,14 @@ const QuickLaunchPage: React.FC = () => {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  // ─── Draft persistence (#9) — restore any in-progress campaign ───────
+  const draftKey = `scaliyo_quicklaunch_draft_${user.id}`;
+  const draft0 = useMemo<QuickLaunchDraft | null>(() => {
+    try { return JSON.parse(localStorage.getItem(draftKey) || 'null'); }
+    catch { return null; }
+  }, [draftKey]);
+  const [restoredDraft, setRestoredDraft] = useState(() => !!draft0);
+
   const { data: workspaceId = null, refetch: refetchWorkspace } = useQuery<string | null>({
     queryKey: ['quick-launch-workspace', user.id],
     queryFn: () => resolveWorkspaceForUser(user.id),
@@ -120,9 +151,9 @@ const QuickLaunchPage: React.FC = () => {
   }, [user.id, wsName, refetchWorkspace, qc]);
 
   // ─── Audience state ─────────────────────────────────────────────────
-  const [mode, setMode] = useState<AudienceMode>('sample');
-  const [pasteText, setPasteText] = useState('');
-  const [pasteLeads, setPasteLeads] = useState<Lead[]>([]);
+  const [mode, setMode] = useState<AudienceMode>(draft0?.mode ?? 'sample');
+  const [pasteText, setPasteText] = useState(draft0?.pasteText ?? '');
+  const [pasteLeads, setPasteLeads] = useState<Lead[]>(draft0?.pasteLeads ?? []);
   const [importOpen, setImportOpen] = useState(false);
 
   const { data: existingLeads = [], refetch: refetchExisting, isLoading: existingLoading } = useQuery<Lead[]>({
@@ -209,14 +240,14 @@ const QuickLaunchPage: React.FC = () => {
   }, []);
 
   // ─── Offer state ────────────────────────────────────────────────────
-  const [offer, setOffer] = useState('Show how AI-personalized outbound books more meetings.');
-  const [goal, setGoal] = useState<EmailSequenceConfig['goal']>('book_meeting');
-  const [tone, setTone] = useState<ToneType>(ToneType.PROFESSIONAL);
-  const [cadence, setCadence] = useState<EmailSequenceConfig['cadence']>('every_2_days');
-  const [sequenceLength, setSequenceLength] = useState(3);
+  const [offer, setOffer] = useState(draft0?.offer ?? DEFAULT_OFFER);
+  const [goal, setGoal] = useState<EmailSequenceConfig['goal']>(draft0?.goal ?? 'book_meeting');
+  const [tone, setTone] = useState<ToneType>(draft0?.tone ?? ToneType.PROFESSIONAL);
+  const [cadence, setCadence] = useState<EmailSequenceConfig['cadence']>(draft0?.cadence ?? 'every_2_days');
+  const [sequenceLength, setSequenceLength] = useState(draft0?.sequenceLength ?? 3);
 
   // ─── Sequence state ────────────────────────────────────────────────
-  const [steps, setSteps] = useState<SequenceStep[]>(SAMPLE_STEPS);
+  const [steps, setSteps] = useState<SequenceStep[]>(draft0?.steps?.length ? draft0.steps : SAMPLE_STEPS);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
@@ -311,6 +342,61 @@ const QuickLaunchPage: React.FC = () => {
   const outbound = getOutboundLimits(user.plan ?? 'Free');
   const dailyCap = Math.max(1, outbound.emailsPerDayPerInbox * outbound.maxInboxes);
 
+  // ─── Suppression + dedup (#13) ──────────────────────────────────────
+  // Emails that have bounced/failed or unsubscribed/complained — never re-send.
+  const { data: suppressedEmails = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ['quick-launch-suppressed', user.id],
+    queryFn: async () => {
+      const set = new Set<string>();
+      try {
+        const { data: msgs } = await supabase
+          .from('email_messages')
+          .select('id, to_email, status')
+          .eq('owner_id', user.id)
+          .limit(5000);
+        const idToEmail = new Map<string, string>();
+        for (const m of (msgs ?? []) as Array<{ id: string; to_email: string | null; status: string | null }>) {
+          const em = (m.to_email ?? '').trim().toLowerCase();
+          if (!em) continue;
+          idToEmail.set(m.id, em);
+          if (m.status === 'bounced' || m.status === 'failed') set.add(em);
+        }
+        const ids = [...idToEmail.keys()];
+        for (let i = 0; i < ids.length; i += 1000) {
+          const { data: evs } = await supabase
+            .from('email_events')
+            .select('message_id, event_type')
+            .in('message_id', ids.slice(i, i + 1000))
+            .in('event_type', ['unsubscribe', 'spam_report', 'bounced']);
+          for (const ev of (evs ?? []) as Array<{ message_id: string; event_type: string }>) {
+            const em = idToEmail.get(ev.message_id);
+            if (em) set.add(em);
+          }
+        }
+      } catch (e) {
+        console.warn('[quick-launch] suppression fetch failed:', e);
+      }
+      return set;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  // The exact list that will be emailed: dedup by email + drop suppressed.
+  const launchAudience = useMemo(() => {
+    const seen = new Set<string>();
+    const leads: Lead[] = [];
+    let dupes = 0, suppressed = 0;
+    for (const l of activeLeads) {
+      const email = (l.primary_email ?? '').trim().toLowerCase();
+      if (!email) continue;
+      if (seen.has(email)) { dupes++; continue; }
+      if (suppressedEmails.has(email) || (l.status && SUPPRESSED_STATUS.test(l.status))) { suppressed++; continue; }
+      seen.add(email);
+      leads.push(l);
+    }
+    return { leads, dupes, suppressed };
+  }, [activeLeads, suppressedEmails]);
+
   // When the user swaps off the sample, blank out the canned preview so
   // the next "Generate" button click feels intentional.
   useEffect(() => {
@@ -318,6 +404,26 @@ const QuickLaunchPage: React.FC = () => {
       setSteps([]);
     }
   }, [mode, steps]);
+
+  // ─── Draft persistence (#9) — save on any change, offer a reset ──────
+  useEffect(() => {
+    try {
+      const d: QuickLaunchDraft = {
+        mode: mode === 'import' ? 'sample' : mode,
+        offer, goal, tone, cadence, sequenceLength, steps, pasteText, pasteLeads,
+      };
+      localStorage.setItem(draftKey, JSON.stringify(d));
+    } catch { /* storage full / disabled — non-fatal */ }
+  }, [mode, offer, goal, tone, cadence, sequenceLength, steps, pasteText, pasteLeads, draftKey]);
+
+  const resetDraft = useCallback(() => {
+    try { localStorage.removeItem(draftKey); } catch { /* noop */ }
+    setRestoredDraft(false);
+    setMode('sample'); setOffer(DEFAULT_OFFER); setGoal('book_meeting');
+    setTone(ToneType.PROFESSIONAL); setCadence('every_2_days'); setSequenceLength(3);
+    setSteps(SAMPLE_STEPS); setPasteText(''); setPasteLeads([]);
+    setLaunchResult(null); setGenError(null); setLaunchError(null);
+  }, [draftKey]);
 
   const handleParsePaste = useCallback(() => {
     const rows = pasteText.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -373,22 +479,26 @@ const QuickLaunchPage: React.FC = () => {
   }, [activeLeads, goal, sequenceLength, cadence, tone, offer, user, mode]);
 
   // ─── Step editing ───────────────────────────────────────────────────
-  // Users edit the AI draft in place before launching. Structural changes
-  // (add/remove/reorder) re-derive delays from the chosen cadence; any edit
-  // invalidates the per-lead preview cache so previews reflect the new copy.
+  // Users edit the AI draft in place before launching: subject/body, send-day,
+  // reorder, add and delete. Send-days are user-owned (only new steps default
+  // from cadence); any content edit clears the per-lead preview cache.
   const cadenceDays = ({ daily: 1, every_2_days: 2, every_3_days: 3, weekly: 7 } as const)[cadence];
-  const reindexSteps = useCallback((arr: SequenceStep[]): SequenceStep[] =>
-    arr.map((s, idx) => ({ ...s, stepIndex: idx + 1, delayDays: idx === 0 ? 0 : cadenceDays * idx })),
-  [cadenceDays]);
+  // Renumber stepIndex only — send-days are user-owned once a sequence exists (#8).
+  const reindexSteps = (arr: SequenceStep[]): SequenceStep[] =>
+    arr.map((s, idx) => ({ ...s, stepIndex: idx + 1 }));
 
   const updateStep = useCallback((i: number, patch: Partial<SequenceStep>) => {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
     setPreviewCache(new Map());
   }, []);
+  const setStepDelay = useCallback((i: number, value: string) => {
+    const n = Math.max(0, Math.floor(Number(value) || 0));
+    setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, delayDays: n } : s)));
+  }, []);
   const removeStep = useCallback((i: number) => {
     setSteps((prev) => reindexSteps(prev.filter((_, idx) => idx !== i)));
     setPreviewCache(new Map());
-  }, [reindexSteps]);
+  }, []);
   const moveStep = useCallback((i: number, dir: -1 | 1) => {
     setSteps((prev) => {
       const j = i + dir;
@@ -398,23 +508,28 @@ const QuickLaunchPage: React.FC = () => {
       return reindexSteps(next);
     });
     setPreviewCache(new Map());
-  }, [reindexSteps]);
+  }, []);
   const addStep = useCallback(() => {
-    setSteps((prev) => reindexSteps([...prev, { stepIndex: prev.length + 1, delayDays: 0, subject: '', body: '' }]));
-  }, [reindexSteps]);
+    setSteps((prev) => {
+      const maxDelay = prev.reduce((m, s) => Math.max(m, s.delayDays), 0);
+      const delayDays = prev.length === 0 ? 0 : maxDelay + cadenceDays;
+      return reindexSteps([...prev, { stepIndex: prev.length + 1, delayDays, subject: '', body: '' }]);
+    });
+  }, [cadenceDays]);
 
   const handleLaunch = useCallback(async () => {
     if (isSampleMode) return;
-    if (activeLeads.length === 0 || steps.length === 0) return;
+    const recipients = launchAudience.leads;
+    if (recipients.length === 0 || steps.length === 0) return;
     setLaunching(true); setLaunchError(null);
-    track('quicklaunch_launch', { recipients: activeLeads.length, steps: steps.length, plan: user.plan ?? 'Free' });
+    track('quicklaunch_launch', { recipients: recipients.length, steps: steps.length, dupes: launchAudience.dupes, suppressed: launchAudience.suppressed, plan: user.plan ?? 'Free' });
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
       if (!token) throw new Error('No auth session — please refresh and try again.');
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-email-sequence-run`;
       const payload = {
-        leads: activeLeads.map((l) => ({
+        leads: recipients.map((l) => ({
           id: l.id,
           email: l.primary_email,
           name: [l.first_name, l.last_name].filter(Boolean).join(' '),
@@ -450,19 +565,35 @@ const QuickLaunchPage: React.FC = () => {
     } finally {
       setLaunching(false);
     }
-  }, [activeLeads, steps, tone, offer, cadence, isSampleMode, user]);
+  }, [launchAudience, steps, tone, offer, cadence, isSampleMode, user]);
 
   // ───────────────────────────────────────────────────────────────────
   return (
     <div className="px-6 py-8 max-w-4xl mx-auto space-y-6">
-      <header className="space-y-1.5">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Rocket size={20} className="text-indigo-500" /> Quick Launch
-        </h1>
-        <p className="text-sm text-slate-600 max-w-xl">
-          Three steps to a live outreach sequence: pick an audience, describe the offer, launch.
-          The sample below shows you the shape — swap your own leads in and click <span className="font-semibold">Launch</span>.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-1.5">
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <Rocket size={20} className="text-indigo-500" /> Quick Launch
+          </h1>
+          <p className="text-sm text-slate-600 max-w-xl">
+            Three steps to a live outreach sequence: pick an audience, describe the offer, launch.
+            The sample below shows you the shape — swap your own leads in and click <span className="font-semibold">Launch</span>.
+          </p>
+        </div>
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          {restoredDraft && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+              <Check size={11} /> Draft restored
+            </span>
+          )}
+          <button
+            onClick={resetDraft}
+            title="Clear the saved draft and reset to the sample"
+            className="text-[11px] font-bold text-slate-400 hover:text-slate-700 transition-colors"
+          >
+            Start over
+          </button>
+        </div>
       </header>
 
       {/* ── STEP 1 — Audience ─────────────────────────────────────── */}
@@ -759,10 +890,19 @@ const QuickLaunchPage: React.FC = () => {
             {steps.map((s, i) => (
               <div key={i} className="rounded-xl border border-slate-200 p-4 bg-white">
                 <div className="flex items-center justify-between mb-2 gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-black flex items-center justify-center shrink-0">{i + 1}</span>
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      {s.delayDays === 0 ? 'Send immediately' : `+${s.delayDays} day${s.delayDays === 1 ? '' : 's'}`}
+                    <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                      <label htmlFor={`delay-${i}`} className="font-bold uppercase tracking-wider">Send on day</label>
+                      <input
+                        id={`delay-${i}`}
+                        type="number"
+                        min={0}
+                        value={s.delayDays}
+                        onChange={(e) => setStepDelay(i, e.target.value)}
+                        className="w-14 px-2 py-0.5 rounded-md border border-slate-200 text-xs text-slate-800 font-bold text-center focus:outline-none focus:border-indigo-500 tabular-nums"
+                      />
+                      <span className="text-slate-400 font-medium normal-case tracking-normal">· {s.delayDays === 0 ? 'today' : fmtSendDate(s.delayDays)}</span>
                     </span>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
@@ -813,12 +953,22 @@ const QuickLaunchPage: React.FC = () => {
                       <span>This is sample data — switch to <span className="font-semibold">Existing</span>, <span className="font-semibold">Paste</span>, or <span className="font-semibold">Import</span> above to send for real.</span>
                     </span>
                   ) : (
-                    <span>Launching will create a real sequence run and schedule the first send.</span>
+                    <span>
+                      {launchAudience.leads.length} recipient{launchAudience.leads.length === 1 ? '' : 's'} will receive this sequence.
+                      {(launchAudience.dupes + launchAudience.suppressed) > 0 && (
+                        <span className="text-slate-400">
+                          {' '}({[
+                            launchAudience.dupes > 0 ? `${launchAudience.dupes} duplicate${launchAudience.dupes === 1 ? '' : 's'}` : null,
+                            launchAudience.suppressed > 0 ? `${launchAudience.suppressed} suppressed` : null,
+                          ].filter(Boolean).join(', ')} skipped)
+                        </span>
+                      )}
+                    </span>
                   )}
                 </div>
                 <button
                   onClick={() => { setLaunchError(null); setConfirmOpen(true); }}
-                  disabled={isSampleMode || launching || activeLeads.length === 0 || steps.length === 0}
+                  disabled={isSampleMode || launching || launchAudience.leads.length === 0 || steps.length === 0}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
                   <Send size={14} />
@@ -859,7 +1009,7 @@ const QuickLaunchPage: React.FC = () => {
             <div className="mt-4 rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm">
               <div className="flex items-center justify-between px-3.5 py-2.5">
                 <span className="text-slate-500">Recipients</span>
-                <span className="font-bold text-slate-900 tabular-nums">{activeLeads.length}</span>
+                <span className="font-bold text-slate-900 tabular-nums">{launchAudience.leads.length}</span>
               </div>
               <div className="flex items-center justify-between px-3.5 py-2.5">
                 <span className="text-slate-500">Emails each</span>
@@ -867,20 +1017,30 @@ const QuickLaunchPage: React.FC = () => {
               </div>
               <div className="flex items-center justify-between px-3.5 py-2.5">
                 <span className="text-slate-500">Total scheduled</span>
-                <span className="font-bold text-slate-900 tabular-nums">{activeLeads.length * steps.length}</span>
+                <span className="font-bold text-slate-900 tabular-nums">{launchAudience.leads.length * steps.length}</span>
               </div>
               <div className="flex items-center justify-between px-3.5 py-2.5">
-                <span className="text-slate-500">First send</span>
-                <span className="font-bold text-slate-900">Immediately</span>
+                <span className="text-slate-500">Sends</span>
+                <span className="font-bold text-slate-900">
+                  Today{steps.length > 1 ? ` → ${fmtSendDate(Math.max(...steps.map((s) => s.delayDays)))}` : ''}
+                </span>
               </div>
             </div>
 
-            {activeLeads.length > dailyCap && (
+            {(launchAudience.dupes + launchAudience.suppressed) > 0 && (
+              <p className="mt-2.5 text-[11px] text-slate-500">
+                Skipped{launchAudience.dupes > 0 ? ` ${launchAudience.dupes} duplicate${launchAudience.dupes === 1 ? '' : 's'}` : ''}
+                {launchAudience.dupes > 0 && launchAudience.suppressed > 0 ? ' and' : ''}
+                {launchAudience.suppressed > 0 ? ` ${launchAudience.suppressed} unsubscribed/bounced address${launchAudience.suppressed === 1 ? '' : 'es'}` : ''}.
+              </p>
+            )}
+
+            {launchAudience.leads.length > dailyCap && (
               <div className="mt-3 flex items-start gap-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3">
                 <AlertCircle size={14} className="mt-0.5 shrink-0" />
                 <span>
                   Your <span className="font-bold">{user.plan ?? 'Free'}</span> plan sends about <span className="font-bold">{dailyCap.toLocaleString()}</span> emails/day.
-                  These {activeLeads.length} recipients will queue and throttle across ~<span className="font-bold">{Math.ceil(activeLeads.length / dailyCap)} days</span> to protect your sender reputation.
+                  These {launchAudience.leads.length} recipients will queue and throttle across ~<span className="font-bold">{Math.ceil(launchAudience.leads.length / dailyCap)} days</span> to protect your sender reputation.
                 </span>
               </div>
             )}
@@ -905,7 +1065,7 @@ const QuickLaunchPage: React.FC = () => {
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition"
               >
                 {launching ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                {launching ? 'Sending…' : `Send to ${activeLeads.length}`}
+                {launching ? 'Sending…' : `Send to ${launchAudience.leads.length}`}
               </button>
             </div>
           </div>
