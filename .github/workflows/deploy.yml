@@ -59,26 +59,43 @@ jobs:
           # Keep only last 5 releases for rollback
           $SSH_CMD $USER@$HOST "cd /var/www/scaliyo/releases && ls -1dt release-* | tail -n +6 | xargs rm -rf 2>/dev/null || true"
 
+      - name: Check if scripts changed
+        id: scripts-check
+        working-directory: .
+        run: |
+          if git diff HEAD~1 --name-only 2>/dev/null | grep -q '^scripts/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Sync scripts/ for vanity-domain TLS automation
-        if: hashFiles('scripts/**') != ''
+        # Only run when scripts/ actually changed (not on every deploy), and never
+        # let this non-critical helper sync fail the site deploy — it runs AFTER
+        # the zero-downtime symlink swap has already gone live.
+        if: steps.scripts-check.outputs.changed == 'true'
+        continue-on-error: true
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER: ${{ secrets.DEPLOY_USER }}
         working-directory: .
         run: |
-          set -euxo pipefail
-          # Diagnostics: what's in scripts/ on the runner?
+          set -uxo pipefail
           ls -la scripts/
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new"
-          $SSH_CMD "$USER@$HOST" "mkdir -p /var/www/scaliyo/scripts && id && ls -la /var/www/scaliyo/scripts/ || true"
-          rsync -av --delete -e "$SSH_CMD" scripts/ "$USER@$HOST:/var/www/scaliyo/scripts/"
-          # Force exec bit on .sh files in case the source filesystem dropped it.
-          $SSH_CMD "$USER@$HOST" "chmod 755 /var/www/scaliyo/scripts/*.sh && ls -la /var/www/scaliyo/scripts/"
+          SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+          $SSH_CMD "$USER@$HOST" "mkdir -p /var/www/scaliyo/scripts" || true
+          rsync -av --delete -e "$SSH_CMD" scripts/ "$USER@$HOST:/var/www/scaliyo/scripts/" || true
+          # Force exec bit on .sh files; retry to ride out transient SSH drops and
+          # never fail on a non-critical chmod (files may be root-owned).
+          for i in 1 2 3; do
+            $SSH_CMD "$USER@$HOST" "chmod 755 /var/www/scaliyo/scripts/*.sh 2>/dev/null || true" && break
+            sleep 3
+          done
 
       - name: Check if Nginx config changed
         id: nginx-check
