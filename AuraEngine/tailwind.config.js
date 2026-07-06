@@ -13,7 +13,7 @@ export default {
       fontFamily: {
         heading: ['"Plus Jakarta Sans"', 'sans-serif'],
         sans: ['Inter', 'sans-serif'],
-        display: ['Fraunces', 'Georgia', 'serif'],
+        display: ['"Space Grotesk"', 'Inter', 'sans-serif'],
       },
       keyframes: {
         marquee: {

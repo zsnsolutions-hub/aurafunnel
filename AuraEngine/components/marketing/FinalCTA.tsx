@@ -16,7 +16,7 @@ const FinalCTA: React.FC = () => (
 
           <p className="eyebrow text-teal-700 mb-6">Early access</p>
           <h2 className="font-display text-4xl sm:text-5xl lg:text-[3.75rem] leading-[1.05] font-medium tracking-[-0.02em] text-[#1C1A17] mb-5 max-w-2xl mx-auto">
-            Give your reps their <span className="italic text-teal-700">time back</span>
+            Give your reps their <span className="text-teal-700">time back</span>
           </h2>
           <p className="text-lg text-[#6F6860] mb-9 max-w-md mx-auto">
             Join the first cohort building on Scaliyo. Free to start, no credit card required.

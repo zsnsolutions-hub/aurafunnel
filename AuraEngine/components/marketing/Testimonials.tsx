@@ -71,7 +71,7 @@ const Testimonials: React.FC = () => {
         {/* Founder note — authentic for an early-stage brand */}
         <Reveal delay={200}>
           <figure className="max-w-2xl mx-auto text-center">
-            <blockquote className="font-display text-2xl lg:text-[1.75rem] leading-[1.4] font-medium text-[#3A342E] italic">
+            <blockquote className="font-display text-2xl lg:text-[1.75rem] leading-[1.4] font-medium text-[#3A342E]">
               &ldquo;We started Scaliyo because great salespeople spend half their week
               on research a computer should just do. Give that time back, and small
               teams can outsell much bigger ones.&rdquo;

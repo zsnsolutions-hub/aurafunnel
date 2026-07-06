@@ -152,7 +152,7 @@ const MarketingLayout: React.FC = () => {
           {/* Tagline */}
           <div className="text-center mb-16">
             <p className="font-display text-2xl md:text-[2rem] font-medium text-[#1C1A17] tracking-tight">
-              Smarter leads. Faster deals. <span className="italic text-teal-700">Powered by AI.</span>
+              Smarter leads. Faster deals. <span className="text-teal-700">Powered by AI.</span>
             </p>
             <p className="text-sm text-[#8A8178] mt-3">Join the first teams closing more with Scaliyo.</p>
           </div>

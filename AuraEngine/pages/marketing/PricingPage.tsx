@@ -114,7 +114,7 @@ const PricingPage: React.FC = () => {
           <div className="text-center mb-16">
             <p className="eyebrow text-teal-700 mb-5">Pricing</p>
             <h1 className="font-display text-4xl lg:text-[3.75rem] leading-[1.05] font-medium tracking-[-0.02em] text-[#1C1A17] mb-5">
-              Start free. <span className="italic text-teal-700">Scale when it works.</span>
+              Start free. <span className="text-teal-700">Scale when it works.</span>
             </h1>
             <p className="text-lg lg:text-xl text-[#6F6860] max-w-2xl mx-auto mb-10 leading-relaxed">
               Pick your volume, not a long-term contract. One closed deal can cover months.

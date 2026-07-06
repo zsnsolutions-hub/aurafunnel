@@ -18,7 +18,7 @@ const Problem: React.FC = () => (
             <h2 className="font-display text-4xl lg:text-[3.25rem] leading-[1.06] font-medium tracking-[-0.02em] text-[#1C1A17]">
               Your pipeline isn&rsquo;t broken.
               <br />
-              <span className="italic text-[#A79E90]">Your visibility is.</span>
+              <span className="text-[#A79E90]">Your visibility is.</span>
             </h2>
             <p className="mt-6 text-lg text-[#6F6860] leading-relaxed max-w-md">
               Modern buyers leave signals everywhere. Most teams simply can&rsquo;t see

@@ -45,7 +45,7 @@ const FeaturesPage: React.FC = () => {
           <div className="mx-auto max-w-2xl text-center">
             <p className="eyebrow text-teal-700 mb-5">Sell smarter</p>
             <h1 className="font-display text-4xl lg:text-[3.75rem] leading-[1.05] font-medium tracking-[-0.02em] text-[#1C1A17]">
-              Everything you need to <span className="italic text-teal-700">scale your funnel</span>
+              Everything you need to <span className="text-teal-700">scale your funnel</span>
             </h1>
             <p className="mt-6 text-lg leading-8 text-[#6F6860]">
               Scaliyo pairs state-of-the-art AI with calm, intuitive workflows — so your team can focus on the one thing that matters: closing deals.

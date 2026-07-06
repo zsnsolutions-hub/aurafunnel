@@ -27,7 +27,7 @@ const Hero: React.FC = () => (
           <h1 className="font-display text-[2.9rem] leading-[1.02] sm:text-6xl lg:text-[4.6rem] font-medium tracking-[-0.02em] text-[#1C1A17] mb-7">
             Grow smarter,
             <br />
-            <span className="italic text-teal-700">not harder.</span>
+            <span className="text-teal-700">not harder.</span>
           </h1>
         </Reveal>
 

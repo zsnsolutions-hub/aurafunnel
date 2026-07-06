@@ -42,7 +42,7 @@ const PlatformOverview: React.FC = () => (
         <div className="text-center max-w-2xl mx-auto mb-16 lg:mb-20">
           <p className="eyebrow text-teal-700 mb-5">What Scaliyo does</p>
           <h2 className="font-display text-4xl lg:text-[3.25rem] leading-[1.06] font-medium tracking-[-0.02em] text-[#1C1A17]">
-            One AI engine to <span className="italic text-teal-700">find, engage &amp; close</span>
+            One AI engine to <span className="text-teal-700">find, engage &amp; close</span>
           </h2>
           <p className="mt-6 text-lg text-[#6F6860] leading-relaxed">
             Everything a modern revenue team needs — without stitching together five different tools.

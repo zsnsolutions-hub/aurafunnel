@@ -25,7 +25,7 @@ const AboutPage: React.FC = () => {
           <div className="text-center">
             <p className="eyebrow text-teal-700 mb-5">Our mission</p>
             <h1 className="font-display text-4xl sm:text-[3.75rem] leading-[1.04] font-medium tracking-[-0.02em] text-[#1C1A17]">
-              Humanizing sales <span className="italic text-teal-700">with AI</span>
+              Humanizing sales <span className="text-teal-700">with AI</span>
             </h1>
             <p className="mt-6 text-lg leading-8 text-[#6F6860] max-w-2xl mx-auto">
               Scaliyo was built to solve a simple problem: outreach has become too loud and impersonal.

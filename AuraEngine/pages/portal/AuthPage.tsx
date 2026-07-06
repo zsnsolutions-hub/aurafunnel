@@ -597,7 +597,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ user: currentUser, onLogin }) => {
               </div>
               <h2 className="font-display text-4xl xl:text-[3.25rem] font-medium text-[#1C1A17] leading-[1.05] tracking-[-0.02em]">
                 Know who&rsquo;s ready{' '}
-                <span className="italic text-teal-700">to buy</span>
+                <span className="text-teal-700">to buy</span>
               </h2>
               <p className="text-[#6F6860] mt-5 text-sm leading-relaxed max-w-md">
                 Scaliyo detects buyer intent, scores leads with behavioral AI, and launches personalized outreach automatically.
