@@ -15,9 +15,10 @@ const MarketingLayout: React.FC = () => {
   const location = useLocation();
 
   const isLightPage = LIGHT_BG_PAGES.includes(location.pathname);
-  // These pages are light, cream-toned end-to-end — the nav stays cream/ink
-  // on them at every scroll position (not just before scroll).
-  const isLanding = location.pathname === '/' || location.pathname === '/pricing';
+  // Every marketing page is now light, cream-toned end-to-end — the nav stays
+  // cream/ink on them at every scroll position (not just before scroll).
+  const CREAM_PAGES = ['/', '/pricing', '/features', '/about', '/contact', '/blog'];
+  const isLanding = CREAM_PAGES.includes(location.pathname) || location.pathname.startsWith('/blog/');
   // Dark ink text/logo whenever the nav sits on a light background.
   const onLight = isLanding || (isLightPage && !scrolled);
   const logoSrc = onLight ? '/scaliyo-logo-light.webp' : '/scaliyo-logo-dark.webp';
