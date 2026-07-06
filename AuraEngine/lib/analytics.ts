@@ -13,7 +13,12 @@ type EventName =
   | 'nav_executed'
   | 'simplified_toggled'
   | 'mic_permission_denied'
-  | 'voice_command_palette';
+  | 'voice_command_palette'
+  | 'quicklaunch_mode'
+  | 'quicklaunch_generate'
+  | 'quicklaunch_preview'
+  | 'quicklaunch_launch'
+  | 'quicklaunch_launch_success';
 
 export function track(event: EventName, props?: Record<string, unknown>) {
   if (import.meta.env.DEV) {

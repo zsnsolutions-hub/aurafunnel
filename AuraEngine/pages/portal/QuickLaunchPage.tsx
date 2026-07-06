@@ -15,18 +15,21 @@
 // instantly. The "Launch sequence" button is gated to real leads.
 // Real leads → generateEmailSequence (Gemini) → start-email-sequence-run.
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Rocket, Users, Upload, Clipboard, Sparkles, Loader2, Mail, Send,
   RefreshCw, Check, Info, AlertCircle, ArrowRight, Zap, Eye, X,
+  Plus, Trash2, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { resolveWorkspaceForUser, createMyWorkspace } from '../../lib/memory';
 import {
   generateEmailSequence, parseEmailSequenceResponse, generatePersonalizedEmail,
 } from '../../lib/gemini';
+import { track } from '../../lib/analytics';
+import { getOutboundLimits } from '../../lib/planLimits';
 import { ToneType, type User, type EmailSequenceConfig, type Lead } from '../../types';
 
 // Local sequence-step shape — matches the start-email-sequence-run edge
@@ -200,6 +203,11 @@ const QuickLaunchPage: React.FC = () => {
 
   const isSampleMode = mode === 'sample';
 
+  const selectMode = useCallback((m: AudienceMode) => {
+    setMode(m);
+    track('quicklaunch_mode', { mode: m });
+  }, []);
+
   // ─── Offer state ────────────────────────────────────────────────────
   const [offer, setOffer] = useState('Show how AI-personalized outbound books more meetings.');
   const [goal, setGoal] = useState<EmailSequenceConfig['goal']>('book_meeting');
@@ -266,6 +274,7 @@ const QuickLaunchPage: React.FC = () => {
     setPreviewLead(lead);
     setPreviewStepIdx(0);
     setPreviewError(null);
+    track('quicklaunch_preview', { lead: lead.id });
     void runPreview(lead, 0);
   }, [runPreview]);
 
@@ -295,6 +304,12 @@ const QuickLaunchPage: React.FC = () => {
   const [launching, setLaunching] = useState(false);
   const [launchResult, setLaunchResult] = useState<{ runId: string; total: number } | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Plan send-budget awareness — surfaced in the launch confirmation so a large
+  // blast doesn't silently exceed the daily cap / hurt deliverability.
+  const outbound = getOutboundLimits(user.plan ?? 'Free');
+  const dailyCap = Math.max(1, outbound.emailsPerDayPerInbox * outbound.maxInboxes);
 
   // When the user swaps off the sample, blank out the canned preview so
   // the next "Generate" button click feels intentional.
@@ -325,6 +340,7 @@ const QuickLaunchPage: React.FC = () => {
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true); setGenError(null);
+    track('quicklaunch_generate', { mode, recipients: activeLeads.length, goal, tone, cadence, length: sequenceLength });
     try {
       const config: EmailSequenceConfig = {
         audienceLeadIds: activeLeads.map((l) => l.id),
@@ -354,12 +370,44 @@ const QuickLaunchPage: React.FC = () => {
     } finally {
       setGenerating(false);
     }
-  }, [activeLeads, goal, sequenceLength, cadence, tone, offer, user]);
+  }, [activeLeads, goal, sequenceLength, cadence, tone, offer, user, mode]);
+
+  // ─── Step editing ───────────────────────────────────────────────────
+  // Users edit the AI draft in place before launching. Structural changes
+  // (add/remove/reorder) re-derive delays from the chosen cadence; any edit
+  // invalidates the per-lead preview cache so previews reflect the new copy.
+  const cadenceDays = ({ daily: 1, every_2_days: 2, every_3_days: 3, weekly: 7 } as const)[cadence];
+  const reindexSteps = useCallback((arr: SequenceStep[]): SequenceStep[] =>
+    arr.map((s, idx) => ({ ...s, stepIndex: idx + 1, delayDays: idx === 0 ? 0 : cadenceDays * idx })),
+  [cadenceDays]);
+
+  const updateStep = useCallback((i: number, patch: Partial<SequenceStep>) => {
+    setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+    setPreviewCache(new Map());
+  }, []);
+  const removeStep = useCallback((i: number) => {
+    setSteps((prev) => reindexSteps(prev.filter((_, idx) => idx !== i)));
+    setPreviewCache(new Map());
+  }, [reindexSteps]);
+  const moveStep = useCallback((i: number, dir: -1 | 1) => {
+    setSteps((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return reindexSteps(next);
+    });
+    setPreviewCache(new Map());
+  }, [reindexSteps]);
+  const addStep = useCallback(() => {
+    setSteps((prev) => reindexSteps([...prev, { stepIndex: prev.length + 1, delayDays: 0, subject: '', body: '' }]));
+  }, [reindexSteps]);
 
   const handleLaunch = useCallback(async () => {
     if (isSampleMode) return;
     if (activeLeads.length === 0 || steps.length === 0) return;
     setLaunching(true); setLaunchError(null);
+    track('quicklaunch_launch', { recipients: activeLeads.length, steps: steps.length, plan: user.plan ?? 'Free' });
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
@@ -395,12 +443,14 @@ const QuickLaunchPage: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
       const data = await res.json() as { run_id: string; items_total: number };
       setLaunchResult({ runId: data.run_id, total: data.items_total });
+      setConfirmOpen(false);
+      track('quicklaunch_launch_success', { total: data.items_total });
     } catch (e) {
       setLaunchError((e as Error).message);
     } finally {
       setLaunching(false);
     }
-  }, [activeLeads, steps, tone, offer, cadence, isSampleMode]);
+  }, [activeLeads, steps, tone, offer, cadence, isSampleMode, user]);
 
   // ───────────────────────────────────────────────────────────────────
   return (
@@ -421,14 +471,14 @@ const QuickLaunchPage: React.FC = () => {
         : `${activeLeads.length} lead${activeLeads.length === 1 ? '' : 's'} selected`
       }>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <ModeButton active={mode === 'sample'} onClick={() => setMode('sample')} icon={Sparkles} label="Sample" hint="See how it works" />
-          <ModeButton active={mode === 'existing'} onClick={() => setMode('existing')} icon={Users} label="Existing" hint={
+          <ModeButton active={mode === 'sample'} onClick={() => selectMode('sample')} icon={Sparkles} label="Sample" hint="See how it works" />
+          <ModeButton active={mode === 'existing'} onClick={() => selectMode('existing')} icon={Users} label="Existing" hint={
             existingLoading ? 'Loading…'
             : existingEmailable.length === 0 ? 'None available'
             : `${existingEmailable.length} emailable`
           } />
-          <ModeButton active={mode === 'paste'} onClick={() => setMode('paste')} icon={Clipboard} label="Paste" hint="Emails or CSV rows" />
-          <ModeButton active={mode === 'import'} onClick={() => { setMode('import'); setImportOpen(true); }} icon={Upload} label="Import CSV" hint="Full importer" />
+          <ModeButton active={mode === 'paste'} onClick={() => selectMode('paste')} icon={Clipboard} label="Paste" hint="Emails or CSV rows" />
+          <ModeButton active={mode === 'import'} onClick={() => { selectMode('import'); setImportOpen(true); }} icon={Upload} label="Import CSV" hint="Full importer" />
         </div>
 
         {mode === 'existing' && !existingLoading && (
@@ -708,18 +758,42 @@ const QuickLaunchPage: React.FC = () => {
           <div className="space-y-3">
             {steps.map((s, i) => (
               <div key={i} className="rounded-xl border border-slate-200 p-4 bg-white">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-black flex items-center justify-center">{i + 1}</span>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-black flex items-center justify-center shrink-0">{i + 1}</span>
                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                       {s.delayDays === 0 ? 'Send immediately' : `+${s.delayDays} day${s.delayDays === 1 ? '' : 's'}`}
                     </span>
                   </div>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button type="button" onClick={() => moveStep(i, -1)} disabled={i === 0} title="Move up" className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"><ArrowUp size={14} /></button>
+                    <button type="button" onClick={() => moveStep(i, 1)} disabled={i === steps.length - 1} title="Move down" className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"><ArrowDown size={14} /></button>
+                    <button type="button" onClick={() => removeStep(i)} disabled={steps.length === 1} title="Delete step" className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 disabled:hover:bg-transparent"><Trash2 size={14} /></button>
+                  </div>
                 </div>
-                <p className="text-sm font-bold text-slate-900">{s.subject}</p>
-                <pre className="mt-2 text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{s.body}</pre>
+                <input
+                  value={s.subject}
+                  onChange={(e) => updateStep(i, { subject: e.target.value })}
+                  placeholder="Subject line"
+                  className="w-full text-sm font-bold text-slate-900 px-2.5 py-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-500 focus:outline-none bg-slate-50/40 focus:bg-white transition-colors"
+                />
+                <textarea
+                  value={s.body}
+                  onChange={(e) => updateStep(i, { body: e.target.value })}
+                  placeholder="Email body… use {{first_name}} and {{company}} for personalization"
+                  rows={Math.min(12, Math.max(4, s.body.split('\n').length + 1))}
+                  className="mt-1.5 w-full text-xs text-slate-700 leading-relaxed px-2.5 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:outline-none resize-y font-sans"
+                />
               </div>
             ))}
+
+            <button
+              type="button"
+              onClick={addStep}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-slate-300 text-xs font-bold text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 transition"
+            >
+              <Plus size={14} /> Add step
+            </button>
 
             {launchResult ? (
               <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-4">
@@ -743,12 +817,12 @@ const QuickLaunchPage: React.FC = () => {
                   )}
                 </div>
                 <button
-                  onClick={handleLaunch}
+                  onClick={() => { setLaunchError(null); setConfirmOpen(true); }}
                   disabled={isSampleMode || launching || activeLeads.length === 0 || steps.length === 0}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
-                  {launching ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  {launching ? 'Launching…' : 'Launch sequence'}
+                  <Send size={14} />
+                  Launch sequence
                 </button>
               </div>
             )}
@@ -769,6 +843,74 @@ const QuickLaunchPage: React.FC = () => {
         planName={user.plan ?? 'Free'}
         onImportComplete={() => { setMode('existing'); refetchExisting(); setImportOpen(false); }}
       />
+
+      {/* ── Launch confirmation ──────────────────────────────────── */}
+      {confirmOpen && (
+        <div role="dialog" aria-modal="true" aria-label="Confirm launch" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { if (!launching) setConfirmOpen(false); }} />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6">
+            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Send size={17} className="text-indigo-600" /> Launch this sequence?
+            </h3>
+            <p className="text-sm text-slate-600 mt-1">
+              This schedules real email to real people. Review before you send.
+            </p>
+
+            <div className="mt-4 rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm">
+              <div className="flex items-center justify-between px-3.5 py-2.5">
+                <span className="text-slate-500">Recipients</span>
+                <span className="font-bold text-slate-900 tabular-nums">{activeLeads.length}</span>
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5">
+                <span className="text-slate-500">Emails each</span>
+                <span className="font-bold text-slate-900 tabular-nums">{steps.length}</span>
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5">
+                <span className="text-slate-500">Total scheduled</span>
+                <span className="font-bold text-slate-900 tabular-nums">{activeLeads.length * steps.length}</span>
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5">
+                <span className="text-slate-500">First send</span>
+                <span className="font-bold text-slate-900">Immediately</span>
+              </div>
+            </div>
+
+            {activeLeads.length > dailyCap && (
+              <div className="mt-3 flex items-start gap-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  Your <span className="font-bold">{user.plan ?? 'Free'}</span> plan sends about <span className="font-bold">{dailyCap.toLocaleString()}</span> emails/day.
+                  These {activeLeads.length} recipients will queue and throttle across ~<span className="font-bold">{Math.ceil(activeLeads.length / dailyCap)} days</span> to protect your sender reputation.
+                </span>
+              </div>
+            )}
+
+            {launchError && (
+              <div className="mt-3 flex items-start gap-2 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-2">
+                <AlertCircle size={13} className="mt-0.5 shrink-0" /> {launchError}
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                disabled={launching}
+                className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLaunch}
+                disabled={launching}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition"
+              >
+                {launching ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {launching ? 'Sending…' : `Send to ${activeLeads.length}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Per-lead email preview drawer ────────────────────────── */}
       {previewLead && (
@@ -825,10 +967,7 @@ const QuickLaunchPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Body</p>
-                    <div
-                      className="prose prose-sm max-w-none text-slate-800 [&_p]:my-2 [&_a]:text-indigo-600"
-                      dangerouslySetInnerHTML={{ __html: previewResult.htmlBody }}
-                    />
+                    <SafeEmailPreview html={previewResult.htmlBody} />
                   </div>
                   <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-3">
                     <Info size={11} className="inline mr-1 text-slate-400" />
@@ -861,6 +1000,33 @@ const QuickLaunchPage: React.FC = () => {
 };
 
 // ─── helpers ──────────────────────────────────────────────────────────
+
+// Renders AI-authored email HTML inside a sandboxed iframe. The sandbox has
+// NO `allow-scripts`, so <script> tags and inline event handlers can't execute
+// (XSS-safe) — `allow-same-origin` is granted only so we can measure the
+// content height for auto-sizing.
+const SafeEmailPreview: React.FC<{ html: string }> = ({ html }) => {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(160);
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{margin:0;padding:2px;font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1e293b;overflow-wrap:break-word;word-break:break-word}p{margin:0 0 12px}a{color:#4f46e5}img{max-width:100%}</style></head><body>${html}</body></html>`;
+  const onLoad = () => {
+    try {
+      const doc = ref.current?.contentDocument;
+      if (doc?.body) setHeight(Math.min(1200, Math.max(120, doc.body.scrollHeight + 8)));
+    } catch { /* measurement failed — keep default height */ }
+  };
+  return (
+    <iframe
+      ref={ref}
+      title="Personalized email preview"
+      sandbox="allow-same-origin"
+      srcDoc={srcDoc}
+      onLoad={onLoad}
+      className="w-full rounded-lg bg-white"
+      style={{ height, border: 0, display: 'block' }}
+    />
+  );
+};
 
 const SectionCard: React.FC<{ step: number; title: string; subtitle?: string; children: React.ReactNode }> = ({ step, title, subtitle, children }) => (
   <section className="rounded-2xl border border-slate-200 bg-white p-5">
