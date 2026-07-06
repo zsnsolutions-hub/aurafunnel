@@ -70,6 +70,39 @@ const fmtSendDate = (delayDays: number): string =>
   new Date(Date.now() + delayDays * 86_400_000)
     .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
+// Accessible dialog behaviour: focus into the panel on open, trap Tab inside it,
+// close on Escape, and restore focus to the trigger on close. Returns a ref to
+// attach to the dialog panel. `onClose` must be stable (useCallback).
+function useFocusTrap<T extends HTMLElement>(active: boolean, onClose: () => void) {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    if (!active) return;
+    const node = ref.current;
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const getFocusable = () => node
+      ? Array.from(node.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])',
+        )).filter((el) => el.offsetParent !== null)
+      : [];
+    (getFocusable()[0] ?? node)?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const items = getFocusable();
+      if (items.length === 0) { e.preventDefault(); return; }
+      const idx = items.indexOf(document.activeElement as HTMLElement);
+      if (e.shiftKey && idx <= 0) { e.preventDefault(); items[items.length - 1].focus(); }
+      else if (!e.shiftKey && idx === items.length - 1) { e.preventDefault(); items[0].focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      prevFocus?.focus?.();
+    };
+  }, [active, onClose]);
+  return ref;
+}
+
 const SAMPLE_LEADS: Lead[] = [
   {
     id: 'sample-1', client_id: '', first_name: 'Maya', last_name: 'Reyes',
@@ -336,6 +369,9 @@ const QuickLaunchPage: React.FC = () => {
   const [launchResult, setLaunchResult] = useState<{ runId: string; total: number } | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const closeConfirm = useCallback(() => setConfirmOpen(false), []);
+  const previewTrapRef = useFocusTrap<HTMLDivElement>(!!previewLead, closePreview);
+  const confirmTrapRef = useFocusTrap<HTMLDivElement>(confirmOpen, closeConfirm);
 
   // Plan send-budget awareness — surfaced in the launch confirmation so a large
   // blast doesn't silently exceed the daily cap / hurt deliverability.
@@ -996,9 +1032,16 @@ const QuickLaunchPage: React.FC = () => {
 
       {/* ── Launch confirmation ──────────────────────────────────── */}
       {confirmOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Confirm launch" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { if (!launching) setConfirmOpen(false); }} />
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6">
+          <div
+            ref={confirmTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm launch"
+            tabIndex={-1}
+            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 focus:outline-none"
+          >
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Send size={17} className="text-indigo-600" /> Launch this sequence?
             </h3>
@@ -1076,7 +1119,14 @@ const QuickLaunchPage: React.FC = () => {
       {previewLead && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={closePreview} />
-          <div className="relative w-full max-w-xl bg-white shadow-2xl flex flex-col animate-in slide-in-from-right">
+          <div
+            ref={previewTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`AI-personalized email preview for ${previewLead.first_name} ${previewLead.last_name}`}
+            tabIndex={-1}
+            className="relative w-full max-w-xl bg-white shadow-2xl flex flex-col animate-in slide-in-from-right motion-reduce:animate-none focus:outline-none"
+          >
             <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between">
               <div className="min-w-0">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">AI-personalized preview</p>
