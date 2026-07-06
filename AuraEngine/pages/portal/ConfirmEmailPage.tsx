@@ -44,49 +44,49 @@ const ConfirmEmailPage: React.FC = () => {
   }, [searchParams, navigate]);
 
   return (
-    <div className="min-h-screen bg-[#0A1628] text-white flex items-center justify-center px-6">
+    <div className="min-h-screen bg-[#FBFAF7] text-[#1C1A17] flex items-center justify-center px-6">
       <div className="max-w-[420px] w-full">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center mb-8 group">
-            <img src="/scaliyo-logo-dark.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" />
+            <img src="/scaliyo-logo-light.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto group-hover:scale-105 transition-transform duration-300" />
           </Link>
         </div>
 
-        <div className="bg-[#0F1D32] p-8 rounded-2xl border border-slate-700/50 shadow-2xl shadow-black/20">
+        <div className="bg-white p-8 rounded-[1.5rem] border border-[#EAE3D6] shadow-chic">
           {status === 'verifying' && (
             <div className="text-center space-y-4">
-              <div className="w-14 h-14 mx-auto border-3 border-teal-500/30 border-t-teal-400 rounded-full animate-spin" />
-              <h3 className="text-lg font-bold text-white">Verifying your email...</h3>
-              <p className="text-slate-400 text-sm">Please wait while we confirm your email address.</p>
+              <div className="w-14 h-14 mx-auto border-[3px] border-teal-600/25 border-t-teal-600 rounded-full animate-spin" />
+              <h3 className="font-display text-lg font-medium text-[#1C1A17]">Verifying your email...</h3>
+              <p className="text-[#6F6860] text-sm">Please wait while we confirm your email address.</p>
             </div>
           )}
 
           {status === 'success' && (
             <div className="text-center space-y-4">
-              <div className="w-14 h-14 mx-auto rounded-full bg-teal-500/15 flex items-center justify-center">
-                <svg className="w-7 h-7 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="w-14 h-14 mx-auto rounded-full bg-[#EAF2EF] flex items-center justify-center">
+                <svg className="w-7 h-7 text-teal-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-white">Email confirmed!</h3>
-              <p className="text-slate-400 text-sm">Your email has been verified. Redirecting you to your dashboard...</p>
+              <h3 className="font-display text-lg font-medium text-[#1C1A17]">Email confirmed!</h3>
+              <p className="text-[#6F6860] text-sm">Your email has been verified. Redirecting you to your dashboard...</p>
             </div>
           )}
 
           {status === 'error' && (
             <div className="text-center space-y-4">
-              <div className="w-14 h-14 mx-auto rounded-full bg-red-500/15 flex items-center justify-center">
-                <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="w-14 h-14 mx-auto rounded-full bg-red-50 flex items-center justify-center">
+                <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-white">Verification failed</h3>
-              <p className="text-slate-400 text-sm">{errorMsg || 'The confirmation link may have expired.'}</p>
+              <h3 className="font-display text-lg font-medium text-[#1C1A17]">Verification failed</h3>
+              <p className="text-[#6F6860] text-sm">{errorMsg || 'The confirmation link may have expired.'}</p>
               <Link
                 to="/auth"
-                className="inline-block mt-4 px-6 py-3 rounded-xl bg-teal-500 text-white font-bold text-sm hover:bg-teal-400 transition-colors"
+                className="inline-block mt-4 px-6 py-3 rounded-full bg-[#1C1A17] text-white font-semibold text-sm hover:bg-black transition-colors"
               >
-                Go to Sign In
+                Go to sign in
               </Link>
             </div>
           )}

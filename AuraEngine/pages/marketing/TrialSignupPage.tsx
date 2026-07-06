@@ -12,6 +12,9 @@ interface FormErrors {
   terms?: string;
 }
 
+const inputBase =
+  'w-full px-4 py-3 rounded-xl bg-white border text-[#1C1A17] placeholder-[#B0A798] outline-none transition-colors focus:ring-2 focus:ring-teal-600/20';
+
 const TrialSignupPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
@@ -74,29 +77,29 @@ const TrialSignupPage: React.FC = () => {
   /* ── Success state: Check your email ── */
   if (formState === 'success') {
     return (
-      <div className="bg-[#0A1628] text-white min-h-screen flex items-center justify-center px-6">
+      <div className="bg-[#FBFAF7] text-[#1C1A17] min-h-screen flex items-center justify-center px-6">
         <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-teal-500/15 flex items-center justify-center">
-            <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[#EAF2EF] flex items-center justify-center">
+            <svg className="w-8 h-8 text-teal-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-black font-heading mb-3">Check your email</h1>
-          <p className="text-slate-400 mb-2">
-            We&rsquo;ve sent a confirmation link to <strong className="text-white">{email}</strong>.
+          <h1 className="font-display text-3xl font-medium mb-3">Check your email</h1>
+          <p className="text-[#6F6860] mb-2">
+            We&rsquo;ve sent a confirmation link to <strong className="text-[#1C1A17]">{email}</strong>.
           </p>
-          <p className="text-sm text-slate-500 mb-6">
+          <p className="text-sm text-[#9A9189] mb-6">
             Click the link in the email to activate your account, then sign in.
           </p>
           <button
             onClick={handleResend}
             disabled={resendStatus === 'sending'}
-            className="text-sm font-semibold text-teal-400 hover:text-teal-300 transition-colors disabled:opacity-50"
+            className="text-sm font-semibold text-teal-700 hover:text-teal-800 transition-colors disabled:opacity-50"
           >
-            {resendStatus === 'sent' ? 'Email resent!' : resendStatus === 'sending' ? 'Sending...' : "Didn\u2019t get it? Resend email"}
+            {resendStatus === 'sent' ? 'Email resent!' : resendStatus === 'sending' ? 'Sending...' : "Didn’t get it? Resend email"}
           </button>
           <div className="mt-6">
-            <Link to="/auth" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+            <Link to="/auth" className="text-sm text-[#9A9189] hover:text-[#1C1A17] transition-colors">
               Go to sign in
             </Link>
           </div>
@@ -106,31 +109,37 @@ const TrialSignupPage: React.FC = () => {
   }
 
   return (
-    <div className="bg-[#0A1628] text-white min-h-screen flex items-center justify-center px-6 pt-28 pb-16">
+    <div className="bg-[#FBFAF7] text-[#1C1A17] min-h-screen flex items-center justify-center px-6 pt-16 pb-16 relative overflow-hidden">
+      {/* Soft pastel wash */}
+      <div className="absolute inset-0 -z-10 pointer-events-none">
+        <div className="absolute -top-24 -left-24 w-[32rem] h-[32rem] rounded-full bg-[#E7F0ED] blur-3xl opacity-70" />
+        <div className="absolute -bottom-24 -right-24 w-[30rem] h-[30rem] rounded-full bg-[#F5E7DF] blur-3xl opacity-60" />
+      </div>
+
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-10">
           <Link to="/" className="inline-block mb-8">
-            <img src="/scaliyo-logo-dark.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto" />
+            <img src="/scaliyo-logo-light.webp" alt="Scaliyo" width={106} height={40} className="h-10 w-auto" />
           </Link>
-          <h1 className="text-3xl font-black font-heading mb-2">Start your free trial</h1>
-          <p className="text-slate-400">
+          <h1 className="font-display text-3xl font-medium mb-2">Start your free trial</h1>
+          <p className="text-[#6F6860]">
             14 days free. No credit card required. Setup in under 5 minutes.
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <form onSubmit={handleSubmit} noValidate className="space-y-5 bg-white border border-[#EAE3D6] rounded-[1.5rem] shadow-chic p-8">
           {/* Server error */}
           {serverError && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400">
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
               {serverError}
             </div>
           )}
 
           {/* Email */}
           <div>
-            <label htmlFor="email" className="block text-sm font-semibold text-slate-300 mb-1.5">
+            <label htmlFor="email" className="block text-sm font-semibold text-[#1C1A17] mb-1.5">
               Work email
             </label>
             <input
@@ -140,17 +149,15 @@ const TrialSignupPage: React.FC = () => {
               required
               value={email}
               onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: undefined })); }}
-              className={`w-full px-4 py-3 rounded-xl bg-[#0F1D32] border text-white placeholder-slate-600 outline-none transition-colors focus:ring-2 focus:ring-teal-500/40 ${
-                errors.email ? 'border-red-500/50' : 'border-slate-700 focus:border-teal-500/60'
-              }`}
+              className={`${inputBase} ${errors.email ? 'border-red-300' : 'border-[#EAE3D6] focus:border-teal-600/50'}`}
               placeholder="you@company.com"
             />
-            {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email}</p>}
+            {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
           </div>
 
           {/* Password */}
           <div>
-            <label htmlFor="password" className="block text-sm font-semibold text-slate-300 mb-1.5">
+            <label htmlFor="password" className="block text-sm font-semibold text-[#1C1A17] mb-1.5">
               Password
             </label>
             <input
@@ -160,18 +167,16 @@ const TrialSignupPage: React.FC = () => {
               required
               value={password}
               onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: undefined })); }}
-              className={`w-full px-4 py-3 rounded-xl bg-[#0F1D32] border text-white placeholder-slate-600 outline-none transition-colors focus:ring-2 focus:ring-teal-500/40 ${
-                errors.password ? 'border-red-500/50' : 'border-slate-700 focus:border-teal-500/60'
-              }`}
+              className={`${inputBase} ${errors.password ? 'border-red-300' : 'border-[#EAE3D6] focus:border-teal-600/50'}`}
               placeholder="8+ characters"
             />
-            {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password}</p>}
+            {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
           </div>
 
           {/* Company (optional) */}
           <div>
-            <label htmlFor="company" className="block text-sm font-semibold text-slate-300 mb-1.5">
-              Company <span className="text-slate-600 font-normal">(optional)</span>
+            <label htmlFor="company" className="block text-sm font-semibold text-[#1C1A17] mb-1.5">
+              Company <span className="text-[#9A9189] font-normal">(optional)</span>
             </label>
             <input
               id="company"
@@ -179,7 +184,7 @@ const TrialSignupPage: React.FC = () => {
               autoComplete="organization"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-[#0F1D32] border border-slate-700 text-white placeholder-slate-600 outline-none transition-colors focus:border-teal-500/60 focus:ring-2 focus:ring-teal-500/40"
+              className={`${inputBase} border-[#EAE3D6] focus:border-teal-600/50`}
               placeholder="Acme Inc."
             />
           </div>
@@ -191,22 +196,22 @@ const TrialSignupPage: React.FC = () => {
               type="checkbox"
               checked={agreed}
               onChange={(e) => { setAgreed(e.target.checked); setErrors((p) => ({ ...p, terms: undefined })); }}
-              className="mt-1 w-4 h-4 rounded border-slate-600 bg-[#0F1D32] text-teal-500 focus:ring-teal-500/40 focus:ring-offset-0"
+              className="mt-1 w-4 h-4 rounded border-[#D9D0C0] bg-white text-teal-600 focus:ring-teal-600/30 focus:ring-offset-0"
             />
-            <label htmlFor="terms" className="text-sm text-slate-400 leading-snug">
+            <label htmlFor="terms" className="text-sm text-[#6F6860] leading-snug">
               I agree to the{' '}
-              <span className="text-teal-400 hover:text-teal-300 cursor-pointer">Terms of Service</span>{' '}
+              <span className="text-teal-700 hover:text-teal-800 cursor-pointer font-medium">Terms of Service</span>{' '}
               and{' '}
-              <span className="text-teal-400 hover:text-teal-300 cursor-pointer">Privacy Policy</span>.
+              <span className="text-teal-700 hover:text-teal-800 cursor-pointer font-medium">Privacy Policy</span>.
             </label>
           </div>
-          {errors.terms && <p className="text-xs text-red-400 -mt-2">{errors.terms}</p>}
+          {errors.terms && <p className="text-xs text-red-600 -mt-2">{errors.terms}</p>}
 
           {/* Submit */}
           <button
             type="submit"
             disabled={formState === 'submitting'}
-            className="w-full py-3.5 rounded-xl bg-teal-500 text-white font-bold text-base transition-all duration-300 hover:bg-teal-400 hover:scale-[1.02] active:scale-95 shadow-lg shadow-teal-500/25 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+            className="w-full py-3.5 rounded-full bg-[#1C1A17] text-white font-semibold text-base transition-all duration-300 hover:bg-black hover:-translate-y-0.5 active:translate-y-0 shadow-chic disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             {formState === 'submitting' ? (
               <span className="inline-flex items-center gap-2">
@@ -217,15 +222,15 @@ const TrialSignupPage: React.FC = () => {
                 Creating your account...
               </span>
             ) : (
-              'Start Free Trial'
+              'Start free trial'
             )}
           </button>
         </form>
 
         {/* Footer */}
-        <p className="text-center text-sm text-slate-500 mt-8">
+        <p className="text-center text-sm text-[#9A9189] mt-8">
           Already have an account?{' '}
-          <Link to="/auth" className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">
+          <Link to="/auth" className="text-teal-700 font-semibold hover:text-teal-800 transition-colors">
             Log in
           </Link>
         </p>
