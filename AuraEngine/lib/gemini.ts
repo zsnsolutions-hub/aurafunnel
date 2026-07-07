@@ -192,6 +192,7 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
 
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
+        operation: 'content_generation',
         contents: finalPrompt,
         config: {
           systemInstruction: systemInstruction + buildBusinessContext(businessProfile) + memoryCtx,
@@ -291,6 +292,7 @@ Keep response under 300 words. Be specific, not generic.`,
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
+      operation: 'dashboard_insights',
       contents: prompt,
       config: {
         systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
@@ -419,6 +421,7 @@ BODY:
       if (streamOpts?.stream) {
         const stream = await ai.models.generateContentStream({
           model: MODEL_NAME,
+          operation: 'email_sequence',
           contents: prompt,
           config: genConfig,
         });
@@ -431,6 +434,7 @@ BODY:
       } else {
         const response = await ai.models.generateContent({
           model: MODEL_NAME,
+          operation: 'email_sequence',
           contents: prompt,
           config: genConfig,
         });
@@ -546,6 +550,7 @@ export const generateContentByCategory = async (
 
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
+        operation: 'content_generation',
         contents: finalCategoryPrompt,
         config: {
           systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
@@ -778,6 +783,7 @@ Return ONE structured JSON object in this exact schema (no commentary outside th
         // Try with Google Search grounding first
         response = await ai.models.generateContent({
           model: MODEL_NAME,
+          operation: 'lead_research',
           contents: prompt,
           config: {
             systemInstruction,
@@ -796,6 +802,7 @@ Return ONE structured JSON object in this exact schema (no commentary outside th
         console.warn('Google Search grounding returned empty response for lead research, falling back to inference-only.');
         response = await ai.models.generateContent({
           model: MODEL_NAME,
+          operation: 'lead_research',
           contents: prompt,
           config: {
             systemInstruction,
@@ -1144,6 +1151,7 @@ Rules:
       const response = await Promise.race([
         ai.models.generateContent({
           model: MODEL_NAME,
+          operation: 'business_analysis',
           contents: prompt,
           config: {
             systemInstruction,
@@ -1280,6 +1288,7 @@ Output: just the field text. Plain text. No labels, no quotes.`;
   const response = await Promise.race([
     ai.models.generateContent({
       model: MODEL_NAME,
+      operation: 'profile_field_generation',
       contents: prompt,
       config: {
         systemInstruction,
@@ -1358,6 +1367,7 @@ Guidelines:
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
+      operation: 'follow_up_questions',
       contents: prompt,
       config: {
         systemInstruction: resolved.systemInstruction,
@@ -1483,6 +1493,7 @@ ${leadContext || 'No leads in pipeline.'}`;
       if (streamOpts?.stream) {
         const stream = await ai.models.generateContentStream({
           model: MODEL_NAME,
+          operation: 'command_center',
           contents,
           config: genConfig,
         });
@@ -1494,6 +1505,7 @@ ${leadContext || 'No leads in pipeline.'}`;
       } else {
         const response = await ai.models.generateContent({
           model: MODEL_NAME,
+          operation: 'command_center',
           contents,
           config: genConfig,
         });
@@ -1577,6 +1589,7 @@ Return exactly 5 suggestions.`,
 
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
+        operation: 'content_suggestions',
         contents: prompt,
         config: {
           systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
@@ -1690,6 +1703,7 @@ Be specific and data-driven.`,
 
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
+        operation: 'pipeline_strategy',
         contents: prompt,
         config: {
           systemInstruction: resolved.systemInstruction + buildBusinessContext(input.businessProfile),
@@ -1880,6 +1894,7 @@ EXISTING CONTENT TO EXPAND:
       if (streamOpts?.stream) {
         const stream = await ai.models.generateContentStream({
           model: MODEL_NAME,
+          operation: 'blog_content',
           contents: prompt,
           config: genConfig,
         });
@@ -1891,6 +1906,7 @@ EXISTING CONTENT TO EXPAND:
       } else {
         const response = await ai.models.generateContent({
           model: MODEL_NAME,
+          operation: 'blog_content',
           contents: prompt,
           config: genConfig,
         });
@@ -1994,6 +2010,7 @@ Output ONLY the caption text.`,
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
+      operation: 'social_caption',
       contents: prompt,
       config: {
         systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
@@ -2090,6 +2107,7 @@ BODY: [rewritten HTML email body]`,
       const response = await Promise.race([
         ai.models.generateContent({
           model: MODEL_NAME,
+          operation: 'email_generation',
           contents: prompt,
           config: {
             systemInstruction: resolved.systemInstruction + buildBusinessContext(input.businessProfile),
@@ -2245,6 +2263,7 @@ Return each suggestion on its own line, prefixed with "- ".`,
 
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
+        operation: 'workflow_optimization',
         contents: prompt,
         config: {
           systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
@@ -2345,6 +2364,7 @@ Respond in EXACTLY this format:
 
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
+        operation: 'guest_post_pitch',
         contents: prompt,
         config: {
           systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),

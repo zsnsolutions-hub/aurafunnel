@@ -440,6 +440,7 @@ export async function testDnaPrompt(
     const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: AI_MODELS.text,
+      operation: 'content_generation',
       contents: finalPrompt,
       config: {
         systemInstruction,

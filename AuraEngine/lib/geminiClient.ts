@@ -15,12 +15,18 @@ interface GenerateContentRequest {
   model: string;
   contents: unknown;
   config?: Record<string, unknown>;
+  /** AI-operation label (config/aiCreditCosts.ts key) for exact server-side
+   *  per-operation usage tracking in gemini-proxy. Optional — omitting it lets
+   *  the proxy fall back to a per-kind default cost. */
+  operation?: string;
 }
 
 interface GenerateImagesRequest {
   model: string;
   prompt: string;
   config?: Record<string, unknown>;
+  /** AI-operation label for exact server-side usage tracking (see above). */
+  operation?: string;
 }
 
 export interface GeminiUsageMetadata {

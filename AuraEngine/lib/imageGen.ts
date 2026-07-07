@@ -41,6 +41,7 @@ export async function generateImages(req: ImageGenRequest): Promise<ImageGenResp
 
   const response = await ai.models.generateImages({
     model: 'imagen-4.0-generate-001',
+    operation: 'image_generation',
     prompt: fullPrompt,
     config: {
       numberOfImages: count,

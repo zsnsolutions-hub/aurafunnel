@@ -287,6 +287,7 @@ Generate the plan now. JSON only.`;
   const ai = getGeminiClient();
   const response = await ai.models.generateContent({
     model: AI_MODELS.text,
+    operation: 'pipeline_strategy',
     contents: userPrompt,
     config: {
       systemInstruction: PLAN_SYSTEM_INSTRUCTION,

@@ -422,6 +422,7 @@ const ModelTraining: React.FC = () => {
 
       const response = await ai.models.generateContent({
         model: AI_MODELS.textTesting,
+        operation: 'content_generation',
         contents: samplePrompt,
         config: {
           systemInstruction: editSystemInstruction,
