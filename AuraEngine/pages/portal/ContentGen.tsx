@@ -18,6 +18,8 @@ import { supabase } from '../../lib/supabase';
 import { normalizeLeads } from '../../lib/queries';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { sendTrackedEmail, sendTrackedEmailBatch, scheduleEmailBlock, fetchOwnerEmailPerformance, fetchCampaignHistory, fetchCampaignRecipients, fetchConnectedEmailProvider } from '../../lib/emailTracking';
+import { fetchSuppressedEmails } from '../../lib/suppression';
+import { useToast } from '../../components/ui/Toast';
 import type { EmailPerformanceEntry, CampaignSummary, CampaignRecipient, ConnectedEmailProvider } from '../../lib/emailTracking';
 import { generateEmailSequencePdf } from '../../lib/pdfExport';
 import { useUsageLimits } from '../../hooks/useUsageLimits';
@@ -327,6 +329,7 @@ function extractDelayDays(title: string, fallbackIndex: number): number {
 // ═══════════════════════════════════════════════
 const ContentGen: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const query = new URLSearchParams(useLocation().search);
   const initialLeadId = query.get('leadId');
@@ -910,9 +913,18 @@ const ContentGen: React.FC = () => {
     setDeliveryConfirmed(true);
 
     if (contentType === ContentCategory.EMAIL_SEQUENCE && selectedLeads.length > 0 && blocks.length > 0) {
-      const eligibleLeads = selectedLeads
+      const rawEligible = selectedLeads
         .filter(l => l.email)
         .map(l => ({ id: l.id, email: l.email, name: l.name, company: l.company, insights: l.insights, score: l.score, status: l.status, lastActivity: l.lastActivity }));
+
+      // Phase 0: honor the shared suppression list (unsubscribed / bounced /
+      // complained) on this send path too — previously only QuickLaunch did.
+      const suppressed = await fetchSuppressedEmails(user.id);
+      const eligibleLeads = rawEligible.filter(l => !suppressed.has((l.email || '').trim().toLowerCase()));
+      const suppressedDropped = rawEligible.length - eligibleLeads.length;
+      if (suppressedDropped > 0) {
+        toast(`Skipped ${suppressedDropped} unsubscribed/suppressed recipient${suppressedDropped === 1 ? '' : 's'}.`, 'warning');
+      }
 
       if (eligibleLeads.length > 0) {
         const sequenceId = `seq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -930,6 +942,12 @@ const ContentGen: React.FC = () => {
             { trackOpens: true, trackClicks: true, provider: connectedProvider?.provider as EmailProvider, fromName: connectedProvider?.from_name }
           );
           console.log(`Email delivery block 1: ${result.sent} sent, ${result.failed} failed`, result.errors);
+          // Phase 0: surface the outcome instead of failing silently.
+          if (result.failed > 0) {
+            toast(`Sent ${result.sent}, but ${result.failed} failed to send.`, result.sent > 0 ? 'warning' : 'error');
+          } else if (result.sent > 0) {
+            toast(`Sent to ${result.sent} recipient${result.sent === 1 ? '' : 's'}.`, 'success');
+          }
 
           // Mode B: Auto-mark New leads as Contacted if preference is enabled
           try {
