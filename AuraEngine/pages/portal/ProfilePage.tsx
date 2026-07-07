@@ -619,14 +619,11 @@ const ProfilePage: React.FC = () => {
     setShowClearConfirm(false);
     setClearingProfile(true); setClearError(null);
     try {
-      const creditResult = await consumeCredits(supabase, 'clear_business_profile');
-      if (!creditResult.success) throw new Error(creditResult.message || 'Could not deduct credits.');
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ businessProfile: null })
-        .eq('id', user.id);
-      if (updateError) throw new Error(`Failed to clear profile: ${updateError.message}`);
+      // Atomic server-side charge + wipe (migration 20260707160000). Charging
+      // and clearing happen in one transaction, so the 2 credits are only spent
+      // if the profile is actually cleared — no partial states, no client skip.
+      const { error: clearError } = await supabase.rpc('clear_business_profile');
+      if (clearError) throw new Error(clearError.message || 'Could not clear profile.');
 
       // Reset every piece of in-memory state that mirrors the profile.
       setBusinessProfile({} as BusinessProfile);
