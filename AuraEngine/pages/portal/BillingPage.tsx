@@ -141,26 +141,14 @@ const BillingPage: React.FC = () => {
     }
   }, [user.id, currentPlanName, creditsUsed]);
 
-  const invoices = useMemo(() => {
-    const history = [];
-    const subscriptionDate = user.subscription?.created_at ? new Date(user.subscription.created_at) : new Date(user.created_at || Date.now());
-    const now = new Date();
-    
-    let currentIter = new Date(now.getFullYear(), now.getMonth(), 1);
-    while (currentIter > subscriptionDate && history.length < 4) {
-      currentIter.setMonth(currentIter.getMonth() - 1);
-      const invoiceDate = new Date(currentIter.getFullYear(), currentIter.getMonth(), 15);
-      
-      history.push({
-        id: `INV-${invoiceDate.getFullYear()}-${(invoiceDate.getMonth() + 1).toString().padStart(2, '0')}`,
-        date: invoiceDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        amount: `$${(PLANS.find(p => p.name === currentPlanName)?.price ?? 0).toFixed(2)}`,
-        status: 'Paid',
-        cycle: `${invoiceDate.getMonth() + 1}/${invoiceDate.getFullYear().toString().slice(-2)}`
-      });
-    }
-    return history;
-  }, [currentPlanName, user.subscription, user.created_at]);
+  // Phase 0: previously synthesized fake "Paid" invoice history from the
+  // subscription date. Those were never real Stripe invoices. Real invoices must
+  // come from Stripe (via the billing webhook / customer portal); until that data
+  // is wired, show none rather than fabricate a payment history.
+  const invoices = useMemo<{ id: string; date: string; amount: string; status: string; cycle: string }[]>(
+    () => [],
+    [],
+  );
 
   // ─── Enhanced Wireframe State ───
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -201,7 +189,7 @@ const BillingPage: React.FC = () => {
       leadProcessing: Math.round(monthlyPrice * 0.25),
       storage: Math.round(monthlyPrice * 0.15),
       support: Math.round(monthlyPrice * 0.15),
-      projectedNext: Math.round(monthlyPrice * (1 + (Math.random() * 0.1 - 0.05))),
+      projectedNext: monthlyPrice, // Phase 0: was randomized; projected = current price
       savingsVsManual: Math.round(monthlyPrice * 3.2),
     };
   }, [currentPlanName]);
@@ -237,12 +225,12 @@ const BillingPage: React.FC = () => {
 
     const monthlyProjections = Array.from({ length: 6 }, (_, i) => {
       const d = new Date(); d.setMonth(d.getMonth() + i);
-      const growth = 1 + i * 0.03 + (Math.random() - 0.5) * 0.04;
+      const growth = 1 + i * 0.03; // Phase 0: removed random noise from usage trend
       return {
         month: d.toLocaleDateString('en-US', { month: 'short' }),
         base: monthlyPrice,
         projected: Math.round(monthlyPrice * growth),
-        overage: i > 2 ? Math.round(Math.random() * 15) : 0,
+        overage: 0, // Phase 0: no real overage data
       };
     });
 
@@ -287,7 +275,7 @@ const BillingPage: React.FC = () => {
     const hourlyPattern = Array.from({ length: 24 }, (_, h) => ({
       hour: h,
       label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
-      credits: Math.round(Math.sin((h - 10) * 0.4) * 8 + 12 + (Math.random() - 0.5) * 4),
+      credits: Math.round(Math.sin((h - 10) * 0.4) * 8 + 12), // Phase 0: removed random noise
     }));
     const peakHour = hourlyPattern.reduce((best, h) => h.credits > best.credits ? h : best, hourlyPattern[0]);
 
@@ -295,8 +283,8 @@ const BillingPage: React.FC = () => {
       const d = new Date(); d.setDate(d.getDate() - (6 - i));
       return {
         day: d.toLocaleDateString('en-US', { weekday: 'short' }),
-        used: Math.round(creditsUsed / 30 * (0.8 + Math.random() * 0.4)),
-        wasted: Math.round(Math.random() * 3),
+        used: Math.round(creditsUsed / 30), // Phase 0: deterministic daily average
+        wasted: 0, // Phase 0: no real 'wasted credits' signal
       };
     });
 
@@ -629,30 +617,24 @@ const BillingPage: React.FC = () => {
           </div>
           
           <div className="flex-grow space-y-8">
-            <div className="relative group/card overflow-hidden bg-slate-950 rounded-3xl p-8 text-white shadow-2xl transition-transform hover:scale-[1.02]">
-              <div className="absolute top-0 right-0 p-8 opacity-5 group-hover/card:opacity-10 transition-opacity">
+            {/* Phase 0: removed the hardcoded fake "•••• 4242 / VISA / 12/26" card.
+                Real payment methods live in Stripe; we don't have (or store) card
+                details in-app, so we show the plan and link to the Stripe portal. */}
+            <div className="relative overflow-hidden bg-slate-950 rounded-3xl p-8 text-white shadow-2xl">
+              <div className="absolute top-0 right-0 p-8 opacity-5">
                 <SparklesIcon className="w-32 h-32" />
               </div>
               <div className="relative z-10 h-full flex flex-col justify-between min-h-[160px]">
                 <div className="flex justify-between items-start">
-                  <div className="w-14 h-9 bg-white/10 rounded-lg border border-white/20 flex items-center justify-center backdrop-blur-md">
-                    <span className="text-[10px] font-black italic tracking-tighter">VISA</span>
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40">Neural Card</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Current plan</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Scaliyo</span>
                 </div>
-                
                 <div className="mt-8">
-                  <p className="text-2xl font-bold tracking-[0.25em] mb-4">•••• •••• •••• 4242</p>
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest mb-1">Card Member</p>
-                      <p className="text-xs font-bold uppercase tracking-widest truncate max-w-[120px]">{user.name || user.email.split('@')[0]}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest mb-1">Exp Date</p>
-                      <p className="text-xs font-bold font-mono">12 / 26</p>
-                    </div>
-                  </div>
+                  <p className="text-2xl font-bold tracking-tight mb-2">{currentPlanName}</p>
+                  <p className="text-xs text-white/50 leading-relaxed max-w-[240px]">
+                    Payment method &amp; billing are managed securely in Stripe. Use “Manage billing”
+                    to view or update your card and download real invoices.
+                  </p>
                 </div>
               </div>
             </div>
@@ -662,7 +644,7 @@ const BillingPage: React.FC = () => {
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Status</p>
                 <p className="text-sm font-bold text-emerald-600 flex items-center gap-2">
                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-                  Active Auto-pay
+                  {user.subscription?.status === 'active' ? 'Active' : (user.subscription?.status || 'Inactive')}
                 </p>
               </div>
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-100 transition-colors">

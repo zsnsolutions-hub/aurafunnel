@@ -30,6 +30,7 @@ import {
 } from '../../lib/gemini';
 import { track } from '../../lib/analytics';
 import { getOutboundLimits } from '../../lib/planLimits';
+import { fetchSuppressedEmails, filterSuppressed } from '../../lib/suppression';
 import { ToneType, type User, type EmailSequenceConfig, type Lead } from '../../types';
 
 // Local sequence-step shape — matches the start-email-sequence-run edge
@@ -61,9 +62,6 @@ interface QuickLaunchDraft {
   pasteText?: string;
   pasteLeads?: Lead[];
 }
-
-// Lead statuses that mean "never contact" — filtered out at launch.
-const SUPPRESSED_STATUS = /unsub|bounce|complain|spam|do.?not|opt.?out/i;
 
 // Resolve a step's cumulative send-day (days from launch) to a real date label.
 const fmtSendDate = (delayDays: number): string =>
@@ -379,59 +377,19 @@ const QuickLaunchPage: React.FC = () => {
   const dailyCap = Math.max(1, outbound.emailsPerDayPerInbox * outbound.maxInboxes);
 
   // ─── Suppression + dedup (#13) ──────────────────────────────────────
-  // Emails that have bounced/failed or unsubscribed/complained — never re-send.
+  // Shared source of truth (lib/suppression.ts): suppressions table + bounced/
+  // failed messages + unsubscribe/spam events. Reused by every send path.
   const { data: suppressedEmails = new Set<string>() } = useQuery<Set<string>>({
     queryKey: ['quick-launch-suppressed', user.id],
-    queryFn: async () => {
-      const set = new Set<string>();
-      try {
-        const { data: msgs } = await supabase
-          .from('email_messages')
-          .select('id, to_email, status')
-          .eq('owner_id', user.id)
-          .limit(5000);
-        const idToEmail = new Map<string, string>();
-        for (const m of (msgs ?? []) as Array<{ id: string; to_email: string | null; status: string | null }>) {
-          const em = (m.to_email ?? '').trim().toLowerCase();
-          if (!em) continue;
-          idToEmail.set(m.id, em);
-          if (m.status === 'bounced' || m.status === 'failed') set.add(em);
-        }
-        const ids = [...idToEmail.keys()];
-        for (let i = 0; i < ids.length; i += 1000) {
-          const { data: evs } = await supabase
-            .from('email_events')
-            .select('message_id, event_type')
-            .in('message_id', ids.slice(i, i + 1000))
-            .in('event_type', ['unsubscribe', 'spam_report', 'bounced']);
-          for (const ev of (evs ?? []) as Array<{ message_id: string; event_type: string }>) {
-            const em = idToEmail.get(ev.message_id);
-            if (em) set.add(em);
-          }
-        }
-      } catch (e) {
-        console.warn('[quick-launch] suppression fetch failed:', e);
-      }
-      return set;
-    },
+    queryFn: () => fetchSuppressedEmails(user.id),
     staleTime: 5 * 60_000,
   });
 
   // The exact list that will be emailed: dedup by email + drop suppressed.
-  const launchAudience = useMemo(() => {
-    const seen = new Set<string>();
-    const leads: Lead[] = [];
-    let dupes = 0, suppressed = 0;
-    for (const l of activeLeads) {
-      const email = (l.primary_email ?? '').trim().toLowerCase();
-      if (!email) continue;
-      if (seen.has(email)) { dupes++; continue; }
-      if (suppressedEmails.has(email) || (l.status && SUPPRESSED_STATUS.test(l.status))) { suppressed++; continue; }
-      seen.add(email);
-      leads.push(l);
-    }
-    return { leads, dupes, suppressed };
-  }, [activeLeads, suppressedEmails]);
+  const launchAudience = useMemo(
+    () => filterSuppressed(activeLeads, suppressedEmails),
+    [activeLeads, suppressedEmails],
+  );
 
   // When the user swaps off the sample, blank out the canned preview so
   // the next "Generate" button click feels intentional.

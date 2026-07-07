@@ -136,10 +136,26 @@ export async function fetchEmailAnalytics(
     const openRate = totalSent > 0 ? +((uniqueOpens / totalSent) * 100).toFixed(1) : 0;
     const clickRate = totalSent > 0 ? +((uniqueClicks / totalSent) * 100).toFixed(1) : 0;
 
+    // Phase 0: the materialized view has no delivered/bounced/failed columns, so
+    // the old code assumed delivered == sent and bounce == 0 (always). Fetch the
+    // real status breakdown (cheap: status only) instead of fabricating them.
+    const { data: statusRows } = await supabase
+      .from('email_messages')
+      .select('status')
+      .eq('owner_id', userId)
+      .gte('created_at', from)
+      .lte('created_at', to);
+    const rows = (statusRows ?? []) as { status: string | null }[];
+    const totalBounced = rows.filter(m => m.status === 'bounced').length;
+    const totalFailed = rows.filter(m => m.status === 'failed').length;
+    const totalDelivered = rows.filter(m => m.status === 'delivered' || m.status === 'sent').length
+      || Math.max(0, totalSent - totalBounced - totalFailed);
+    const bounceRate = totalSent > 0 ? +((totalBounced / totalSent) * 100).toFixed(1) : 0;
+
     return {
-      totalSent, totalDelivered: totalSent, totalBounced: 0, totalFailed: 0,
+      totalSent, totalDelivered, totalBounced, totalFailed,
       totalOpens, uniqueOpens, totalClicks, uniqueClicks,
-      openRate, clickRate, bounceRate: 0,
+      openRate, clickRate, bounceRate,
     };
   }
 

@@ -120,7 +120,9 @@ const REPORT_METRICS = [
 ];
 
 const REPORT_FILTERS = [
-  { id: 'team_member', label: 'By Team Member', options: ['Sarah Chen', 'Alex Rivera', 'Jordan Kim', 'Casey Morgan', 'Taylor Brooks'] },
+  // Phase 0: removed hardcoded fake team-member names. Real team-member options
+  // will be populated from workspace members when team performance is wired.
+  { id: 'team_member', label: 'By Team Member', options: [] as string[] },
   { id: 'lead_source', label: 'By Lead Source', options: ['LinkedIn', 'Website', 'Referral', 'Cold Outreach', 'Webinar'] },
   { id: 'industry', label: 'By Industry', options: ['SaaS', 'FinTech', 'Healthcare', 'E-commerce', 'Manufacturing'] },
   { id: 'campaign', label: 'By Campaign', options: ['Q4 Launch', 'Product Update', 'Webinar Series', 'Re-engagement', 'Hot Lead Nurture'] },
