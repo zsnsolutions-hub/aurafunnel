@@ -625,7 +625,10 @@ const LeadManagement: React.FC = () => {
         return;
       }
 
-      const mockScore = Math.floor(Math.random() * 40) + 60;
+      // Leads start unscored. A real score is only assigned by an actual
+      // scoring signal (email engagement, enrichment) — never fabricated.
+      // Phase 0: removed the previous `Math.random()*40+60` mock score.
+      const initialScore = 0;
 
       // Build knowledgeBase from social/website fields
       const normalizeUrl = (url: string) => {
@@ -650,7 +653,7 @@ const LeadManagement: React.FC = () => {
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
-        score: mockScore,
+        score: initialScore,
         status: 'New',
         last_activity: new Date().toISOString(),
       };
