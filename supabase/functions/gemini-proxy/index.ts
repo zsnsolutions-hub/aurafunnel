@@ -67,6 +67,9 @@ interface ProxyRequest {
   config?: Record<string, unknown>;
   stream?: boolean;
   kind?: "content" | "images";
+  /** Optional AI-operation label (e.g. "blog_content") for exact per-op cost.
+   *  Absent -> the quota RPC charges a per-kind default so it's never free. */
+  operation?: string;
 }
 
 function jsonResponse(body: unknown, status: number, headers: Record<string, string>): Response {
@@ -139,6 +142,38 @@ serve(async (req) => {
   }
   if (kind === "images" && !body.prompt) {
     return jsonResponse({ error: "Missing required field: prompt" }, 400, corsHeaders);
+  }
+
+  // ── AI credit enforcement (server-authoritative, anti-bypass) ──
+  // Credits are billed client-side per user *action* (some non-AI), so we do
+  // NOT re-bill here. Instead we enforce an independent monthly ceiling on
+  // ACTUAL Gemini usage (ai_proxy_usage) so a modified client can't call this
+  // proxy directly for unlimited free AI. Honest clients charge before calling
+  // us, so their in-app limit trips first and they never reach this ceiling.
+  // Fails CLOSED: a check failure denies the call rather than leaking free AI.
+  const operation =
+    typeof body.operation === "string" && body.operation ? body.operation : null;
+  try {
+    const { data: quota, error: quotaErr } = await supabaseAdmin.rpc(
+      "enforce_ai_proxy_quota",
+      { p_user_id: user.id, p_operation: operation, p_kind: kind },
+    );
+    if (quotaErr) {
+      console.error("[gemini-proxy] quota RPC error, denying:", quotaErr.message);
+      return jsonResponse({ error: "AI credit check failed. Please try again." }, 503, corsHeaders);
+    }
+    const q = quota as {
+      allowed?: boolean; reason?: string; remaining?: number; cost?: number; limit?: number;
+    };
+    if (!q?.allowed) {
+      const msg = q?.reason === "insufficient_credits"
+        ? `Insufficient AI credits (${q?.remaining ?? 0} remaining, ${q?.cost ?? 0} needed for this operation). Upgrade your plan for more capacity.`
+        : "AI credits are unavailable for this account.";
+      return jsonResponse({ error: msg, reason: q?.reason, remaining: q?.remaining }, 402, corsHeaders);
+    }
+  } catch (e) {
+    console.error("[gemini-proxy] quota check threw, denying:", (e as Error).message);
+    return jsonResponse({ error: "AI credit check failed. Please try again." }, 503, corsHeaders);
   }
 
   const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
