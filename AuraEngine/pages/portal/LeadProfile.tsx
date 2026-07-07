@@ -77,60 +77,30 @@ const deriveCompanyDetails = (lead: Lead) => {
 const deriveContactInfo = (lead: Lead) => {
   const name = leadDisplayName(lead);
   return {
-    phone: lead.primary_phone || `(555) ${String(Math.abs(name.charCodeAt(0) * 7 + 100)).slice(0, 3)}-${String(Math.abs((name.charCodeAt(1) || 0) * 13 + 1000)).slice(0, 4)}`,
-    linkedin: lead.linkedin_url || `linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '')}`,
+    phone: lead.primary_phone || '',
+    linkedin: lead.linkedin_url || '',
   };
 };
 
-const derivePredictiveAnalysis = (lead: Lead) => ({
-  conversionProb: Math.min(99, lead.score + Math.floor(Math.random() * 8)),
-  timeline: lead.score >= 80 ? '3-7 days' : lead.score >= 60 ? '7-14 days' : '14-30 days',
-  decisionMaker: lead.score >= 70 ? 'Yes' : 'Likely',
-  dealSize: lead.score >= 80 ? '$15,000 - $25,000' : lead.score >= 60 ? '$5,000 - $15,000' : '$1,000 - $5,000',
+// ── Phase 0: fabricated "intelligence" removed ───────────────────────────────
+// These functions previously invented conversion probability, deal size,
+// behavioral patterns and an engagement timeline (fake "Viewed pricing page",
+// "Attended webinar" events) from a lead's — itself random — score. That was
+// not real data. They now return honest empty/blank values until a real scoring
+// + activity pipeline exists. Signatures are kept so dependent panels render
+// honest empty states instead of fabricated numbers.
+const derivePredictiveAnalysis = (_lead: Lead) => ({
+  conversionProb: 0,
+  timeline: '—',
+  decisionMaker: '—',
+  dealSize: '—',
 });
 
-const deriveBehavioralPatterns = (lead: Lead) => {
-  const patterns = [];
-  if (lead.score >= 70) patterns.push('Engages with technical content');
-  if (lead.score >= 60) patterns.push('Most active: Tuesday mornings');
-  patterns.push(lead.score >= 75 ? 'Prefers email over phone' : 'Responds well to LinkedIn outreach');
-  if (lead.score >= 80) patterns.push('Viewed pricing page multiple times');
-  if (lead.status === 'Qualified') patterns.push('Has requested a demo');
-  patterns.push('Average response time: 2-4 hours');
-  return patterns;
-};
+const deriveBehavioralPatterns = (_lead: Lead): string[] => [];
 
-const deriveRecommendedActions = (lead: Lead) => {
-  const actions = [];
-  if (lead.score >= 80) {
-    actions.push({ text: 'Send case study on API integration', priority: 'high' });
-    actions.push({ text: 'Schedule brief technical demo', priority: 'high' });
-  } else {
-    actions.push({ text: 'Send introductory email sequence', priority: 'medium' });
-    actions.push({ text: 'Share relevant blog content', priority: 'medium' });
-  }
-  actions.push({ text: `Connect on LinkedIn (shared connections: ${Math.floor(lead.score / 25)})`, priority: 'low' });
-  if (lead.status === 'Contacted') actions.push({ text: 'Follow up on previous conversation', priority: 'high' });
-  actions.push({ text: 'Add to weekly nurture campaign', priority: 'low' });
-  return actions;
-};
+const deriveRecommendedActions = (_lead: Lead): { text: string; priority: string }[] => [];
 
-const deriveEngagementTimeline = (lead: Lead) => {
-  const now = new Date();
-  const events = [
-    { date: new Date(now.getTime() - 2 * 3600000), label: `Viewed pricing page (${Math.ceil(lead.score / 30)}x)`, type: 'page_view' },
-    { date: new Date(now.getTime() - 26 * 3600000), label: 'Downloaded whitepaper', type: 'download' },
-    { date: new Date(now.getTime() - 3 * 86400000), label: 'Attended webinar', type: 'event' },
-    { date: new Date(now.getTime() - 5 * 86400000), label: 'First website visit', type: 'visit' },
-  ];
-  if (lead.status === 'Contacted') {
-    events.splice(1, 0, { date: new Date(now.getTime() - 12 * 3600000), label: 'Replied to outreach email', type: 'email' });
-  }
-  if (lead.score >= 85) {
-    events.splice(1, 0, { date: new Date(now.getTime() - 4 * 3600000), label: 'Requested product demo', type: 'demo' });
-  }
-  return events;
-};
+const deriveEngagementTimeline = (_lead: Lead): { date: Date; label: string; type: string }[] => [];
 
 const formatEventDate = (date: Date): string => {
   const now = new Date();
@@ -185,12 +155,9 @@ const LeadProfile: React.FC = () => {
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [newNote, setNewNote] = useState('');
 
-  // Tasks
-  const [tasks, setTasks] = useState<TaskItem[]>([
-    { id: '1', title: 'Send follow-up email', done: false, dueDate: 'Tomorrow' },
-    { id: '2', title: 'Prepare demo materials', done: false, dueDate: 'This week' },
-    { id: '3', title: 'Review proposal draft', done: true, dueDate: 'Completed' },
-  ]);
+  // Tasks — start empty (previous hardcoded mock tasks removed in Phase 0).
+  // Persistent tasks arrive with the real lead_tasks table in a later phase.
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [newTask, setNewTask] = useState('');
 
   // Quick action feedback
@@ -590,42 +557,32 @@ const LeadProfile: React.FC = () => {
   // ── Conversion Intel ──
   const conversionIntel = useMemo(() => {
     if (!lead) return { probability: 0, dealSize: '$0', timeline: 'N/A', signals: [] as { label: string; strength: string }[], stage: 'Unknown', readiness: 0, forecast: [] as { scenario: string; value: string; prob: number }[] };
-    const prediction = derivePredictiveAnalysis(lead);
+    // Phase 0: only status-derived facts — no fabricated behavioral "signals".
     const signals: { label: string; strength: string }[] = [];
-    if (lead.score >= 80) signals.push({ label: 'High engagement score', strength: 'strong' });
-    if (lead.score >= 70) signals.push({ label: 'Multiple page visits', strength: 'strong' });
     if (lead.status === 'Qualified') signals.push({ label: 'Qualification confirmed', strength: 'strong' });
-    if (lead.status === 'Contacted') signals.push({ label: 'Outreach responded', strength: 'medium' });
-    signals.push({ label: lead.score >= 60 ? 'Content engagement active' : 'Content engagement low', strength: lead.score >= 60 ? 'medium' : 'weak' });
-    signals.push({ label: lead.score >= 75 ? 'Decision-maker identified' : 'Decision-maker unconfirmed', strength: lead.score >= 75 ? 'strong' : 'weak' });
-    const stage = lead.status === 'Qualified' ? 'Negotiation' : lead.status === 'Contacted' ? 'Discovery' : lead.status === 'New' ? 'Awareness' : 'Closed-Lost';
-    const readiness = Math.min(100, Math.round(lead.score * 0.4 + (lead.status === 'Qualified' ? 40 : lead.status === 'Contacted' ? 25 : lead.status === 'New' ? 10 : 0) + (lead.insights ? 20 : 5)));
-    const forecast = [
-      { scenario: 'Best Case', value: lead.score >= 80 ? '$25,000' : lead.score >= 60 ? '$15,000' : '$5,000', prob: Math.min(95, prediction.conversionProb + 10) },
-      { scenario: 'Expected', value: prediction.dealSize, prob: prediction.conversionProb },
-      { scenario: 'Conservative', value: lead.score >= 80 ? '$10,000' : lead.score >= 60 ? '$3,000' : '$1,000', prob: Math.max(10, prediction.conversionProb - 20) },
-    ];
-    return { probability: prediction.conversionProb, dealSize: prediction.dealSize, timeline: prediction.timeline, signals, stage, readiness, forecast };
+    if (lead.status === 'Contacted') signals.push({ label: 'Outreach in progress', strength: 'medium' });
+    if (lead.insights) signals.push({ label: 'Research / notes available', strength: 'medium' });
+    const stage = lead.status === 'Qualified' ? 'Qualified' : lead.status === 'Contacted' ? 'In conversation' : lead.status === 'New' ? 'New' : lead.status === 'Converted' ? 'Won' : 'Closed';
+    // Conversion probability, deal size, readiness and forecast need a real
+    // scoring/pipeline model (later phase). Blank rather than invented.
+    return { probability: 0, dealSize: '—', timeline: '—', signals, stage, readiness: 0, forecast: [] as { scenario: string; value: string; prob: number }[] };
   }, [lead]);
 
   // ── Engagement Map ──
   const engagementMap = useMemo(() => {
     if (!lead) return { depth: 0, channels: [] as { name: string; effectiveness: number; interactions: number; preferred: boolean }[], touchpoints: 0, responsiveness: 'Unknown', preferredChannel: { name: 'N/A', effectiveness: 0 }, interactionScore: 0, bestWindow: 'N/A' };
-    const tl = deriveEngagementTimeline(lead);
-    const depth = Math.min(100, Math.round(lead.score * 0.6 + tl.length * 8 + (lead.status !== 'New' ? 20 : 0)));
-    const channels = [
-      { name: 'Email', effectiveness: lead.score >= 70 ? 85 : 50, interactions: Math.ceil(lead.score / 25), preferred: lead.score >= 75 },
-      { name: 'Website', effectiveness: Math.min(95, lead.score + 10), interactions: Math.ceil(lead.score / 20), preferred: true },
-      { name: 'Phone', effectiveness: lead.score >= 60 ? 70 : 30, interactions: Math.ceil(lead.score / 40), preferred: false },
-      { name: 'LinkedIn', effectiveness: lead.score >= 50 ? 60 : 40, interactions: Math.ceil(lead.score / 35), preferred: lead.score < 75 },
-      { name: 'Events', effectiveness: lead.score >= 65 ? 75 : 20, interactions: lead.score >= 65 ? 2 : 0, preferred: false },
-    ];
-    const touchpoints = channels.reduce((sum, c) => sum + c.interactions, 0);
-    const responsiveness = lead.score >= 80 ? 'Highly responsive' : lead.score >= 60 ? 'Responsive' : lead.score >= 40 ? 'Moderate' : 'Low';
-    const preferredChannel = channels.reduce((best, c) => c.effectiveness > best.effectiveness ? c : best, channels[0]);
-    const interactionScore = Math.min(100, Math.round(depth * 0.4 + (touchpoints / 20) * 100 * 0.3 + (lead.status !== 'New' ? 30 : 0)));
-    const bestWindow = lead.score >= 70 ? 'Tue\u2013Thu, 9\u201311am' : 'Wed\u2013Fri, 2\u20134pm';
-    return { depth, channels, touchpoints, responsiveness, preferredChannel, interactionScore, bestWindow };
+    // Phase 0: fabricated per-channel effectiveness / interactions / best-window
+    // removed. Real channel analytics need real interaction data (email events +
+    // connected inbox), which arrives in a later phase.
+    return {
+      depth: 0,
+      channels: [] as { name: string; effectiveness: number; interactions: number; preferred: boolean }[],
+      touchpoints: 0,
+      responsiveness: '\u2014',
+      preferredChannel: { name: '\u2014', effectiveness: 0 },
+      interactionScore: 0,
+      bestWindow: '\u2014',
+    };
   }, [lead]);
 
   // ── Keyboard Shortcuts ──
