@@ -1,8 +1,8 @@
 import React, { Suspense, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import {
-  BarChart3, Users, Sparkles, Zap, Target, PenSquare,
-  Shield, Lock, Settings, LogOut, DollarSign, Headphones, Wrench, Terminal, LayoutDashboard
+  Users, Sparkles, Zap, Target, PenSquare,
+  Lock, Settings, LogOut, DollarSign, Headphones, Wrench, Terminal, LayoutDashboard
 } from 'lucide-react';
 import { User } from '../../types';
 import { BRAND } from '../../lib/brand';
@@ -25,14 +25,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const navItems = [
-    { label: 'Overview', path: '/admin', icon: <BarChart3 size={20} /> },
     { label: 'Admin Console', path: '/admin/console', icon: <LayoutDashboard size={20} /> },
     { label: 'User Directory', path: '/admin/users', icon: <Users size={20} /> },
     { label: 'Neural Analytics', path: '/admin/ai', icon: <Sparkles size={20} /> },
     { label: 'DNA Registry', path: '/admin/prompts', icon: <Zap size={20} /> },
     { label: 'Global Leads', path: '/admin/leads', icon: <Target size={20} /> },
     { label: 'Blog Engine', path: '/admin/blog', icon: <PenSquare size={20} /> },
-    { label: 'System Integrity', path: '/admin/health', icon: <Shield size={20} /> },
     { label: 'Audit Vault', path: '/admin/audit', icon: <Lock size={20} /> },
     { label: 'Pricing Management', path: '/admin/pricing', icon: <DollarSign size={20} /> },
     { label: 'Platform Settings', path: '/admin/settings', icon: <Settings size={20} /> },

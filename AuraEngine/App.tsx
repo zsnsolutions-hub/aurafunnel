@@ -82,10 +82,10 @@ const WebhooksPage = lazy(() => import('./pages/portal/WebhooksPage'));
 const BrandingPage = lazy(() => import('./pages/portal/BrandingPage'));
 
 // Admin
-const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+// Legacy AdminDashboard + SystemHealth removed (Phase 0): they rendered fabricated
+// health/analytics. /admin and /admin/health now redirect to the real Admin Console.
 const SupportConsole = lazy(() => import('./pages/support/SupportConsole'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
-const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
 const LeadsManagement = lazy(() => import('./pages/admin/LeadsManagement'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AIOperations = lazy(() => import('./pages/admin/AIOperations'));
@@ -355,14 +355,14 @@ const App: React.FC = () => {
               <AuthRedirect />
             }
           >
-            <Route index element={<AdminDashboard />} />
+            <Route index element={<Navigate to="/admin/console" replace />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="ai" element={<AIOperations />} />
             <Route path="prompts" element={<DnaRegistryPage />} />
             <Route path="prompts/:id" element={<DnaEditorPage />} />
             <Route path="leads" element={<LeadsManagement />} />
             <Route path="blog" element={<BlogManager />} />
-            <Route path="health" element={<SystemHealth />} />
+            <Route path="health" element={<Navigate to="/admin/console?tab=health" replace />} />
             <Route path="audit" element={<AuditLogs />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="pricing" element={<PricingManagement />} />

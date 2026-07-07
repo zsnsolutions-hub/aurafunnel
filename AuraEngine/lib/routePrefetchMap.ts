@@ -49,13 +49,13 @@ const routeImportMap: Record<string, () => Promise<unknown>> = {
   '/portal/team-hub':       () => import('../pages/portal/team-hub/TeamHubPage'),
 
   // Admin
-  '/admin':          () => import('../pages/admin/AdminDashboard'),
+  '/admin':          () => import('../pages/admin/console/AdminConsolePage'),
   '/admin/users':    () => import('../pages/admin/UserManagement'),
   '/admin/ai':       () => import('../pages/admin/AIOperations'),
   '/admin/prompts':  () => import('../pages/admin/prompt-lab/DnaRegistryPage'),
   '/admin/leads':    () => import('../pages/admin/LeadsManagement'),
   '/admin/blog':     () => import('../pages/admin/BlogManager'),
-  '/admin/health':   () => import('../pages/admin/SystemHealth'),
+  '/admin/health':   () => import('../pages/admin/console/AdminConsolePage'),
   '/admin/audit':    () => import('../pages/admin/AuditLogs'),
   '/admin/settings': () => import('../pages/admin/AdminSettings'),
   '/admin/pricing':  () => import('../pages/admin/PricingManagement'),
