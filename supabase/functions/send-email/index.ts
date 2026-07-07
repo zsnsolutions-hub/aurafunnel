@@ -449,6 +449,37 @@ serve(async (req) => {
       );
     }
 
+    // ── Suppression (do-not-contact) check ──
+    // Never send to an address this owner has suppressed (unsubscribe, bounce,
+    // complaint, manual, invalid). Keyed by (owner_id, lower(email)) — writers
+    // store the address lowercased, so we match on the lowercased recipient.
+    // Fail OPEN on infra error (logged) so a transient DB blip can't halt all
+    // sending, but fail CLOSED (skip) on an explicit match. Returns 200 with
+    // { skipped, suppressed } so batch callers (process-scheduled-emails,
+    // sequence runners) continue to the next recipient instead of erroring.
+    try {
+      const { data: sup, error: supErr } = await supabaseAdmin
+        .from("suppressions")
+        .select("reason")
+        .eq("owner_id", userId)
+        .eq("email", String(to_email).trim().toLowerCase())
+        .maybeSingle();
+      if (supErr) {
+        console.warn("[send-email] suppression lookup failed, allowing:", supErr.message);
+      } else if (sup) {
+        console.log(`[send-email] recipient suppressed (${sup.reason}); skipping send`);
+        return new Response(
+          JSON.stringify({ skipped: true, suppressed: true, reason: sup.reason }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    } catch (e) {
+      console.warn("[send-email] suppression check threw, allowing:", (e as Error).message);
+    }
+
     // ── Phase 3.2.1 + 3.2.3: resolve workspace_id + sender_account_id ──
     // Order:
     //   A. Resolve workspaceId from workspace_members.
