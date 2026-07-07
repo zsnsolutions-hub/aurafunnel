@@ -51,7 +51,7 @@ const generateTrendData = (leads: Lead[]) => {
       ? Math.min(45, 10 + leads.filter(l => l.status === 'Qualified').length * 3)
       : 18;
 
-    const variance = Math.sin(i * 0.5) * 5 + (Math.random() - 0.5) * 4;
+    const variance = 0; // Phase 0: removed random wiggle from the conversion sparkline
     data.push({
       day: dayLabel,
       accuracy: Math.round(Math.max(50, Math.min(99, baseAccuracy + variance))),
@@ -213,19 +213,21 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
     };
   }, [leads]);
 
-  // ─── Lead Velocity (mock 7-day data) ───
+  // ─── Lead Velocity (real 7-day data from leads.created_at) ───
+  // Phase 0: removed the Math.random() padding — this now counts real leads
+  // created each day. "converted" counts leads that reached a Converted status.
   const leadVelocity = useMemo(() => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const added = Math.floor(Math.random() * 5) + (i === 0 ? leads.filter(l => {
+      const dayLeads = leads.filter(l => {
         if (!l.created_at) return false;
-        const created = new Date(l.created_at);
-        return created.toDateString() === d.toDateString();
-      }).length : Math.floor(Math.random() * 3));
-      const converted = Math.floor(added * 0.3);
+        return new Date(l.created_at).toDateString() === d.toDateString();
+      });
+      const added = dayLeads.length;
+      const converted = dayLeads.filter(l => l.status === 'Converted').length;
       days.push({ day: dayLabel, added, converted, net: added - converted });
     }
     const totalAdded = days.reduce((s, d) => s + d.added, 0);
@@ -249,76 +251,31 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   ], [leads, quickStats, conversionRate]);
 
   // ─── Engagement Analytics ───
-  const engagementAnalytics = useMemo(() => {
-    if (leads.length === 0) return null;
-
-    const channels = [
-      { name: 'Email Outreach', leads: leads.filter(l => l.email?.includes('@gmail') || l.email?.includes('@yahoo')).length || Math.round(leads.length * 0.35), responseRate: 42, avgScore: 0, color: '#6366f1' },
-      { name: 'Social Media', leads: Math.round(leads.length * 0.25), responseRate: 28, avgScore: 0, color: '#8b5cf6' },
-      { name: 'Direct Referral', leads: Math.round(leads.length * 0.22), responseRate: 61, avgScore: 0, color: '#10b981' },
-      { name: 'Content Marketing', leads: Math.round(leads.length * 0.18), responseRate: 34, avgScore: 0, color: '#f59e0b' },
-    ];
-    channels.forEach(ch => {
-      const channelLeads = leads.slice(0, ch.leads);
-      ch.avgScore = channelLeads.length > 0 ? Math.round(channelLeads.reduce((s, l) => s + l.score, 0) / channelLeads.length) : 0;
-    });
-
-    const hourlyActivity = Array.from({ length: 24 }, (_, h) => ({
-      hour: h,
-      label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
-      activity: Math.round(Math.sin((h - 10) * 0.4) * 40 + 50 + (Math.random() - 0.5) * 15),
-    }));
-    const peakHour = hourlyActivity.reduce((best, h) => h.activity > best.activity ? h : best, hourlyActivity[0]);
-
-    const topEngaged = leads.slice(0, 5).map(l => ({
-      ...l,
-      engagementScore: Math.round(l.score * 0.6 + Math.random() * 40),
-      lastTouch: ['2h ago', '5h ago', '1d ago', '2d ago', '3d ago'][leads.indexOf(l) % 5],
-      touchpoints: Math.floor(Math.random() * 8) + 2,
-    }));
-
-    const overallScore = Math.round(leads.reduce((s, l) => s + l.score, 0) / leads.length * 0.85);
-
-    return { channels, hourlyActivity, peakHour, topEngaged, overallScore };
-  }, [leads]);
+  // Phase 0: this panel invented channel attribution, hourly activity heatmaps,
+  // per-lead engagement scores and touchpoint counts (all Math.random / hardcoded
+  // response rates). No real interaction data backs it, so it returns null and the
+  // render shows an honest empty state. Real engagement analytics arrive with the
+  // connected-inbox + email-events pipeline.
+  const engagementAnalytics = useMemo<null | {
+    channels: { name: string; leads: number; responseRate: number; avgScore: number; color: string }[];
+    hourlyActivity: { hour: number; label: string; activity: number }[];
+    peakHour: { hour: number; label: string; activity: number };
+    topEngaged: (Lead & { engagementScore: number; lastTouch: string; touchpoints: number })[];
+    overallScore: number;
+  }>(() => null, [leads]);
 
   // ─── Revenue Forecast ───
-  const revenueForecast = useMemo(() => {
-    if (leads.length === 0) return null;
-
-    const avgDealSize = 2800;
-    const hotLeads = leads.filter(l => l.score > 80);
-    const warmLeads = leads.filter(l => l.score >= 50 && l.score <= 80);
-    const coldLeads = leads.filter(l => l.score < 50);
-
-    const pipeline = [
-      { stage: 'Hot Leads', count: hotLeads.length, winProb: 0.45, value: hotLeads.length * avgDealSize, color: '#ef4444' },
-      { stage: 'Warm Leads', count: warmLeads.length, winProb: 0.20, value: warmLeads.length * avgDealSize, color: '#f59e0b' },
-      { stage: 'Cold Leads', count: coldLeads.length, winProb: 0.05, value: coldLeads.length * avgDealSize, color: '#3b82f6' },
-    ];
-    const totalPipelineValue = pipeline.reduce((s, p) => s + p.value, 0);
-    const weightedForecast = pipeline.reduce((s, p) => s + p.value * p.winProb, 0);
-
-    const projections = [
-      { period: '30 Days', revenue: Math.round(weightedForecast * 0.4), deals: Math.round(hotLeads.length * 0.45 * 0.4), confidence: 82 },
-      { period: '60 Days', revenue: Math.round(weightedForecast * 0.7), deals: Math.round((hotLeads.length * 0.45 + warmLeads.length * 0.2) * 0.5), confidence: 68 },
-      { period: '90 Days', revenue: Math.round(weightedForecast), deals: Math.round(hotLeads.length * 0.45 + warmLeads.length * 0.2 + coldLeads.length * 0.05), confidence: 55 },
-    ];
-
-    const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
-      const month = new Date();
-      month.setMonth(month.getMonth() - (5 - i));
-      return {
-        month: month.toLocaleDateString('en-US', { month: 'short' }),
-        revenue: Math.round(weightedForecast * (0.6 + i * 0.08) + (Math.random() - 0.5) * weightedForecast * 0.15),
-      };
-    });
-
-    const avgScore = leads.length > 0 ? Math.round(leads.reduce((s, l) => s + l.score, 0) / leads.length) : 0;
-    const forecastHealth = avgScore > 65 ? 'Strong' : avgScore > 45 ? 'Moderate' : 'Needs Attention';
-
-    return { pipeline, totalPipelineValue, weightedForecast, projections, monthlyTrend, forecastHealth, avgDealSize };
-  }, [leads]);
+  // Phase 0: revenue forecast invented a flat $2,800 deal size, pipeline value,
+  // 30/60/90-day projections and a random monthly-revenue trend. Scaliyo has no
+  // real deal/revenue data (no Opportunity object), so this returns null and the
+  // render shows an honest empty state until real pipeline value exists.
+  const revenueForecast = useMemo<null | {
+    pipeline: { stage: string; count: number; winProb: number; value: number; color: string }[];
+    totalPipelineValue: number; weightedForecast: number;
+    projections: { period: string; revenue: number; deals: number; confidence: number }[];
+    monthlyTrend: { month: string; revenue: number }[];
+    forecastHealth: string; avgDealSize: number;
+  }>(() => null, [leads]);
 
   // ─── Content Performance ───
   const contentPerformance = useMemo(() => {
@@ -338,12 +295,12 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
       week.setDate(week.getDate() - (7 - i) * 7);
       return {
         week: `W${i + 1}`,
-        count: Math.floor(Math.random() * 6) + (i > 4 ? 4 : 2),
+        count: 0, // Phase 0: no real per-week content history yet (real source in a later phase)
       };
     });
 
     const qualityScore = Math.min(95, Math.round(
-      (leads.filter(l => l.score > 70).length / Math.max(leads.length, 1)) * 50 + 45 + (Math.random() - 0.5) * 10
+      (leads.filter(l => l.score > 70).length / Math.max(leads.length, 1)) * 50 + 45
     ));
 
     return { contentTypes, totalGenerated, avgROI, bestPerformer, weeklyOutput, qualityScore };
@@ -565,7 +522,8 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         return;
       }
 
-      const mockScore = Math.floor(Math.random() * 40) + 60;
+      // Phase 0: leads start unscored (removed Math.random()*40+60 mock score).
+      const initialScore = 0;
       const kb = buildKnowledgeBase(newLeadKB, newLead.phone);
 
       const payload: Record<string, any> = {
@@ -574,7 +532,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
-        score: mockScore,
+        score: initialScore,
         status: 'New',
         lastActivity: 'Just now',
       };
