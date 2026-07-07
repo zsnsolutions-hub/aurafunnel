@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { User } from '../../types';
+import { useToast } from '../../components/ui/Toast';
 
 // ─── Constants ───
 
@@ -42,6 +43,7 @@ interface OnboardingPageProps {
 }
 
 const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile }) => {
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
 
@@ -116,7 +118,10 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, refreshProfile })
         .eq('id', user.id)
     )
       .then(() => refreshProfile())
-      .catch((err) => console.warn('Onboarding save failed:', err));
+      .catch((err) => {
+        console.warn('Onboarding save failed:', err);
+        toast('We couldn’t save your business details. Please try again from Settings.', 'error');
+      });
 
     // Navigate immediately
     navigate('/portal', { replace: true });

@@ -5,6 +5,7 @@ import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, Filt
 import { supabase } from '../../lib/supabase';
 import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummaries } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
+import { useToast } from '../../components/ui/Toast';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
@@ -133,6 +134,7 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 const LeadManagement: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { integrations: integrationStatuses } = useIntegrations();
@@ -532,6 +534,7 @@ const LeadManagement: React.FC = () => {
         setSelectedLead({ ...selectedLead, status: prevStatus!, last_activity: prevActivity!, lastActivity: prevActivity! });
       }
       console.error('Lead status update error:', updateError.message);
+      toast(`Couldn’t update lead status: ${updateError.message}`, 'error');
       return;
     }
     // Audit log (fire-and-forget)

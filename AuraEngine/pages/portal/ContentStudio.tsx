@@ -22,6 +22,8 @@ import ImageGeneratorDrawer from '../../components/image-gen/ImageGeneratorDrawe
 import CTAButtonBuilderModal from '../../components/email/CTAButtonBuilderModal';
 import EmailWriterProgressModal from '../../components/email/EmailWriterProgressModal';
 import { startEmailSequenceRun } from '../../lib/emailWriterQueue';
+import { fetchSuppressedEmails } from '../../lib/suppression';
+import { useToast } from '../../components/ui/Toast';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
 import { useIntegrations } from '../../lib/integrations';
@@ -274,6 +276,7 @@ Either way, wishing you and the {{company}} team all the best.
 
 const ContentStudio: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<LayoutContext>();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1230,7 +1233,7 @@ const ContentStudio: React.FC = () => {
     setSendResult(null);
 
     try {
-      const eligibleLeads = leads
+      const rawEligible = leads
         .filter(l => selectedLeadIds.has(l.id) && l.primary_email)
         .map(l => ({
           id: l.id,
@@ -1244,6 +1247,14 @@ const ContentStudio: React.FC = () => {
           industry: l.industry,
           title: l.title,
         }));
+
+      // Phase 0: honor the shared suppression list before starting the run.
+      const suppressed = await fetchSuppressedEmails(user.id);
+      const eligibleLeads = rawEligible.filter(l => !suppressed.has((l.email || '').trim().toLowerCase()));
+      const suppressedDropped = rawEligible.length - eligibleLeads.length;
+      if (suppressedDropped > 0) {
+        toast(`Skipped ${suppressedDropped} unsubscribed/suppressed recipient${suppressedDropped === 1 ? '' : 's'}.`, 'warning');
+      }
 
       if (eligibleLeads.length === 0) {
         setSendResult({ sent: 0, failed: 0 });
@@ -1280,6 +1291,7 @@ const ContentStudio: React.FC = () => {
       if ('error' in result) {
         console.error('Start run error:', result.error);
         setSendResult({ sent: 0, failed: selectedLeadIds.size });
+        toast(`Couldn't start the sequence: ${result.error}`, 'error');
         return;
       }
 
@@ -1287,6 +1299,7 @@ const ContentStudio: React.FC = () => {
       setWriterRunId(result.runId);
       setShowSendModal(false);
       setShowWriterProgress(true);
+      toast(`Sequence started for ${eligibleLeads.length} recipient${eligibleLeads.length === 1 ? '' : 's'}.`, 'success');
 
       // Auto-mark New leads as Contacted
       try {
