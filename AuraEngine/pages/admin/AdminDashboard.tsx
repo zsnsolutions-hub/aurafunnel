@@ -83,14 +83,14 @@ const AdminDashboard: React.FC = () => {
   // ── Platform Health ──────────────────────────────────────
   const platformHealth = useMemo(() => {
     const services = [
-      { name: 'Supabase API', status: 'operational' as const, latency: Math.floor(Math.random() * 40) + 15, uptime: 99.97 },
-      { name: 'Authentication', status: 'operational' as const, latency: Math.floor(Math.random() * 30) + 10, uptime: 99.99 },
-      { name: 'Lead Scoring Engine', status: totalLeadsCount > 0 ? 'operational' as const : 'idle' as const, latency: Math.floor(Math.random() * 50) + 20, uptime: 99.95 },
-      { name: 'AI Content Gen', status: 'operational' as const, latency: Math.floor(Math.random() * 100) + 80, uptime: 99.90 },
-      { name: 'CSV Processor', status: 'operational' as const, latency: Math.floor(Math.random() * 20) + 5, uptime: 99.98 },
-      { name: 'Realtime Feed', status: 'operational' as const, latency: Math.floor(Math.random() * 15) + 3, uptime: 99.96 },
-      { name: 'Billing Service', status: activeSubs > 0 ? 'operational' as const : 'idle' as const, latency: Math.floor(Math.random() * 60) + 30, uptime: 99.99 },
-      { name: 'Email Delivery', status: 'operational' as const, latency: Math.floor(Math.random() * 80) + 40, uptime: 99.92 },
+      { name: 'Supabase API', status: 'operational' as const, latency: 0 + 15, uptime: 99.97 },
+      { name: 'Authentication', status: 'operational' as const, latency: 0 + 10, uptime: 99.99 },
+      { name: 'Lead Scoring Engine', status: totalLeadsCount > 0 ? 'operational' as const : 'idle' as const, latency: 0 + 20, uptime: 99.95 },
+      { name: 'AI Content Gen', status: 'operational' as const, latency: 0 + 80, uptime: 99.90 },
+      { name: 'CSV Processor', status: 'operational' as const, latency: 0 + 5, uptime: 99.98 },
+      { name: 'Realtime Feed', status: 'operational' as const, latency: 0 + 3, uptime: 99.96 },
+      { name: 'Billing Service', status: activeSubs > 0 ? 'operational' as const : 'idle' as const, latency: 0 + 30, uptime: 99.99 },
+      { name: 'Email Delivery', status: 'operational' as const, latency: 0 + 40, uptime: 99.92 },
     ];
     const operationalCount = services.filter(s => s.status === 'operational').length;
     const avgLatency = Math.round(services.reduce((a, s) => a + s.latency, 0) / services.length);
@@ -110,7 +110,7 @@ const AdminDashboard: React.FC = () => {
     const conversionRate = totalUsers > 0 ? Math.round((activeSubs / totalUsers) * 100) : 0;
     const projectedAnnual = estimatedRevenue * 12;
     const ltv = arpu * 14; // ~14 month avg retention estimate
-    const churnEstimate = totalUsers > 10 ? Math.round(Math.random() * 3 + 2) : 0; // 2-5% estimate
+    const churnEstimate = totalUsers > 10 ? 0 : 0; // 2-5% estimate
     return { planDistribution, arpu, conversionRate, projectedAnnual, ltv, churnEstimate };
   }, [totalUsers, activeSubs, estimatedRevenue]);
 
@@ -126,13 +126,13 @@ const AdminDashboard: React.FC = () => {
       scale: Math.round(activeSubs * 0.2)
     };
     const weeklyGrowth = [
-      { day: 'Mon', signups: Math.floor(Math.random() * 3) + 1 },
-      { day: 'Tue', signups: Math.floor(Math.random() * 4) + 1 },
-      { day: 'Wed', signups: Math.floor(Math.random() * 3) + 2 },
-      { day: 'Thu', signups: Math.floor(Math.random() * 5) + 1 },
-      { day: 'Fri', signups: Math.floor(Math.random() * 4) + 2 },
-      { day: 'Sat', signups: Math.floor(Math.random() * 2) },
-      { day: 'Sun', signups: Math.floor(Math.random() * 2) },
+      { day: 'Mon', signups: 0 + 1 },
+      { day: 'Tue', signups: 0 + 1 },
+      { day: 'Wed', signups: 0 + 2 },
+      { day: 'Thu', signups: 0 + 1 },
+      { day: 'Fri', signups: 0 + 2 },
+      { day: 'Sat', signups: 0 },
+      { day: 'Sun', signups: 0 },
     ];
     return { signupsThisWeek, avgLeadsPerUser, activeRate, planBreakdown, weeklyGrowth };
   }, [recentUsers, totalUsers, totalLeadsCount, activeSubs]);
@@ -140,17 +140,17 @@ const AdminDashboard: React.FC = () => {
   // ── AI Operations Analytics ─────────────────────────────
   const aiOperations = useMemo(() => {
     const models = [
-      { name: 'Gemini Pro', calls: Math.floor(Math.random() * 200) + 50, avgLatency: Math.floor(Math.random() * 400) + 200, successRate: Math.round(95 + Math.random() * 4.5), cost: Math.round((Math.random() * 8 + 2) * 100) / 100 },
-      { name: 'Lead Scorer', calls: totalLeadsCount, avgLatency: Math.floor(Math.random() * 50) + 10, successRate: 99.9, cost: 0 },
-      { name: 'Content Engine', calls: quickStats.contentCreated, avgLatency: Math.floor(Math.random() * 800) + 300, successRate: Math.round(92 + Math.random() * 6), cost: Math.round((Math.random() * 5 + 1) * 100) / 100 },
-      { name: 'Insight Engine', calls: Math.floor(Math.random() * 100) + 20, avgLatency: Math.floor(Math.random() * 100) + 30, successRate: 100, cost: 0 },
+      { name: 'Gemini Pro', calls: 0 + 50, avgLatency: 0 + 200, successRate: Math.round(95 + 0), cost: Math.round((0 + 2) * 100) / 100 },
+      { name: 'Lead Scorer', calls: totalLeadsCount, avgLatency: 0 + 10, successRate: 99.9, cost: 0 },
+      { name: 'Content Engine', calls: quickStats.contentCreated, avgLatency: 0 + 300, successRate: Math.round(92 + 0), cost: Math.round((0 + 1) * 100) / 100 },
+      { name: 'Insight Engine', calls: 0 + 20, avgLatency: 0 + 30, successRate: 100, cost: 0 },
     ];
     const totalCalls = models.reduce((a, m) => a + m.calls, 0);
     const totalCost = models.reduce((a, m) => a + m.cost, 0);
     const avgSuccessRate = models.length > 0 ? Math.round(models.reduce((a, m) => a + m.successRate, 0) / models.length * 10) / 10 : 0;
     const dailyUsage = Array.from({ length: 7 }, (_, i) => ({
       day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i],
-      calls: Math.floor(Math.random() * 80) + 10,
+      calls: 0 + 10,
     }));
     return { models, totalCalls, totalCost, avgSuccessRate, dailyUsage };
   }, [totalLeadsCount, quickStats.contentCreated]);
@@ -931,10 +931,10 @@ const AdminDashboard: React.FC = () => {
               <div className="space-y-3">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Resources</h4>
                 {[
-                  { name: 'CPU Usage', value: Math.floor(Math.random() * 25) + 10, max: 100, unit: '%', color: 'bg-blue-500' },
-                  { name: 'Memory', value: Math.floor(Math.random() * 30) + 20, max: 100, unit: '%', color: 'bg-purple-500' },
-                  { name: 'DB Connections', value: Math.floor(Math.random() * 8) + 3, max: 50, unit: '/50', color: 'bg-indigo-500' },
-                  { name: 'Storage', value: Math.floor(Math.random() * 15) + 5, max: 100, unit: '%', color: 'bg-amber-500' },
+                  { name: 'CPU Usage', value: 0 + 10, max: 100, unit: '%', color: 'bg-blue-500' },
+                  { name: 'Memory', value: 0 + 20, max: 100, unit: '%', color: 'bg-purple-500' },
+                  { name: 'DB Connections', value: 0 + 3, max: 50, unit: '/50', color: 'bg-indigo-500' },
+                  { name: 'Storage', value: 0 + 5, max: 100, unit: '%', color: 'bg-amber-500' },
                 ].map((r, i) => (
                   <div key={i}>
                     <div className="flex items-center justify-between text-xs mb-1">

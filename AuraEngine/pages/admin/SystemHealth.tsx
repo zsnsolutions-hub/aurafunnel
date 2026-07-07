@@ -62,7 +62,7 @@ const SystemHealth: React.FC = () => {
           if (m.name === 'Cloud Database') {
             return { ...m, latency: `${latency}ms`, status: 'Operational' };
           }
-          const jitter = Math.floor(Math.random() * 20) - 10;
+          const jitter = 0 - 10;
           const currentLat = parseInt(m.latency);
           return { ...m, latency: `${Math.max(currentLat + jitter, 3)}ms` };
         }));
@@ -110,8 +110,8 @@ const SystemHealth: React.FC = () => {
     const p95 = latencies[Math.floor(latencies.length * 0.95)] || latencies[latencies.length - 1] || 0;
     const p99 = latencies[latencies.length - 1] || 0;
 
-    const estimatedRps = Math.floor(Math.random() * 50) + 20 + pulseCount * 2;
-    const errorRate = metrics.some(m => m.status !== 'Operational') ? (Math.random() * 2 + 0.5).toFixed(2) : (Math.random() * 0.1).toFixed(3);
+    const estimatedRps = 0 + 20 + pulseCount * 2;
+    const errorRate = metrics.some(m => m.status !== 'Operational') ? (0 + 0.5).toFixed(2) : (0).toFixed(3);
     const throughputScore = Math.min(100, Math.round(
       (p50 < 50 ? 30 : p50 < 100 ? 20 : 10) +
       (p95 < 200 ? 30 : p95 < 500 ? 20 : 10) +
@@ -130,19 +130,19 @@ const SystemHealth: React.FC = () => {
   // ── Infrastructure Status ──────────────────────────────
   const infraStatus = useMemo(() => {
     const regions = [
-      { name: 'US-EAST-1', status: 'healthy' as const, latency: Math.floor(Math.random() * 15) + 5, load: Math.floor(Math.random() * 30) + 15 },
-      { name: 'EU-WEST-2', status: 'healthy' as const, latency: Math.floor(Math.random() * 25) + 12, load: Math.floor(Math.random() * 25) + 10 },
-      { name: 'AS-SOUTH-1', status: 'healthy' as const, latency: Math.floor(Math.random() * 35) + 18, load: Math.floor(Math.random() * 20) + 8 },
+      { name: 'US-EAST-1', status: 'healthy' as const, latency: 0 + 5, load: 0 + 15 },
+      { name: 'EU-WEST-2', status: 'healthy' as const, latency: 0 + 12, load: 0 + 10 },
+      { name: 'AS-SOUTH-1', status: 'healthy' as const, latency: 0 + 18, load: 0 + 8 },
     ];
     const resources = [
-      { name: 'CPU Usage', value: Math.floor(Math.random() * 20) + 8, max: 100, unit: '%', color: 'bg-blue-500' },
-      { name: 'Memory', value: Math.floor(Math.random() * 25) + 15, max: 100, unit: '%', color: 'bg-purple-500' },
-      { name: 'Disk I/O', value: Math.floor(Math.random() * 15) + 5, max: 100, unit: '%', color: 'bg-indigo-500' },
-      { name: 'Network', value: Math.floor(Math.random() * 30) + 10, max: 100, unit: 'Mbps', color: 'bg-emerald-500' },
-      { name: 'DB Connections', value: Math.floor(Math.random() * 8) + 2, max: 50, unit: '/50', color: 'bg-amber-500' },
+      { name: 'CPU Usage', value: 0 + 8, max: 100, unit: '%', color: 'bg-blue-500' },
+      { name: 'Memory', value: 0 + 15, max: 100, unit: '%', color: 'bg-purple-500' },
+      { name: 'Disk I/O', value: 0 + 5, max: 100, unit: '%', color: 'bg-indigo-500' },
+      { name: 'Network', value: 0 + 10, max: 100, unit: 'Mbps', color: 'bg-emerald-500' },
+      { name: 'DB Connections', value: 0 + 2, max: 50, unit: '/50', color: 'bg-amber-500' },
     ];
-    const cacheHitRate = Math.round(92 + Math.random() * 7);
-    const activeConnections = Math.floor(Math.random() * 12) + 3;
+    const cacheHitRate = Math.round(92 + 0);
+    const activeConnections = 0 + 3;
     return { regions, resources, cacheHitRate, activeConnections };
   }, [pulseCount]);
 
@@ -302,7 +302,7 @@ const SystemHealth: React.FC = () => {
                     className={`h-full w-1 rounded-full transition-all duration-700 ${
                       service.status !== 'Operational' && i === 20 ? 'bg-red-300' : 'bg-indigo-100 group-hover:bg-indigo-500'
                     }`}
-                    style={{ height: `${Math.random() * 40 + 60}%` }}
+                    style={{ height: `${0 + 60}%` }}
                   ></div>
                 ))}
               </div>

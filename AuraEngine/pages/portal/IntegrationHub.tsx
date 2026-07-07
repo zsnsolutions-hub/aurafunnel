@@ -76,18 +76,8 @@ interface IntegrationHealthMetric {
   status: 'healthy' | 'degraded' | 'down';
 }
 
-const MOCK_SYNC_HISTORY: SyncHistoryEntry[] = [
-  { id: 'sh1', timestamp: new Date(Date.now() - 120000).toISOString(), integration: 'Salesforce', direction: 'Inbound', records: 12, status: 'success', duration: 1.8 },
-  { id: 'sh2', timestamp: new Date(Date.now() - 300000).toISOString(), integration: 'HubSpot', direction: 'Outbound', records: 45, status: 'success', duration: 3.2 },
-  { id: 'sh3', timestamp: new Date(Date.now() - 600000).toISOString(), integration: 'Slack', direction: 'Outbound', records: 1, status: 'partial', duration: 0.5 },
-  { id: 'sh4', timestamp: new Date(Date.now() - 900000).toISOString(), integration: 'Google Analytics', direction: 'Inbound', records: 1842, status: 'success', duration: 8.4 },
-  { id: 'sh5', timestamp: new Date(Date.now() - 1500000).toISOString(), integration: 'Mailchimp', direction: 'Outbound', records: 42, status: 'success', duration: 2.1 },
-  { id: 'sh6', timestamp: new Date(Date.now() - 1800000).toISOString(), integration: 'Salesforce', direction: 'Outbound', records: 8, status: 'failed', duration: 5.0 },
-  { id: 'sh7', timestamp: new Date(Date.now() - 2400000).toISOString(), integration: 'HubSpot', direction: 'Outbound', records: 23, status: 'success', duration: 1.9 },
-  { id: 'sh8', timestamp: new Date(Date.now() - 3600000).toISOString(), integration: 'Slack', direction: 'Outbound', records: 1, status: 'success', duration: 0.3 },
-  { id: 'sh9', timestamp: new Date(Date.now() - 5400000).toISOString(), integration: 'Google Analytics', direction: 'Inbound', records: 2104, status: 'success', duration: 9.1 },
-  { id: 'sh10', timestamp: new Date(Date.now() - 7200000).toISOString(), integration: 'Salesforce', direction: 'Inbound', records: 6, status: 'success', duration: 1.2 },
-];
+// Phase 0: removed fabricated sync history (there is no live sync engine).
+const MOCK_SYNC_HISTORY: SyncHistoryEntry[] = [];
 
 const SYNC_STATUS_STYLES: Record<SyncHistoryEntry['status'], { bg: string; text: string; label: string }> = {
   success: { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Success' },
@@ -95,15 +85,10 @@ const SYNC_STATUS_STYLES: Record<SyncHistoryEntry['status'], { bg: string; text:
   partial: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Partial' },
 };
 
-const SECURITY_CHECKS = [
-  { label: 'API Keys Encrypted', status: 'pass' as const, detail: 'AES-256 at rest' },
-  { label: 'OAuth 2.0 Tokens', status: 'pass' as const, detail: 'Auto-refresh enabled' },
-  { label: 'Data in Transit', status: 'pass' as const, detail: 'TLS 1.3 enforced' },
-  { label: 'IP Allowlisting', status: 'warn' as const, detail: 'Not configured' },
-  { label: 'Webhook Signatures', status: 'pass' as const, detail: 'HMAC-SHA256 verified' },
-  { label: 'Audit Logging', status: 'pass' as const, detail: '90-day retention' },
-  { label: 'Data Residency', status: 'pass' as const, detail: 'US-East-1 region' },
-  { label: 'PII Masking', status: 'warn' as const, detail: 'Email fields exposed' },
+// Phase 0: removed hardcoded 'pass' security claims (encryption, HMAC, audit
+// retention) that probed nothing and were false per the security audit.
+const SECURITY_CHECKS: { label: string; status: 'pass' | 'warn' | 'fail'; detail: string }[] = [
+  { label: 'Automated posture checks', status: 'warn', detail: 'Not implemented \u2014 provider credential encryption, webhook signing and audit scoping are not automatically verified here.' },
 ];
 
 const DEFAULT_INTEGRATIONS: Integration[] = [
@@ -155,25 +140,26 @@ const DEFAULT_INTEGRATIONS: Integration[] = [
   },
 ];
 
-const DEFAULT_API_KEYS: ApiKeyData[] = [
-  { id: 'prod', name: 'Production Key', keyPreview: 'af_live_...c2f9', fullKey: 'af_live_xxxx_xxxx_xxxx_xxxx_c2f9', lastUsed: '2 minutes ago', permissions: 'readwrite', active: true },
-  { id: 'dev', name: 'Development Key', keyPreview: 'af_test_...8a3b', fullKey: 'af_test_xxxx_xxxx_xxxx_xxxx_8a3b', lastUsed: '1 hour ago', permissions: 'read', active: true },
-];
+// Phase 0: removed fake af_live_/af_test_ keys. Real API keys live on the
+// API Keys page (scal_ keys, hash-stored). This panel no longer fabricates any.
+const DEFAULT_API_KEYS: ApiKeyData[] = [];
 
+// Phase 0: zeroed fabricated sync stats (no real sync data).
 const SYNC_STATS = {
-  totalRecords: 12842,
-  successRate: 99.8,
-  avgSyncTime: 2.4,
-  failedSyncs: 24,
+  totalRecords: 0,
+  successRate: 0,
+  avgSyncTime: 0,
+  failedSyncs: 0,
 };
 
+// Phase 0: zeroed fabricated API usage/cost (rate-limit config kept — it's real).
 const API_USAGE = {
-  requestsToday: 8424,
-  avgLatency: 142,
-  errorRate: 0.8,
-  costToday: 4.28,
+  requestsToday: 0,
+  avgLatency: 0,
+  errorRate: 0,
+  costToday: 0,
   rateLimits: { perMinute: 60, perHour: 1000, perDay: 10000 },
-  currentUsagePct: 42,
+  currentUsagePct: 0,
 };
 
 const IntegrationHub: React.FC = () => {
@@ -300,9 +286,9 @@ const IntegrationHub: React.FC = () => {
   const integrationHealth = useMemo((): IntegrationHealthMetric[] => {
     return integrations.map(integ => ({
       name: integ.name,
-      uptime: integ.status === 'connected' ? 99.0 + Math.random() * 0.99 : integ.status === 'partial' ? 85 + Math.random() * 10 : 0,
-      errorRate: integ.status === 'connected' ? Math.random() * 2 : integ.status === 'partial' ? 5 + Math.random() * 10 : 100,
-      avgLatency: 50 + Math.floor(Math.random() * 200),
+      uptime: integ.status === 'connected' ? 99.0 : integ.status === 'partial' ? 85 : 0,
+      errorRate: integ.status === 'connected' ? 0 : integ.status === 'partial' ? 5 : 100,
+      avgLatency: 0,
       lastIncident: integ.status === 'connected' ? '14 days ago' : integ.status === 'partial' ? '2 hours ago' : 'Now',
       status: integ.status === 'connected' ? 'healthy' : integ.status === 'partial' ? 'degraded' : 'down',
     }));
@@ -312,18 +298,18 @@ const IntegrationHub: React.FC = () => {
   const pipelineAnalytics = useMemo(() => {
     const throughput = integrations.map(integ => ({
       name: integ.name,
-      recordsPerHour: Math.round(integ.dataVolume * 28 + Math.random() * 50),
-      avgLatency: Math.round(80 + Math.random() * 180),
-      peakLoad: Math.round(60 + Math.random() * 38),
-      queueDepth: Math.floor(Math.random() * 15),
+      recordsPerHour: 0,
+      avgLatency: 0,
+      peakLoad: 0,
+      queueDepth: 0,
       status: integ.status,
     }));
 
     const hourlyFlow = Array.from({ length: 24 }, (_, h) => ({
       hour: h,
       label: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
-      inbound: Math.round(Math.sin((h - 9) * 0.4) * 120 + 150 + (Math.random() - 0.5) * 40),
-      outbound: Math.round(Math.sin((h - 10) * 0.35) * 80 + 100 + (Math.random() - 0.5) * 30),
+      inbound: 0,
+      outbound: 0,
     }));
     const peakHour = hourlyFlow.reduce((best, h) => (h.inbound + h.outbound) > (best.inbound + best.outbound) ? h : best, hourlyFlow[0]);
 
@@ -349,8 +335,8 @@ const IntegrationHub: React.FC = () => {
       const d = new Date(); d.setDate(d.getDate() - (6 - i));
       return {
         day: d.toLocaleDateString('en-US', { weekday: 'short' }),
-        errors: Math.floor(Math.random() * 12) + 2,
-        resolved: Math.floor(Math.random() * 10) + 1,
+        errors: 0,
+        resolved: 0,
       };
     });
 
@@ -366,18 +352,18 @@ const IntegrationHub: React.FC = () => {
   const costOptimization = useMemo(() => {
     const perIntegration = integrations.map(integ => ({
       name: integ.name,
-      monthlyCost: Math.round(integ.dataVolume * 2.8 + Math.random() * 20),
-      callsPerDay: Math.round(integ.dataVolume * 180 + Math.random() * 500),
-      costPerRecord: (0.001 + Math.random() * 0.008).toFixed(4),
-      optimizable: Math.round(Math.random() * 25 + 5),
+      monthlyCost: 0,
+      callsPerDay: 0,
+      costPerRecord: '0.0000',
+      optimizable: 0,
     }));
 
     const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
       const d = new Date(); d.setMonth(d.getMonth() - (5 - i));
       return {
         month: d.toLocaleDateString('en-US', { month: 'short' }),
-        actual: Math.round(85 + i * 8 + (Math.random() - 0.5) * 15),
-        optimized: Math.round(65 + i * 5 + (Math.random() - 0.5) * 10),
+        actual: 0,
+        optimized: 0,
       };
     });
 

@@ -55,30 +55,14 @@ const SecurityTab: React.FC<Props> = ({ adminId, isSuperAdmin }) => {
         status: adminCount <= 3 ? 'pass' : adminCount <= 5 ? 'warn' : 'fail',
         detail: `${adminCount} admin accounts out of ${totalUsers} total users`,
       },
+      // Phase 0: removed the hardcoded "pass" claims for RLS / audit logging /
+      // redaction / secret encryption. These probed nothing and several were
+      // false per the security audit. Showing a green tick for unverified posture
+      // is worse than showing nothing — track real posture in the security review.
       {
-        label: 'RLS enabled on all tables',
-        status: 'pass',
-        detail: 'All 67 tables have Row Level Security enabled per schema design',
-      },
-      {
-        label: 'Support session time-boxing',
-        status: 'pass',
-        detail: 'Support sessions auto-expire after 2 hours',
-      },
-      {
-        label: 'Audit logging active',
-        status: 'pass',
-        detail: 'All admin actions write to audit_logs with redaction',
-      },
-      {
-        label: 'Sensitive field redaction',
-        status: 'pass',
-        detail: 'API keys, tokens, and passwords are redacted in audit entries',
-      },
-      {
-        label: 'Super-admin access control',
-        status: 'pass',
-        detail: 'Support Console requires is_super_admin flag beyond ADMIN role',
+        label: 'Automated posture checks',
+        status: 'warn',
+        detail: 'Not implemented here — RLS scoping, audit-log tenancy, secret encryption and redaction are not automatically probed. See the security review.',
       },
     ];
 
