@@ -233,6 +233,8 @@ const LeadManagement: React.FC = () => {
   const [campaigns, setCampaigns] = useState<{ id: string; name: string; status: string }[]>([]);
   const [bulkCampaignId, setBulkCampaignId] = useState('');
   const [addingToCampaign, setAddingToCampaign] = useState(false);
+  const [newCampaignName, setNewCampaignName] = useState('');
+  const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [bulkSubject, setBulkSubject] = useState('');
@@ -955,10 +957,40 @@ const LeadManagement: React.FC = () => {
       const rows = toEnroll.map(id => ({ sequence_id: bulkCampaignId, lead_id: id, workspace_id: user.id, status: 'active', current_step: 0 }));
       const { error } = await supabase.from('sequence_enrollments').insert(rows);
       if (error) throw new Error(error.message);
+      // Keep the campaign's lead count accurate (no DB trigger maintains it).
+      const { count } = await supabase.from('sequence_enrollments')
+        .select('id', { count: 'exact', head: true }).eq('sequence_id', bulkCampaignId);
+      if (typeof count === 'number') await supabase.from('email_sequences').update({ total_leads: count }).eq('id', bulkCampaignId);
       toast(`Added ${toEnroll.length} lead${toEnroll.length !== 1 ? 's' : ''} to "${name}"${already.size ? ` · ${already.size} already in it` : ''}`, 'success');
       setSelectedIds(new Set());
     } catch (e) { toast((e as Error).message || 'Could not add to campaign.', 'error'); }
     finally { setAddingToCampaign(false); }
+  };
+
+  // Create a brand-new draft campaign (email sequence) and enroll the selected
+  // leads. The user adds the email steps afterwards in the Campaigns editor.
+  const handleCreateCampaignFromSelected = async () => {
+    const ids = Array.from(selectedIds);
+    const nm = newCampaignName.trim();
+    if (ids.length === 0 || !nm) return;
+    setCreatingCampaign(true);
+    try {
+      const { data: seq, error } = await supabase.from('email_sequences')
+        .insert({ workspace_id: user.id, created_by: user.id, name: nm, status: 'draft', total_leads: ids.length })
+        .select('id,name,status').single();
+      if (error || !seq) throw new Error(error?.message || 'Could not create campaign.');
+      const seqId = (seq as { id: string }).id;
+      const rows = ids.map(id => ({ sequence_id: seqId, lead_id: id, workspace_id: user.id, status: 'active', current_step: 0 }));
+      const { error: enrollErr } = await supabase.from('sequence_enrollments').insert(rows);
+      if (enrollErr) throw new Error(enrollErr.message);
+      setCampaigns(prev => [{ id: seqId, name: (seq as { name: string }).name, status: (seq as { status: string }).status }, ...prev]);
+      setBulkCampaignId(seqId);
+      setNewCampaignName('');
+      setBulkActionOpen(null);
+      setSelectedIds(new Set());
+      toast(`Created "${nm}" with ${ids.length} lead${ids.length !== 1 ? 's' : ''}. Add email steps in the Campaigns area to start sending.`, 'success');
+    } catch (e) { toast((e as Error).message || 'Could not create campaign.', 'error'); }
+    finally { setCreatingCampaign(false); }
   };
 
   const handleBulkTag = async () => {
@@ -1867,6 +1899,26 @@ const LeadManagement: React.FC = () => {
                           className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold disabled:opacity-50"
                         >
                           {addingToCampaign ? 'Adding…' : 'Add'}
+                        </button>
+                      </div>
+
+                      {/* Or create a new campaign */}
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Or create new</p>
+                        <input
+                          type="text"
+                          value={newCampaignName}
+                          onChange={e => setNewCampaignName(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleCreateCampaignFromSelected(); }}
+                          placeholder="New campaign name…"
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-2 outline-none focus:border-blue-300"
+                        />
+                        <button
+                          onClick={handleCreateCampaignFromSelected}
+                          disabled={creatingCampaign || !newCampaignName.trim()}
+                          className="w-full py-2 bg-white border border-blue-200 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-50 transition-all disabled:opacity-50"
+                        >
+                          {creatingCampaign ? 'Creating…' : `Create & add ${selectedIds.size} lead${selectedIds.size !== 1 ? 's' : ''}`}
                         </button>
                       </div>
                     </div>
