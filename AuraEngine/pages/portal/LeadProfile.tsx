@@ -16,6 +16,7 @@ import EmailValidationControl from '../../components/validation/EmailValidationC
 import { leadIntelligenceEnabled } from '../../lib/leadScoring';
 import LeadScorePanel from '../../components/leads/LeadScorePanel';
 import LeadResearchPanel from '../../components/leads/LeadResearchPanel';
+import NextActionPanel from '../../components/leads/NextActionPanel';
 import FastSendModal from '../../components/leads/FastSendModal';
 import { workspaceFlagEnabled } from '../../lib/featureFlags';
 import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
@@ -1020,6 +1021,11 @@ const LeadProfile: React.FC = () => {
                 {intelEnabled && (
                   <div className="md:col-span-3">
                     <LeadResearchPanel lead={lead} businessId={currentBusinessId} workspaceId={currentBusiness?.workspace_id ?? null} userId={user.id} enabled={intelEnabled} />
+                  </div>
+                )}
+                {intelEnabled && (
+                  <div className="md:col-span-3">
+                    <NextActionPanel lead={lead} businessId={currentBusinessId} enabled={intelEnabled} />
                   </div>
                 )}
 
