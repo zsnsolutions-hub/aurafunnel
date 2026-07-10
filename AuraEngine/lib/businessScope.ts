@@ -16,9 +16,12 @@ export function setBusinessScope(scope: { businessId: string | null; enabled: bo
   _enabled = scope.enabled;
 }
 
-/** business_id to stamp on newly-created rows — null when scoping is off. */
+/** business_id to stamp on newly-created rows. Returns the current business
+ *  ALWAYS (even when the multi_business flag is off) — every user has a default
+ *  business, so stamping it keeps rows business-scoped and avoids NULLs that a
+ *  future business-scoped RLS would orphan. Null only before the provider loads. */
 export function activeBusinessId(): string | null {
-  return _enabled ? _businessId : null;
+  return _businessId;
 }
 
 /** True only when the multi_business flag is on AND a business is selected. */
