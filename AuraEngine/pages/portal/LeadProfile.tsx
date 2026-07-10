@@ -15,6 +15,7 @@ import { emailValidationEnabled } from '../../lib/emailValidation';
 import EmailValidationControl from '../../components/validation/EmailValidationControl';
 import { leadIntelligenceEnabled } from '../../lib/leadScoring';
 import LeadScorePanel from '../../components/leads/LeadScorePanel';
+import LeadResearchPanel from '../../components/leads/LeadResearchPanel';
 import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
 import { consumeCredits } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
@@ -1009,6 +1010,11 @@ const LeadProfile: React.FC = () => {
                 {intelEnabled && (
                   <div className="md:col-span-3">
                     <LeadScorePanel lead={lead} businessId={currentBusinessId} workspaceId={currentBusiness?.workspace_id ?? null} enabled={intelEnabled} />
+                  </div>
+                )}
+                {intelEnabled && (
+                  <div className="md:col-span-3">
+                    <LeadResearchPanel lead={lead} businessId={currentBusinessId} workspaceId={currentBusiness?.workspace_id ?? null} userId={user.id} enabled={intelEnabled} />
                   </div>
                 )}
 
