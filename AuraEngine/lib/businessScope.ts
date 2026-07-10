@@ -25,3 +25,17 @@ export function activeBusinessId(): string | null {
 export function businessScopeActive(): boolean {
   return _enabled && !!_businessId;
 }
+
+/** The current businessId for query keys (null when scoping is off). */
+export function scopeKey(): string | null {
+  return _enabled ? _businessId : null;
+}
+
+/** Apply the business filter to a supabase query builder when scoping is on.
+ *  Typed loosely (any) on purpose — capturing the supabase filter-builder type in
+ *  a generic here trips TS2589 ("excessively deep"). Callers keep their own types
+ *  via the surrounding chain. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function scopeLeads(query: any): any {
+  return _enabled && _businessId ? query.eq('business_id', _businessId) : query;
+}

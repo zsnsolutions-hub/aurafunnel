@@ -6,7 +6,8 @@
 // it stays in sync with the switcher.
 
 import React, { useState, useCallback } from 'react';
-import { Building2, Plus, Check, Pencil, Archive, Globe, Loader2, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, Plus, Check, Pencil, Archive, Globe, Loader2, X, Settings2 } from 'lucide-react';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { createBusiness, updateBusiness, archiveBusiness, Business, NewBusinessInput } from '../../lib/businesses';
 import { useToast } from '../../components/ui/Toast';
@@ -18,6 +19,7 @@ const EMPTY: Draft = { name: '', website: '', industry: '', description: '', def
 const BusinessesPage: React.FC = () => {
   const { businesses, currentBusinessId, setCurrentBusiness, refresh, multiBusinessEnabled } = useCurrentBusiness();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [editor, setEditor] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -127,6 +129,7 @@ const BusinessesPage: React.FC = () => {
                   <button onClick={() => setCurrentBusiness(b.id)} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Switch to</button>
                 )}
                 <div className="flex-1" />
+                <button onClick={() => { setCurrentBusiness(b.id); navigate('/portal/business-settings'); }} title="Settings" className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-gray-50"><Settings2 size={15} /></button>
                 <button onClick={() => openEdit(b)} title="Edit" className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-50"><Pencil size={15} /></button>
                 <button onClick={() => onArchive(b)} title="Archive" className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-50"><Archive size={15} /></button>
               </div>

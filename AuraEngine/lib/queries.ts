@@ -4,6 +4,7 @@ import { Lead } from '../types';
 import { queryClient } from './queryClient';
 import { fetchBatchEmailSummary, type BatchEmailSummary } from './emailTracking';
 import { useCurrentBusiness } from '../components/business/BusinessProvider';
+import { scopeLeads, scopeKey } from './businessScope';
 
 // Canonical columns used by the app — avoids SELECT *
 const LEAD_COLUMNS = 'id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,linkedin_url,location,title,industry,company_size,source,import_batch_id,imported_at,custom_fields' as const;
@@ -102,24 +103,25 @@ export function useSocialStats(userId: string | undefined) {
 /** Prefetch leads + counts for a given user — call on sidebar hover */
 export function prefetchPortalData(userId: string | undefined) {
   if (!userId) return;
+  const bizId = scopeKey();
   queryClient.prefetchQuery({
-    queryKey: ['leads', userId],
+    queryKey: ['leads', userId, bizId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId).order('score', { ascending: false });
+      const { data, error } = await scopeLeads(supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId)).order('score', { ascending: false });
       if (error) throw error;
       return normalizeLeads(data || []);
     },
     staleTime: 60_000,
   });
   queryClient.prefetchQuery({
-    queryKey: ['leadCounts', userId],
+    queryKey: ['leadCounts', userId, bizId],
     queryFn: async () => {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
       const [todayRes, yesterdayRes, contentRes] = await Promise.all([
-        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId).gte('created_at', todayStart),
-        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId).gte('created_at', yesterdayStart).lt('created_at', todayStart),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId)).gte('created_at', todayStart),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId)).gte('created_at', yesterdayStart).lt('created_at', todayStart),
         supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       ]);
       return {
@@ -134,8 +136,10 @@ export function prefetchPortalData(userId: string | undefined) {
 
 /** Fetches lead counts for quick stats — uses head:true to avoid transferring rows */
 export function useLeadCounts(userId: string | undefined) {
+  const { currentBusinessId, multiBusinessEnabled } = useCurrentBusiness();
+  const bizId = multiBusinessEnabled ? currentBusinessId : null;
   return useQuery({
-    queryKey: ['leadCounts', userId],
+    queryKey: ['leadCounts', userId, bizId],
     queryFn: async () => {
       if (!userId) return { leadsToday: 0, leadsYesterday: 0, contentCreated: 0 };
       const now = new Date();
@@ -143,8 +147,8 @@ export function useLeadCounts(userId: string | undefined) {
       const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
 
       const [todayRes, yesterdayRes, contentRes] = await Promise.all([
-        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId).gte('created_at', todayStart),
-        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId).gte('created_at', yesterdayStart).lt('created_at', todayStart),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId)).gte('created_at', todayStart),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('client_id', userId)).gte('created_at', yesterdayStart).lt('created_at', todayStart),
         supabase.from('ai_usage_logs').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       ]);
 
@@ -154,7 +158,7 @@ export function useLeadCounts(userId: string | undefined) {
         contentCreated: contentRes.count ?? 0,
       };
     },
-    enabled: !!userId,
+    enabled: !!userId && (!multiBusinessEnabled || !!currentBusinessId),
   });
 }
 

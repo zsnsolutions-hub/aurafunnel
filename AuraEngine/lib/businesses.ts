@@ -92,3 +92,57 @@ export async function updateBusiness(id: string, patch: BusinessPatch): Promise<
 export async function archiveBusiness(id: string): Promise<void> {
   await updateBusiness(id, { status: 'archived' });
 }
+
+// ── Business profile (the per-business "brain") ─────────────────────────────
+
+export interface BusinessProfileRow {
+  business_id: string;
+  workspace_id: string;
+  products_services: string | null;
+  audience: string | null;
+  tone: string | null;
+  offers: string | null;
+  objections: string | null;
+  competitors: string | null;
+  case_studies: string | null;
+  sender_name: string | null;
+  sender_email: string | null;
+  postal_address: string | null;
+  brand_voice: string | null;
+  visual_style_notes: string | null;
+  preferred_ctas: string[] | null;
+  value_prop: string | null;
+  unique_selling_points: string[] | null;
+  competitive_advantage: string | null;
+  company_story: string | null;
+}
+
+export type BusinessProfilePatch = Partial<Omit<BusinessProfileRow, 'business_id' | 'workspace_id'>>;
+
+export async function getBusinessProfile(businessId: string): Promise<Partial<BusinessProfileRow> | null> {
+  const { data, error } = await supabase
+    .from('business_profiles')
+    .select('*')
+    .eq('business_id', businessId)
+    .maybeSingle();
+  if (error) {
+    console.warn('[businesses] profile load failed:', error.message);
+    return null;
+  }
+  return (data as Partial<BusinessProfileRow>) ?? null;
+}
+
+/** Upsert the business profile (row exists from backfill/create, but upsert is safe). */
+export async function upsertBusinessProfile(
+  businessId: string,
+  workspaceId: string,
+  patch: BusinessProfilePatch,
+): Promise<void> {
+  const { error } = await supabase
+    .from('business_profiles')
+    .upsert(
+      { business_id: businessId, workspace_id: workspaceId, ...patch, updated_at: new Date().toISOString() },
+      { onConflict: 'business_id' },
+    );
+  if (error) throw new Error(error.message);
+}
