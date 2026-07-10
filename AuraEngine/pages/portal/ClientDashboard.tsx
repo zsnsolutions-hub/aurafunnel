@@ -438,7 +438,9 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
   const AI_RESEARCH_HEADER = '--- AI Research Brief ---';
 
   const onLeadCreated = async (createdLead: Lead, kb: Record<string, string> | undefined) => {
-    const updated = [createdLead, ...leads];
+    // Normalize the raw insert row so it carries the computed aliases the UI needs.
+    const [normalized] = normalizeLeads([createdLead]);
+    const updated = [normalized, ...leads];
     setLeads(updated);
     setFilteredLeads(updated);
     setActiveSegmentId(null);

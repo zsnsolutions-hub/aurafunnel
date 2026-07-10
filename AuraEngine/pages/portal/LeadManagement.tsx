@@ -702,16 +702,19 @@ const LeadManagement: React.FC = () => {
         return;
       }
       if (data) {
-        setAllLeads(prev => [data, ...prev]);
+        // Normalize the raw DB row so it has the computed aliases (name/email/…)
+        // the UI expects — a raw insert row would crash the list/quick-insight.
+        const [normalized] = normalizeLeads([data]);
+        setAllLeads(prev => [normalized, ...prev]);
         // Auto-validate the new lead's email (fire-and-forget, flag-gated).
-        if (valEnabled && currentBusinessId && data.primary_email) {
-          validateEmail(currentBusinessId, data.primary_email).then(() => loadValMap()).catch(() => {});
+        if (valEnabled && currentBusinessId && normalized.primary_email) {
+          validateEmail(currentBusinessId, normalized.primary_email).then(() => loadValMap()).catch(() => {});
         }
         setIsAddLeadOpen(false);
         setNewLead({ name: '', email: '', company: '', phone: '', insights: '' });
         setNewLeadKb({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
         setVisibleKbFields(new Set());
-        setQuickInsightLead(data);
+        setQuickInsightLead(normalized);
       } else {
         setAddLeadError('Insert returned no data. The lead may not have been created.');
       }
