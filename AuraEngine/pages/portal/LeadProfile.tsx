@@ -635,6 +635,33 @@ const LeadProfile: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Real activity timeline: lead created + email validation (status + Mails.so
+  // reason). Declared BEFORE the loading/not-found early returns so hook order
+  // stays stable across renders (guards lead being null internally).
+  const loadTimeline = useCallback(async () => {
+    if (!lead) { setTimeline([]); return; }
+    const events: { date: Date; label: string; type: string; detail?: string }[] = [];
+    if (lead.created_at) events.push({ date: new Date(lead.created_at), label: 'Lead created', type: 'created' });
+    const email = (lead.primary_email || '').trim().toLowerCase();
+    if (currentBusinessId && email) {
+      const { data } = await supabase.from('email_validation_log')
+        .select('status, reason, validated_at')
+        .eq('business_id', currentBusinessId).eq('email', email)
+        .order('validated_at', { ascending: false }).limit(50);
+      for (const row of (data ?? []) as { status: string; reason: string | null; validated_at: string }[]) {
+        events.push({
+          date: new Date(row.validated_at),
+          label: `Email validation — ${row.status}`,
+          type: row.status === 'invalid' ? 'error' : row.status === 'risky' ? 'warning' : 'validated',
+          detail: row.reason ? `Mails.so reason: ${row.reason}` : undefined,
+        });
+      }
+    }
+    events.sort((a, b) => b.date.getTime() - a.date.getTime());
+    setTimeline(events);
+  }, [lead, currentBusinessId]);
+  useEffect(() => { void loadTimeline(); }, [loadTimeline]);
+
   if (loading) {
     return (
       <div className="space-y-6 animate-in fade-in duration-700">
@@ -685,30 +712,6 @@ const LeadProfile: React.FC = () => {
     : null;
 
   const isPotentialLead = hasRecentClick || recentOpenCount >= 2;
-  // Real activity timeline: lead created + email validation (status + Mails.so reason).
-  const loadTimeline = useCallback(async () => {
-    if (!lead) { setTimeline([]); return; }
-    const events: { date: Date; label: string; type: string; detail?: string }[] = [];
-    if (lead.created_at) events.push({ date: new Date(lead.created_at), label: 'Lead created', type: 'created' });
-    const email = (lead.primary_email || '').trim().toLowerCase();
-    if (currentBusinessId && email) {
-      const { data } = await supabase.from('email_validation_log')
-        .select('status, reason, validated_at')
-        .eq('business_id', currentBusinessId).eq('email', email)
-        .order('validated_at', { ascending: false }).limit(50);
-      for (const row of (data ?? []) as { status: string; reason: string | null; validated_at: string }[]) {
-        events.push({
-          date: new Date(row.validated_at),
-          label: `Email validation — ${row.status}`,
-          type: row.status === 'invalid' ? 'error' : row.status === 'risky' ? 'warning' : 'validated',
-          detail: row.reason ? `Mails.so reason: ${row.reason}` : undefined,
-        });
-      }
-    }
-    events.sort((a, b) => b.date.getTime() - a.date.getTime());
-    setTimeline(events);
-  }, [lead, currentBusinessId]);
-  useEffect(() => { void loadTimeline(); }, [loadTimeline]);
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'ai-insights', label: 'AI Insights' },
