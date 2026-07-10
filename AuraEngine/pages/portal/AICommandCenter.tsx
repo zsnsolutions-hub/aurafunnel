@@ -601,6 +601,21 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
 
     // ─── Template fallback generator (preserves all original templates) ───
     const generateTemplateResponse = (): string | null => {
+      // If a lead is focused, keep the local fallback about that lead only.
+      const focusedLead = focusedLeadId ? leads.find(l => l.id === focusedLeadId) : null;
+      if (focusedLead) {
+        const kb = (focusedLead as unknown as { knowledgeBase?: Record<string, string> }).knowledgeBase || {};
+        const details = [
+          `**${focusedLead.name}** (${focusedLead.company || '—'})`,
+          `- Score: ${focusedLead.score} · Status: ${focusedLead.status}`,
+          focusedLead.primary_email ? `- Email: ${focusedLead.primary_email}` : '',
+          kb.industry ? `- Industry: ${kb.industry}` : '',
+          kb.website ? `- Website: ${kb.website}` : '',
+          focusedLead.insights ? `- Insights: ${focusedLead.insights}` : '',
+          kb.companyOverview ? `\n${kb.companyOverview}` : '',
+        ].filter(Boolean).join('\n');
+        return `You're focused on this lead:\n\n${details}\n\nAsk me to draft outreach, suggest next steps, or research this lead further.`;
+      }
       if (lowerPrompt.includes('pipeline health') || lowerPrompt.includes('overview')) {
         const insights = generateProgrammaticInsights(leads);
         const hotPct = stats.total > 0 ? Math.round((stats.hot / stats.total) * 100) : 0;
@@ -846,11 +861,11 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
         return parts.join('\n');
       };
       const focused = focusedLeadId ? leads.find(l => l.id === focusedLeadId) : null;
-      const topLeads = leads.slice(0, 15).filter(l => l.id !== focused?.id);
-      const leadContext = [
-        focused ? `FOCUSED LEAD — the user selected this lead; prioritize answering about them:\n${describeLead(focused, true)}\n` : '',
-        topLeads.map(l => describeLead(l)).join('\n'),
-      ].filter(Boolean).join('\n');
+      // When a lead is focused, send ONLY that lead so the AI answers about it and
+      // doesn't summarise the whole pipeline. Otherwise send the top leads.
+      const leadContext = focused
+        ? `The user has FOCUSED on ONE specific lead. Answer ONLY about this lead — do not list, compare, or describe other leads unless explicitly asked.\n\n${describeLead(focused, true)}`
+        : leads.slice(0, 15).map(l => describeLead(l)).join('\n');
 
       const statusBreakdown: Record<string, number> = {};
       leads.forEach(l => { statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1; });
@@ -900,7 +915,7 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
 
     setThinking(false);
     setResponseCount(prev => prev + 1);
-  }, [leads, stats, aiMode, frameModeResponse, getConversationHistory, user.businessProfile, streamHook, thread, persistMessage, startFlushLoop, stopFlushLoop, finalizeMessage]);
+  }, [leads, stats, aiMode, focusedLeadId, frameModeResponse, getConversationHistory, user.businessProfile, streamHook, thread, persistMessage, startFlushLoop, stopFlushLoop, finalizeMessage]);
 
   // ─── Handlers ───
   const handleSend = () => {
