@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadIcon } from '../Icons';
 import { supabase } from '../../lib/supabase';
+import { activeBusinessId } from '../../lib/businessScope';
 
 interface CSVImportModalProps {
   isOpen: boolean;
@@ -85,12 +86,13 @@ const CSVImportModal: React.FC<CSVImportModalProps> = ({ isOpen, onClose, userId
 
     const leadsToInsert = parsedRows.map(row => ({
       client_id: userId,
+      business_id: activeBusinessId(),
       first_name: row.name.split(' ')[0] || '',
       last_name: row.name.split(' ').slice(1).join(' ') || '',
       primary_email: row.email,
       company: row.company,
       insights: row.insights || 'Imported via CSV',
-      score: Math.floor(Math.random() * 40) + 50,
+      score: 0, // unscored on import — real scoring lands in Phase B (no random mock)
       status: 'New' as const,
       last_activity: new Date().toISOString(),
     }));

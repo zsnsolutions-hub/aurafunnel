@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useOutletContext, useSearchParams } from 'react-router-dom';
+import { useOutletContext, useSearchParams, useNavigate } from 'react-router-dom';
+import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { User, NotificationPreferences, DashboardPreferences, ApiKey, BusinessProfile, BusinessAnalysisResult, BusinessAnalysisField, BusinessService, BusinessPricingTier } from '../../types';
 import {
   ShieldIcon, BellIcon, KeyIcon, LayoutIcon, CogIcon, CopyIcon, PlusIcon, XIcon, CheckIcon, EyeIcon, LockIcon,
@@ -104,6 +105,8 @@ const WriteWithAIChip: React.FC<{
 
 const ProfilePage: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const navigate = useNavigate();
+  const { multiBusinessEnabled, currentBusiness } = useCurrentBusiness();
   const { isAdvanced: isAdvancedMode } = useUIMode();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
@@ -1255,6 +1258,20 @@ const ProfilePage: React.FC = () => {
       {/* Business Profile Tab */}
       {activeTab === 'business_profile' && (
         <div className="space-y-6 animate-in fade-in duration-300">
+
+          {/* ─── Multi-business: per-business brand lives in Business Settings ─── */}
+          {multiBusinessEnabled && (
+            <div className="rounded-2xl p-4 border border-indigo-200 bg-indigo-50 flex items-center justify-between gap-4">
+              <p className="text-sm text-indigo-900 min-w-0">
+                You're managing multiple businesses. Per-business brand voice &amp; positioning now live in
+                <strong> Business Settings</strong>{currentBusiness ? <> for <strong>{currentBusiness.name}</strong></> : null}. This tab still edits your default AI profile.
+              </p>
+              <button onClick={() => navigate('/portal/business-settings')}
+                className="shrink-0 px-3.5 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                Open Business Settings
+              </button>
+            </div>
+          )}
 
           {/* ─── Background enrichment status banner ─── */}
           {enrichmentStatus !== 'idle' && (

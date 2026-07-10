@@ -83,6 +83,7 @@ const BusinessSettingsPage: React.FC = () => {
 
   const save = useCallback(async () => {
     if (!currentBusiness || !currentBusinessId) return;
+    if (!(form['name'] ?? '').trim()) { toast('Business name is required.', 'error'); return; }
     setSaving(true);
     try {
       const bizPatch: Record<string, string | null> = {};

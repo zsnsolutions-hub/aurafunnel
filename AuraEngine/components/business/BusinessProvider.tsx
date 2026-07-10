@@ -37,12 +37,17 @@ export function useCurrentBusiness(): BusinessContextValue {
 }
 
 const storageKey = (userId: string) => `scaliyo:currentBusiness:${userId}`;
+const flagCacheKey = (userId: string) => `scaliyo:mbFlag:${userId}`;
 
 export const BusinessProvider: React.FC<{ userId: string; children: React.ReactNode }> = ({ userId, children }) => {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [multiBusinessEnabled, setMultiBusinessEnabled] = useState(false);
+  // Seed from a cached value so the flag is known synchronously on repeat loads
+  // (avoids a flash of unscoped/all-business data before the RPC resolves).
+  const [multiBusinessEnabled, setMultiBusinessEnabled] = useState(() => {
+    try { return localStorage.getItem(flagCacheKey(userId)) === '1'; } catch { return false; }
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,7 +76,10 @@ export const BusinessProvider: React.FC<{ userId: string; children: React.ReactN
         const ws = await resolveWorkspaceForUser(userId);
         if (!ws || cancelled) return;
         const on = await isFlagEnabled(ws, 'multi_business');
-        if (!cancelled) setMultiBusinessEnabled(on);
+        if (!cancelled) {
+          setMultiBusinessEnabled(on);
+          try { localStorage.setItem(flagCacheKey(userId), on ? '1' : '0'); } catch { /* ignore */ }
+        }
       } catch { /* flag stays off */ }
     })();
     return () => { cancelled = true; };

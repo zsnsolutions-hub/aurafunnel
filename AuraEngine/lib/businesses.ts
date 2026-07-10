@@ -93,6 +93,24 @@ export async function archiveBusiness(id: string): Promise<void> {
   await updateBusiness(id, { status: 'archived' });
 }
 
+/** Archived businesses (so their leads/content can be restored, not lost). */
+export async function listArchivedBusinesses(): Promise<Business[]> {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('status', 'archived')
+    .order('updated_at', { ascending: false });
+  if (error) {
+    console.warn('[businesses] archived list failed:', error.message);
+    return [];
+  }
+  return (data ?? []) as Business[];
+}
+
+export async function restoreBusiness(id: string): Promise<void> {
+  await updateBusiness(id, { status: 'active' });
+}
+
 // ── Business profile (the per-business "brain") ─────────────────────────────
 
 export interface BusinessProfileRow {

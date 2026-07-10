@@ -5,11 +5,11 @@
 // business switcher ("Manage businesses"). Uses the BusinessProvider context so
 // it stays in sync with the switcher.
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Plus, Check, Pencil, Archive, Globe, Loader2, X, Settings2 } from 'lucide-react';
+import { Building2, Plus, Check, Pencil, Archive, Globe, Loader2, X, Settings2, RotateCcw } from 'lucide-react';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
-import { createBusiness, updateBusiness, archiveBusiness, Business, NewBusinessInput } from '../../lib/businesses';
+import { createBusiness, updateBusiness, archiveBusiness, restoreBusiness, listArchivedBusinesses, Business, NewBusinessInput } from '../../lib/businesses';
 import { useToast } from '../../components/ui/Toast';
 
 type Draft = NewBusinessInput & { id?: string };
@@ -22,6 +22,18 @@ const BusinessesPage: React.FC = () => {
   const navigate = useNavigate();
   const [editor, setEditor] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [archived, setArchived] = useState<Business[]>([]);
+
+  const loadArchived = useCallback(async () => { setArchived(await listArchivedBusinesses()); }, []);
+  useEffect(() => { void loadArchived(); }, [loadArchived, businesses.length]);
+
+  // Close the editor on Escape.
+  useEffect(() => {
+    if (!editor) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) setEditor(null); };
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
+  }, [editor, busy]);
 
   const openCreate = useCallback(() => setEditor({ ...EMPTY }), []);
   const openEdit = useCallback((b: Business) => setEditor({
@@ -71,11 +83,23 @@ const BusinessesPage: React.FC = () => {
         if (next) setCurrentBusiness(next.id);
       }
       await refresh();
+      await loadArchived();
       toast('Business archived', 'success');
     } catch (e) {
       toast((e as Error).message || 'Could not archive', 'error');
     }
-  }, [businesses, currentBusinessId, setCurrentBusiness, refresh, toast]);
+  }, [businesses, currentBusinessId, setCurrentBusiness, refresh, loadArchived, toast]);
+
+  const onRestore = useCallback(async (b: Business) => {
+    try {
+      await restoreBusiness(b.id);
+      await refresh();
+      await loadArchived();
+      toast(`"${b.name}" restored`, 'success');
+    } catch (e) {
+      toast((e as Error).message || 'Could not restore', 'error');
+    }
+  }, [refresh, loadArchived, toast]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -138,6 +162,27 @@ const BusinessesPage: React.FC = () => {
         })}
       </div>
 
+      {archived.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Archived</h2>
+          <div className="space-y-2">
+            {archived.map(b => (
+              <div key={b.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
+                <span className="w-8 h-8 rounded-lg bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-bold shrink-0">{b.name.charAt(0).toUpperCase() || 'B'}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-700 truncate">{b.name}</p>
+                  {b.industry && <p className="text-xs text-gray-400 truncate">{b.industry}</p>}
+                </div>
+                <button onClick={() => onRestore(b)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors shrink-0">
+                  <RotateCcw size={13} /> Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {editor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setEditor(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
@@ -155,7 +200,7 @@ const BusinessesPage: React.FC = () => {
                 <div key={key}>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">{label}{key === 'name' && ' *'}</label>
                   <input value={(editor[key] as string) ?? ''} onChange={e => setEditor(d => d && { ...d, [key]: e.target.value })}
-                    placeholder={ph} disabled={busy}
+                    placeholder={ph} disabled={busy} autoFocus={key === 'name'}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200" />
                 </div>
               ))}
