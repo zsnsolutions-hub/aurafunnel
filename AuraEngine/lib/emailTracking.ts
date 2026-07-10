@@ -8,7 +8,7 @@ import type {
   KnowledgeBase,
 } from '../types';
 import { personalizeForSend } from './personalization';
-import { getValidations, sendDecision } from './emailValidation';
+import { sendDecision, type ValidationStatus } from './emailValidation';
 import { checkEmailAllowed, trackEmailSend } from './usageTracker';
 import type { LimitType } from './usageTracker';
 
@@ -304,8 +304,6 @@ export async function fetchBatchEmailSummary(
 // ── Send a tracked email via edge function ──
 export interface SendEmailParams {
   leadId?: string;
-  /** Optional — otherwise resolved from the lead. Used by the validation gate. */
-  businessId?: string;
   toEmail: string;
   fromEmail?: string;
   subject: string;
@@ -321,12 +319,6 @@ export interface SendEmailResult {
   providerMessageId?: string;
   error?: string;
   limitType?: LimitType;
-}
-
-async function resolveLeadBusinessId(leadId?: string): Promise<string | null> {
-  if (!leadId) return null;
-  const { data } = await supabase.from('leads').select('business_id').eq('id', leadId).maybeSingle();
-  return (data as { business_id?: string } | null)?.business_id ?? null;
 }
 
 export async function sendTrackedEmail(
@@ -360,23 +352,27 @@ export async function sendTrackedEmail(
   }
 
   // ── Email validation gate (Phase B) ──
-  // Only bites when a validation row exists for this address, so it's a no-op
-  // for workspaces that haven't validated (i.e. flag off). Suppression is a
-  // separate, always-block check in the send-email edge function.
-  //   invalid -> block · risky -> block unless owner/admin · else allow
+  // One RLS-scoped read by email (returns validations for the user's businesses).
+  // No-op when no validation row exists (i.e. validation not in use), and fails
+  // OPEN on any error. Suppression is a separate always-block check in the
+  // send-email edge function.  invalid -> block · risky -> admin-only · else allow
   try {
-    const businessId = params.businessId ?? (await resolveLeadBusinessId(params.leadId));
-    if (businessId) {
-      const map = await getValidations(businessId, [params.toEmail]);
-      const v = map.get(params.toEmail.trim().toLowerCase());
-      if (v) {
-        const decision = sendDecision(v.status);
-        if (decision === 'block') {
-          return { success: false, error: `Can't send: ${params.toEmail} is invalid${v.reason ? ` (${v.reason})` : ''}.` };
-        }
-        if (decision === 'override' && !isAdmin) {
-          return { success: false, error: `${params.toEmail} is a risky address — an owner or admin must send it.` };
-        }
+    const email = params.toEmail.trim().toLowerCase();
+    const { data: v } = await supabase
+      .from('email_validations')
+      .select('status, reason')
+      .eq('email', email)
+      .order('validated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (v) {
+      const row = v as { status: ValidationStatus; reason: string | null };
+      const decision = sendDecision(row.status);
+      if (decision === 'block') {
+        return { success: false, error: `Can't send: ${params.toEmail} is invalid${row.reason ? ` (${row.reason})` : ''}.` };
+      }
+      if (decision === 'override' && !isAdmin) {
+        return { success: false, error: `${params.toEmail} is a risky address — an owner or admin must send it.` };
       }
     }
   } catch {

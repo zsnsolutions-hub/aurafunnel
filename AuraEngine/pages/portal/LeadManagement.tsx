@@ -8,7 +8,7 @@ import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummar
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
-import { emailValidationEnabled, validateEmails } from '../../lib/emailValidation';
+import { emailValidationEnabled, validateEmails, validateEmail, getValidations, statusMeta, type ValidationStatus } from '../../lib/emailValidation';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
@@ -141,6 +141,7 @@ const LeadManagement: React.FC = () => {
   const { currentBusinessId } = useCurrentBusiness();
   const [valEnabled, setValEnabled] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [valMap, setValMap] = useState<Map<string, ValidationStatus>>(new Map());
   useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -472,6 +473,17 @@ const LeadManagement: React.FC = () => {
     return filteredLeads.slice(start, start + perPage);
   }, [filteredLeads, currentPage, perPage]);
 
+  // Cached validation statuses for the visible leads (per-row badges).
+  const loadValMap = useCallback(async () => {
+    if (!valEnabled || !currentBusinessId) { setValMap(new Map()); return; }
+    const emails = paginatedLeads.map(l => l.primary_email).filter((e): e is string => !!e);
+    const m = await getValidations(currentBusinessId, emails);
+    const next = new Map<string, ValidationStatus>();
+    m.forEach((v, email) => next.set(email, v.status));
+    setValMap(next);
+  }, [valEnabled, currentBusinessId, paginatedLeads]);
+  useEffect(() => { void loadValMap(); }, [loadValMap]);
+
   useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery, perPage]);
 
   // ── Selection Helpers ──
@@ -690,6 +702,10 @@ const LeadManagement: React.FC = () => {
       }
       if (data) {
         setAllLeads(prev => [data, ...prev]);
+        // Auto-validate the new lead's email (fire-and-forget, flag-gated).
+        if (valEnabled && currentBusinessId && data.primary_email) {
+          validateEmail(currentBusinessId, data.primary_email).then(() => loadValMap()).catch(() => {});
+        }
         setIsAddLeadOpen(false);
         setNewLead({ name: '', email: '', company: '', phone: '', insights: '' });
         setNewLeadKb({ website: '', linkedin: '', instagram: '', facebook: '', twitter: '', youtube: '' });
@@ -886,10 +902,11 @@ const LeadManagement: React.FC = () => {
       }
       toast(`Validated ${emails.length}: ${counts.valid} valid · ${counts.risky} risky · ${counts.invalid} invalid`, 'success');
       setSelectedIds(new Set());
+      void loadValMap();
     } catch (e) {
       toast((e as Error).message || 'Validation failed.', 'error');
     } finally { setValidating(false); }
-  }, [currentBusinessId, selectedIds, allLeads, toast]);
+  }, [currentBusinessId, selectedIds, allLeads, toast, loadValMap]);
 
   const handleBulkWorkflow = useCallback(async () => {
     if (!bulkSelectedWorkflowId) return;
@@ -1954,7 +1971,14 @@ const LeadManagement: React.FC = () => {
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
-                              <p className="text-[11px] text-slate-400 truncate">{lead.email}</p>
+                              <p className="text-[11px] text-slate-400 truncate flex items-center gap-1">
+                                <span className="truncate">{lead.email}</span>
+                                {valEnabled && lead.email && valMap.has(lead.email.toLowerCase()) && (() => {
+                                  const m = statusMeta(valMap.get(lead.email.toLowerCase()));
+                                  const c = m.tone === 'good' ? 'bg-emerald-500' : m.tone === 'warn' ? 'bg-amber-500' : m.tone === 'bad' ? 'bg-rose-500' : 'bg-slate-300';
+                                  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${c}`} title={m.label} />;
+                                })()}
+                              </p>
                             </div>
                           </button>
                         </td>
