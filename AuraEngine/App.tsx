@@ -30,14 +30,21 @@ function lazyWithRetry<T extends React.ComponentType<any>>(factory: () => Promis
     try {
       return await factory();
     } catch (err) {
+      // One transient retry (a network blip re-fetches fine).
       try { return await factory(); } catch (err2) {
         const msg = (err2 as Error)?.message || (err as Error)?.message || '';
-        if (isChunkError(msg) && !sessionStorage.getItem('__chunkReload')) {
-          sessionStorage.setItem('__chunkReload', '1');
+        if (!isChunkError(msg)) throw err2; // genuine code error — surface it
+        // A hashed chunk was rotated out by a newer deploy (we keep only the last
+        // 5 releases). Reload to fetch a fresh index.html + current chunk names.
+        // Crucially we NEVER re-throw a chunk error: React.lazy caches rejections,
+        // which would blank the route until a manual reload. Time-guarded so it
+        // recovers on every deploy without looping.
+        const lastAt = Number(sessionStorage.getItem('__chunkReloadAt') || '0');
+        if (Date.now() - lastAt > 8000) {
+          sessionStorage.setItem('__chunkReloadAt', String(Date.now()));
           window.location.reload();
-          return await new Promise<{ default: T }>(() => {}); // hold render until reload
         }
-        throw err2;
+        return await new Promise<{ default: T }>(() => {}); // hold on the skeleton while reloading
       }
     }
   });

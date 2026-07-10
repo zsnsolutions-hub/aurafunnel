@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo, lazy, memo } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, Search, Bell } from 'lucide-react';
 import { User } from '../../types';
 import ErrorBoundary from '../ErrorBoundary';
@@ -32,6 +32,7 @@ interface ClientLayoutProps {
 
 const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refreshProfile }) => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Set user ID for data prefetching and pre-warm cache on mount
   useEffect(() => {
@@ -302,7 +303,9 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
         topbar={null}
       >
         <GlobalInviteBanner user={user} />
-        <ErrorBoundary>
+        {/* Key by path so a caught error on one route doesn't persist as a blank
+            screen after navigating to another route. */}
+        <ErrorBoundary key={location.pathname}>
           <Suspense fallback={<PortalContentSkeleton />}>
             <Outlet context={outletContext} />
           </Suspense>
