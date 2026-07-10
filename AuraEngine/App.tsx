@@ -50,6 +50,7 @@ const LeadManagement = lazy(() => import('./pages/portal/LeadManagement'));
 const LeadProfile = lazy(() => import('./pages/portal/LeadProfile'));
 const BusinessesPage = lazy(() => import('./pages/portal/BusinessesPage'));
 const BusinessSettingsPage = lazy(() => import('./pages/portal/BusinessSettingsPage'));
+const ImageStudio = lazy(() => import('./pages/portal/ImageStudio'));
 const ContentGen = lazy(() => import('./pages/portal/ContentGen'));
 const BlogDrafts = lazy(() => import('./pages/portal/BlogDrafts'));
 const AnalyticsPage = lazy(() => import('./pages/portal/AnalyticsPage'));
@@ -333,6 +334,7 @@ const App: React.FC = () => {
             <Route path="settings" element={<ProfilePage />} />
             <Route path="businesses" element={<BusinessesPage />} />
             <Route path="business-settings" element={<BusinessSettingsPage />} />
+            <Route path="image-studio" element={<ImageStudio />} />
             <Route path="intelligence" element={<LeadIntelligence />} />
             <Route path="ai" element={<AICommandCenter />} />
             <Route path="content-studio" element={<ContentStudio />} />
