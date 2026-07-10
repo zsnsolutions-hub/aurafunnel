@@ -86,6 +86,7 @@ const CSVImportModal: React.FC<CSVImportModalProps> = ({ isOpen, onClose, userId
 
     const leadsToInsert = parsedRows.map(row => ({
       client_id: userId,
+      workspace_id: userId, // NOT NULL; holds the user id (legacy, matches existing rows)
       business_id: activeBusinessId(),
       first_name: row.name.split(' ')[0] || '',
       last_name: row.name.split(' ').slice(1).join(' ') || '',

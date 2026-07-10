@@ -675,6 +675,7 @@ const LeadManagement: React.FC = () => {
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
+        workspace_id: user.id, // leads.workspace_id is NOT NULL and holds the user id (legacy)
         business_id: activeBusinessId(),
         score: initialScore,
         status: 'New',

@@ -533,6 +533,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
+        workspace_id: user.id, // NOT NULL; holds the user id (legacy, matches existing rows)
         business_id: activeBusinessId(),
         score: initialScore,
         status: 'New',
