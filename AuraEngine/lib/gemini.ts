@@ -1232,6 +1232,70 @@ Rules:
   };
 };
 
+// Analyze an uploaded business document (PDF / image / text) and extract the same
+// structured BusinessAnalysisResult. Gemini reads the file natively via inlineData
+// (OpenAI's chat API can't), so this forces the Gemini model regardless of the
+// default text provider. Returns the same shape as analyzeBusinessFromWeb.
+export const analyzeBusinessFromDocument = async (
+  base64Data: string,
+  mimeType: string,
+  userId?: string,
+): Promise<AIResponse & { analysis: BusinessAnalysisResult | null }> => {
+  const ai = getGeminiClient();
+
+  const resolved = await resolvePrompt('business_analysis', userId, {
+    systemInstruction: `You are an advanced Business Intelligence Agent. Extract accurate business information from the ATTACHED DOCUMENT to auto-populate a structured business profile. Extract only information explicitly present in the document. Do not guess or infer unstated facts. Always respond with valid JSON only.`,
+    promptTemplate: '',
+    temperature: 0.3,
+    topP: 0.9,
+  });
+
+  // Reuse the web analysis's output contract by asking for the same JSON, but
+  // pointed at the attached document instead of a URL to crawl.
+  const prompt = `A business document is attached (e.g. company deck, brochure, or profile PDF). There is NO website to crawl — extract everything from the DOCUMENT itself.\n\n${resolved.promptTemplate
+    .replace('{{website_url}}', 'None — use the attached document.')
+    .replace('{{social_context}}', '')}`;
+
+  const ANALYSIS_TIMEOUT_MS = 60_000;
+  let attempt = 0;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: AI_MODELS.textGrounded, // Gemini — reads PDFs/images natively
+          operation: 'business_analysis',
+          contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data: base64Data } }] }],
+          config: {
+            systemInstruction: resolved.systemInstruction,
+            temperature: resolved.temperature,
+            topP: resolved.topP,
+          } as never,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Document analysis timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s.`)), ANALYSIS_TIMEOUT_MS),
+        ),
+      ]);
+      const text = response.text;
+      if (!text) throw new Error('Empty response from document analysis.');
+      const analysis = parseAnalysisJSON(text);
+      return {
+        text, tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        model_name: AI_MODELS.textGrounded, prompt_name: 'business_analysis',
+        prompt_version: resolved.promptVersion, analysis,
+      };
+    } catch (error: unknown) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`Document analysis attempt ${attempt} failed:`, errMsg);
+      if (attempt === MAX_RETRIES) {
+        return { text: `ANALYSIS FAILED: ${errMsg}`, tokens_used: 0, model_name: AI_MODELS.textGrounded, prompt_name: 'business_analysis_doc', prompt_version: 1, analysis: null };
+      }
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+  return { text: 'CRITICAL FAILURE: Document analysis could not be completed.', tokens_used: 0, model_name: AI_MODELS.textGrounded, prompt_name: 'business_analysis_doc', prompt_version: 1, analysis: null };
+};
+
 // ─── Per-field "Write with AI" ─────────────────────────────────────────
 //
 // Generates the text for ONE business-profile field using everything else

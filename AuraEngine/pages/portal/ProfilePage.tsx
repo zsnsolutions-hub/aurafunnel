@@ -12,7 +12,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import StageColorSettings from '../../components/leads/StageColorSettings';
 import { consumeCredits } from '../../lib/credits';
-import { analyzeBusinessFromWeb, generateFollowUpQuestions, generateProfileField, type ProfileGenField } from '../../lib/gemini';
+import { analyzeBusinessFromWeb, analyzeBusinessFromDocument, generateFollowUpQuestions, generateProfileField, type ProfileGenField } from '../../lib/gemini';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly, useUIMode } from '../../components/ui-mode';
 import { BRAND } from '../../lib/brand';
@@ -411,17 +411,21 @@ const ProfilePage: React.FC = () => {
 
   // Runs analyzeBusinessFromWeb in the background and merges the result without
   // overwriting any field the user has already filled in.
-  const startEnrichment = async (fullUrl: string, socials: typeof socialUrls) => {
+  const startEnrichment = async (fullUrl: string, socials: typeof socialUrls, docResult?: Awaited<ReturnType<typeof analyzeBusinessFromWeb>>) => {
     setEnrichmentStatus('running');
     setEnrichmentStartedAt(Date.now());
     setEnrichmentElapsed(0);
     setEnrichmentError('');
     setEnrichmentFieldsAdded(0);
     try {
-      const creditResult = await consumeCredits(supabase, 'business_analysis');
-      if (!creditResult.success) throw new Error(creditResult.message || 'Insufficient credits.');
-      const result = await analyzeBusinessFromWeb(fullUrl, socials);
-      if (!result.analysis) throw new Error('Could not analyze the website. Edit your fields manually or try a different URL.');
+      // The document path already charged the credit before its AI call, so only
+      // charge here for the URL path.
+      if (!docResult) {
+        const creditResult = await consumeCredits(supabase, 'business_analysis');
+        if (!creditResult.success) throw new Error(creditResult.message || 'Insufficient credits.');
+      }
+      const result = docResult ?? await analyzeBusinessFromWeb(fullUrl, socials);
+      if (!result.analysis) throw new Error('Could not extract a profile. Edit your fields manually or try a different URL/document.');
 
       // Merge into whatever the user has now. Two rules:
       //   - Empty fields:  fill with anything the AI returned (any confidence).
@@ -613,6 +617,52 @@ const ProfilePage: React.FC = () => {
     setEnrichmentStatus('idle');
     setWizardPhase('manual');
   }, []);
+
+  // ─── Upload a document (PDF / image) to auto-fill the profile ───────────
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const ACCEPTED_DOC_TYPES = 'application/pdf,image/png,image/jpeg,image/webp';
+  const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(new Error('Could not read the file.'));
+    reader.readAsDataURL(file);
+  });
+  const handleDocumentUpload = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) { setAnalysisError('File is too large (max 15 MB).'); return; }
+
+    setUrlError(''); setAnalysisError('');
+    setAnalysisCancelled(false); analysisCancelledRef.current = false;
+    setAnalysisStage('reading'); setAnalysisProgress(10);
+    setAnalysisStartedAt(Date.now()); setAnalysisElapsed(0);
+    setWizardPhase('analyzing');
+
+    const stageOrder: AnalysisStage[] = ['reading', 'extracting', 'structuring'];
+    const progressTicker = setInterval(() => {
+      setAnalysisProgress((p) => Math.min(92, p + 2));
+      setAnalysisStage((s) => { const i = stageOrder.indexOf(s); return i >= 0 && i < stageOrder.length - 1 ? stageOrder[i + 1] : s; });
+    }, 1500);
+    const elapsedTicker = setInterval(() => setAnalysisElapsed((e) => e + 1), 1000);
+
+    try {
+      const creditResult = await consumeCredits(supabase, 'business_analysis');
+      if (!creditResult.success) throw new Error(creditResult.message || 'Insufficient credits.');
+      const base64 = await fileToBase64(file);
+      const result = await analyzeBusinessFromDocument(base64, file.type || 'application/pdf');
+      if (analysisCancelledRef.current) return;
+      await startEnrichment('', socialUrls, result); // reuse the same merge/save path
+      if (analysisCancelledRef.current) return;
+      setAnalysisProgress(100); setAnalysisStage('complete');
+      setTimeout(() => setWizardPhase('manual'), 500);
+    } catch (err) {
+      if (analysisCancelledRef.current) return;
+      setAnalysisError((err as Error).message ?? 'Could not read that document.');
+      setWizardPhase('input');
+    } finally {
+      clearInterval(progressTicker); clearInterval(elapsedTicker);
+      if (docInputRef.current) docInputRef.current.value = '';
+    }
+  };
 
   // ─── Clear & start over ────────────────────────────────────────────
   // Wipes the saved business profile from DB + local state, then drops the
@@ -1416,6 +1466,28 @@ const ProfilePage: React.FC = () => {
                     rows={4}
                     className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800 resize-none"
                   />
+                </div>
+
+                {/* "Or" Divider */}
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <span className="text-xs font-bold text-slate-400">&mdash; or &mdash;</span>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
+
+                {/* Upload a document */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Upload a document</label>
+                  <p className="text-xs text-slate-500 leading-relaxed">Have a company deck, brochure, or profile PDF? Upload it and we&rsquo;ll read it and fill in your business profile automatically.</p>
+                  <input ref={docInputRef} type="file" accept={ACCEPTED_DOC_TYPES} className="hidden" onChange={e => handleDocumentUpload(e.target.files?.[0])} />
+                  <button
+                    type="button"
+                    onClick={() => docInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all font-bold text-sm"
+                  >
+                    <UploadIcon className="w-4 h-4" />
+                    <span>Choose a PDF or image (max 15 MB)</span>
+                  </button>
                 </div>
 
                 {/* Expandable Social Handles */}
