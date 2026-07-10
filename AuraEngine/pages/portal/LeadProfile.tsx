@@ -1331,7 +1331,7 @@ const LeadProfile: React.FC = () => {
                 </button>
               )}
               <button
-                onClick={() => showFeedback('Email composer opened')}
+                onClick={() => setFastSendOpen(true)}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors font-semibold text-sm"
               >
                 <MailIcon className="w-4 h-4" />

@@ -844,11 +844,9 @@ const LeadManagement: React.FC = () => {
     let processed = 0;
     progressRef.current = setInterval(() => {
       processed++;
-      const errors = Math.random() < 0.02 ? 1 : 0;
       setBulkProgress(prev => prev ? {
         ...prev,
         processed,
-        errors: prev.errors + errors,
       } : null);
       if (processed >= total) {
         if (progressRef.current) clearInterval(progressRef.current);
@@ -876,8 +874,21 @@ const LeadManagement: React.FC = () => {
     setSelectedIds(new Set());
   };
 
-  const handleBulkTag = () => {
-    executeBulkAction(`Add "${bulkTag}" tag`);
+  const handleBulkTag = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkActionOpen(null);
+    const withTag = (l: Lead) => Array.from(new Set([...(((l as { tags?: string[] }).tags) ?? []), bulkTag]));
+    try {
+      await Promise.all(ids.map(id => {
+        const lead = allLeads.find(l => l.id === id);
+        return lead ? supabase.from('leads').update({ tags: withTag(lead) }).eq('id', id) : Promise.resolve();
+      }));
+      setAllLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, tags: withTag(l) } : l));
+      toast(`Tagged ${ids.length} lead${ids.length > 1 ? 's' : ''} "${bulkTag}"`, 'success');
+    } catch (e) {
+      toast((e as Error).message || 'Bulk tag failed', 'error');
+    }
     setSelectedIds(new Set());
   };
 
