@@ -586,7 +586,7 @@ const ProfilePage: React.FC = () => {
     // did something and surfaces elapsed time prominently.
     const stageOrder: AnalysisStage[] = ['searching', 'reading', 'extracting', 'structuring'];
     const progressTicker = setInterval(() => {
-      setAnalysisProgress((p) => Math.min(92, p + 2));
+      setAnalysisProgress((p) => Math.min(99, p + (p < 88 ? 2 : 0.6)));
       setAnalysisStage((s) => {
         const i = stageOrder.indexOf(s);
         return i < stageOrder.length - 1 ? stageOrder[i + 1] : s;
@@ -639,7 +639,7 @@ const ProfilePage: React.FC = () => {
 
     const stageOrder: AnalysisStage[] = ['reading', 'extracting', 'structuring'];
     const progressTicker = setInterval(() => {
-      setAnalysisProgress((p) => Math.min(92, p + 2));
+      setAnalysisProgress((p) => Math.min(99, p + (p < 88 ? 2 : 0.6)));
       setAnalysisStage((s) => { const i = stageOrder.indexOf(s); return i >= 0 && i < stageOrder.length - 1 ? stageOrder[i + 1] : s; });
     }, 1500);
     const elapsedTicker = setInterval(() => setAnalysisElapsed((e) => e + 1), 1000);

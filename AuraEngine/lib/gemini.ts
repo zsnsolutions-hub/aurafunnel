@@ -1168,30 +1168,51 @@ Rules:
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
-      const response = await Promise.race([
-        ai.models.generateContent({
-          model: MODEL_NAME,
-          operation: 'business_analysis',
-          contents: prompt,
-          config: {
-            systemInstruction,
-            temperature: resolved.temperature,
-            topP: resolved.topP,
-            tools: [
-              { urlContext: {} },
-              { googleSearch: {} },
-            ],
-          } as never,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`Business analysis timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s. The model is taking too long — try a simpler URL or skip to manual entry.`)),
-            ANALYSIS_TIMEOUT_MS,
-          )
-        ),
-      ]);
+      const timeoutPromise = () => new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Business analysis timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s. The model is taking too long — try a simpler URL or skip to manual entry.`)),
+          ANALYSIS_TIMEOUT_MS,
+        )
+      );
 
-      const text = response.text;
+      // Try with grounding first (URL context + Google Search).
+      let response: { text?: string; usageMetadata?: { totalTokenCount?: number } } | null = null;
+      try {
+        response = await Promise.race([
+          ai.models.generateContent({
+            model: MODEL_NAME,
+            operation: 'business_analysis',
+            contents: prompt,
+            config: {
+              systemInstruction,
+              temperature: resolved.temperature,
+              topP: resolved.topP,
+              tools: [{ urlContext: {} }, { googleSearch: {} }],
+            } as never,
+          }),
+          timeoutPromise(),
+        ]);
+      } catch (groundingErr) {
+        console.warn('Business analysis grounding failed, falling back to inference-only:', groundingErr instanceof Error ? groundingErr.message : 'unknown');
+        response = null;
+      }
+
+      // Grounding sometimes returns empty text — fall back to a plain (no-tools)
+      // call, which is faster and reliable, before giving up. This is the main
+      // cause of the wizard sitting at ~92% until a hard timeout.
+      if (!response?.text) {
+        response = await Promise.race([
+          ai.models.generateContent({
+            model: MODEL_NAME,
+            operation: 'business_analysis',
+            contents: prompt,
+            config: { systemInstruction, temperature: resolved.temperature, topP: resolved.topP } as never,
+          }),
+          timeoutPromise(),
+        ]);
+      }
+
+      const text = response?.text;
       if (!text) throw new Error("Empty response from business analysis.");
 
       const analysis = parseAnalysisJSON(text);
