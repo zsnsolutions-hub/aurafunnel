@@ -7,6 +7,8 @@ import { activeBusinessId } from '../../lib/businessScope';
 import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummaries } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
+import { useCurrentBusiness } from '../../components/business/BusinessProvider';
+import { emailValidationEnabled, validateEmails } from '../../lib/emailValidation';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
@@ -136,6 +138,10 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 const LeadManagement: React.FC = () => {
   const { user } = useOutletContext<{ user: User }>();
   const { toast } = useToast();
+  const { currentBusinessId } = useCurrentBusiness();
+  const [valEnabled, setValEnabled] = useState(false);
+  const [validating, setValidating] = useState(false);
+  useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { integrations: integrationStatuses } = useIntegrations();
@@ -864,6 +870,27 @@ const LeadManagement: React.FC = () => {
     setSelectedIds(new Set());
   };
 
+  // Real bulk email validation (batched <=50/req via the edge function).
+  const handleBulkValidate = useCallback(async () => {
+    if (!currentBusinessId) { toast('No business selected.', 'error'); return; }
+    const emails = Array.from(selectedIds)
+      .map(id => allLeads.find(l => l.id === id)?.primary_email)
+      .filter((e): e is string => !!e && e.includes('@'));
+    if (emails.length === 0) { toast('No valid emails in selection.', 'error'); return; }
+    setValidating(true);
+    const counts = { valid: 0, invalid: 0, risky: 0, unknown: 0 };
+    try {
+      for (let i = 0; i < emails.length; i += 50) {
+        const results = await validateEmails(currentBusinessId, emails.slice(i, i + 50));
+        for (const r of results) counts[r.status]++;
+      }
+      toast(`Validated ${emails.length}: ${counts.valid} valid · ${counts.risky} risky · ${counts.invalid} invalid`, 'success');
+      setSelectedIds(new Set());
+    } catch (e) {
+      toast((e as Error).message || 'Validation failed.', 'error');
+    } finally { setValidating(false); }
+  }, [currentBusinessId, selectedIds, allLeads, toast]);
+
   const handleBulkWorkflow = useCallback(async () => {
     if (!bulkSelectedWorkflowId) return;
     const wf = bulkWorkflows.find(w => w.id === bulkSelectedWorkflowId);
@@ -1546,6 +1573,16 @@ const LeadManagement: React.FC = () => {
               </div>
 
               <div className="flex items-center flex-wrap gap-2">
+                {valEnabled && (
+                  <button
+                    onClick={handleBulkValidate}
+                    disabled={validating}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-50 transition-all disabled:opacity-50"
+                  >
+                    <CheckIcon className="w-3.5 h-3.5" />
+                    <span>{validating ? 'Validating…' : 'Validate emails'}</span>
+                  </button>
+                )}
                 {/* Add to Campaign */}
                 <div className="relative">
                   <button

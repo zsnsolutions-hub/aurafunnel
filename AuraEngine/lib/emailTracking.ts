@@ -8,6 +8,7 @@ import type {
   KnowledgeBase,
 } from '../types';
 import { personalizeForSend } from './personalization';
+import { getValidations, sendDecision } from './emailValidation';
 import { checkEmailAllowed, trackEmailSend } from './usageTracker';
 import type { LimitType } from './usageTracker';
 
@@ -303,6 +304,8 @@ export async function fetchBatchEmailSummary(
 // ── Send a tracked email via edge function ──
 export interface SendEmailParams {
   leadId?: string;
+  /** Optional — otherwise resolved from the lead. Used by the validation gate. */
+  businessId?: string;
   toEmail: string;
   fromEmail?: string;
   subject: string;
@@ -320,6 +323,12 @@ export interface SendEmailResult {
   limitType?: LimitType;
 }
 
+async function resolveLeadBusinessId(leadId?: string): Promise<string | null> {
+  if (!leadId) return null;
+  const { data } = await supabase.from('leads').select('business_id').eq('id', leadId).maybeSingle();
+  return (data as { business_id?: string } | null)?.business_id ?? null;
+}
+
 export async function sendTrackedEmail(
   params: SendEmailParams
 ): Promise<SendEmailResult> {
@@ -328,17 +337,19 @@ export async function sendTrackedEmail(
     return { success: false, error: 'Not authenticated' };
   }
 
-  // ── Limit enforcement ──
+  // ── Limit enforcement (+ role, for the validation override) ──
   const userId = session.user.id;
   const inboxId = params.fromEmail ?? 'default';
+  let isAdmin = false;
 
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('plan')
+      .select('plan, role')
       .eq('id', userId)
       .single();
 
+    isAdmin = String(profile?.role ?? '').toUpperCase() === 'ADMIN';
     const planName = profile?.plan ?? 'Starter';
     const limitErr = await checkEmailAllowed(userId, inboxId, planName);
     if (limitErr) {
@@ -346,6 +357,30 @@ export async function sendTrackedEmail(
     }
   } catch {
     // If profile fetch fails, allow the send (don't block on infra issues)
+  }
+
+  // ── Email validation gate (Phase B) ──
+  // Only bites when a validation row exists for this address, so it's a no-op
+  // for workspaces that haven't validated (i.e. flag off). Suppression is a
+  // separate, always-block check in the send-email edge function.
+  //   invalid -> block · risky -> block unless owner/admin · else allow
+  try {
+    const businessId = params.businessId ?? (await resolveLeadBusinessId(params.leadId));
+    if (businessId) {
+      const map = await getValidations(businessId, [params.toEmail]);
+      const v = map.get(params.toEmail.trim().toLowerCase());
+      if (v) {
+        const decision = sendDecision(v.status);
+        if (decision === 'block') {
+          return { success: false, error: `Can't send: ${params.toEmail} is invalid${v.reason ? ` (${v.reason})` : ''}.` };
+        }
+        if (decision === 'override' && !isAdmin) {
+          return { success: false, error: `${params.toEmail} is a risky address — an owner or admin must send it.` };
+        }
+      }
+    }
+  } catch {
+    // Fail open — never block a send on a validation-lookup infra error.
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
