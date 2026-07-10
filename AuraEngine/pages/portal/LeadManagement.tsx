@@ -16,7 +16,8 @@ import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow 
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
 import LeadActionsModal from '../../components/dashboard/LeadActionsModal';
 import ImportLeadsWizard from '../../components/portal/ImportLeadsWizard';
-import { resolvePlanName } from '../../lib/credits';
+import { resolvePlanName, consumeCredits } from '../../lib/credits';
+import { generateLeadResearch } from '../../lib/gemini';
 import LeadColorDot from '../../components/leads/LeadColorDot';
 import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, resolveLeadColor, getColorClasses, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
@@ -141,6 +142,7 @@ const LeadManagement: React.FC = () => {
   const { currentBusinessId } = useCurrentBusiness();
   const [valEnabled, setValEnabled] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [enriching, setEnriching] = useState(false);
   const [valMap, setValMap] = useState<Map<string, ValidationStatus>>(new Map());
   const [validatingRowId, setValidatingRowId] = useState<string | null>(null);
   useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
@@ -978,6 +980,68 @@ const LeadManagement: React.FC = () => {
     } finally { setValidating(false); }
   }, [currentBusinessId, selectedIds, allLeads, toast, loadValMap]);
 
+  // Bulk AI enrichment — fires the server-side enrich-lead job for each selected
+  // lead (concurrency-limited). Each becomes a background job shown in the global
+  // indicator; the KB is filled in server-side even if the user navigates away.
+  const FREE_EMAIL_RE = /^(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|proton|protonmail|aol|gmx|zoho|mail|yandex)\./i;
+  const handleBulkEnrich = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    const selected = allLeads.filter(l => ids.includes(l.id));
+    if (selected.length === 0) return;
+    if (!window.confirm(`Enrich ${selected.length} lead${selected.length !== 1 ? 's' : ''} with AI? This uses ${selected.length} AI research credit${selected.length !== 1 ? 's' : ''} and runs in the background.`)) return;
+
+    setEnriching(true);
+    setBulkProgress({ action: 'AI enrichment', total: selected.length, processed: 0, errors: 0, running: true });
+    let processed = 0, errors = 0;
+    const queue = [...selected];
+
+    const worker = async () => {
+      while (queue.length) {
+        const lead = queue.shift();
+        if (!lead) break;
+        try {
+          const kb = ((lead as unknown as { knowledgeBase?: Record<string, string> }).knowledgeBase || {}) as Record<string, string>;
+          const emailDomain = lead.primary_email?.includes('@') ? lead.primary_email.split('@')[1] : '';
+          const website = kb.website || (emailDomain && !FREE_EMAIL_RE.test(emailDomain) ? `https://${emailDomain}` : '');
+          const linkedin = kb.linkedin || (lead as { linkedin_url?: string }).linkedin_url || '';
+          const socialUrls: Record<string, string> = {};
+          if (website) socialUrls.website = website;
+          if (linkedin) socialUrls.linkedin = linkedin;
+          for (const k of ['instagram', 'facebook', 'twitter', 'youtube'] as const) if (kb[k]) socialUrls[k] = kb[k];
+          if (Object.keys(socialUrls).length === 0) { errors++; continue; } // nothing to research
+
+          const credit = await consumeCredits(supabase, 'lead_research');
+          if (!credit.success) { errors++; continue; }
+          const prepared = await generateLeadResearch(lead, socialUrls, (user as { businessProfile?: unknown }).businessProfile as never, user.id, true);
+          if (!prepared.request) { errors++; continue; }
+          const { error } = await supabase.functions.invoke('enrich-lead', {
+            body: {
+              lead_id: lead.id,
+              prompt: prepared.request.prompt,
+              systemInstruction: prepared.request.systemInstruction,
+              temperature: prepared.request.temperature,
+              topP: prepared.request.topP,
+              currentKb: kb,
+              label: `Enriching ${lead.company || lead.name || 'lead'}…`,
+            },
+          });
+          if (error) errors++;
+        } catch { errors++; }
+        finally {
+          processed++;
+          setBulkProgress(prev => prev ? { ...prev, processed, errors } : null);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(3, selected.length) }, () => worker()));
+    setBulkProgress(prev => prev ? { ...prev, running: false } : null);
+    setEnriching(false);
+    const started = selected.length - errors;
+    toast(`Started AI enrichment for ${started} lead${started !== 1 ? 's' : ''}${errors ? ` · ${errors} skipped (no website/social)` : ''}`, started > 0 ? 'success' : 'error');
+    setSelectedIds(new Set());
+  }, [selectedIds, allLeads, user, toast]);
+
   const handleBulkWorkflow = useCallback(async () => {
     if (!bulkSelectedWorkflowId) return;
     const wf = bulkWorkflows.find(w => w.id === bulkSelectedWorkflowId);
@@ -1689,6 +1753,15 @@ const LeadManagement: React.FC = () => {
                     <span>{validating ? 'Validating…' : 'Validate emails'}</span>
                   </button>
                 )}
+                <button
+                  onClick={handleBulkEnrich}
+                  disabled={enriching}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-violet-200 text-violet-700 rounded-lg text-xs font-bold hover:bg-violet-50 transition-all disabled:opacity-50"
+                  title="Run AI research to fill each lead's Knowledge Base (runs in the background)"
+                >
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <span>{enriching ? 'Starting…' : 'Enrich with AI'}</span>
+                </button>
                 {/* Assign to Team */}
                 <div className="relative">
                   <button

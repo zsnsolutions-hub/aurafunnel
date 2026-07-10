@@ -167,6 +167,10 @@ const AICommandCenter: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
+  // Focus the AI on a specific lead (not just the top-scored ones).
+  const [focusedLeadId, setFocusedLeadId] = useState<string | null>(null);
+  const [leadPickerOpen, setLeadPickerOpen] = useState(false);
+  const [leadSearch, setLeadSearch] = useState('');
   const [thinking, setThinking] = useState(false);
   const [chipFilter, setChipFilter] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -826,13 +830,27 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
       const aiDbId = await persistMessage('ai', '', { status: 'streaming', confidence: 90 });
       dbMessageIdRef.current = aiDbId;
 
-      // Build lead context for edge function
-      const topLeads = leads.slice(0, 15);
-      const leadContext = topLeads.map(l => {
+      // Build lead context for edge function. If the user focused a specific
+      // lead, put its full detail first so the AI answers about it — even when it
+      // isn't one of the top-scored leads.
+      const describeLead = (l: typeof leads[number], detailed = false) => {
         const parts = [`- ${l.name} (${l.company}) — Score: ${l.score}, Status: ${l.status}`];
         if (l.insights) parts.push(`  Insights: ${l.insights}`);
+        const kb = (l as unknown as { knowledgeBase?: Record<string, string> }).knowledgeBase;
+        if (detailed && kb) {
+          if (kb.companyOverview) parts.push(`  Company: ${kb.companyOverview}`);
+          if (kb.industry) parts.push(`  Industry: ${kb.industry}`);
+          if (kb.website) parts.push(`  Website: ${kb.website}`);
+          if (l.primary_email) parts.push(`  Email: ${l.primary_email}`);
+        }
         return parts.join('\n');
-      }).join('\n');
+      };
+      const focused = focusedLeadId ? leads.find(l => l.id === focusedLeadId) : null;
+      const topLeads = leads.slice(0, 15).filter(l => l.id !== focused?.id);
+      const leadContext = [
+        focused ? `FOCUSED LEAD — the user selected this lead; prioritize answering about them:\n${describeLead(focused, true)}\n` : '',
+        topLeads.map(l => describeLead(l)).join('\n'),
+      ].filter(Boolean).join('\n');
 
       const statusBreakdown: Record<string, number> = {};
       leads.forEach(l => { statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1; });
@@ -1328,6 +1346,50 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
 
             {/* Input Area */}
             <div className="p-4 border-t border-slate-100">
+              {/* Focus-on-a-lead picker */}
+              <div className="mb-2 relative">
+                {(() => {
+                  const focusedLead = focusedLeadId ? leads.find(l => l.id === focusedLeadId) : null;
+                  return focusedLead ? (
+                    <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg text-xs font-semibold text-violet-700">
+                      <TargetIcon className="w-3 h-3" />
+                      <span>Focused: {focusedLead.name} · {focusedLead.company}</span>
+                      <button onClick={() => setFocusedLeadId(null)} className="text-violet-400 hover:text-violet-600" title="Clear focus"><XIcon className="w-3 h-3" /></button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setLeadPickerOpen(o => !o)} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                      <TargetIcon className="w-3 h-3" /> Focus on a specific lead
+                    </button>
+                  );
+                })()}
+                {leadPickerOpen && !focusedLeadId && (
+                  <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-2 z-20">
+                    <input
+                      autoFocus
+                      value={leadSearch}
+                      onChange={e => setLeadSearch(e.target.value)}
+                      placeholder="Search leads by name or company…"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-300 mb-1"
+                    />
+                    <div className="max-h-56 overflow-y-auto">
+                      {leads
+                        .filter(l => { const q = leadSearch.toLowerCase().trim(); return !q || (l.name || '').toLowerCase().includes(q) || (l.company || '').toLowerCase().includes(q); })
+                        .slice(0, 40)
+                        .map(l => (
+                          <button
+                            key={l.id}
+                            onClick={() => { setFocusedLeadId(l.id); setLeadPickerOpen(false); setLeadSearch(''); }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-indigo-50 text-xs transition-colors"
+                          >
+                            <span className="font-semibold text-slate-800">{l.name || 'Unnamed'}</span>
+                            <span className="text-slate-400"> · {l.company || '—'} · {l.score}</span>
+                          </button>
+                        ))}
+                      {leads.length === 0 && <p className="text-xs text-slate-400 px-3 py-2">No leads yet.</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="flex items-center space-x-2">
                 <div className="flex-1 relative">
                   <input
