@@ -692,11 +692,11 @@ const LeadProfile: React.FC = () => {
     if (lead.created_at) events.push({ date: new Date(lead.created_at), label: 'Lead created', type: 'created' });
     const email = (lead.primary_email || '').trim().toLowerCase();
     if (currentBusinessId && email) {
-      const { data } = await supabase.from('email_validations')
+      const { data } = await supabase.from('email_validation_log')
         .select('status, reason, validated_at')
-        .eq('business_id', currentBusinessId).eq('email', email).maybeSingle();
-      if (data) {
-        const row = data as { status: string; reason: string | null; validated_at: string };
+        .eq('business_id', currentBusinessId).eq('email', email)
+        .order('validated_at', { ascending: false }).limit(50);
+      for (const row of (data ?? []) as { status: string; reason: string | null; validated_at: string }[]) {
         events.push({
           date: new Date(row.validated_at),
           label: `Email validation — ${row.status}`,

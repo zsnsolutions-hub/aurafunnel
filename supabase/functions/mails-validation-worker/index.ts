@@ -172,6 +172,24 @@ serve(async (req) => {
       validated_at: new Date().toISOString(),
     }, { onConflict: "business_id,email" });
     if (upErr) console.warn("[mails-validation] upsert failed:", upErr.message);
+
+    // ── Append to history log (one row per fresh validation) ──
+    const { error: logErr } = await admin.from("email_validation_log").insert({
+      workspace_id: workspaceId,
+      business_id: businessId,
+      email,
+      status: result.status,
+      deliverability: result.deliverability,
+      reason: result.reason,
+      is_disposable: result.is_disposable,
+      is_role: result.is_role,
+      is_free: result.is_free,
+      score: result.score,
+      provider: "mails.so",
+      validated_by: user.id,
+      validated_at: new Date().toISOString(),
+    });
+    if (logErr) console.warn("[mails-validation] log insert failed:", logErr.message);
   }
 
   return json({ results }, 200, cors);
