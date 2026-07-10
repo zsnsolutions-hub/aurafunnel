@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { UserRole, User } from './types';
 import ErrorBoundary from './components/ErrorBoundary';
 import { BackgroundTasksProvider } from './components/background/BackgroundTasks';
+import { LeadEnrichmentWatcher } from './components/background/LeadEnrichmentWatcher';
 import { GuideProvider } from './components/guide/GuideProvider';
 import { SupportProvider } from './components/support/SupportProvider';
 import { SupportBanner } from './components/support/SupportBanner';
@@ -413,6 +414,7 @@ const App: React.FC = () => {
         </Routes>
     </GuideProvider>
     </ErrorBoundary>
+    <LeadEnrichmentWatcher userId={user?.id} />
     </BackgroundTasksProvider>
     {import.meta.env.DEV && (
       <Suspense fallback={null}><PerfPanel /></Suspense>

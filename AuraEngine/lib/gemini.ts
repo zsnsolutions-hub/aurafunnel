@@ -590,12 +590,20 @@ export const generateContentByCategory = async (
   return { text: "CRITICAL FAILURE", tokens_used: 0, model_name: MODEL_NAME, prompt_name: promptKey, prompt_version: resolved.promptVersion };
 };
 
+export interface LeadResearchRequest {
+  prompt: string;
+  systemInstruction: string;
+  temperature?: number;
+  topP?: number;
+}
+
 export const generateLeadResearch = async (
   lead: Pick<Lead, 'first_name' | 'last_name' | 'primary_email' | 'company' | 'insights'>,
   socialUrls: Record<string, string>,
   businessProfile?: BusinessProfile,
-  userId?: string
-): Promise<AIResponse> => {
+  userId?: string,
+  prepareOnly = false
+): Promise<AIResponse & { request?: LeadResearchRequest }> => {
   const ai = getGeminiClient();
 
   const urlContext = Object.entries(socialUrls)
@@ -773,6 +781,16 @@ Return ONE structured JSON object in this exact schema (no commentary outside th
   const memoryCtx = await safeMemoryContext({ userId });
 
   const systemInstruction = resolved.systemInstruction + buildBusinessContext(businessProfile) + memoryCtx;
+
+  // Prepare-only: return the built prompt so a server-side background job can run
+  // the (slow) grounded generation itself, surviving client navigation/reload.
+  if (prepareOnly) {
+    return {
+      text: '', tokens_used: 0, model_name: MODEL_NAME,
+      prompt_name: 'lead_research', prompt_version: resolved.promptVersion,
+      request: { prompt, systemInstruction, temperature: resolved.temperature, topP: resolved.topP },
+    };
+  }
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {

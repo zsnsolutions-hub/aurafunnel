@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useBackgroundTasks } from '../../components/background/BackgroundTasks';
 import { Lead, KnowledgeBase, User, ContentType } from '../../types';
 import {
   TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, ChartIcon,
@@ -225,9 +224,8 @@ const LeadProfile: React.FC = () => {
   const [kbForm, setKbForm] = useState<KnowledgeBase>({});
   const [kbNotesExpanded, setKbNotesExpanded] = useState(false);
   const [kbResearching, setKbResearching] = useState(false);
-  const bgTasks = useBackgroundTasks();
-  // Lets background-task callbacks skip UI state updates after the user leaves
-  // the page (the DB write still happens either way).
+  // Lets the KB-save handler skip UI state updates after the user leaves the
+  // page (the enrichment continues server-side either way).
   const profileMountedRef = useRef(true);
   useEffect(() => { profileMountedRef.current = true; return () => { profileMountedRef.current = false; }; }, []);
   const [kbSaving, setKbSaving] = useState(false);
@@ -447,65 +445,35 @@ const LeadProfile: React.FC = () => {
     const creditResult = await consumeCredits(supabase, 'lead_research');
     if (!creditResult.success) return;
 
+    // Kick off enrichment as a SERVER-SIDE background job: build the research
+    // prompt client-side (fast, prepareOnly), then hand it to the enrich-lead
+    // edge function which runs the slow grounded generation + DB write in the
+    // background (survives navigation AND full reload). The LeadEnrichmentWatcher
+    // polls the job row and shows a live timer.
     setKbResearching(true);
-    // Run the (slow) AI enrichment as an app-level background task so it keeps
-    // running — and stays visible with a live timer — even if the user navigates
-    // away from this lead. The DB write is the source of truth; UI state updates
-    // are guarded so they no-op after unmount.
-    const leadId = lead.id;
-    const clientId = user.id;
-    const leadForResearch = lead;
-    const businessProfile = user.businessProfile;
-    const taskLabel = `Enriching ${lead.company || leadDisplayName(lead) || 'lead'}…`;
-    bgTasks.runTask(taskLabel, async () => {
-      const res = await generateLeadResearch(leadForResearch, socialUrls, businessProfile);
-      if (!res.text) return;
-
-      // Parse structured fields from AI response
-      const structured = parseLeadResearchResponse(res.text);
-
-      const userNotes = stripPreviousAIResearch(cleaned.extraNotes);
-      const briefText = structured.aiResearchBrief || res.text;
-      const merged = userNotes
-        ? `${userNotes}\n\n${AI_RESEARCH_HEADER}\n${briefText}`
-        : `${AI_RESEARCH_HEADER}\n${briefText}`;
-
-      const updatedKb: KnowledgeBase = {
-        ...cleaned,
-        extraNotes: merged,
-        // Merge structured intelligence fields
-        title: structured.title || cleaned.title,
-        industry: structured.industry || cleaned.industry,
-        employeeCount: structured.employeeCount || cleaned.employeeCount,
-        location: structured.location || cleaned.location,
-        companyOverview: structured.companyOverview || cleaned.companyOverview,
-        talkingPoints: structured.talkingPoints || cleaned.talkingPoints,
-        outreachAngle: structured.outreachAngle || cleaned.outreachAngle,
-        riskFactors: structured.riskFactors || cleaned.riskFactors,
-        aiResearchBrief: briefText,
-        aiResearchedAt: structured.aiResearchedAt,
-        mentionedOnWebsite: structured.mentionedOnWebsite || cleaned.mentionedOnWebsite,
-      };
-      const newInsights = briefText.substring(0, 200);
-
-      const { error: researchError } = await supabase.from('leads').update({
-        knowledgeBase: updatedKb,
-        insights: newInsights,
-      }).eq('id', leadId).eq('client_id', clientId);
-
-      if (researchError) {
-        console.error('AI research save error:', researchError.message);
-        throw new Error(researchError.message);
-      }
-
-      // Reflect the result live only if the user is still viewing this lead.
-      if (profileMountedRef.current) {
-        setLead(prev => prev ? { ...prev, knowledgeBase: updatedKb, insights: newInsights } : prev);
-        if (refreshProfile) await refreshProfile();
-      }
-    })
-      .catch(() => { /* surfaced by the background-task indicator */ })
-      .finally(() => { if (profileMountedRef.current) setKbResearching(false); });
+    try {
+      const prepared = await generateLeadResearch(lead, socialUrls, user.businessProfile, user.id, true);
+      if (!prepared.request) return;
+      const label = `Enriching ${lead.company || leadDisplayName(lead) || 'lead'}…`;
+      const { error: invokeErr } = await supabase.functions.invoke('enrich-lead', {
+        body: {
+          lead_id: lead.id,
+          prompt: prepared.request.prompt,
+          systemInstruction: prepared.request.systemInstruction,
+          temperature: prepared.request.temperature,
+          topP: prepared.request.topP,
+          currentKb: cleaned,
+          label,
+        },
+      });
+      showFeedback(invokeErr
+        ? 'Could not start enrichment — please retry'
+        : 'AI enrichment started — it finishes in the background');
+    } catch {
+      showFeedback('Could not start enrichment — please retry');
+    } finally {
+      if (profileMountedRef.current) setKbResearching(false);
+    }
   };
 
   const KB_SOCIAL_LINKS: { key: keyof KnowledgeBase; label: string; icon: React.ReactNode; color: string }[] = [

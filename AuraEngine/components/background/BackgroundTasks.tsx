@@ -24,6 +24,10 @@ interface BackgroundTasksValue {
   /** Run `fn` as a tracked background task. Resolves/rejects with fn's result. */
   runTask: <T>(label: string, fn: () => Promise<T>) => Promise<T>;
   dismiss: (id: string) => void;
+  /** Add/update a task tracked externally (e.g. a server-side job polled from
+   *  the DB), keyed by a stable id. */
+  upsertExternalTask: (task: BgTask) => void;
+  removeExternalTask: (id: string) => void;
 }
 
 const BackgroundTasksContext = createContext<BackgroundTasksValue | null>(null);
@@ -66,8 +70,18 @@ export const BackgroundTasksProvider: React.FC<{ children: React.ReactNode }> = 
     );
   }, [scheduleRemoval]);
 
+  const upsertExternalTask = useCallback((task: BgTask) => {
+    setTasks(prev => prev.some(t => t.id === task.id)
+      ? prev.map(t => t.id === task.id ? { ...t, ...task } : t)
+      : [...prev, task]);
+  }, []);
+
+  const removeExternalTask = useCallback((id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   return (
-    <BackgroundTasksContext.Provider value={{ tasks, runTask, dismiss }}>
+    <BackgroundTasksContext.Provider value={{ tasks, runTask, dismiss, upsertExternalTask, removeExternalTask }}>
       {children}
       <BackgroundTasksIndicator tasks={tasks} onDismiss={dismiss} />
     </BackgroundTasksContext.Provider>
@@ -82,6 +96,8 @@ export function useBackgroundTasks(): BackgroundTasksValue {
       tasks: [],
       runTask: (_label, fn) => fn(),
       dismiss: () => {},
+      upsertExternalTask: () => {},
+      removeExternalTask: () => {},
     };
   }
   return ctx;
