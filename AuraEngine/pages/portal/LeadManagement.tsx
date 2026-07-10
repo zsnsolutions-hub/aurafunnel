@@ -9,6 +9,8 @@ import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom
 import { useToast } from '../../components/ui/Toast';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { emailValidationEnabled, validateEmails, validateEmail, getValidations, statusMeta, type ValidationStatus } from '../../lib/emailValidation';
+import { sendTrackedEmailBatch } from '../../lib/emailTracking';
+import { resolveWorkspaceForUser } from '../../lib/memory';
 import type { BatchEmailSummary } from '../../lib/emailTracking';
 import { loadWorkflows, executeWorkflow as executeWorkflowEngine, type Workflow as DbWorkflow, type ExecutionResult } from '../../lib/automationEngine';
 import { useIntegrations, fetchIntegration } from '../../lib/integrations';
@@ -131,8 +133,6 @@ const STAGE_COLORS: Record<Lead['status'], { dot: string; active: string }> = {
 };
 const ACTIVITY_OPTIONS = ['Today', 'This Week', 'This Month', 'All Time'] as const;
 const COMPANY_SIZES = ['1-10', '11-50', '51-200', '201-500', '500+'] as const;
-const CAMPAIGNS = ['Q4 Tech Nurture', 'Enterprise Outreach', 'Product Launch', 'Re-engagement', 'Cold Outreach'] as const;
-const TEAM_MEMBERS = ['Sarah Johnson', 'Mike Chen', 'Emma Davis', 'Alex Kim', 'Chris Park'] as const;
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 const LeadManagement: React.FC = () => {
@@ -143,6 +143,22 @@ const LeadManagement: React.FC = () => {
   const [validating, setValidating] = useState(false);
   const [valMap, setValMap] = useState<Map<string, ValidationStatus>>(new Map());
   useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
+  // Real assignees = workspace members (falls back to the current user).
+  useEffect(() => {
+    (async () => {
+      const self = { id: user.id, name: user.name || 'Me' };
+      try {
+        const ws = await resolveWorkspaceForUser(user.id);
+        const { data: wm } = ws ? await supabase.from('workspace_members').select('user_id').eq('workspace_id', ws) : { data: null };
+        const ids = (wm ?? []).map((r: { user_id: string }) => r.user_id);
+        const { data: profs } = ids.length ? await supabase.from('profiles').select('id, name').in('id', ids) : { data: null };
+        const list = (profs ?? []).map((p: { id: string; name: string | null }) => ({ id: p.id, name: p.name || p.id.slice(0, 8) }));
+        const final = list.length ? list : [self];
+        setMembers(final);
+        setBulkAssignee(prev => prev || final[0].id);
+      } catch { setMembers([self]); setBulkAssignee(prev => prev || self.id); }
+    })();
+  }, [user.id, user.name]);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { integrations: integrationStatuses } = useIntegrations();
@@ -201,10 +217,13 @@ const LeadManagement: React.FC = () => {
 
   // ── Bulk Actions ──
   const [bulkActionOpen, setBulkActionOpen] = useState<BulkAction | null>(null);
-  const [bulkCampaign, setBulkCampaign] = useState(CAMPAIGNS[0]);
-  const [bulkAssignee, setBulkAssignee] = useState(TEAM_MEMBERS[0]);
+  const [bulkAssignee, setBulkAssignee] = useState('');
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
+  const [bulkSubject, setBulkSubject] = useState('');
+  const [bulkBody, setBulkBody] = useState('');
+  const [bulkSending, setBulkSending] = useState(false);
   const [bulkTag, setBulkTag] = useState<LeadTag>('Hot Lead');
-  const [bulkAIPersonalize, setBulkAIPersonalize] = useState(true);
   const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -868,13 +887,17 @@ const LeadManagement: React.FC = () => {
     setSelectedIds(new Set());
   };
 
-  const handleBulkCampaign = () => {
-    executeBulkAction(`Add to "${bulkCampaign}" campaign`);
-    setSelectedIds(new Set());
-  };
-
-  const handleBulkAssign = () => {
-    executeBulkAction(`Assign to ${bulkAssignee}`);
+  const handleBulkAssign = async () => {
+    const ids = Array.from(selectedIds);
+    if (!bulkAssignee || ids.length === 0) return;
+    setBulkActionOpen(null);
+    try {
+      const { error } = await supabase.from('leads').update({ assigned_to: bulkAssignee }).in('id', ids);
+      if (error) throw new Error(error.message);
+      setAllLeads(prev => prev.map(l => ids.includes(l.id) ? ({ ...l, assigned_to: bulkAssignee } as Lead) : l));
+      const name = members.find(m => m.id === bulkAssignee)?.name ?? 'user';
+      toast(`Assigned ${ids.length} lead${ids.length > 1 ? 's' : ''} to ${name}`, 'success');
+    } catch (e) { toast((e as Error).message || 'Assign failed.', 'error'); }
     setSelectedIds(new Set());
   };
 
@@ -896,9 +919,24 @@ const LeadManagement: React.FC = () => {
     setSelectedIds(new Set());
   };
 
-  const handleBulkEmail = () => {
-    executeBulkAction('Send bulk email');
-    setSelectedIds(new Set());
+  const handleBulkEmail = () => { setBulkActionOpen(null); setBulkEmailOpen(true); };
+
+  const handleBulkEmailSend = async () => {
+    const ids = Array.from(selectedIds);
+    const recipients = allLeads.filter(l => ids.includes(l.id) && (l.email || l.primary_email));
+    if (!bulkSubject.trim() || !bulkBody.trim()) { toast('Subject and body are required.', 'error'); return; }
+    if (recipients.length === 0) { toast('No selected leads have an email.', 'error'); return; }
+    setBulkSending(true);
+    try {
+      const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#1e293b">${bulkBody.trim().split('\n').join('<br>')}</div>`;
+      const res = await sendTrackedEmailBatch(
+        recipients.map(l => ({ ...l, email: (l.email || l.primary_email || '') })) as unknown as Parameters<typeof sendTrackedEmailBatch>[0],
+        bulkSubject, html,
+      );
+      toast(`Sent ${res.sent}${res.failed ? `, ${res.failed} blocked/failed${res.errors[0] ? ` — ${res.errors[0]}` : ''}` : ''}`, res.failed ? 'error' : 'success');
+      setBulkEmailOpen(false); setBulkSubject(''); setBulkBody(''); setSelectedIds(new Set());
+    } catch (e) { toast((e as Error).message || 'Bulk send failed.', 'error'); }
+    finally { setBulkSending(false); }
   };
 
   // Real bulk email validation (batched <=50/req via the edge function).
@@ -1615,34 +1653,6 @@ const LeadManagement: React.FC = () => {
                     <span>{validating ? 'Validating…' : 'Validate emails'}</span>
                   </button>
                 )}
-                {/* Add to Campaign */}
-                <div className="relative">
-                  <button
-                    onClick={() => setBulkActionOpen(bulkActionOpen === 'campaign' ? null : 'campaign')}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all"
-                  >
-                    <BoltIcon className="w-3.5 h-3.5" />
-                    <span>Add to Campaign</span>
-                  </button>
-                  {bulkActionOpen === 'campaign' && (
-                    <div className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-4 min-w-[260px]">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Campaign</p>
-                      <select value={bulkCampaign} onChange={e => setBulkCampaign(e.target.value as any)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-2">
-                        {CAMPAIGNS.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      <label className="flex items-center space-x-2 mb-3 cursor-pointer">
-                        <input type="checkbox" checked={bulkAIPersonalize} onChange={() => setBulkAIPersonalize(!bulkAIPersonalize)} className="w-4 h-4 text-indigo-600 rounded" />
-                        <span className="text-xs text-slate-600 font-semibold">AI Personalization</span>
-                      </label>
-                      <p className="text-[10px] text-slate-400 mb-3">{selectedIds.size} leads will be added. {bulkAIPersonalize ? 'AI will personalize for each lead.' : ''}</p>
-                      <div className="flex space-x-2">
-                        <button onClick={() => setBulkActionOpen(null)} className="flex-1 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">Cancel</button>
-                        <button onClick={handleBulkCampaign} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Execute</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 {/* Assign to Team */}
                 <div className="relative">
                   <button
@@ -1655,8 +1665,8 @@ const LeadManagement: React.FC = () => {
                   {bulkActionOpen === 'assign' && (
                     <div className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-4 min-w-[220px]">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Team Member</p>
-                      <select value={bulkAssignee} onChange={e => setBulkAssignee(e.target.value as any)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3">
-                        {TEAM_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                      <select value={bulkAssignee} onChange={e => setBulkAssignee(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3">
+                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                       <div className="flex space-x-2">
                         <button onClick={() => setBulkActionOpen(null)} className="flex-1 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">Cancel</button>
@@ -2292,6 +2302,28 @@ const LeadManagement: React.FC = () => {
       )}
 
       {/* Add Lead Slide-over */}
+      {bulkEmailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !bulkSending && setBulkEmailOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h2 className="font-bold text-slate-900">Send email to {selectedIds.size} lead{selectedIds.size !== 1 ? 's' : ''}</h2>
+              <button onClick={() => setBulkEmailOpen(false)} disabled={bulkSending} className="p-1 text-slate-400 hover:text-slate-600"><XIcon className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <input value={bulkSubject} onChange={e => setBulkSubject(e.target.value)} placeholder="Subject" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg" />
+              <textarea value={bulkBody} onChange={e => setBulkBody(e.target.value)} rows={8} placeholder="Write your message… (use {{first_name}} to personalize)" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg resize-none" />
+              <p className="text-[11px] text-slate-400">Invalid &amp; suppressed recipients are blocked automatically. Sends from your default sender account.</p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+              <button onClick={() => setBulkEmailOpen(false)} disabled={bulkSending} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+              <button onClick={handleBulkEmailSend} disabled={bulkSending || !bulkSubject.trim() || !bulkBody.trim()} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                {bulkSending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAddLeadOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-end">
           <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsAddLeadOpen(false)}></div>
