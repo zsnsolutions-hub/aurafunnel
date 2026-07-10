@@ -11,7 +11,7 @@ import {
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
-import { emailValidationEnabled } from '../../lib/emailValidation';
+import { emailValidationEnabled, validateEmail } from '../../lib/emailValidation';
 import EmailValidationControl from '../../components/validation/EmailValidationControl';
 import { leadIntelligenceEnabled } from '../../lib/leadScoring';
 import LeadScorePanel from '../../components/leads/LeadScorePanel';
@@ -159,6 +159,7 @@ const LeadProfile: React.FC = () => {
   useEffect(() => { leadIntelligenceEnabled(user.id).then(setIntelEnabled).catch(() => {}); }, [user.id]);
   const [fastEnabled, setFastEnabled] = useState(false);
   const [fastSendOpen, setFastSendOpen] = useState(false);
+  const [validatingEmail, setValidatingEmail] = useState(false);
   useEffect(() => { workspaceFlagEnabled(user.id, 'fast_send').then(setFastEnabled).catch(() => {}); }, [user.id]);
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
@@ -1337,6 +1338,24 @@ const LeadProfile: React.FC = () => {
                 <MailIcon className="w-4 h-4" />
                 <span>Send Email</span>
               </button>
+              {valEnabled && (
+                <button
+                  onClick={async () => {
+                    if (!currentBusinessId || !lead?.primary_email) { showFeedback('No email to validate'); return; }
+                    setValidatingEmail(true);
+                    try {
+                      const r = await validateEmail(currentBusinessId, lead.primary_email, true);
+                      showFeedback(r ? `Email is ${r.status}${r.reason ? ` — ${r.reason}` : ''}` : 'Validation returned no result');
+                    } catch (e) { showFeedback((e as Error).message || 'Validation failed'); }
+                    finally { setValidatingEmail(false); }
+                  }}
+                  disabled={validatingEmail}
+                  className="w-full flex items-center space-x-3 p-3 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors font-semibold text-sm disabled:opacity-50"
+                >
+                  <CheckIcon className="w-4 h-4" />
+                  <span>{validatingEmail ? 'Validating…' : 'Validate Email'}</span>
+                </button>
+              )}
               <button
                 onClick={() => showFeedback('Call logged successfully')}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors font-semibold text-sm"
