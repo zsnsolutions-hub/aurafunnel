@@ -19,6 +19,8 @@ import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
 const ActivityPanel = lazy(() => import('../activity/ActivityPanel').then(m => ({ default: m.ActivityPanel })));
 import VoiceAgentLauncher from '../voice/VoiceAgentLauncher';
+import { BusinessProvider } from '../business/BusinessProvider';
+import { BusinessSwitcher } from '../business/BusinessSwitcher';
 import { setDataPrefetchUser } from '../../lib/dataPrefetch';
 import { prefetchPortalData } from '../../lib/queries';
 
@@ -244,6 +246,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
   const sidebarFooter = useMemo(() =>
     sidebarCollapsed ? (
       <div className="flex flex-col items-center gap-3">
+        <BusinessSwitcher collapsed />
         <UIModeSwitcher collapsed />
         <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
           {user.name?.charAt(0) || 'U'}
@@ -254,6 +257,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
       </div>
     ) : (
       <>
+        <BusinessSwitcher />
         <UIModeSwitcher />
         <div className="p-4 bg-gray-900 rounded-2xl text-white mb-4 mt-3">
           <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">AI Credits</p>
@@ -281,7 +285,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
   , [sidebarCollapsed, user.name, onLogout, usagePercentage, creditsTotal, creditsUsed]);
 
   return (
-    <>
+    <BusinessProvider userId={user.id}>
       <AppShell
         sidebarCollapsed={sidebarCollapsed}
         sidebar={
@@ -330,7 +334,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
           />
         </Suspense>
       </ErrorBoundary>
-    </>
+    </BusinessProvider>
   );
 });
 
