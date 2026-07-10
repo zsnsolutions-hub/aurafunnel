@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const MODEL_NAME = "gemini-3-flash-preview";
+// Chat now streams from OpenAI (faster). The SSE contract to the client is
+// unchanged: { type: "chunk", text, accumulated } events then a { type: "done" }.
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const MODEL_NAME = "gpt-4o-mini";
 
 // Cluster-wide rate limit (20 req/min per user) via Postgres consume_ai_rate_limit.
 // Tighter than gemini-proxy because streaming sessions are heavier per request.
@@ -134,38 +136,35 @@ serve(async (req) => {
       );
     }
 
-    if (!GEMINI_API_KEY) {
+    if (!OPENAI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
+        JSON.stringify({ error: "OPENAI_API_KEY not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Build Gemini request ──
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    // ── Build OpenAI request ──
     const systemInstruction =
       (MODE_SYSTEM_INSTRUCTIONS[mode] || MODE_SYSTEM_INSTRUCTIONS.analyst) +
       (businessContext ? `\n\nBUSINESS CONTEXT:\n${businessContext}` : "");
 
     const contextBlock = `${pipelineStats}\n\nTOP LEADS:\n${leadContext || "No leads in pipeline."}`;
 
-    const contents: { role: "user" | "model"; parts: { text: string }[] }[] = [];
+    const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
+      { role: "system", content: systemInstruction },
+    ];
     for (const msg of (history || []).slice(-10)) {
-      contents.push({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }],
-      });
+      messages.push({ role: msg.role === "user" ? "user" : "assistant", content: msg.content });
     }
-    contents.push({
-      role: "user",
-      parts: [{ text: `${contextBlock}\n\nUSER REQUEST:\n${prompt}` }],
-    });
+    messages.push({ role: "user", content: `${contextBlock}\n\nUSER REQUEST:\n${prompt}` });
 
-    const genConfig = {
-      systemInstruction,
+    const openaiBody = {
+      model: MODEL_NAME,
+      messages,
       temperature: mode === "creative" ? 0.85 : 0.7,
-      topP: 0.9,
-      topK: 40,
+      top_p: 0.9,
+      stream: true,
+      stream_options: { include_usage: true },
     };
 
     // ── Stream via SSE ──
@@ -177,23 +176,50 @@ serve(async (req) => {
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          const stream = await ai.models.generateContentStream({
-            model: MODEL_NAME,
-            contents,
-            config: genConfig,
+          const oaRes = await fetch(OPENAI_URL, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify(openaiBody),
           });
-
-          for await (const chunk of stream) {
-            const text = chunk.text || "";
-            if (!text) continue;
-            fullText += text;
-
-            const data = JSON.stringify({ type: "chunk", text, accumulated: fullText.length });
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          if (!oaRes.ok || !oaRes.body) {
+            const errText = await oaRes.text().catch(() => "");
+            throw new Error(`OpenAI HTTP ${oaRes.status} ${errText}`);
           }
 
-          // Final event with metadata
-          totalTokens = Math.ceil(fullText.length / 4); // rough estimate
+          const reader = oaRes.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          let usageTokens = 0;
+          streamLoop:
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const events = buf.split("\n\n");
+            buf = events.pop() ?? "";
+            for (const evt of events) {
+              const line = evt.split("\n").find((l) => l.startsWith("data: "));
+              if (!line) continue;
+              const payload = line.slice(6).trim();
+              if (payload === "[DONE]") break streamLoop;
+              try {
+                const j = JSON.parse(payload) as {
+                  choices?: { delta?: { content?: string } }[];
+                  usage?: { total_tokens?: number };
+                };
+                if (j.usage?.total_tokens) usageTokens = j.usage.total_tokens;
+                const text = j.choices?.[0]?.delta?.content || "";
+                if (!text) continue;
+                fullText += text;
+                const data = JSON.stringify({ type: "chunk", text, accumulated: fullText.length });
+                controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+              } catch { /* ignore keepalive/partial */ }
+            }
+          }
+          if (usageTokens) totalTokens = usageTokens;
+
+          // Final event with metadata (prefer OpenAI's reported usage)
+          if (!totalTokens) totalTokens = Math.ceil(fullText.length / 4); // rough fallback
           const latencyMs = Date.now() - startTime;
           const done = JSON.stringify({
             type: "done",
