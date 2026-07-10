@@ -13,6 +13,8 @@ import { supabase } from '../../lib/supabase';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { emailValidationEnabled } from '../../lib/emailValidation';
 import EmailValidationControl from '../../components/validation/EmailValidationControl';
+import { leadIntelligenceEnabled } from '../../lib/leadScoring';
+import LeadScorePanel from '../../components/leads/LeadScorePanel';
 import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
 import { consumeCredits } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
@@ -146,9 +148,11 @@ interface TaskItem {
 
 const LeadProfile: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
-  const { currentBusinessId } = useCurrentBusiness();
+  const { currentBusinessId, currentBusiness } = useCurrentBusiness();
   const [valEnabled, setValEnabled] = useState(false);
+  const [intelEnabled, setIntelEnabled] = useState(false);
   useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
+  useEffect(() => { leadIntelligenceEnabled(user.id).then(setIntelEnabled).catch(() => {}); }, [user.id]);
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
 
@@ -1001,6 +1005,12 @@ const LeadProfile: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {intelEnabled && (
+                  <div className="md:col-span-3">
+                    <LeadScorePanel lead={lead} businessId={currentBusinessId} workspaceId={currentBusiness?.workspace_id ?? null} enabled={intelEnabled} />
+                  </div>
+                )}
 
                 {/* Company Details */}
                 <div className="md:col-span-2">
