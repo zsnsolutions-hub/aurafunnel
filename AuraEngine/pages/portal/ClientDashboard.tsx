@@ -439,7 +439,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
 
   const onLeadCreated = async (createdLead: Lead, kb: Record<string, string> | undefined) => {
     // Normalize the raw insert row so it carries the computed aliases the UI needs.
-    const [normalized] = normalizeLeads([createdLead]);
+    const [normalized] = normalizeLeads([createdLead as unknown as Record<string, unknown>]);
     const updated = [normalized, ...leads];
     setLeads(updated);
     setFilteredLeads(updated);
