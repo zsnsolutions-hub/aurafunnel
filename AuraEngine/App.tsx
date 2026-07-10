@@ -14,8 +14,35 @@ import { useIsMobile } from './hooks/useIsMobile';
 import { canEnterAdmin, canEnterSupport } from './lib/permissions';
 import { loadBranding, loadBrandingByHost, applyBrandingToDocument } from './lib/branding';
 
+// Reload-safe lazy(): a dynamic import can fail with a ChunkLoadError when a new
+// deploy has rotated out (last-5-releases) the hashed chunk that this older,
+// still-open bundle references. The ErrorBoundary would otherwise catch the
+// rejection and show a permanent crash screen. Instead: retry once for a
+// transient network hiccup, then force a single full reload to pull a fresh
+// index.html + current chunk names. Guarded by the same sessionStorage key
+// index.html uses, so it can never loop.
+function lazyWithRetry<T extends React.ComponentType<any>>(factory: () => Promise<{ default: T }>) {
+  const isChunkError = (msg: string) =>
+    /ChunkLoadError|Loading chunk|dynamically imported module|Importing a module script failed|error loading dynamically imported/i.test(msg);
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch (err) {
+      try { return await factory(); } catch (err2) {
+        const msg = (err2 as Error)?.message || (err as Error)?.message || '';
+        if (isChunkError(msg) && !sessionStorage.getItem('__chunkReload')) {
+          sessionStorage.setItem('__chunkReload', '1');
+          window.location.reload();
+          return await new Promise<{ default: T }>(() => {}); // hold render until reload
+        }
+        throw err2;
+      }
+    }
+  });
+}
+
 // Dev perf panel — lazy-loaded, tree-shaken in production
-const PerfPanel = lazy(() => import('./components/dev/PerfPanel'));
+const PerfPanel = lazyWithRetry(() => import('./components/dev/PerfPanel'));
 
 // Layouts — direct imports so the app shell never suspends
 import MarketingLayout from './components/layout/MarketingLayout';
@@ -25,81 +52,81 @@ import ClientLayout from './components/layout/ClientLayout';
 // ─── Lazy-loaded pages ───
 
 // Marketing
-const LandingPage = lazy(() => import('./pages/marketing/LandingPage'));
-const FeaturesPage = lazy(() => import('./pages/marketing/FeaturesPage'));
-const PricingPage = lazy(() => import('./pages/marketing/PricingPage'));
-const AboutPage = lazy(() => import('./pages/marketing/AboutPage'));
-const ContactPage = lazy(() => import('./pages/marketing/ContactPage'));
-const BlogPage = lazy(() => import('./pages/marketing/BlogPage'));
-const BlogPostPage = lazy(() => import('./pages/marketing/BlogPostPage'));
-const TrialSignupPage = lazy(() => import('./pages/marketing/TrialSignupPage'));
+const LandingPage = lazyWithRetry(() => import('./pages/marketing/LandingPage'));
+const FeaturesPage = lazyWithRetry(() => import('./pages/marketing/FeaturesPage'));
+const PricingPage = lazyWithRetry(() => import('./pages/marketing/PricingPage'));
+const AboutPage = lazyWithRetry(() => import('./pages/marketing/AboutPage'));
+const ContactPage = lazyWithRetry(() => import('./pages/marketing/ContactPage'));
+const BlogPage = lazyWithRetry(() => import('./pages/marketing/BlogPage'));
+const BlogPostPage = lazyWithRetry(() => import('./pages/marketing/BlogPostPage'));
+const TrialSignupPage = lazyWithRetry(() => import('./pages/marketing/TrialSignupPage'));
 
 // Auth
-const AuthPage = lazy(() => import('./pages/portal/AuthPage'));
-const VoiceAgentLauncher = lazy(() => import('./components/voice/VoiceAgentLauncher'));
-const ResetPasswordPage = lazy(() => import('./pages/portal/ResetPasswordPage'));
-const ConfirmEmailPage = lazy(() => import('./pages/portal/ConfirmEmailPage'));
+const AuthPage = lazyWithRetry(() => import('./pages/portal/AuthPage'));
+const VoiceAgentLauncher = lazyWithRetry(() => import('./components/voice/VoiceAgentLauncher'));
+const ResetPasswordPage = lazyWithRetry(() => import('./pages/portal/ResetPasswordPage'));
+const ConfirmEmailPage = lazyWithRetry(() => import('./pages/portal/ConfirmEmailPage'));
 
 // Onboarding
-const OnboardingPage = lazy(() => import('./pages/portal/OnboardingPage'));
+const OnboardingPage = lazyWithRetry(() => import('./pages/portal/OnboardingPage'));
 
 // Client Portal
-const ClientDashboard = lazy(() => import('./pages/portal/ClientDashboard'));
-const MissionControl = lazy(() => import('./pages/portal/MissionControl'));
-const LeadManagement = lazy(() => import('./pages/portal/LeadManagement'));
-const LeadProfile = lazy(() => import('./pages/portal/LeadProfile'));
-const BusinessesPage = lazy(() => import('./pages/portal/BusinessesPage'));
-const BusinessSettingsPage = lazy(() => import('./pages/portal/BusinessSettingsPage'));
-const ImageStudio = lazy(() => import('./pages/portal/ImageStudio'));
-const ContentGen = lazy(() => import('./pages/portal/ContentGen'));
-const BlogDrafts = lazy(() => import('./pages/portal/BlogDrafts'));
-const AnalyticsPage = lazy(() => import('./pages/portal/AnalyticsPage'));
-const AutomationPage = lazy(() => import('./pages/portal/AutomationPage'));
-const BillingPage = lazy(() => import('./pages/portal/BillingPage'));
-const HelpCenterPage = lazy(() => import('./pages/portal/HelpCenterPage'));
-const UserManualPage = lazy(() => import('./pages/portal/UserManualPage'));
-const ProfilePage = lazy(() => import('./pages/portal/ProfilePage'));
-const LeadIntelligence = lazy(() => import('./pages/portal/LeadIntelligence'));
-const AICommandCenter = lazy(() => import('./pages/portal/AICommandCenter'));
-const ContentStudio = lazy(() => import('./pages/portal/ContentStudio'));
+const ClientDashboard = lazyWithRetry(() => import('./pages/portal/ClientDashboard'));
+const MissionControl = lazyWithRetry(() => import('./pages/portal/MissionControl'));
+const LeadManagement = lazyWithRetry(() => import('./pages/portal/LeadManagement'));
+const LeadProfile = lazyWithRetry(() => import('./pages/portal/LeadProfile'));
+const BusinessesPage = lazyWithRetry(() => import('./pages/portal/BusinessesPage'));
+const BusinessSettingsPage = lazyWithRetry(() => import('./pages/portal/BusinessSettingsPage'));
+const ImageStudio = lazyWithRetry(() => import('./pages/portal/ImageStudio'));
+const ContentGen = lazyWithRetry(() => import('./pages/portal/ContentGen'));
+const BlogDrafts = lazyWithRetry(() => import('./pages/portal/BlogDrafts'));
+const AnalyticsPage = lazyWithRetry(() => import('./pages/portal/AnalyticsPage'));
+const AutomationPage = lazyWithRetry(() => import('./pages/portal/AutomationPage'));
+const BillingPage = lazyWithRetry(() => import('./pages/portal/BillingPage'));
+const HelpCenterPage = lazyWithRetry(() => import('./pages/portal/HelpCenterPage'));
+const UserManualPage = lazyWithRetry(() => import('./pages/portal/UserManualPage'));
+const ProfilePage = lazyWithRetry(() => import('./pages/portal/ProfilePage'));
+const LeadIntelligence = lazyWithRetry(() => import('./pages/portal/LeadIntelligence'));
+const AICommandCenter = lazyWithRetry(() => import('./pages/portal/AICommandCenter'));
+const ContentStudio = lazyWithRetry(() => import('./pages/portal/ContentStudio'));
 // Mobile portal
 import MobileAppShell from './components/layout/MobileAppShell';
-const MobileHome = lazy(() => import('./pages/portal/mobile/MobileHome'));
-const MobileLeads = lazy(() => import('./pages/portal/mobile/MobileLeads'));
-const MobileLeadDetail = lazy(() => import('./pages/portal/mobile/MobileLeadDetail'));
-const MobileCampaigns = lazy(() => import('./pages/portal/mobile/MobileCampaigns'));
-const MobileActivity = lazy(() => import('./pages/portal/mobile/MobileActivity'));
-const MobileMore = lazy(() => import('./pages/portal/mobile/MobileMore'));
-const MobileGoals = lazy(() => import('./pages/portal/mobile/MobileGoals'));
-const ModelTraining = lazy(() => import('./pages/portal/ModelTraining'));
-const IntegrationHub = lazy(() => import('./pages/portal/IntegrationHub'));
-const InvoicesPage = lazy(() => import('./pages/portal/InvoicesPage'));
-const SocialScheduler = lazy(() => import('./pages/portal/SocialScheduler'));
-const TeamHubBoards = lazy(() => import('./pages/portal/team-hub/TeamHubPage'));
-const SenderAccountsPage = lazy(() => import('./pages/portal/SenderAccountsPage'));
-const ApiKeysPage = lazy(() => import('./pages/portal/ApiKeysPage'));
-const ApiDocsPage = lazy(() => import('./pages/portal/ApiDocsPage'));
-const GoalsPage = lazy(() => import('./pages/portal/GoalsPage'));
-const QuickLaunchPage = lazy(() => import('./pages/portal/QuickLaunchPage'));
-const WebhooksPage = lazy(() => import('./pages/portal/WebhooksPage'));
-const BrandingPage = lazy(() => import('./pages/portal/BrandingPage'));
+const MobileHome = lazyWithRetry(() => import('./pages/portal/mobile/MobileHome'));
+const MobileLeads = lazyWithRetry(() => import('./pages/portal/mobile/MobileLeads'));
+const MobileLeadDetail = lazyWithRetry(() => import('./pages/portal/mobile/MobileLeadDetail'));
+const MobileCampaigns = lazyWithRetry(() => import('./pages/portal/mobile/MobileCampaigns'));
+const MobileActivity = lazyWithRetry(() => import('./pages/portal/mobile/MobileActivity'));
+const MobileMore = lazyWithRetry(() => import('./pages/portal/mobile/MobileMore'));
+const MobileGoals = lazyWithRetry(() => import('./pages/portal/mobile/MobileGoals'));
+const ModelTraining = lazyWithRetry(() => import('./pages/portal/ModelTraining'));
+const IntegrationHub = lazyWithRetry(() => import('./pages/portal/IntegrationHub'));
+const InvoicesPage = lazyWithRetry(() => import('./pages/portal/InvoicesPage'));
+const SocialScheduler = lazyWithRetry(() => import('./pages/portal/SocialScheduler'));
+const TeamHubBoards = lazyWithRetry(() => import('./pages/portal/team-hub/TeamHubPage'));
+const SenderAccountsPage = lazyWithRetry(() => import('./pages/portal/SenderAccountsPage'));
+const ApiKeysPage = lazyWithRetry(() => import('./pages/portal/ApiKeysPage'));
+const ApiDocsPage = lazyWithRetry(() => import('./pages/portal/ApiDocsPage'));
+const GoalsPage = lazyWithRetry(() => import('./pages/portal/GoalsPage'));
+const QuickLaunchPage = lazyWithRetry(() => import('./pages/portal/QuickLaunchPage'));
+const WebhooksPage = lazyWithRetry(() => import('./pages/portal/WebhooksPage'));
+const BrandingPage = lazyWithRetry(() => import('./pages/portal/BrandingPage'));
 
 // Admin
 // Legacy AdminDashboard + SystemHealth removed (Phase 0): they rendered fabricated
 // health/analytics. /admin and /admin/health now redirect to the real Admin Console.
-const SupportConsole = lazy(() => import('./pages/support/SupportConsole'));
-const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
-const LeadsManagement = lazy(() => import('./pages/admin/LeadsManagement'));
-const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
-const AIOperations = lazy(() => import('./pages/admin/AIOperations'));
-const DnaRegistryPage = lazy(() => import('./pages/admin/prompt-lab/DnaRegistryPage'));
-const DnaEditorPage = lazy(() => import('./pages/admin/prompt-lab/DnaEditorPage'));
-const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
-const BlogManager = lazy(() => import('./pages/admin/BlogManager'));
-const PricingManagement = lazy(() => import('./pages/admin/PricingManagement'));
-const AdminOpsCenter = lazy(() => import('./pages/admin/AdminOpsCenter'));
-const AdminCommandCenter = lazy(() => import('./pages/admin/CommandCenter/AdminCommandCenterPage'));
-const AdminConsolePage = lazy(() => import('./pages/admin/console/AdminConsolePage'));
+const SupportConsole = lazyWithRetry(() => import('./pages/support/SupportConsole'));
+const UserManagement = lazyWithRetry(() => import('./pages/admin/UserManagement'));
+const LeadsManagement = lazyWithRetry(() => import('./pages/admin/LeadsManagement'));
+const AdminSettings = lazyWithRetry(() => import('./pages/admin/AdminSettings'));
+const AIOperations = lazyWithRetry(() => import('./pages/admin/AIOperations'));
+const DnaRegistryPage = lazyWithRetry(() => import('./pages/admin/prompt-lab/DnaRegistryPage'));
+const DnaEditorPage = lazyWithRetry(() => import('./pages/admin/prompt-lab/DnaEditorPage'));
+const AuditLogs = lazyWithRetry(() => import('./pages/admin/AuditLogs'));
+const BlogManager = lazyWithRetry(() => import('./pages/admin/BlogManager'));
+const PricingManagement = lazyWithRetry(() => import('./pages/admin/PricingManagement'));
+const AdminOpsCenter = lazyWithRetry(() => import('./pages/admin/AdminOpsCenter'));
+const AdminCommandCenter = lazyWithRetry(() => import('./pages/admin/CommandCenter/AdminCommandCenterPage'));
+const AdminConsolePage = lazyWithRetry(() => import('./pages/admin/console/AdminConsolePage'));
 
 // ─── Route guard components ───
 // These isolate useLocation / useIsMobile so App never re-renders on navigation.
