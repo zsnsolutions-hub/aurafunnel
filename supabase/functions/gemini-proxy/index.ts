@@ -131,6 +131,55 @@ function buildOpenAIBody(model: string, contents: unknown, config: Record<string
   return bodyObj;
 }
 
+// Direct Gemini REST call for non-streaming content. The @google/genai SDK
+// (pinned old version) has been unreliable with grounding tools (url_context /
+// google_search often came back empty), which left the business-profile /
+// lead-research analyzers stuck. The raw v1beta REST endpoint grounds reliably,
+// so we use it for all non-streaming Gemini content generation.
+async function geminiGenerateContentREST(
+  model: string,
+  contents: unknown,
+  config: Record<string, unknown> | undefined,
+): Promise<{ text: string; candidates: unknown[]; usageMetadata: unknown }> {
+  const normContents = typeof contents === "string"
+    ? [{ role: "user", parts: [{ text: contents }] }]
+    : contents;
+  const cfg = config ?? {};
+  const restBody: Record<string, unknown> = { contents: normContents };
+
+  const si = cfg.systemInstruction;
+  if (typeof si === "string") restBody.systemInstruction = { parts: [{ text: si }] };
+  else if (si && typeof si === "object") restBody.systemInstruction = si;
+
+  const gen: Record<string, unknown> = {};
+  if (typeof cfg.temperature === "number") gen.temperature = cfg.temperature;
+  if (typeof cfg.topP === "number") gen.topP = cfg.topP;
+  if (typeof cfg.topK === "number") gen.topK = cfg.topK;
+  if (typeof cfg.maxOutputTokens === "number") gen.maxOutputTokens = cfg.maxOutputTokens;
+  if (cfg.responseMimeType) gen.responseMimeType = cfg.responseMimeType;
+  if (cfg.responseSchema) gen.responseSchema = cfg.responseSchema;
+  if (Object.keys(gen).length) restBody.generationConfig = gen;
+  if (Array.isArray(cfg.tools)) restBody.tools = cfg.tools;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(restBody),
+  });
+  const data = await res.json().catch(() => null) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    usageMetadata?: unknown;
+    error?: { message?: string };
+  } | null;
+  if (!res.ok || !data || data.error) {
+    throw new Error(data?.error?.message ?? `Gemini REST HTTP ${res.status}`);
+  }
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.map((p) => p?.text ?? "").join("");
+  return { text, candidates: data.candidates ?? [], usageMetadata: data.usageMetadata ?? null };
+}
+
 // Cluster-wide rate limit (60 req/min per user) via Postgres consume_ai_rate_limit.
 // The previous in-memory Map only worked within a single worker, so a user
 // could exceed the cap by hitting multiple instances. Fail-open on RPC error
@@ -428,12 +477,8 @@ serve(async (req) => {
       });
     }
 
-    // ── Non-streaming ──
-    const response = await ai.models.generateContent({
-      model: route.model,
-      contents: body.contents as never,
-      config: body.config as never,
-    });
+    // ── Non-streaming (direct REST — reliable grounding) ──
+    const response = await geminiGenerateContentREST(route.model, body.contents, body.config);
 
     return jsonResponse(
       {
