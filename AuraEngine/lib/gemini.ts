@@ -1147,60 +1147,44 @@ Rules:
     topP: 0.9,
   });
 
-  const prompt = resolved.promptTemplate
+  const basePrompt = resolved.promptTemplate
     .replace('{{website_url}}', websiteUrl)
     .replace('{{social_context}}', socialContext ? `\nSOCIAL MEDIA PROFILES:\n${socialContext}` : '');
 
   const systemInstruction = resolved.systemInstruction;
 
-  // Grounded inference: enable URL context (Gemini fetches the actual page
-  // contents at `websiteUrl`) and Google Search (for related public signals
-  // like the company's LinkedIn / Crunchbase / news). Previously grounding
-  // returned empty text on this prompt — but that was against the retired
-  // gemini-3-flash-preview model. 2.5-flash handles tools + JSON-in-text
-  // output reliably.
-  //
-  // Each attempt is bounded to ANALYSIS_TIMEOUT_MS so the wizard can never
-  // sit indefinitely if Gemini stalls. With MAX_RETRIES=3 and a 60s cap
-  // plus 1s/2s back-offs, worst-case total wait is ~183s before we surface
-  // a clear failure.
+  // Reliable scraping: Gemini's url_context grounding hangs/returns empty from the
+  // Edge runtime, so we fetch the site OURSELVES (fetch-page edge fn — a plain
+  // HTTP GET is reliable) and hand the extracted text to a normal, non-grounded
+  // AI call. Falls back to inference-from-URL only if the fetch yields nothing.
+  let pageText = '';
+  try {
+    const { data } = await supabase.functions.invoke('fetch-page', { body: { url: websiteUrl } });
+    pageText = ((data as { text?: string } | null)?.text || '').slice(0, 45_000);
+  } catch (e) {
+    console.warn('fetch-page failed, falling back to inference-only:', e instanceof Error ? e.message : 'unknown');
+  }
+
+  const prompt = pageText
+    ? `${basePrompt}\n\n=== WEBSITE CONTENT (already fetched for you — extract ONLY from this text) ===\n${pageText}`
+    : basePrompt;
+
+  // Each attempt is bounded to ANALYSIS_TIMEOUT_MS so the wizard can never sit
+  // indefinitely. The AI call is non-grounded now (we supplied the content), so
+  // it's fast and reliable.
   const ANALYSIS_TIMEOUT_MS = 60_000;
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
       const timeoutPromise = () => new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error(`Business analysis timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s. The model is taking too long — try a simpler URL or skip to manual entry.`)),
+          () => reject(new Error(`Business analysis timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s.`)),
           ANALYSIS_TIMEOUT_MS,
         )
       );
 
-      // Try with grounding first (URL context + Google Search).
       let response: { text?: string; usageMetadata?: { totalTokenCount?: number } } | null = null;
-      try {
-        response = await Promise.race([
-          ai.models.generateContent({
-            model: MODEL_NAME,
-            operation: 'business_analysis',
-            contents: prompt,
-            config: {
-              systemInstruction,
-              temperature: resolved.temperature,
-              topP: resolved.topP,
-              tools: [{ urlContext: {} }, { googleSearch: {} }],
-            } as never,
-          }),
-          timeoutPromise(),
-        ]);
-      } catch (groundingErr) {
-        console.warn('Business analysis grounding failed, falling back to inference-only:', groundingErr instanceof Error ? groundingErr.message : 'unknown');
-        response = null;
-      }
-
-      // Grounding sometimes returns empty text — fall back to a plain (no-tools)
-      // call, which is faster and reliable, before giving up. This is the main
-      // cause of the wizard sitting at ~92% until a hard timeout.
-      if (!response?.text) {
+      {
         response = await Promise.race([
           ai.models.generateContent({
             model: MODEL_NAME,
