@@ -48,12 +48,33 @@
 <body class="bg-[#F8FAFC] text-slate-900">
     <div id="root"></div>
     <script>
-        // Unregister any stale service workers to prevent caching issues
+        // Unregister any stale service workers + clear their caches, so old
+        // chunk files are never served after a deploy.
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(regs) {
                 regs.forEach(function(r) { r.unregister(); });
             });
         }
+        if (window.caches && caches.keys) {
+            caches.keys().then(function(keys) { keys.forEach(function(k) { caches.delete(k); }); });
+        }
+        // Self-recover from a stale bundle after a deploy: if a dynamic chunk
+        // fails to load (its hashed filename was rotated out), reload once to
+        // pull a fresh index.html + current chunk names. Guarded against loops.
+        (function() {
+            function isChunkError(msg) {
+                return /ChunkLoadError|Loading chunk|dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(msg || '');
+            }
+            function recover(msg) {
+                if (isChunkError(msg) && !sessionStorage.getItem('__chunkReload')) {
+                    sessionStorage.setItem('__chunkReload', '1');
+                    window.location.reload();
+                }
+            }
+            window.addEventListener('error', function(e) { recover(e && (e.message || (e.error && e.error.message))); }, true);
+            window.addEventListener('unhandledrejection', function(e) { recover(e && e.reason && (e.reason.message || String(e.reason))); });
+            window.addEventListener('load', function() { setTimeout(function() { sessionStorage.removeItem('__chunkReload'); }, 8000); });
+        })();
     </script>
     <script type="module" src="/index.tsx"></script>
 </body>
