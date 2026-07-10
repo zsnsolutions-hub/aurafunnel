@@ -10,6 +10,9 @@ import {
   SendIcon, EyeIcon, CursorClickIcon, TrashIcon
 } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { useCurrentBusiness } from '../../components/business/BusinessProvider';
+import { emailValidationEnabled } from '../../lib/emailValidation';
+import EmailValidationControl from '../../components/validation/EmailValidationControl';
 import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
 import { consumeCredits } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
@@ -143,6 +146,9 @@ interface TaskItem {
 
 const LeadProfile: React.FC = () => {
   const { user, refreshProfile } = useOutletContext<{ user: User; refreshProfile: () => Promise<void> }>();
+  const { currentBusinessId } = useCurrentBusiness();
+  const [valEnabled, setValEnabled] = useState(false);
+  useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
 
@@ -980,6 +986,11 @@ const LeadProfile: React.FC = () => {
                       <MailIcon className="w-3.5 h-3.5 text-slate-400" />
                       <span className="text-xs text-indigo-600 font-medium truncate">{lead.primary_email}</span>
                     </div>
+                    {valEnabled && (
+                      <div className="pl-5">
+                        <EmailValidationControl businessId={currentBusinessId} email={lead.primary_email} enabled={valEnabled} />
+                      </div>
+                    )}
                     <div className="flex items-center space-x-2">
                       <PhoneIcon className="w-3.5 h-3.5 text-slate-400" />
                       <span className="text-xs text-slate-700 font-medium">{contact.phone}</span>
