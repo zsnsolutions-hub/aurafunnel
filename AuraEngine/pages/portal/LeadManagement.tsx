@@ -764,13 +764,13 @@ const LeadManagement: React.FC = () => {
     // Lazy-load knowledgeBase for this lead
     const { data } = await supabase
       .from('leads')
-      .select('knowledgeBase')
+      .select('knowledgeBase, website')
       .eq('id', lead.id)
       .single();
     const kb = data?.knowledgeBase || {};
     setEditLead(prev => ({ ...prev, phone: (kb as Record<string, string>).phone || '' }));
     setEditLeadKb({
-      website: kb.website || '',
+      website: (data as { website?: string })?.website || kb.website || '',
       linkedin: kb.linkedin || '',
       instagram: kb.instagram || '',
       facebook: kb.facebook || '',
@@ -812,6 +812,7 @@ const LeadManagement: React.FC = () => {
         last_name: editLead.name.trim().split(' ').slice(1).join(' ') || '',
         primary_email: editLead.email.trim(),
         company: editLead.company.trim(),
+        website: editLeadKb.website.trim() ? normalizeUrl(editLeadKb.website.trim()) : null,
         insights: editLead.insights.trim() || '',
       };
       if (knowledgeBase !== undefined) payload.knowledgeBase = knowledgeBase;
@@ -2496,6 +2497,10 @@ const LeadManagement: React.FC = () => {
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Company Name</label>
                 <input required type="text" value={editLead.company} onChange={e => setEditLead({...editLead, company: e.target.value})} placeholder="e.g. Stripe" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Company Website / Domain</label>
+                <input type="text" value={editLeadKb.website} onChange={e => setEditLeadKb({...editLeadKb, website: e.target.value})} placeholder="e.g. stripe.com (not the company name)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Phone Number</label>
