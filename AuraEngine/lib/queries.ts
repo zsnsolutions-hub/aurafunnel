@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { Lead } from '../types';
 import { queryClient } from './queryClient';
 import { fetchBatchEmailSummary, type BatchEmailSummary } from './emailTracking';
+import { useCurrentBusiness } from '../components/business/BusinessProvider';
 
 // Canonical columns used by the app — avoids SELECT *
 const LEAD_COLUMNS = 'id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,linkedin_url,location,title,industry,company_size,source,import_batch_id,imported_at,custom_fields' as const;
@@ -41,17 +42,24 @@ export function leadInitials(lead: Pick<Lead, 'first_name' | 'last_name'>): stri
   return [lead.first_name?.[0], lead.last_name?.[0]].filter(Boolean).join('').toUpperCase() || '?';
 }
 
-/** Fetches all leads for a client with only the columns used by the UI */
+/** Fetches all leads for a client with only the columns used by the UI.
+ *  When the multi_business flag is on, results are scoped to the current
+ *  business; the businessId is part of the query key so switching refetches. */
 export function useLeads(userId: string | undefined) {
+  const { currentBusinessId, multiBusinessEnabled } = useCurrentBusiness();
+  const bizId = multiBusinessEnabled ? currentBusinessId : null;
   return useQuery<Lead[]>({
-    queryKey: ['leads', userId],
+    queryKey: ['leads', userId, bizId],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId).order('score', { ascending: false });
+      let q = supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId);
+      if (bizId) q = q.eq('business_id', bizId);
+      const { data, error } = await q.order('score', { ascending: false });
       if (error) throw error;
       return normalizeLeads(data || []);
     },
-    enabled: !!userId,
+    // When scoping is on, wait until we have a current business to avoid a flash of all-business data.
+    enabled: !!userId && (!multiBusinessEnabled || !!currentBusinessId),
     placeholderData: keepPreviousData,
   });
 }

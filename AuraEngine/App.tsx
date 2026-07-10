@@ -48,6 +48,7 @@ const ClientDashboard = lazy(() => import('./pages/portal/ClientDashboard'));
 const MissionControl = lazy(() => import('./pages/portal/MissionControl'));
 const LeadManagement = lazy(() => import('./pages/portal/LeadManagement'));
 const LeadProfile = lazy(() => import('./pages/portal/LeadProfile'));
+const BusinessesPage = lazy(() => import('./pages/portal/BusinessesPage'));
 const ContentGen = lazy(() => import('./pages/portal/ContentGen'));
 const BlogDrafts = lazy(() => import('./pages/portal/BlogDrafts'));
 const AnalyticsPage = lazy(() => import('./pages/portal/AnalyticsPage'));
@@ -329,6 +330,7 @@ const App: React.FC = () => {
             <Route path="help" element={<HelpCenterPage />} />
             <Route path="manual" element={<UserManualPage />} />
             <Route path="settings" element={<ProfilePage />} />
+            <Route path="businesses" element={<BusinessesPage />} />
             <Route path="intelligence" element={<LeadIntelligence />} />
             <Route path="ai" element={<AICommandCenter />} />
             <Route path="content-studio" element={<ContentStudio />} />

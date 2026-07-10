@@ -34,6 +34,7 @@ const routeImportMap: Record<string, () => Promise<unknown>> = {
   '/portal/help':           () => import('../pages/portal/HelpCenterPage'),
   '/portal/manual':         () => import('../pages/portal/UserManualPage'),
   '/portal/settings':       () => import('../pages/portal/ProfilePage'),
+  '/portal/businesses':     () => import('../pages/portal/BusinessesPage'),
   '/portal/intelligence':   () => import('../pages/portal/LeadIntelligence'),
   '/portal/ai':             () => import('../pages/portal/AICommandCenter'),
   '/portal/content-studio': () => import('../pages/portal/ContentStudio'),

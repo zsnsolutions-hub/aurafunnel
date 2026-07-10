@@ -5,12 +5,14 @@
 // ready. Lets the user switch the current business and create a new one inline.
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Building2, ChevronsUpDown, Plus, Check, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, ChevronsUpDown, Plus, Check, Loader2, Settings2 } from 'lucide-react';
 import { useCurrentBusiness } from './BusinessProvider';
 import { createBusiness } from '../../lib/businesses';
 
 export const BusinessSwitcher: React.FC<{ collapsed?: boolean }> = ({ collapsed }) => {
   const { businesses, currentBusiness, currentBusinessId, setCurrentBusiness, multiBusinessEnabled, refresh } = useCurrentBusiness();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -81,10 +83,16 @@ export const BusinessSwitcher: React.FC<{ collapsed?: boolean }> = ({ collapsed 
             </div>
           </div>
         ) : (
-          <button onClick={() => setCreating(true)}
-            className="w-full flex items-center gap-2 px-2.5 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-            <Plus size={15} /> New business
-          </button>
+          <>
+            <button onClick={() => setCreating(true)}
+              className="w-full flex items-center gap-2 px-2.5 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+              <Plus size={15} /> New business
+            </button>
+            <button onClick={() => { navigate('/portal/businesses'); setOpen(false); }}
+              className="w-full flex items-center gap-2 px-2.5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
+              <Settings2 size={15} /> Manage businesses
+            </button>
+          </>
         )}
       </div>
     </div>

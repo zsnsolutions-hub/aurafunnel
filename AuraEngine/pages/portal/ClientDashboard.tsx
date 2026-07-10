@@ -12,6 +12,7 @@ import {
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 
 import { supabase } from '../../lib/supabase';
+import { activeBusinessId } from '../../lib/businessScope';
 import { normalizeLeads, useLeads, useLeadCounts, useEmailSummaries, useSocialStats } from '../../lib/queries';
 import { consumeCredits, resolvePlanName } from '../../lib/credits';
 import { useOutletContext, useNavigate } from 'react-router-dom';
@@ -532,6 +533,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
+        business_id: activeBusinessId(),
         score: initialScore,
         status: 'New',
         lastActivity: 'Just now',

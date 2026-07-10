@@ -10,6 +10,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { Business, listBusinesses, getOrCreateDefaultBusinessId } from '../../lib/businesses';
 import { resolveWorkspaceForUser } from '../../lib/memory';
 import { isFlagEnabled } from '../../lib/goals';
+import { setBusinessScope } from '../../lib/businessScope';
 
 export interface BusinessContextValue {
   businesses: Business[];
@@ -75,6 +76,12 @@ export const BusinessProvider: React.FC<{ userId: string; children: React.ReactN
     })();
     return () => { cancelled = true; };
   }, [userId]);
+
+  // Mirror the scope to the module-level helper so non-hook code (insert
+  // handlers, plain async queries) can read the active business.
+  useEffect(() => {
+    setBusinessScope({ businessId: currentBusinessId, enabled: multiBusinessEnabled });
+  }, [currentBusinessId, multiBusinessEnabled]);
 
   const setCurrentBusiness = useCallback((id: string) => {
     setCurrentBusinessId(id);

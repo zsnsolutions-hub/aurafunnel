@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon, TrashIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
+import { activeBusinessId } from '../../lib/businessScope';
 import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummaries } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
@@ -656,6 +657,7 @@ const LeadManagement: React.FC = () => {
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
+        business_id: activeBusinessId(),
         score: initialScore,
         status: 'New',
         last_activity: new Date().toISOString(),
