@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { User, Lead } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { normalizeLeads } from '../../lib/queries';
 import { consumeCredits } from '../../lib/credits';
 import { generateProgrammaticInsights, generateLeadInsights } from '../../lib/insights';
 import { generateDashboardInsights, generateCommandCenterResponse } from '../../lib/gemini';
@@ -263,11 +264,13 @@ const AICommandCenter: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('leads')
-        .select('id,client_id,name,company,email,score,status,lastActivity:last_activity,insights,created_at,knowledgeBase')
+        .select('id,client_id,first_name,last_name,primary_email,company,score,status,last_activity,insights,created_at,knowledgeBase')
         .eq('client_id', user.id)
         .order('score', { ascending: false });
       if (error) throw error;
-      setLeads((data || []) as Lead[]);
+      // name / email / lastActivity are computed aliases, not real columns —
+      // normalizeLeads builds them from first_name/last_name/primary_email/etc.
+      setLeads(normalizeLeads(data || []));
     } catch (err: unknown) {
       console.error('AI Command fetch error:', err instanceof Error ? err.message : err);
     } finally {
