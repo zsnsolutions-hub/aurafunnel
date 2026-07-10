@@ -146,6 +146,13 @@ const LeadManagement: React.FC = () => {
   const [valMap, setValMap] = useState<Map<string, ValidationStatus>>(new Map());
   const [validatingRowId, setValidatingRowId] = useState<string | null>(null);
   useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
+  // Saved campaigns (email sequences) for the "Add to campaign" bulk action.
+  const loadCampaigns = useCallback(async () => {
+    const { data } = await supabase.from('email_sequences')
+      .select('id,name,status').eq('workspace_id', user.id).order('created_at', { ascending: false });
+    if (data) { setCampaigns(data as { id: string; name: string; status: string }[]); setBulkCampaignId(prev => prev || (data[0]?.id ?? '')); }
+  }, [user.id]);
+  useEffect(() => { void loadCampaigns(); }, [loadCampaigns]);
   // Real assignees = workspace members (falls back to the current user).
   useEffect(() => {
     (async () => {
@@ -223,6 +230,9 @@ const LeadManagement: React.FC = () => {
   // ── Bulk Actions ──
   const [bulkActionOpen, setBulkActionOpen] = useState<BulkAction | null>(null);
   const [bulkAssignee, setBulkAssignee] = useState('');
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string; status: string }[]>([]);
+  const [bulkCampaignId, setBulkCampaignId] = useState('');
+  const [addingToCampaign, setAddingToCampaign] = useState(false);
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [bulkSubject, setBulkSubject] = useState('');
@@ -926,6 +936,29 @@ const LeadManagement: React.FC = () => {
       toast(`Assigned ${ids.length} lead${ids.length > 1 ? 's' : ''} to ${name}`, 'success');
     } catch (e) { toast((e as Error).message || 'Assign failed.', 'error'); }
     setSelectedIds(new Set());
+  };
+
+  // Enroll the selected leads into a saved campaign (email sequence), skipping any
+  // that are already enrolled.
+  const handleBulkAddToCampaign = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || !bulkCampaignId) return;
+    setAddingToCampaign(true);
+    setBulkActionOpen(null);
+    try {
+      const { data: existing } = await supabase.from('sequence_enrollments')
+        .select('lead_id').eq('sequence_id', bulkCampaignId).in('lead_id', ids);
+      const already = new Set((existing ?? []).map(r => (r as { lead_id: string }).lead_id));
+      const toEnroll = ids.filter(id => !already.has(id));
+      const name = campaigns.find(c => c.id === bulkCampaignId)?.name ?? 'campaign';
+      if (toEnroll.length === 0) { toast(`All selected leads are already in "${name}".`, 'success'); return; }
+      const rows = toEnroll.map(id => ({ sequence_id: bulkCampaignId, lead_id: id, workspace_id: user.id, status: 'active', current_step: 0 }));
+      const { error } = await supabase.from('sequence_enrollments').insert(rows);
+      if (error) throw new Error(error.message);
+      toast(`Added ${toEnroll.length} lead${toEnroll.length !== 1 ? 's' : ''} to "${name}"${already.size ? ` · ${already.size} already in it` : ''}`, 'success');
+      setSelectedIds(new Set());
+    } catch (e) { toast((e as Error).message || 'Could not add to campaign.', 'error'); }
+    finally { setAddingToCampaign(false); }
   };
 
   const handleBulkTag = async () => {
@@ -1802,6 +1835,39 @@ const LeadManagement: React.FC = () => {
                       <div className="flex space-x-2">
                         <button onClick={() => setBulkActionOpen(null)} className="flex-1 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">Cancel</button>
                         <button onClick={handleBulkAssign} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Assign</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Add to Campaign */}
+                <div className="relative">
+                  <button
+                    onClick={() => setBulkActionOpen(bulkActionOpen === 'campaign' ? null : 'campaign')}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-50 transition-all"
+                  >
+                    <MailIcon className="w-3.5 h-3.5" />
+                    <span>Add to campaign</span>
+                  </button>
+                  {bulkActionOpen === 'campaign' && (
+                    <div className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-4 min-w-[240px]">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Saved campaign</p>
+                      {campaigns.length === 0 ? (
+                        <p className="text-xs text-slate-500 mb-3">No saved campaigns yet. Create one in the Campaigns / Sequences area, then it'll appear here.</p>
+                      ) : (
+                        <select value={bulkCampaignId} onChange={e => setBulkCampaignId(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3">
+                          {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}{c.status && c.status !== 'active' ? ` (${c.status})` : ''}</option>)}
+                        </select>
+                      )}
+                      <div className="flex space-x-2">
+                        <button onClick={() => setBulkActionOpen(null)} className="flex-1 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">Cancel</button>
+                        <button
+                          onClick={handleBulkAddToCampaign}
+                          disabled={addingToCampaign || !bulkCampaignId || campaigns.length === 0}
+                          className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                        >
+                          {addingToCampaign ? 'Adding…' : 'Add'}
+                        </button>
                       </div>
                     </div>
                   )}
