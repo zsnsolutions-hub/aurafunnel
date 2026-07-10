@@ -1346,48 +1346,50 @@ ${hot > warm ? 'Great pipeline quality — most leads are hot!' : warm > hot ? '
 
             {/* Input Area */}
             <div className="p-4 border-t border-slate-100">
-              {/* Focus-on-a-lead picker */}
+              {/* Focus-on-a-lead search-select */}
               <div className="mb-2 relative">
-                {(() => {
-                  const focusedLead = focusedLeadId ? leads.find(l => l.id === focusedLeadId) : null;
-                  return focusedLead ? (
-                    <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg text-xs font-semibold text-violet-700">
-                      <TargetIcon className="w-3 h-3" />
-                      <span>Focused: {focusedLead.name} · {focusedLead.company}</span>
-                      <button onClick={() => setFocusedLeadId(null)} className="text-violet-400 hover:text-violet-600" title="Clear focus"><XIcon className="w-3 h-3" /></button>
+                {focusedLeadId ? (() => {
+                  const focusedLead = leads.find(l => l.id === focusedLeadId);
+                  return (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg text-xs">
+                      <TargetIcon className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                      <span className="font-semibold text-violet-700 truncate">AI is focusing on: {focusedLead?.name || 'lead'}{focusedLead?.company ? ` · ${focusedLead.company}` : ''}{focusedLead ? ` · ${focusedLead.score}` : ''}</span>
+                      <button onClick={() => { setFocusedLeadId(null); setLeadSearch(''); }} className="ml-auto text-violet-400 hover:text-violet-600 shrink-0" title="Clear focus"><XIcon className="w-3.5 h-3.5" /></button>
                     </div>
-                  ) : (
-                    <button onClick={() => setLeadPickerOpen(o => !o)} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
-                      <TargetIcon className="w-3 h-3" /> Focus on a specific lead
-                    </button>
                   );
-                })()}
-                {leadPickerOpen && !focusedLeadId && (
-                  <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-2 z-20">
+                })() : (
+                  <>
+                    <TargetIcon className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
-                      autoFocus
                       value={leadSearch}
-                      onChange={e => setLeadSearch(e.target.value)}
-                      placeholder="Search leads by name or company…"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-300 mb-1"
+                      onChange={e => { setLeadSearch(e.target.value); setLeadPickerOpen(true); }}
+                      onFocus={() => setLeadPickerOpen(true)}
+                      onBlur={() => setTimeout(() => setLeadPickerOpen(false), 150)}
+                      placeholder="Search a lead to focus the AI on… (optional)"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-300 focus:bg-white transition-colors"
                     />
-                    <div className="max-h-56 overflow-y-auto">
-                      {leads
-                        .filter(l => { const q = leadSearch.toLowerCase().trim(); return !q || (l.name || '').toLowerCase().includes(q) || (l.company || '').toLowerCase().includes(q); })
-                        .slice(0, 40)
-                        .map(l => (
-                          <button
-                            key={l.id}
-                            onClick={() => { setFocusedLeadId(l.id); setLeadPickerOpen(false); setLeadSearch(''); }}
-                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-indigo-50 text-xs transition-colors"
-                          >
-                            <span className="font-semibold text-slate-800">{l.name || 'Unnamed'}</span>
-                            <span className="text-slate-400"> · {l.company || '—'} · {l.score}</span>
-                          </button>
-                        ))}
-                      {leads.length === 0 && <p className="text-xs text-slate-400 px-3 py-2">No leads yet.</p>}
-                    </div>
-                  </div>
+                    {leadPickerOpen && (() => {
+                      const q = leadSearch.toLowerCase().trim();
+                      const matches = leads
+                        .filter(l => !q || (l.name || '').toLowerCase().includes(q) || (l.company || '').toLowerCase().includes(q))
+                        .slice(0, 40);
+                      if (matches.length === 0) return null;
+                      return (
+                        <div className="absolute bottom-full mb-2 left-0 w-full bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-20 max-h-64 overflow-y-auto">
+                          {matches.map(l => (
+                            <button
+                              key={l.id}
+                              onMouseDown={() => { setFocusedLeadId(l.id); setLeadPickerOpen(false); setLeadSearch(''); }}
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-indigo-50 text-xs transition-colors"
+                            >
+                              <span className="font-semibold text-slate-800">{l.name || 'Unnamed'}</span>
+                              <span className="text-slate-400"> · {l.company || '—'} · {l.score}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
               <div className="flex items-center space-x-2">
