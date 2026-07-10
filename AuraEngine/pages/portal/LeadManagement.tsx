@@ -142,6 +142,7 @@ const LeadManagement: React.FC = () => {
   const [valEnabled, setValEnabled] = useState(false);
   const [validating, setValidating] = useState(false);
   const [valMap, setValMap] = useState<Map<string, ValidationStatus>>(new Map());
+  const [validatingRowId, setValidatingRowId] = useState<string | null>(null);
   useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
   // Real assignees = workspace members (falls back to the current user).
   useEffect(() => {
@@ -2060,6 +2061,24 @@ const LeadManagement: React.FC = () => {
                         </td>
                         <td className="px-3 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {valEnabled && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const email = lead.email || lead.primary_email;
+                                  if (!currentBusinessId || !email) return;
+                                  setValidatingRowId(lead.id);
+                                  try { await validateEmail(currentBusinessId, email, true); await loadValMap(); }
+                                  catch (err) { toast((err as Error).message || 'Validation failed', 'error'); }
+                                  finally { setValidatingRowId(null); }
+                                }}
+                                disabled={validatingRowId === lead.id}
+                                title="Validate email"
+                                className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100 disabled:text-emerald-500"
+                              >
+                                <CheckIcon className={`w-3.5 h-3.5 ${validatingRowId === lead.id ? 'animate-pulse' : ''}`} />
+                              </button>
+                            )}
                             <button
                               onClick={() => navigate(`/portal/leads/${lead.id}`)}
                               title="View"
