@@ -693,6 +693,7 @@ const LeadManagement: React.FC = () => {
         last_name: newLead.name.trim().split(' ').slice(1).join(' ') || '',
         primary_email: newLead.email.trim(),
         company: newLead.company.trim(),
+        website: newLeadKb.website.trim() ? normalizeUrl(newLeadKb.website.trim()) : null,
         insights: newLead.insights.trim() || '',
         client_id: user.id,
         workspace_id: user.id, // leads.workspace_id is NOT NULL and holds the user id (legacy)
@@ -2368,6 +2369,10 @@ const LeadManagement: React.FC = () => {
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Company Name</label>
                 <input required type="text" value={newLead.company} onChange={e => setNewLead({...newLead, company: e.target.value})} placeholder="e.g. Stripe" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Company Website / Domain</label>
+                <input type="text" value={newLeadKb.website} onChange={e => setNewLeadKb({...newLeadKb, website: e.target.value})} placeholder="e.g. stripe.com (not the company name)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-300 transition-colors" />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Phone Number</label>
