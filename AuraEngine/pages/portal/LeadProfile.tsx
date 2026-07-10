@@ -134,6 +134,10 @@ const eventTypeIcon = (type: string) => {
     case 'visit': return 'bg-emerald-100 text-emerald-600';
     case 'email': return 'bg-indigo-100 text-indigo-600';
     case 'demo': return 'bg-red-100 text-red-600';
+    case 'created': return 'bg-slate-100 text-slate-600';
+    case 'validated': return 'bg-emerald-100 text-emerald-600';
+    case 'warning': return 'bg-amber-100 text-amber-600';
+    case 'error': return 'bg-red-100 text-red-600';
     default: return 'bg-slate-100 text-slate-600';
   }
 };
@@ -165,6 +169,7 @@ const LeadProfile: React.FC = () => {
   const [fastEnabled, setFastEnabled] = useState(false);
   const [fastSendOpen, setFastSendOpen] = useState(false);
   const [validatingEmail, setValidatingEmail] = useState(false);
+  const [timeline, setTimeline] = useState<{ date: Date; label: string; type: string; detail?: string }[]>([]);
   useEffect(() => { workspaceFlagEnabled(user.id, 'fast_send').then(setFastEnabled).catch(() => {}); }, [user.id]);
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
@@ -680,7 +685,30 @@ const LeadProfile: React.FC = () => {
     : null;
 
   const isPotentialLead = hasRecentClick || recentOpenCount >= 2;
-  const timeline = deriveEngagementTimeline(lead);
+  // Real activity timeline: lead created + email validation (status + Mails.so reason).
+  const loadTimeline = useCallback(async () => {
+    if (!lead) { setTimeline([]); return; }
+    const events: { date: Date; label: string; type: string; detail?: string }[] = [];
+    if (lead.created_at) events.push({ date: new Date(lead.created_at), label: 'Lead created', type: 'created' });
+    const email = (lead.primary_email || '').trim().toLowerCase();
+    if (currentBusinessId && email) {
+      const { data } = await supabase.from('email_validations')
+        .select('status, reason, validated_at')
+        .eq('business_id', currentBusinessId).eq('email', email).maybeSingle();
+      if (data) {
+        const row = data as { status: string; reason: string | null; validated_at: string };
+        events.push({
+          date: new Date(row.validated_at),
+          label: `Email validation — ${row.status}`,
+          type: row.status === 'invalid' ? 'error' : row.status === 'risky' ? 'warning' : 'validated',
+          detail: row.reason ? `Mails.so reason: ${row.reason}` : undefined,
+        });
+      }
+    }
+    events.sort((a, b) => b.date.getTime() - a.date.getTime());
+    setTimeline(events);
+  }, [lead, currentBusinessId]);
+  useEffect(() => { void loadTimeline(); }, [loadTimeline]);
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'ai-insights', label: 'AI Insights' },
@@ -1005,7 +1033,7 @@ const LeadProfile: React.FC = () => {
                     </div>
                     {valEnabled && (
                       <div className="pl-5">
-                        <EmailValidationControl businessId={currentBusinessId} email={lead.primary_email} enabled={valEnabled} />
+                        <EmailValidationControl businessId={currentBusinessId} email={lead.primary_email} enabled={valEnabled} onValidated={loadTimeline} />
                       </div>
                     )}
                     <div className="flex items-center space-x-2">
@@ -1200,13 +1228,17 @@ const LeadProfile: React.FC = () => {
               {activeTab === 'activity' && (
                 <div className="space-y-4 animate-in fade-in duration-300">
                   <p className="text-xs text-slate-400 mb-4">Recent activity and interactions with this lead.</p>
+                  {timeline.length === 0 && (
+                    <p className="text-sm text-slate-400 italic py-8 text-center">No activity recorded yet.</p>
+                  )}
                   {timeline.map((event, i) => (
-                    <div key={i} className="flex items-center space-x-4 p-4 bg-slate-50 rounded-xl">
+                    <div key={i} className="flex items-start space-x-4 p-4 bg-slate-50 rounded-xl">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${eventTypeIcon(event.type)}`}>
                         <ClockIcon className="w-3.5 h-3.5" />
                       </div>
                       <div className="flex-grow">
                         <p className="text-sm font-medium text-slate-800">{event.label}</p>
+                        {event.detail && <p className="text-xs text-slate-500 mt-0.5">{event.detail}</p>}
                         <p className="text-[10px] text-slate-400 mt-0.5">{formatEventDate(event.date)}</p>
                       </div>
                     </div>
@@ -1351,6 +1383,7 @@ const LeadProfile: React.FC = () => {
                     try {
                       const r = await validateEmail(currentBusinessId, lead.primary_email, true);
                       showFeedback(r ? `Email is ${r.status}${r.reason ? ` — ${r.reason}` : ''}` : 'Validation returned no result');
+                      void loadTimeline();
                     } catch (e) { showFeedback((e as Error).message || 'Validation failed'); }
                     finally { setValidatingEmail(false); }
                   }}

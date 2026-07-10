@@ -21,9 +21,10 @@ interface Props {
   businessId: string | null;
   email: string | null | undefined;
   enabled: boolean;
+  onValidated?: () => void;
 }
 
-export const EmailValidationControl: React.FC<Props> = ({ businessId, email, enabled }) => {
+export const EmailValidationControl: React.FC<Props> = ({ businessId, email, enabled, onValidated }) => {
   const [val, setVal] = useState<EmailValidation | null>(null);
   const [loading, setLoading] = useState(false);
   const normalized = (email ?? '').trim().toLowerCase();
@@ -43,10 +44,11 @@ export const EmailValidationControl: React.FC<Props> = ({ businessId, email, ena
     setLoading(true);
     try {
       setVal(await validateEmail(businessId, normalized, force));
+      onValidated?.();
     } catch (e) {
       console.warn('[EmailValidation] validate failed:', (e as Error).message);
     } finally { setLoading(false); }
-  }, [businessId, normalized]);
+  }, [businessId, normalized, onValidated]);
 
   if (!enabled || !businessId || !normalized) return null;
 
