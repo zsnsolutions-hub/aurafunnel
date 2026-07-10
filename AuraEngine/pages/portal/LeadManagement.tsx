@@ -181,6 +181,7 @@ const LeadManagement: React.FC = () => {
 
   // ── Filter State ──
   const [statusFilter, setStatusFilter] = useState<Lead['status'] | 'All'>('All');
+  const [validationFilter, setValidationFilter] = useState<ValidationStatus | 'All' | 'unvalidated'>('All');
   const [scoreFilter, setScoreFilter] = useState<'all' | '50-100' | 'below-50'>('all');
   const [activityFilter, setActivityFilter] = useState<typeof ACTIVITY_OPTIONS[number]>('All Time');
   const [companySizeFilter, setCompanySizeFilter] = useState<Set<string>>(new Set());
@@ -352,6 +353,12 @@ const LeadManagement: React.FC = () => {
         return summary && summary.openCount >= 2;
       });
     }
+    if (validationFilter !== 'All') {
+      result = result.filter(l => {
+        const st = l.email ? valMap.get(l.email.toLowerCase()) : undefined;
+        return validationFilter === 'unvalidated' ? !st : st === validationFilter;
+      });
+    }
 
     // Sort
     result.sort((a, b) => {
@@ -366,7 +373,7 @@ const LeadManagement: React.FC = () => {
     });
 
     return result;
-  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, emailSummaryMap, sortBy, sortDir]);
+  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, validationFilter, valMap, emailSummaryMap, sortBy, sortDir]);
 
   // ── KPI Stats ──
   const kpiStats = useMemo(() => {
@@ -493,18 +500,24 @@ const LeadManagement: React.FC = () => {
     return filteredLeads.slice(start, start + perPage);
   }, [filteredLeads, currentPage, perPage]);
 
-  // Cached validation statuses for the visible leads (per-row badges).
+  // Cached validation statuses for ALL leads — powers the per-row badges AND the
+  // validation filter (so filtering isn't limited to the current page). Chunked
+  // to keep the `in(email,...)` lists reasonable.
   const loadValMap = useCallback(async () => {
     if (!valEnabled || !currentBusinessId) { setValMap(new Map()); return; }
-    const emails = paginatedLeads.map(l => l.primary_email).filter((e): e is string => !!e);
-    const m = await getValidations(currentBusinessId, emails);
+    const emails = allLeads.map(l => l.primary_email).filter((e): e is string => !!e);
+    if (emails.length === 0) { setValMap(new Map()); return; }
     const next = new Map<string, ValidationStatus>();
-    m.forEach((v, email) => next.set(email, v.status));
+    const CHUNK = 300;
+    for (let i = 0; i < emails.length; i += CHUNK) {
+      const m = await getValidations(currentBusinessId, emails.slice(i, i + CHUNK));
+      m.forEach((v, email) => next.set(email, v.status));
+    }
     setValMap(next);
-  }, [valEnabled, currentBusinessId, paginatedLeads]);
+  }, [valEnabled, currentBusinessId, allLeads]);
   useEffect(() => { void loadValMap(); }, [loadValMap]);
 
-  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery, perPage]);
+  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, validationFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery, perPage]);
 
   // ── Selection Helpers ──
   const allOnPageSelected = paginatedLeads.length > 0 && paginatedLeads.every(l => selectedIds.has(l.id));
@@ -542,6 +555,7 @@ const LeadManagement: React.FC = () => {
 
   const clearFilters = () => {
     setStatusFilter('All');
+    setValidationFilter('All');
     setScoreFilter('all');
     setActivityFilter('All Time');
     setCompanySizeFilter(new Set());
@@ -1072,7 +1086,7 @@ const LeadManagement: React.FC = () => {
   }, [navigate, paginatedLeads.length, focusedIndex, isActionsOpen, isCSVOpen, isAddLeadOpen, isEditLeadOpen, activityLogOpen]);
 
   const activeFilterCount = [
-    statusFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
+    statusFilter !== 'All', validationFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
     companySizeFilter.size > 0, tagFilter.size > 0, emailEngagementFilter.size > 0, followUpFilter,
   ].filter(Boolean).length;
 
@@ -1422,6 +1436,25 @@ const LeadManagement: React.FC = () => {
                 {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+
+            {/* Email Validation */}
+            {valEnabled && (
+              <div className="mb-5">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Email Validation</label>
+                <select
+                  value={validationFilter}
+                  onChange={e => setValidationFilter(e.target.value as ValidationStatus | 'All' | 'unvalidated')}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors"
+                >
+                  <option value="All">All</option>
+                  <option value="valid">Valid</option>
+                  <option value="risky">Risky</option>
+                  <option value="invalid">Invalid</option>
+                  <option value="unknown">Unknown</option>
+                  <option value="unvalidated">Unvalidated</option>
+                </select>
+              </div>
+            )}
 
             {/* Score Range */}
             <div className="mb-5">
@@ -2001,10 +2034,10 @@ const LeadManagement: React.FC = () => {
                               <p className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{lead.name}</p>
                               <p className="text-[11px] text-slate-400 truncate flex items-center gap-1">
                                 <span className="truncate">{lead.email}</span>
-                                {valEnabled && lead.email && valMap.has(lead.email.toLowerCase()) && (() => {
+                                {valEnabled && lead.email && (() => {
                                   const m = statusMeta(valMap.get(lead.email.toLowerCase()));
-                                  const c = m.tone === 'good' ? 'bg-emerald-500' : m.tone === 'warn' ? 'bg-amber-500' : m.tone === 'bad' ? 'bg-rose-500' : 'bg-slate-300';
-                                  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${c}`} title={m.label} />;
+                                  const c = m.tone === 'good' ? 'bg-emerald-50 text-emerald-700' : m.tone === 'warn' ? 'bg-amber-50 text-amber-700' : m.tone === 'bad' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-500';
+                                  return <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide shrink-0 ${c}`} title={`Email: ${m.label}`}>{m.label}</span>;
                                 })()}
                               </p>
                             </div>
