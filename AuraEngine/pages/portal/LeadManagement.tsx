@@ -184,6 +184,7 @@ const LeadManagement: React.FC = () => {
   // ── Filter State ──
   const [statusFilter, setStatusFilter] = useState<Lead['status'] | 'All'>('All');
   const [validationFilter, setValidationFilter] = useState<ValidationStatus | 'All' | 'unvalidated'>('All');
+  const [enrichmentFilter, setEnrichmentFilter] = useState<'All' | 'enriched' | 'not_enriched'>('All');
   const [scoreFilter, setScoreFilter] = useState<'all' | '50-100' | 'below-50'>('all');
   const [activityFilter, setActivityFilter] = useState<typeof ACTIVITY_OPTIONS[number]>('All Time');
   const [companySizeFilter, setCompanySizeFilter] = useState<Set<string>>(new Set());
@@ -361,6 +362,12 @@ const LeadManagement: React.FC = () => {
         return validationFilter === 'unvalidated' ? !st : st === validationFilter;
       });
     }
+    if (enrichmentFilter !== 'All') {
+      result = result.filter(l => {
+        const enriched = !!(l as unknown as { knowledgeBase?: { aiResearchedAt?: string } }).knowledgeBase?.aiResearchedAt;
+        return enrichmentFilter === 'enriched' ? enriched : !enriched;
+      });
+    }
 
     // Sort
     result.sort((a, b) => {
@@ -375,7 +382,7 @@ const LeadManagement: React.FC = () => {
     });
 
     return result;
-  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, validationFilter, valMap, emailSummaryMap, sortBy, sortDir]);
+  }, [allLeads, searchQuery, statusFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, validationFilter, enrichmentFilter, valMap, emailSummaryMap, sortBy, sortDir]);
 
   // ── KPI Stats ──
   const kpiStats = useMemo(() => {
@@ -519,7 +526,7 @@ const LeadManagement: React.FC = () => {
   }, [valEnabled, currentBusinessId, allLeads]);
   useEffect(() => { void loadValMap(); }, [loadValMap]);
 
-  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, validationFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery, perPage]);
+  useEffect(() => { setCurrentPage(1); setFocusedIndex(-1); }, [statusFilter, validationFilter, enrichmentFilter, scoreFilter, activityFilter, companySizeFilter, tagFilter, emailEngagementFilter, followUpFilter, searchQuery, perPage]);
 
   // ── Selection Helpers ──
   const allOnPageSelected = paginatedLeads.length > 0 && paginatedLeads.every(l => selectedIds.has(l.id));
@@ -558,6 +565,7 @@ const LeadManagement: React.FC = () => {
   const clearFilters = () => {
     setStatusFilter('All');
     setValidationFilter('All');
+    setEnrichmentFilter('All');
     setScoreFilter('all');
     setActivityFilter('All Time');
     setCompanySizeFilter(new Set());
@@ -1150,7 +1158,7 @@ const LeadManagement: React.FC = () => {
   }, [navigate, paginatedLeads.length, focusedIndex, isActionsOpen, isCSVOpen, isAddLeadOpen, isEditLeadOpen, activityLogOpen]);
 
   const activeFilterCount = [
-    statusFilter !== 'All', validationFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
+    statusFilter !== 'All', validationFilter !== 'All', enrichmentFilter !== 'All', scoreFilter !== 'all', activityFilter !== 'All Time',
     companySizeFilter.size > 0, tagFilter.size > 0, emailEngagementFilter.size > 0, followUpFilter,
   ].filter(Boolean).length;
 
@@ -1519,6 +1527,20 @@ const LeadManagement: React.FC = () => {
                 </select>
               </div>
             )}
+
+            {/* AI Enrichment */}
+            <div className="mb-5">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">AI Enrichment</label>
+              <select
+                value={enrichmentFilter}
+                onChange={e => setEnrichmentFilter(e.target.value as 'All' | 'enriched' | 'not_enriched')}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors"
+              >
+                <option value="All">All</option>
+                <option value="enriched">Enriched</option>
+                <option value="not_enriched">Not enriched</option>
+              </select>
+            </div>
 
             {/* Score Range */}
             <div className="mb-5">
