@@ -72,14 +72,19 @@ const TAG_BADGE: Record<string, string> = {
   'Cold': 'bg-blue-100 text-blue-700',
 };
 
-// ── Derived / simulated data from lead fields ──
+// ── Real company details from the lead's own fields (no fabrication) ──
+const FREE_EMAIL_DOMAIN = /^(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|proton|protonmail|aol|gmx|zoho|mail|yandex)\./i;
 const deriveCompanyDetails = (lead: Lead) => {
-  const company = lead.company || '';
+  const email = lead.primary_email || '';
+  const emailDomain = email.includes('@') ? email.split('@')[1].toLowerCase() : '';
+  // Domain is a SEPARATE entity from the company name — take the real website
+  // field, else the business email's domain. Never invent one from the name.
+  const bizDomain = emailDomain && !FREE_EMAIL_DOMAIN.test(emailDomain) ? emailDomain : '';
   return {
-    industry: lead.industry || (company.length > 10 ? 'SaaS / Technology' : 'Technology'),
-    size: lead.company_size || `${Math.max(50, Math.round(lead.score * 3))} employees`,
-    location: lead.location || (lead.score > 70 ? 'San Francisco, CA' : 'New York, NY'),
-    website: company ? `${company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'N/A',
+    industry: lead.industry || '',
+    size: lead.company_size || '',
+    location: lead.location || '',
+    website: (lead as { website?: string }).website || bizDomain || '',
   };
 };
 
@@ -1046,7 +1051,7 @@ const LeadProfile: React.FC = () => {
                     ].map(item => (
                       <div key={item.label}>
                         <p className="text-[10px] text-slate-400 font-bold">{item.label}</p>
-                        <p className="text-xs font-medium text-slate-800 mt-0.5 truncate">{item.value}</p>
+                        <p className={`text-xs font-medium mt-0.5 truncate ${item.value ? 'text-slate-800' : 'text-slate-300'}`}>{item.value || '—'}</p>
                       </div>
                     ))}
                   </div>

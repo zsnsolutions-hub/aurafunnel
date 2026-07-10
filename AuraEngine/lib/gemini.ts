@@ -606,7 +606,9 @@ export const generateLeadResearch = async (
   const emailDomain = lead.primary_email?.includes('@') ? lead.primary_email.split('@')[1] : '';
 
   // Determine the best website URL to crawl
-  const websiteUrl = socialUrls.website || (emailDomain ? `https://${emailDomain}` : lead.company ? `https://${lead.company.toLowerCase().replace(/\s+/g, '')}.com` : '');
+  // Domain != company name — crawl the real website or the email's domain, but
+  // never a fabricated "<companyname>.com" guess.
+  const websiteUrl = socialUrls.website || (emailDomain ? `https://${emailDomain}` : '');
 
   const resolved = await resolvePrompt('lead_research', userId, {
     systemInstruction: `You are an advanced Web Intelligence Agent acting as a Senior Data Extraction Engineer and Business Analyst.
