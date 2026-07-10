@@ -206,6 +206,8 @@ const ProfilePage: React.FC = () => {
   const [analysisCancelled, setAnalysisCancelled] = useState(false);
   const analysisCancelledRef = useRef(false);
   const [websiteUrl, setWebsiteUrl] = useState(user?.businessProfile?.companyWebsite || '');
+  const urlInputRef = useRef<HTMLInputElement>(null);
+  const [highlightUrl, setHighlightUrl] = useState(false);
   const [socialUrls, setSocialUrls] = useState({ linkedin: '', twitter: '', instagram: '', facebook: '' });
   const [showSocialInputs, setShowSocialInputs] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<BusinessAnalysisResult | null>(null);
@@ -621,33 +623,41 @@ const ProfilePage: React.FC = () => {
   const handleClearAndStartOver = useCallback(async () => {
     setShowClearConfirm(false);
     setClearingProfile(true); setClearError(null);
+
+    // Optimistic: wipe the in-memory profile and drop onto the input phase
+    // IMMEDIATELY so clearing feels instant, then highlight + focus the URL field
+    // so the user knows what to do next. The server charge/wipe runs after.
+    setBusinessProfile({} as BusinessProfile);
+    setServicesList([]);
+    setPricingTiers([]);
+    setWebsiteUrl('');
+    setSocialUrls({ linkedin: '', twitter: '', instagram: '', facebook: '' });
+    setBusinessDescription('');
+    setAnalysisResult(null);
+    setAnalysisError('');
+    setEnrichmentStatus('idle');
+    setEnrichmentError('');
+    setEnrichmentFieldsAdded(0);
+    setWizardPhase('input');
+    setHighlightUrl(true);
+    setTimeout(() => { urlInputRef.current?.focus(); }, 50);
+    setTimeout(() => setHighlightUrl(false), 4000);
+
     try {
       // Atomic server-side charge + wipe (migration 20260707160000). Charging
       // and clearing happen in one transaction, so the 2 credits are only spent
       // if the profile is actually cleared — no partial states, no client skip.
       const { error: clearError } = await supabase.rpc('clear_business_profile');
       if (clearError) throw new Error(clearError.message || 'Could not clear profile.');
-
-      // Reset every piece of in-memory state that mirrors the profile.
-      setBusinessProfile({} as BusinessProfile);
-      setServicesList([]);
-      setPricingTiers([]);
-      setWebsiteUrl('');
-      setSocialUrls({ linkedin: '', twitter: '', instagram: '', facebook: '' });
-      setBusinessDescription('');
-      setAnalysisResult(null);
-      setAnalysisError('');
-      setEnrichmentStatus('idle');
-      setEnrichmentError('');
-      setEnrichmentFieldsAdded(0);
       if (refreshProfile) await refreshProfile();
-      setWizardPhase('input');
     } catch (err) {
       setClearError((err as Error).message ?? 'Failed to clear profile.');
+      // Restore from the server so the UI doesn't show empty on a failed clear.
+      if (refreshProfile) await refreshProfile();
     } finally {
       setClearingProfile(false);
     }
-  }, [user.id, refreshProfile]);
+  }, [refreshProfile]);
 
   // Wizard: save profile (reused for all phases)
   const handleWizardSave = async () => {
@@ -1377,11 +1387,12 @@ const ProfilePage: React.FC = () => {
                       <GlobeIcon className="w-5 h-5" />
                     </div>
                     <input
+                      ref={urlInputRef}
                       type="text"
                       value={websiteUrl}
-                      onChange={e => { setWebsiteUrl(e.target.value); setUrlError(''); }}
+                      onChange={e => { setWebsiteUrl(e.target.value); setUrlError(''); setHighlightUrl(false); }}
                       placeholder="https://yourcompany.com"
-                      className={`w-full pl-12 pr-5 py-4 rounded-2xl border ${urlError ? 'border-red-300 focus:ring-red-100 focus:border-red-500' : 'border-slate-200 focus:ring-indigo-100 focus:border-indigo-500'} focus:ring-4 outline-none transition-all font-bold text-slate-800 text-lg`}
+                      className={`w-full pl-12 pr-5 py-4 rounded-2xl border ${urlError ? 'border-red-300 focus:ring-red-100 focus:border-red-500' : highlightUrl ? 'border-indigo-400 ring-4 ring-indigo-100 animate-pulse' : 'border-slate-200 focus:ring-indigo-100 focus:border-indigo-500'} focus:ring-4 outline-none transition-all font-bold text-slate-800 text-lg`}
                     />
                   </div>
                   {urlError && <p className="text-xs font-bold text-red-500 mt-1">{urlError}</p>}
