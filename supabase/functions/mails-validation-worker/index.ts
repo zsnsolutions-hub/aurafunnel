@@ -61,17 +61,33 @@ function bool(v: unknown): boolean {
   return v === true || v === "true" || v === 1;
 }
 
+// Bounded, never-throwing provider call. Without an AbortController timeout a
+// slow/hung Mails.so request would keep the whole edge function (and the client's
+// "Validating…" spinner) waiting indefinitely. On timeout or any network error we
+// return null, so the caller records an 'unknown' result and still responds.
 async function callMailsSo(email: string): Promise<Record<string, unknown> | null> {
   const url = `${MAILS_SO_URL}?email=${encodeURIComponent(email)}`;
-  const res = await fetch(url, { headers: { "x-mails-api-key": MAILS_SO_API_KEY, "Accept": "application/json" } });
-  if (!res.ok) {
-    console.warn(`[mails-validation] provider ${res.status} for ${email}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const res = await fetch(url, {
+      headers: { "x-mails-api-key": MAILS_SO_API_KEY, "Accept": "application/json" },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[mails-validation] provider ${res.status} for ${email}`);
+      return null;
+    }
+    const body = await res.json().catch(() => null);
+    // Mails.so wraps the payload in { data: {...} } — unwrap if present.
+    const d = (body && typeof body === "object" && "data" in body) ? (body as { data: unknown }).data : body;
+    return (d && typeof d === "object") ? d as Record<string, unknown> : null;
+  } catch (e) {
+    console.warn(`[mails-validation] provider fetch failed for ${email}:`, (e as Error).message);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
-  const body = await res.json().catch(() => null);
-  // Mails.so wraps the payload in { data: {...} } — unwrap if present.
-  const d = (body && typeof body === "object" && "data" in body) ? (body as { data: unknown }).data : body;
-  return (d && typeof d === "object") ? d as Record<string, unknown> : null;
 }
 
 serve(async (req) => {
@@ -143,7 +159,9 @@ serve(async (req) => {
       email,
       status,
       deliverability: (raw?.result ?? raw?.status ?? null) as string | null,
-      reason: (raw?.reason as string) ?? null,
+      // If the provider was unreachable/timed out (raw === null), say so rather
+      // than leaving the reason blank.
+      reason: (raw?.reason as string) ?? (raw ? null : "provider_unreachable"),
       is_disposable: bool(raw?.is_disposable ?? raw?.disposable),
       // Mails.so has no is_role field — a generic/role address (info@, support@)
       // is flagged by isv_nogeneric === false.
