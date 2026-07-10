@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { UserRole, User } from './types';
 import ErrorBoundary from './components/ErrorBoundary';
+import { BackgroundTasksProvider } from './components/background/BackgroundTasks';
 import { GuideProvider } from './components/guide/GuideProvider';
 import { SupportProvider } from './components/support/SupportProvider';
 import { SupportBanner } from './components/support/SupportBanner';
@@ -251,6 +252,7 @@ const App: React.FC = () => {
     <AuthGate phase={state.phase} error={state.error} onRetry={retry}>
     <UIModeProvider userId={user?.id}>
     <SupportProvider user={user}>
+    <BackgroundTasksProvider>
     <ErrorBoundary queryClient={qc} onReset={handleErrorReset}>
       <GuideProvider>
       <SupportBanner />
@@ -411,6 +413,7 @@ const App: React.FC = () => {
         </Routes>
     </GuideProvider>
     </ErrorBoundary>
+    </BackgroundTasksProvider>
     {import.meta.env.DEV && (
       <Suspense fallback={null}><PerfPanel /></Suspense>
     )}

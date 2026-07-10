@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useBackgroundTasks } from '../../components/background/BackgroundTasks';
 import { Lead, KnowledgeBase, User, ContentType } from '../../types';
 import {
   TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, ChartIcon,
@@ -224,6 +225,11 @@ const LeadProfile: React.FC = () => {
   const [kbForm, setKbForm] = useState<KnowledgeBase>({});
   const [kbNotesExpanded, setKbNotesExpanded] = useState(false);
   const [kbResearching, setKbResearching] = useState(false);
+  const bgTasks = useBackgroundTasks();
+  // Lets background-task callbacks skip UI state updates after the user leaves
+  // the page (the DB write still happens either way).
+  const profileMountedRef = useRef(true);
+  useEffect(() => { profileMountedRef.current = true; return () => { profileMountedRef.current = false; }; }, []);
   const [kbSaving, setKbSaving] = useState(false);
   const [kbError, setKbError] = useState('');
 
@@ -442,11 +448,18 @@ const LeadProfile: React.FC = () => {
     if (!creditResult.success) return;
 
     setKbResearching(true);
-    generateLeadResearch(lead, socialUrls, user.businessProfile).then(async (res) => {
-      if (!res.text) {
-        setKbResearching(false);
-        return;
-      }
+    // Run the (slow) AI enrichment as an app-level background task so it keeps
+    // running — and stays visible with a live timer — even if the user navigates
+    // away from this lead. The DB write is the source of truth; UI state updates
+    // are guarded so they no-op after unmount.
+    const leadId = lead.id;
+    const clientId = user.id;
+    const leadForResearch = lead;
+    const businessProfile = user.businessProfile;
+    const taskLabel = `Enriching ${lead.company || leadDisplayName(lead) || 'lead'}…`;
+    bgTasks.runTask(taskLabel, async () => {
+      const res = await generateLeadResearch(leadForResearch, socialUrls, businessProfile);
+      if (!res.text) return;
 
       // Parse structured fields from AI response
       const structured = parseLeadResearchResponse(res.text);
@@ -478,23 +491,21 @@ const LeadProfile: React.FC = () => {
       const { error: researchError } = await supabase.from('leads').update({
         knowledgeBase: updatedKb,
         insights: newInsights,
-      }).eq('id', lead.id).eq('client_id', user.id);
+      }).eq('id', leadId).eq('client_id', clientId);
 
       if (researchError) {
         console.error('AI research save error:', researchError.message);
+        throw new Error(researchError.message);
       }
 
-      setLead(prev => prev ? {
-        ...prev,
-        knowledgeBase: updatedKb,
-        insights: newInsights,
-      } : prev);
-      setKbResearching(false);
-      showFeedback(researchError ? 'Research done but save failed' : 'AI research complete');
-      if (refreshProfile) await refreshProfile();
-    }).catch(() => {
-      setKbResearching(false);
-    });
+      // Reflect the result live only if the user is still viewing this lead.
+      if (profileMountedRef.current) {
+        setLead(prev => prev ? { ...prev, knowledgeBase: updatedKb, insights: newInsights } : prev);
+        if (refreshProfile) await refreshProfile();
+      }
+    })
+      .catch(() => { /* surfaced by the background-task indicator */ })
+      .finally(() => { if (profileMountedRef.current) setKbResearching(false); });
   };
 
   const KB_SOCIAL_LINKS: { key: keyof KnowledgeBase; label: string; icon: React.ReactNode; color: string }[] = [
