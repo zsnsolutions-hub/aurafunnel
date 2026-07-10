@@ -16,6 +16,8 @@ import EmailValidationControl from '../../components/validation/EmailValidationC
 import { leadIntelligenceEnabled } from '../../lib/leadScoring';
 import LeadScorePanel from '../../components/leads/LeadScorePanel';
 import LeadResearchPanel from '../../components/leads/LeadResearchPanel';
+import FastSendModal from '../../components/leads/FastSendModal';
+import { workspaceFlagEnabled } from '../../lib/featureFlags';
 import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
 import { consumeCredits } from '../../lib/credits';
 import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
@@ -154,6 +156,9 @@ const LeadProfile: React.FC = () => {
   const [intelEnabled, setIntelEnabled] = useState(false);
   useEffect(() => { emailValidationEnabled(user.id).then(setValEnabled).catch(() => {}); }, [user.id]);
   useEffect(() => { leadIntelligenceEnabled(user.id).then(setIntelEnabled).catch(() => {}); }, [user.id]);
+  const [fastEnabled, setFastEnabled] = useState(false);
+  const [fastSendOpen, setFastSendOpen] = useState(false);
+  useEffect(() => { workspaceFlagEnabled(user.id, 'fast_send').then(setFastEnabled).catch(() => {}); }, [user.id]);
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
 
@@ -1310,6 +1315,15 @@ const LeadProfile: React.FC = () => {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
             <h3 className="font-bold text-slate-800 font-heading text-sm mb-4">Quick Actions</h3>
             <div className="space-y-2">
+              {fastEnabled && (
+                <button
+                  onClick={() => setFastSendOpen(true)}
+                  className="w-full flex items-center space-x-3 p-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors font-semibold text-sm"
+                >
+                  <SendIcon className="w-4 h-4" />
+                  <span>Fast Send</span>
+                </button>
+              )}
               <button
                 onClick={() => showFeedback('Email composer opened')}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors font-semibold text-sm"
@@ -2241,6 +2255,18 @@ const LeadProfile: React.FC = () => {
       )}
 
       {/* ── Share Blog Post Modal ── */}
+      {lead && (
+        <FastSendModal
+          open={fastSendOpen}
+          onClose={() => setFastSendOpen(false)}
+          lead={lead}
+          businessId={currentBusinessId}
+          workspaceId={currentBusiness?.workspace_id ?? null}
+          userId={user.id}
+          businessProfile={user.businessProfile}
+        />
+      )}
+
       {showBlogShareModal && lead && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowBlogShareModal(false)} />
