@@ -282,7 +282,18 @@ const LeadProfile: React.FC = () => {
   };
 
   const openKbDrawer = () => {
-    setKbForm({ ...(lead?.knowledgeBase || {}) });
+    const existing = lead?.knowledgeBase || {};
+    // Seed blank fields from what the lead already knows (shown in Company
+    // Details / Contact Info) so the drawer isn't empty — website from the
+    // company details, LinkedIn from the lead's social URL. Existing KB values
+    // always win so we never clobber something the user already saved.
+    const company = lead ? deriveCompanyDetails(lead) : { website: '' };
+    const linkedinUrl = (lead as { linkedin_url?: string } | null)?.linkedin_url || '';
+    setKbForm({
+      ...existing,
+      website: existing.website || company.website || '',
+      linkedin: existing.linkedin || linkedinUrl,
+    });
     setKbDrawerOpen(true);
   };
 
