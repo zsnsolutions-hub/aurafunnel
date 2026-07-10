@@ -145,7 +145,9 @@ serve(async (req) => {
       deliverability: (raw?.result ?? raw?.status ?? null) as string | null,
       reason: (raw?.reason as string) ?? null,
       is_disposable: bool(raw?.is_disposable ?? raw?.disposable),
-      is_role: bool(raw?.is_role ?? raw?.role),
+      // Mails.so has no is_role field — a generic/role address (info@, support@)
+      // is flagged by isv_nogeneric === false.
+      is_role: bool(raw?.is_role ?? raw?.role) || raw?.isv_nogeneric === false,
       is_free: bool(raw?.is_free ?? raw?.free),
       score: (typeof raw?.score === "number" ? raw.score : null) as number | null,
       cached: false,
