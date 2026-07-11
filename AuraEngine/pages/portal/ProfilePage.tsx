@@ -607,7 +607,10 @@ const ProfilePage: React.FC = () => {
       setTimeout(() => setWizardPhase('manual'), 500);
     } catch (err) {
       if (analysisCancelledRef.current) return;
+      // Don't leave the user staring at a frozen progress bar — surface the error
+      // and drop onto the manual form so they can edit fields or retry.
       setAnalysisError((err as Error).message ?? 'Analysis failed.');
+      setWizardPhase('manual');
     } finally {
       clearInterval(progressTicker);
       clearInterval(elapsedTicker);

@@ -176,11 +176,14 @@ serve(async (req) => {
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          const connectController = new AbortController();
+          const connectTimer = setTimeout(() => connectController.abort(), 30_000);
           const oaRes = await fetch(OPENAI_URL, {
             method: "POST",
             headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify(openaiBody),
-          });
+            signal: connectController.signal,
+          }).finally(() => clearTimeout(connectTimer));
           if (!oaRes.ok || !oaRes.body) {
             const errText = await oaRes.text().catch(() => "");
             throw new Error(`OpenAI HTTP ${oaRes.status} ${errText}`);

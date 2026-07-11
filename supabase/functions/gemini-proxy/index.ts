@@ -30,6 +30,17 @@ import { adminClient } from "../_shared/auth.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
+
+// Upstream (OpenAI / Gemini) calls must never hang the function — bound them.
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const GEMINI_GROUNDED_FALLBACK = "gemini-2.5-flash";
 
@@ -162,11 +173,11 @@ async function geminiGenerateContentREST(
   if (Array.isArray(cfg.tools)) restBody.tools = cfg.tools;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(restBody),
-  });
+  }, 45_000);
   const data = await res.json().catch(() => null) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
     usageMetadata?: unknown;
@@ -334,11 +345,11 @@ serve(async (req) => {
     }
     try {
       const oaBody = buildOpenAIBody(route.model, body.contents, body.config, !!body.stream);
-      const oaRes = await fetch(OPENAI_URL, {
+      const oaRes = await fetchWithTimeout(OPENAI_URL, {
         method: "POST",
         headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify(oaBody),
-      });
+      }, 45_000);
 
       if (!body.stream) {
         const data = await oaRes.json().catch(() => null) as {

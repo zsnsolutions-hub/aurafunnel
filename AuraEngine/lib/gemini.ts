@@ -1159,8 +1159,14 @@ Rules:
   // AI call. Falls back to inference-from-URL only if the fetch yields nothing.
   let pageText = '';
   try {
-    const { data } = await supabase.functions.invoke('fetch-page', { body: { url: websiteUrl } });
-    pageText = ((data as { text?: string } | null)?.text || '').slice(0, 45_000);
+    // Bounded so a slow/unreachable site can never hang the wizard — we proceed
+    // to the AI call (inference-only) if the fetch doesn't return in time.
+    const invoke = supabase.functions.invoke('fetch-page', { body: { url: websiteUrl } });
+    const raced = await Promise.race([
+      invoke,
+      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 20_000)),
+    ]);
+    pageText = (((raced as { data: { text?: string } | null }).data)?.text || '').slice(0, 45_000);
   } catch (e) {
     console.warn('fetch-page failed, falling back to inference-only:', e instanceof Error ? e.message : 'unknown');
   }
