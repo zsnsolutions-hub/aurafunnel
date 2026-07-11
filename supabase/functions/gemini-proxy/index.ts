@@ -488,15 +488,26 @@ serve(async (req) => {
       });
     }
 
-    // ── Non-streaming (direct REST — reliable grounding) ──
-    const response = await geminiGenerateContentREST(route.model, body.contents, body.config);
+    // ── Non-streaming ──
+    // Prefer the SDK (proven reliable from the Edge runtime — it's what the chat
+    // uses). Only fall back to raw REST for grounded calls, where the SDK has
+    // returned empty. Analysis is non-grounded now (fetch-page supplies content).
+    const usesGrounding = hasGroundingTools(body.config);
+    let respText: string, respCandidates: unknown[], respUsage: unknown;
+    if (usesGrounding) {
+      const r = await geminiGenerateContentREST(route.model, body.contents, body.config);
+      respText = r.text; respCandidates = r.candidates; respUsage = r.usageMetadata;
+    } else {
+      const r = await ai.models.generateContent({
+        model: route.model,
+        contents: body.contents as never,
+        config: body.config as never,
+      });
+      respText = r.text ?? ""; respCandidates = r.candidates ?? []; respUsage = r.usageMetadata ?? null;
+    }
 
     return jsonResponse(
-      {
-        text: response.text ?? "",
-        candidates: response.candidates ?? [],
-        usageMetadata: response.usageMetadata ?? null,
-      },
+      { text: respText, candidates: respCandidates, usageMetadata: respUsage },
       200,
       corsHeaders,
     );
