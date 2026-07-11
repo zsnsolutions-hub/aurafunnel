@@ -20,19 +20,44 @@ function json(body: unknown, status: number, headers: Record<string, string>): R
   return new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json" } });
 }
 
+function decode(s: string): string {
+  return s.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&#x27;/gi, "'").replace(/&rsquo;|&#8217;/gi, "'");
+}
+
 function htmlToText(html: string): string {
-  return html
+  return decode(html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
 }
 
-async function fetchOne(url: string): Promise<string> {
+// Extract the structured head data (title, meta description/keywords/OG, JSON-LD).
+// SPAs render an empty <body> via JS but still ship this in the HTML source, so
+// it's often the ONLY real business info a plain fetch can see.
+function extractHead(html: string): string {
+  const parts: string[] = [];
+  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+  if (title) parts.push(`Title: ${decode(title.trim())}`);
+  const wanted = ["description", "keywords", "author", "og:title", "og:description", "og:site_name"];
+  for (const tag of html.match(/<meta[^>]+>/gi) ?? []) {
+    const name = tag.match(/(?:name|property)=["']([^"']+)["']/i)?.[1]?.toLowerCase();
+    const content = tag.match(/content=["']([\s\S]*?)["']/i)?.[1];
+    if (name && content && wanted.includes(name)) parts.push(`${name}: ${decode(content.trim())}`);
+  }
+  const ldRe = /<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = ldRe.exec(html)) !== null) {
+    const j = m[1].trim();
+    if (j) parts.push(`Structured data (JSON-LD): ${j.slice(0, 2500)}`);
+  }
+  return parts.join("\n");
+}
+
+async function fetchOne(url: string): Promise<{ head: string; body: string }> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), PER_PAGE_TIMEOUT_MS);
   try {
@@ -41,12 +66,12 @@ async function fetchOne(url: string): Promise<string> {
       redirect: "follow",
       headers: { "User-Agent": "Mozilla/5.0 (compatible; ScaliyoBot/1.0; +https://scaliyo.com)", "Accept": "text/html" },
     });
-    if (!res.ok) return "";
+    if (!res.ok) return { head: "", body: "" };
     const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("html") && !ct.includes("text")) return "";
+    if (!ct.includes("html") && !ct.includes("text")) return { head: "", body: "" };
     const html = await res.text();
-    return htmlToText(html);
-  } catch { return ""; } finally { clearTimeout(t); }
+    return { head: extractHead(html), body: htmlToText(html) };
+  } catch { return { head: "", body: "" }; } finally { clearTimeout(t); }
 }
 
 serve(async (req) => {
@@ -78,12 +103,17 @@ serve(async (req) => {
 
   const origin = `${base.protocol}//${base.host}`;
   const results = await Promise.all(SUBPATHS.map((p) => fetchOne(p === "" ? raw : `${origin}${p}`)));
-  let text = "";
+
+  // Head metadata (title / description / OG / JSON-LD) from the homepage first —
+  // this is the richest signal for SPAs whose <body> is empty on a raw fetch.
+  const head = results.find((r) => r.head)?.head ?? "";
+  let text = head;
   const seen = new Set<string>();
-  for (const chunk of results) {
-    if (!chunk || seen.has(chunk.slice(0, 200))) continue;
-    seen.add(chunk.slice(0, 200));
-    text += (text ? "\n\n" : "") + chunk;
+  for (const r of results) {
+    const body = r.body;
+    if (!body || body.length < 40 || seen.has(body.slice(0, 200))) continue;
+    seen.add(body.slice(0, 200));
+    text += (text ? "\n\n" : "") + body;
     if (text.length >= MAX_CHARS) break;
   }
   text = text.slice(0, MAX_CHARS);
