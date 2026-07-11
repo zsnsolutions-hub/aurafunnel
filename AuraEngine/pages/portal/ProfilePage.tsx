@@ -76,10 +76,13 @@ const WriteWithAIChip: React.FC<{
       const creditResult = await consumeCredits(supabase, 'profile_field_generation');
       if (!creditResult.success) throw new Error(creditResult.message || 'Insufficient credits.');
       const result = await generateProfileField(field, getProfile(), userId);
+      if (!result.value?.trim()) throw new Error('The AI returned nothing — please try again.');
       onResult(result.value);
     } catch (err) {
-      setError((err as Error).message ?? 'Generation failed');
-      setTimeout(() => setError(null), 4500);
+      const msg = (err as Error).message || 'Generation failed';
+      console.error('[WriteWithAI] failed:', msg);
+      setError(msg);
+      setTimeout(() => setError(null), 12000);
     } finally {
       setLoading(false);
     }
@@ -98,7 +101,7 @@ const WriteWithAIChip: React.FC<{
           : <span className="text-indigo-600">✨</span>}
         {loading ? 'Writing…' : 'Write with AI · 1 cr'}
       </button>
-      {error && <span className="text-[10px] font-bold text-rose-600 truncate max-w-[260px]" title={error}>{error}</span>}
+      {error && <span className="text-[10px] font-bold text-rose-600 max-w-[320px] leading-tight" title={error}>{error}</span>}
     </div>
   );
 };
