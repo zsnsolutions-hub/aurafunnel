@@ -1189,27 +1189,30 @@ Rules:
         )
       );
 
-      let response: { text?: string; usageMetadata?: { totalTokenCount?: number } } | null = null;
-      {
-        response = await Promise.race([
-          ai.models.generateContent({
-            model: MODEL_NAME,
-            operation: 'business_analysis',
-            contents: prompt,
-            config: { systemInstruction, temperature: resolved.temperature, topP: resolved.topP } as never,
-          }),
-          timeoutPromise(),
-        ]);
-      }
+      // Use the STREAMING interface (the one path proven to work from the Edge —
+      // it's what the chat uses). Accumulate chunks as they arrive so a full-
+      // response wait can never stall the way non-streaming generateContent did.
+      let text = '';
+      const accumulate = (async () => {
+        const stream = await ai.models.generateContentStream({
+          model: MODEL_NAME,
+          operation: 'business_analysis',
+          contents: prompt,
+          config: { systemInstruction, temperature: resolved.temperature, topP: resolved.topP } as never,
+        });
+        for await (const chunk of stream) {
+          text += (chunk as { text?: string }).text || '';
+        }
+      })();
+      await Promise.race([accumulate, timeoutPromise()]);
 
-      const text = response?.text;
       if (!text) throw new Error("Empty response from business analysis.");
 
       const analysis = parseAnalysisJSON(text);
 
       return {
         text: text,
-        tokens_used: response.usageMetadata?.totalTokenCount || 0,
+        tokens_used: 0,
         model_name: MODEL_NAME,
         prompt_name: 'business_analysis',
         prompt_version: resolved.promptVersion,
@@ -1379,29 +1382,34 @@ ${profileContextLines(profile)}
 
 Output: just the field text. Plain text. No labels, no quotes.`;
 
-  const TIMEOUT_PER_CALL_MS = 20_000;
-  const response = await Promise.race([
-    ai.models.generateContent({
+  const TIMEOUT_PER_CALL_MS = 40_000;
+  // Stream + accumulate (the Edge-reliable path — non-streaming generateContent
+  // stalls from the Edge runtime).
+  let raw = '';
+  const accumulate = (async () => {
+    const stream = await ai.models.generateContentStream({
       model: MODEL_NAME,
       operation: 'profile_field_generation',
       contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        topP: 0.9,
-      },
-    }),
+      config: { systemInstruction, temperature: 0.7, topP: 0.9 },
+    });
+    for await (const chunk of stream) {
+      raw += (chunk as { text?: string }).text || '';
+    }
+  })();
+  await Promise.race([
+    accumulate,
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Write with AI timed out after 20s')), TIMEOUT_PER_CALL_MS),
+      setTimeout(() => reject(new Error('Write with AI timed out after 40s')), TIMEOUT_PER_CALL_MS),
     ),
   ]);
 
-  const text = (response.text || '').trim().replace(/^["']|["']$/g, '');
+  const text = raw.trim().replace(/^["']|["']$/g, '');
   if (!text) throw new Error('AI returned no content for this field.');
 
   return {
     value: text,
-    tokensUsed: response.usageMetadata?.totalTokenCount || 0,
+    tokensUsed: 0,
   };
 }
 
