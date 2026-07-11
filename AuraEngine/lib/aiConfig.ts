@@ -6,18 +6,18 @@
 
 export const AI_MODELS = {
   /** Default text generation model used by lead/content/email/dashboard flows. */
-  // Text generation now runs on OpenAI gpt-4o-mini (faster, cheaper). The proxy
-  // routes any request whose model starts with `gpt`/`o` to OpenAI, and keeps
-  // Gemini for image generation and for grounded calls (Google Search + URL
-  // context) which OpenAI's chat API can't do. See gemini-proxy/index.ts.
-  text: 'gpt-4o-mini',
+  // Text generation runs on Gemini 2.5-flash. (We trialled OpenAI gpt-4o-mini but
+  // the workspace's OpenAI account wasn't authorized, so text + chat are back on
+  // Gemini.) The proxy still supports routing gpt-* models to OpenAI, so flipping
+  // this back to 'gpt-4o-mini' is all it takes to switch once OpenAI is sorted.
+  text: 'gemini-2.5-flash',
   /** Gemini model for grounded text (Google Search + URL context) — the
    *  analyze-website + grounded lead-research flows keep using this. */
   textGrounded: 'gemini-2.5-flash',
   /** Image generation model (Imagen via gemini-proxy kind:"images"). */
   image: 'imagen-4.0-generate-001',
   /** Lightweight model used for prompt-lab test runs in ModelTraining. */
-  textTesting: 'gpt-4o-mini',
+  textTesting: 'gemini-2.0-flash',
 } as const;
 
 export const AI_DEFAULTS = {
