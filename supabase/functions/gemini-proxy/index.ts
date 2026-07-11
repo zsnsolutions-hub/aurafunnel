@@ -501,16 +501,29 @@ serve(async (req) => {
       const r = await geminiGenerateContentREST(route.model, body.contents, body.config);
       respText = r.text; respCandidates = r.candidates; respUsage = r.usageMetadata;
     } else {
-      const stream = await ai.models.generateContentStream({
-        model: route.model,
-        contents: body.contents as never,
-        config: body.config as never,
-      });
-      for await (const chunk of stream) {
-        respText += chunk.text ?? "";
-        if (chunk.usageMetadata) respUsage = chunk.usageMetadata;
-        if (chunk.candidates) respCandidates = chunk.candidates;
-      }
+      // Normalize contents to the SAME structured shape the (working) chat sends —
+      // a plain-string `contents` was the one difference between the working chat
+      // and the hanging analysis/Write-with-AI calls.
+      const normContents = typeof body.contents === "string"
+        ? [{ role: "user", parts: [{ text: body.contents }] }]
+        : body.contents;
+      const collect = (async () => {
+        const stream = await ai.models.generateContentStream({
+          model: route.model,
+          contents: normContents as never,
+          config: body.config as never,
+        });
+        for await (const chunk of stream) {
+          respText += chunk.text ?? "";
+          if (chunk.usageMetadata) respUsage = chunk.usageMetadata;
+          if (chunk.candidates) respCandidates = chunk.candidates;
+        }
+      })();
+      // Never hang the request — bound the whole generation.
+      await Promise.race([
+        collect,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini generation timed out after 50s")), 50_000)),
+      ]);
     }
 
     return jsonResponse(
