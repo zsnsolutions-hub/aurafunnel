@@ -7,6 +7,12 @@ import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 // (backward compatible) so nothing breaks until it's configured.
 const SEND_EMAIL_HOOK_SECRET = (Deno.env.get("SEND_EMAIL_HOOK_SECRET") ?? "").replace(/^v1,whsec_/, "");
 const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY") ?? "";
+// Auth emails prefer SMTP (set these to your own mail server) and fall back to
+// SendGrid only if SMTP isn't configured.
+const SMTP_HOST = Deno.env.get("SMTP_HOST") ?? "";
+const SMTP_PORT = parseInt(Deno.env.get("SMTP_PORT") ?? "587", 10);
+const SMTP_USER = Deno.env.get("SMTP_USER") ?? "";
+const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
 const SITE_URL = Deno.env.get("SITE_URL") ?? "https://scaliyo.com";
 const SENDER_EMAIL = Deno.env.get("AUTH_SENDER_EMAIL") ?? "support@scaliyo.com";
 const SENDER_NAME = Deno.env.get("AUTH_SENDER_NAME") ?? "Scaliyo";
@@ -167,6 +173,104 @@ async function sendViaSendGrid(
   return true;
 }
 
+// Send auth email via SMTP (own mail server). Ported from send-email — handles
+// port 465 (implicit TLS) and 587/25 (STARTTLS). Returns false on any failure so
+// the caller can fall back / not block signup.
+async function sendViaSmtp(to: string, subject: string, html: string): Promise<boolean> {
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
+  const from = SENDER_EMAIL;
+  try {
+    const port = SMTP_PORT;
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    let activeConn: Deno.Conn;
+    if (port === 465) {
+      activeConn = await Deno.connectTls({ hostname: SMTP_HOST, port });
+    } else {
+      activeConn = await Deno.connect({ hostname: SMTP_HOST, port });
+    }
+
+    async function readResponse(): Promise<string> {
+      let full = "";
+      const buf = new Uint8Array(4096);
+      while (true) {
+        const n = await activeConn.read(buf);
+        if (!n) break;
+        full += decoder.decode(buf.subarray(0, n));
+        const lines = full.trimEnd().split("\n");
+        const lastLine = lines[lines.length - 1].trimStart();
+        if (/^\d{3}\s/.test(lastLine) || /^\d{3}$/.test(lastLine)) break;
+      }
+      return full.trim();
+    }
+    async function send(cmd: string): Promise<string> {
+      await activeConn.write(encoder.encode(cmd + "\r\n"));
+      return await readResponse();
+    }
+
+    await readResponse(); // greeting
+    const ehloResp = await send("EHLO localhost");
+
+    if (port !== 465 && (ehloResp.includes("STARTTLS") || port === 587)) {
+      const starttlsResp = await send("STARTTLS");
+      if (starttlsResp.startsWith("220")) {
+        activeConn = await (Deno as unknown as { startTls: (c: Deno.Conn, o: { hostname: string }) => Promise<Deno.Conn> }).startTls(activeConn, { hostname: SMTP_HOST });
+        await send("EHLO localhost");
+      }
+    }
+
+    await send("AUTH LOGIN");
+    await send(btoa(SMTP_USER));
+    const authResp = await send(btoa(SMTP_PASS));
+    if (authResp.startsWith("535") || authResp.startsWith("534")) {
+      activeConn.close();
+      console.error(`SMTP auth failed: ${authResp}`);
+      return false;
+    }
+
+    const fromDisplay = SENDER_NAME ? `${SENDER_NAME} <${from}>` : from;
+    await send(`MAIL FROM:<${from}>`);
+    await send(`RCPT TO:<${to}>`);
+    await send("DATA");
+
+    const boundary = `boundary-${crypto.randomUUID()}`;
+    const message = [
+      `From: ${fromDisplay}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/html; charset=UTF-8`,
+      ``,
+      html,
+      ``,
+      `--${boundary}--`,
+      `.`,
+    ].join("\r\n");
+
+    await send(message);
+    await send("QUIT");
+    activeConn.close();
+    return true;
+  } catch (err) {
+    console.error(`SMTP error: ${(err as Error).message}`);
+    return false;
+  }
+}
+
+// Prefer SMTP (own mail server), fall back to SendGrid.
+async function sendAuthEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+    const ok = await sendViaSmtp(to, subject, html);
+    if (ok) return true;
+    console.warn("auth-send-email: SMTP send failed, falling back to SendGrid");
+  }
+  return await sendViaSendGrid(to, subject, html);
+}
+
 // ── Main handler ──
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -236,7 +340,7 @@ serve(async (req) => {
         break;
     }
 
-    const sent = await sendViaSendGrid(userEmail, email.subject, email.html);
+    const sent = await sendAuthEmail(userEmail, email.subject, email.html);
 
     // IMPORTANT: never return non-2xx for a send failure — GoTrue treats a
     // failing Send Email hook as a hard error and aborts the whole signup /
