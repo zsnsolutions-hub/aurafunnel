@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
+// GoTrue signs Send-Email hook calls (standardwebhooks). Set this to the hook's
+// secret (Dashboard → Authentication → Hooks → Send Email → reveal secret) to
+// reject any caller that isn't GoTrue. Opt-in: if unset, we skip verification
+// (backward compatible) so nothing breaks until it's configured.
+const SEND_EMAIL_HOOK_SECRET = (Deno.env.get("SEND_EMAIL_HOOK_SECRET") ?? "").replace(/^v1,whsec_/, "");
 const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY") ?? "";
 const SITE_URL = Deno.env.get("SITE_URL") ?? "https://scaliyo.com";
 const SENDER_EMAIL = Deno.env.get("AUTH_SENDER_EMAIL") ?? "support@scaliyo.com";
@@ -168,7 +174,28 @@ serve(async (req) => {
   }
 
   try {
-    const payload = await req.json();
+    const rawBody = await req.text();
+
+    // Verify the GoTrue webhook signature when a secret is configured.
+    let payload: {
+      user?: { email?: string };
+      email_data?: { email_action_type?: string; token_hash?: string };
+    };
+    if (SEND_EMAIL_HOOK_SECRET) {
+      try {
+        const wh = new Webhook(SEND_EMAIL_HOOK_SECRET);
+        payload = wh.verify(rawBody, Object.fromEntries(req.headers)) as typeof payload;
+      } catch (e) {
+        console.error("auth-send-email: signature verification failed —", (e as Error).message);
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      console.warn("auth-send-email: SEND_EMAIL_HOOK_SECRET not set — signature NOT verified. Set it to lock down this hook.");
+      payload = JSON.parse(rawBody);
+    }
 
     const userEmail: string = payload.user?.email;
     const emailAction: string = payload.email_data?.email_action_type;
