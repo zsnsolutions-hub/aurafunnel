@@ -155,7 +155,7 @@ async function sendViaSendGrid(
   if (!res.ok) {
     const errText = await res.text();
     console.error(`SendGrid error ${res.status}: ${errText}`);
-    throw new Error(`SendGrid ${res.status}: ${errText}`);
+    return false;
   }
 
   return true;
@@ -211,17 +211,19 @@ serve(async (req) => {
 
     const sent = await sendViaSendGrid(userEmail, email.subject, email.html);
 
+    // IMPORTANT: never return non-2xx for a send failure — GoTrue treats a
+    // failing Send Email hook as a hard error and aborts the whole signup /
+    // password-reset. Email delivery is best-effort; account creation must not
+    // depend on it (e.g. SendGrid out of credits). Log and return 200.
     if (!sent) {
-      return new Response(
-        JSON.stringify({ error: "Failed to send email via SendGrid" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      console.error(`auth-send-email: delivery failed for ${emailAction} to ${userEmail} (returning 200 so signup is not blocked)`);
+      return new Response(JSON.stringify({ success: false, delivered: false }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, delivered: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
