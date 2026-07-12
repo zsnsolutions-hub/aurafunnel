@@ -397,7 +397,11 @@ export async function sendTrackedEmail(
         from_email: params.fromEmail ?? null,
         subject: params.subject,
         html_body: params.htmlBody,
-        provider: params.provider ?? 'sendgrid',
+        // null => let send-email auto-pick the workspace's healthiest connected
+        // sender (SMTP/Gmail/etc.). Forcing 'sendgrid' here routed every outreach
+        // email through the shared system SendGrid instead of the user's own
+        // connected account.
+        provider: params.provider ?? null,
         track_opens: params.trackOpens ?? true,
         track_clicks: params.trackClicks ?? true,
       }),

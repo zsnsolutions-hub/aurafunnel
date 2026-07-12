@@ -1282,7 +1282,7 @@ const ContentStudio: React.FC = () => {
           goal: 'book a meeting',
           fromEmail: connectedProvider?.from_email ?? user.businessProfile?.businessEmail ?? user.email,
           fromName: connectedProvider?.from_name ?? user.name,
-          provider: connectedProvider?.provider ?? 'sendgrid',
+          provider: connectedProvider?.provider ?? null,
           businessProfile: user.businessProfile as Record<string, unknown> | undefined,
           sendMode,
         },
