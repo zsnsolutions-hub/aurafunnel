@@ -449,9 +449,12 @@ serve(async (req) => {
 
     // ── Streaming ──
     if (body.stream) {
+      const streamContents = typeof body.contents === "string"
+        ? [{ role: "user", parts: [{ text: body.contents }] }]
+        : body.contents;
       const stream = await ai.models.generateContentStream({
         model: route.model,
-        contents: body.contents as never,
+        contents: streamContents as never,
         config: body.config as never,
       });
 
