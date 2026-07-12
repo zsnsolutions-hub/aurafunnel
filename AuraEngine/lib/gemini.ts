@@ -966,6 +966,54 @@ const parseAnalysisJSON = (text: string): BusinessAnalysisResult | null => {
   }
 };
 
+// Single-shot text generation via the dedicated ai-generate edge function (SSE).
+// gemini-proxy's non-grounded generation stalls from the Edge runtime; ai-generate
+// mirrors the WORKING chat function's streaming path. Returns the full text.
+async function streamGenerateText(
+  prompt: string,
+  systemInstruction: string,
+  opts: { temperature?: number; topP?: number; operation?: string } = {},
+): Promise<string> {
+  const supabaseUrl = (import.meta as unknown as { env: Record<string, string> }).env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) throw new Error('VITE_SUPABASE_URL not configured');
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error('Not authenticated');
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/ai-generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ prompt, systemInstruction, temperature: opts.temperature, topP: opts.topP, operation: opts.operation }),
+  });
+  if (!res.ok || !res.body) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`ai-generate ${res.status}: ${t.slice(0, 200)}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let text = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() ?? '';
+    for (const evt of events) {
+      const line = evt.split('\n').find((l) => l.startsWith('data: '));
+      if (!line) continue;
+      const payload = line.slice(6).trim();
+      if (payload === '[DONE]') return text;
+      let parsed: { text?: string; error?: string } | null = null;
+      try { parsed = JSON.parse(payload); } catch { continue; }
+      if (parsed?.error) throw new Error(parsed.error);
+      text += parsed?.text || '';
+    }
+  }
+  return text;
+}
+
 export const analyzeBusinessFromWeb = async (
   websiteUrl: string,
   socialUrls?: { linkedin?: string; twitter?: string; instagram?: string; facebook?: string },
@@ -1189,20 +1237,12 @@ Rules:
         )
       );
 
-      // Use the STREAMING interface (the one path proven to work from the Edge —
-      // it's what the chat uses). Accumulate chunks as they arrive so a full-
-      // response wait can never stall the way non-streaming generateContent did.
+      // Generate via the dedicated ai-generate function (mirrors the working chat).
       let text = '';
       const accumulate = (async () => {
-        const stream = await ai.models.generateContentStream({
-          model: MODEL_NAME,
-          operation: 'business_analysis',
-          contents: prompt,
-          config: { systemInstruction, temperature: resolved.temperature, topP: resolved.topP } as never,
+        text = await streamGenerateText(prompt, systemInstruction, {
+          temperature: resolved.temperature, topP: resolved.topP, operation: 'business_analysis',
         });
-        for await (const chunk of stream) {
-          text += (chunk as { text?: string }).text || '';
-        }
       })();
       await Promise.race([accumulate, timeoutPromise()]);
 
@@ -1383,19 +1423,12 @@ ${profileContextLines(profile)}
 Output: just the field text. Plain text. No labels, no quotes.`;
 
   const TIMEOUT_PER_CALL_MS = 40_000;
-  // Stream + accumulate (the Edge-reliable path — non-streaming generateContent
-  // stalls from the Edge runtime).
+  // Generate via the dedicated ai-generate function (mirrors the working chat).
   let raw = '';
   const accumulate = (async () => {
-    const stream = await ai.models.generateContentStream({
-      model: MODEL_NAME,
-      operation: 'profile_field_generation',
-      contents: prompt,
-      config: { systemInstruction, temperature: 0.7, topP: 0.9 },
+    raw = await streamGenerateText(prompt, systemInstruction, {
+      temperature: 0.7, topP: 0.9, operation: 'profile_field_generation',
     });
-    for await (const chunk of stream) {
-      raw += (chunk as { text?: string }).text || '';
-    }
   })();
   await Promise.race([
     accumulate,
