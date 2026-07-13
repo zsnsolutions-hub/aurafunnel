@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useOutletContext, useNavigate } from 'react-router-dom';
+import { useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import { User, Lead, ToneType, ContentCategory, EmailSequenceConfig, EmailProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { normalizeLeads, leadDisplayName } from '../../lib/queries';
@@ -292,6 +292,34 @@ const ContentStudio: React.FC = () => {
     return s.map(step => ({ ...step, activeVariantId: step.variants[0].id }));
   });
   const [activeStepIdx, setActiveStepIdx] = useState(0);
+
+  // ─── Prefill from a handoff (e.g. Image Studio → "Use in Email") ───
+  // Router state carries { emailPrefill: { subject, body, imageUrl } }. The image
+  // URL is already a public image-gen-assets URL, so it drops straight into the
+  // body as an [image:URL] placeholder and renders inline on send.
+  const location = useLocation();
+  const prefillDone = useRef(false);
+  useEffect(() => {
+    if (prefillDone.current) return;
+    const st = location.state as { emailPrefill?: { subject?: string; body?: string; imageUrl?: string } } | null;
+    const p = st?.emailPrefill;
+    if (!p) return;
+    prefillDone.current = true;
+    setContentMode('email');
+    setActiveStepIdx(0);
+    setSteps(prev => prev.map((step, i) => {
+      if (i !== 0) return step;
+      const body = [p.body, p.imageUrl ? `[image:${p.imageUrl}]` : ''].filter(Boolean).join('\n\n');
+      return {
+        ...step,
+        variants: step.variants.map(v => v.id === step.activeVariantId
+          ? { ...v, subject: p.subject || v.subject, body: body || v.body }
+          : v),
+      };
+    }));
+    // Clear router state so a refresh doesn't re-inject.
+    navigate(location.pathname, { replace: true, state: null });
+  }, []);
 
   // ─── LinkedIn State ───
   const [linkedinPost, setLinkedinPost] = useState(`3 ways AI is transforming lead generation:\n\n1. Predictive scoring identifies hot leads 7 days before they're ready to buy\n2. Personalization at scale increases engagement by 300%\n3. Automated nurturing reduces manual work by 40 hours/week\n\nWe're seeing these results with clients like {{company}}. What's your experience?\n\n#AI #LeadGeneration #MarketingTech`);

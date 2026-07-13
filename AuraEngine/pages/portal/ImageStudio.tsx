@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Upload, Sparkles, Loader2, Image as ImageIcon, Copy, Check, Send } from 'lucide-react';
+import { Upload, Sparkles, Loader2, Image as ImageIcon, Copy, Check, Send, Mail } from 'lucide-react';
 import { User } from '../../types';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { workspaceFlagEnabled } from '../../lib/featureFlags';
@@ -112,6 +112,21 @@ const ImageStudio: React.FC = () => {
     navigate('/portal/social-scheduler', { state: { content, mediaPaths } });
   }, [asset, user.id, navigate, toast]);
 
+  // Hand a generated piece off to the email campaign composer. The image already
+  // lives in image-gen-assets (the same public bucket the email builder embeds
+  // from), so pass its URL straight through — no copy needed.
+  const useInEmail = useCallback((pc: GeneratedPiece) => {
+    navigate('/portal/content-studio', {
+      state: {
+        emailPrefill: {
+          subject: pc.title || undefined,
+          body: [pc.content, hashLine(pc)].filter(Boolean).join('\n\n'),
+          imageUrl: asset?.file_url ?? undefined,
+        },
+      },
+    });
+  }, [asset, navigate]);
+
   if (flagChecked && !enabled) {
     return <div className="max-w-3xl mx-auto px-4 py-20 text-center text-slate-400 text-sm">Image Campaign Studio isn't enabled for this workspace yet.</div>;
   }
@@ -189,6 +204,10 @@ const ImageStudio: React.FC = () => {
                   <button onClick={() => copy(pc.variant, [pc.title, pc.content, (pc.hashtags ?? []).join(' ')].filter(Boolean).join('\n\n'))}
                     className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-700">
                     {copied === pc.variant ? <Check size={12} /> : <Copy size={12} />} Copy
+                  </button>
+                  <button onClick={() => useInEmail(pc)}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700">
+                    <Mail size={12} /> Use in Email
                   </button>
                   <button onClick={() => postToSocial(pc)} disabled={posting === pc.variant}
                     className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
