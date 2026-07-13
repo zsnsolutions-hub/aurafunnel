@@ -333,15 +333,17 @@ export async function sendTrackedEmail(
   const userId = session.user.id;
   const inboxId = params.fromEmail ?? 'default';
   let isAdmin = false;
+  let requireValidation = false;
 
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('plan, role')
+      .select('plan, role, preferences')
       .eq('id', userId)
       .single();
 
     isAdmin = String(profile?.role ?? '').toUpperCase() === 'ADMIN';
+    requireValidation = (profile?.preferences as { requireEmailValidation?: boolean } | null)?.requireEmailValidation === true;
     const planName = profile?.plan ?? 'Starter';
     const limitErr = await checkEmailAllowed(userId, inboxId, planName);
     if (limitErr) {
@@ -365,15 +367,16 @@ export async function sendTrackedEmail(
       .order('validated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (v) {
-      const row = v as { status: ValidationStatus; reason: string | null };
-      const decision = sendDecision(row.status);
-      if (decision === 'block') {
-        return { success: false, error: `Can't send: ${params.toEmail} is invalid${row.reason ? ` (${row.reason})` : ''}.` };
-      }
-      if (decision === 'override' && !isAdmin) {
-        return { success: false, error: `${params.toEmail} is a risky address — an owner or admin must send it.` };
-      }
+    const row = v as { status: ValidationStatus; reason: string | null } | null;
+    const decision = sendDecision(row?.status, { requireValidation });
+    if (decision === 'block') {
+      const msg = row?.status === 'invalid'
+        ? `Can't send: ${params.toEmail} is invalid${row.reason ? ` (${row.reason})` : ''}.`
+        : `Can't send: ${params.toEmail} hasn't been validated. Validate it first, or turn off "Require email validation" in Settings.`;
+      return { success: false, error: msg };
+    }
+    if (decision === 'override' && !isAdmin) {
+      return { success: false, error: `${params.toEmail} is a risky address — an owner or admin must send it.` };
     }
   } catch {
     // Fail open — never block a send on a validation-lookup infra error.

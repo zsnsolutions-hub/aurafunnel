@@ -150,6 +150,36 @@ const ProfilePage: React.FC = () => {
     } catch { return { defaultView: 'grid', itemsPerPage: 25, showQuickStats: true, showAiInsights: true, showActivityFeed: true, theme: 'light', autoContactedOnSend: false }; }
   });
 
+  // Email sending — require validation before sending (persisted in profiles.preferences)
+  const [requireEmailValidation, setRequireEmailValidation] = useState(false);
+  const [savingRequireValidation, setSavingRequireValidation] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from('profiles').select('preferences').eq('id', user.id).maybeSingle();
+      if (cancelled) return;
+      const prefs = (data?.preferences as { requireEmailValidation?: boolean } | null) ?? null;
+      setRequireEmailValidation(prefs?.requireEmailValidation === true);
+    })();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
+  const toggleRequireValidation = async () => {
+    const next = !requireEmailValidation;
+    setRequireEmailValidation(next);
+    setSavingRequireValidation(true);
+    try {
+      const { data } = await supabase.from('profiles').select('preferences').eq('id', user.id).maybeSingle();
+      const merged = { ...((data?.preferences as Record<string, unknown> | null) ?? {}), requireEmailValidation: next };
+      const { error } = await supabase.from('profiles').update({ preferences: merged }).eq('id', user.id);
+      if (error) throw error;
+    } catch {
+      setRequireEmailValidation(!next); // revert on failure
+    } finally {
+      setSavingRequireValidation(false);
+    }
+  };
+
   // API Keys
   const [apiKeys, setApiKeys] = useState<ApiKey[]>(() => {
     try {
@@ -1234,6 +1264,23 @@ const ProfilePage: React.FC = () => {
                 </button>
               </div>
             ))}
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-4">
+            <h3 className="text-lg font-bold text-slate-900 font-heading">Email Sending</h3>
+            <div className="flex items-center justify-between py-4">
+              <div className="pr-6">
+                <p className="text-sm font-bold text-slate-800">Require email validation before sending</p>
+                <p className="text-xs text-slate-400 mt-0.5">Block outgoing emails to addresses that haven't been validated or that failed validation. Keeps your sender reputation clean before campaigns.</p>
+              </div>
+              <button
+                onClick={toggleRequireValidation}
+                disabled={savingRequireValidation}
+                className={`relative w-12 h-7 rounded-full transition-colors shrink-0 disabled:opacity-60 ${requireEmailValidation ? 'bg-indigo-600' : 'bg-slate-200'}`}
+              >
+                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${requireEmailValidation ? 'left-6' : 'left-1'}`} />
+              </button>
+            </div>
           </div>
         </div>
       )}
