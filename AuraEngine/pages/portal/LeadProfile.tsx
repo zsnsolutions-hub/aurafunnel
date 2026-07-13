@@ -126,6 +126,14 @@ const formatEventDate = (date: Date): string => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const CALL_OUTCOME_LABELS: Record<string, string> = {
+  connected: 'Connected',
+  voicemail: 'Left voicemail',
+  no_answer: 'No answer',
+  busy: 'Busy',
+  wrong_number: 'Wrong number',
+};
+
 const eventTypeIcon = (type: string) => {
   switch (type) {
     case 'page_view': return 'bg-blue-100 text-blue-600';
@@ -138,6 +146,7 @@ const eventTypeIcon = (type: string) => {
     case 'validated': return 'bg-emerald-100 text-emerald-600';
     case 'warning': return 'bg-amber-100 text-amber-600';
     case 'error': return 'bg-red-100 text-red-600';
+    case 'call': return 'bg-emerald-100 text-emerald-600';
     default: return 'bg-slate-100 text-slate-600';
   }
 };
@@ -170,6 +179,10 @@ const LeadProfile: React.FC = () => {
   const [fastSendOpen, setFastSendOpen] = useState(false);
   const [validatingEmail, setValidatingEmail] = useState(false);
   const [timeline, setTimeline] = useState<{ date: Date; label: string; type: string; detail?: string }[]>([]);
+  const [logCallOpen, setLogCallOpen] = useState(false);
+  const [callOutcome, setCallOutcome] = useState('connected');
+  const [callNotes, setCallNotes] = useState('');
+  const [savingCall, setSavingCall] = useState(false);
   useEffect(() => { workspaceFlagEnabled(user.id, 'fast_send').then(setFastEnabled).catch(() => {}); }, [user.id]);
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
@@ -647,10 +660,52 @@ const LeadProfile: React.FC = () => {
         });
       }
     }
+    // Logged calls
+    const { data: calls } = await supabase.from('lead_call_logs')
+      .select('outcome, notes, created_at')
+      .eq('lead_id', lead.id)
+      .order('created_at', { ascending: false }).limit(50);
+    for (const c of (calls ?? []) as { outcome: string; notes: string | null; created_at: string }[]) {
+      events.push({
+        date: new Date(c.created_at),
+        label: `Call — ${CALL_OUTCOME_LABELS[c.outcome] ?? c.outcome}`,
+        type: 'call',
+        detail: c.notes || undefined,
+      });
+    }
     events.sort((a, b) => b.date.getTime() - a.date.getTime());
     setTimeline(events);
   }, [lead, currentBusinessId]);
   useEffect(() => { void loadTimeline(); }, [loadTimeline]);
+
+  const handleLogCall = async () => {
+    if (!lead) return;
+    setSavingCall(true);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase.from('lead_call_logs').insert({
+        lead_id: lead.id,
+        client_id: user.id,
+        business_id: currentBusinessId,
+        outcome: callOutcome,
+        notes: callNotes.trim() || null,
+        created_by: user.id,
+      });
+      if (error) throw new Error(error.message);
+      // Bump last_activity so the lead reflects the touch.
+      await supabase.from('leads').update({ last_activity: now }).eq('id', lead.id).eq('client_id', user.id);
+      setLead(prev => (prev ? ({ ...prev, last_activity: now, lastActivity: now } as Lead) : prev));
+      showFeedback(`Call logged — ${CALL_OUTCOME_LABELS[callOutcome] ?? callOutcome}`);
+      setLogCallOpen(false);
+      setCallNotes('');
+      setCallOutcome('connected');
+      void loadTimeline();
+    } catch (e) {
+      showFeedback((e as Error).message || 'Could not log the call');
+    } finally {
+      setSavingCall(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -1388,7 +1443,7 @@ const LeadProfile: React.FC = () => {
                 </button>
               )}
               <button
-                onClick={() => showFeedback('Call logged successfully')}
+                onClick={() => setLogCallOpen(true)}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors font-semibold text-sm"
               >
                 <PhoneIcon className="w-4 h-4" />
@@ -2321,6 +2376,51 @@ const LeadProfile: React.FC = () => {
           userId={user.id}
           businessProfile={user.businessProfile}
         />
+      )}
+
+      {logCallOpen && lead && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => !savingCall && setLogCallOpen(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center"><PhoneIcon className="w-4 h-4" /></div>
+                <h3 className="font-bold text-slate-900 font-heading text-sm">Log a call with {lead.name}</h3>
+              </div>
+              <button onClick={() => !savingCall && setLogCallOpen(false)} className="text-slate-400 hover:text-slate-600"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Outcome</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(CALL_OUTCOME_LABELS).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setCallOutcome(val)}
+                      className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${callOutcome === val ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-200'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Notes (optional)</label>
+                <textarea
+                  value={callNotes}
+                  onChange={e => setCallNotes(e.target.value)}
+                  rows={3}
+                  placeholder="What was discussed, next steps…"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 resize-none"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setLogCallOpen(false)} disabled={savingCall} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 disabled:opacity-50">Cancel</button>
+                <button onClick={handleLogCall} disabled={savingCall} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 disabled:opacity-50">{savingCall ? 'Saving…' : 'Log call'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {showBlogShareModal && lead && (
