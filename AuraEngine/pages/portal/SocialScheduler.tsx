@@ -105,10 +105,11 @@ const SocialScheduler: React.FC = () => {
     if (draftRestored.current) return;
     draftRestored.current = true;
 
-    const routerState = location.state as { content?: string; linkUrl?: string } | null;
+    const routerState = location.state as { content?: string; linkUrl?: string; mediaPaths?: string[] } | null;
     if (routerState?.content) {
       setContentText(routerState.content);
       if (routerState.linkUrl) setLinkUrl(routerState.linkUrl);
+      if (routerState.mediaPaths && routerState.mediaPaths.length > 0) setMediaPaths(routerState.mediaPaths);
       // Clear router state so refresh doesn't re-populate
       navigate(location.pathname, { replace: true, state: null });
       return;

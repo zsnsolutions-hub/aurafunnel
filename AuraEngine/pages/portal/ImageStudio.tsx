@@ -5,8 +5,8 @@
 // is saved to generated_assets. Business-scoped + credit-gated.
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Upload, Sparkles, Loader2, Image as ImageIcon, Copy, Check } from 'lucide-react';
+import { useOutletContext, useNavigate } from 'react-router-dom';
+import { Upload, Sparkles, Loader2, Image as ImageIcon, Copy, Check, Send } from 'lucide-react';
 import { User } from '../../types';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { workspaceFlagEnabled } from '../../lib/featureFlags';
@@ -27,6 +27,7 @@ const ImageStudio: React.FC = () => {
   const { currentBusinessId, currentBusiness } = useCurrentBusiness();
   const workspaceId = currentBusiness?.workspace_id ?? null;
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [dataUri, setDataUri] = useState<string | null>(null);
   const [asset, setAsset] = useState<MediaAsset | null>(null);
@@ -37,6 +38,7 @@ const ImageStudio: React.FC = () => {
   const [tone, setTone] = useState('');
   const [pieces, setPieces] = useState<GeneratedPiece[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
+  const [posting, setPosting] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [flagChecked, setFlagChecked] = useState(false);
   useEffect(() => { workspaceFlagEnabled(user.id, 'image_studio').then(setEnabled).finally(() => setFlagChecked(true)); }, [user.id]);
@@ -79,6 +81,36 @@ const ImageStudio: React.FC = () => {
   const copy = useCallback((id: string, text: string) => {
     navigator.clipboard?.writeText(text); setCopied(id); setTimeout(() => setCopied(null), 1500);
   }, []);
+
+  // Hand off a generated piece + its image to the Social Scheduler, ready to
+  // publish. The image lives in the image-gen-assets bucket; the publisher signs
+  // media from social_media, so copy it over first. If that fails, still hand off
+  // the copy (image is optional — the user can re-attach in the scheduler).
+  const hashLine = (pc: GeneratedPiece) =>
+    (pc.hashtags ?? []).map(h => (h.startsWith('#') ? h : `#${h}`)).join(' ');
+  const postToSocial = useCallback(async (pc: GeneratedPiece) => {
+    const content = [pc.title, pc.content, hashLine(pc)].filter(Boolean).join('\n\n');
+    setPosting(pc.variant);
+    let mediaPaths: string[] | undefined;
+    try {
+      if (asset?.file_url) {
+        const resp = await fetch(asset.file_url);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const ext = ((blob.type.split('/')[1] || 'png').split('+')[0]).replace(/[^a-z0-9]/gi, '') || 'png';
+          const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+          const { error } = await supabase.storage.from('social_media').upload(path, blob, { contentType: blob.type });
+          if (!error) mediaPaths = [path];
+          else toast("Couldn't attach the image — you can add it in the scheduler.", 'error');
+        }
+      }
+    } catch {
+      toast("Couldn't attach the image — you can add it in the scheduler.", 'error');
+    } finally {
+      setPosting(null);
+    }
+    navigate('/portal/social-scheduler', { state: { content, mediaPaths } });
+  }, [asset, user.id, navigate, toast]);
 
   if (flagChecked && !enabled) {
     return <div className="max-w-3xl mx-auto px-4 py-20 text-center text-slate-400 text-sm">Image Campaign Studio isn't enabled for this workspace yet.</div>;
@@ -153,10 +185,16 @@ const ImageStudio: React.FC = () => {
             <div key={pc.variant} className="bg-white border border-slate-200 rounded-2xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{pc.variant}</span>
-                <button onClick={() => copy(pc.variant, [pc.title, pc.content, (pc.hashtags ?? []).join(' ')].filter(Boolean).join('\n\n'))}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700">
-                  {copied === pc.variant ? <Check size={12} /> : <Copy size={12} />} Copy
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => copy(pc.variant, [pc.title, pc.content, (pc.hashtags ?? []).join(' ')].filter(Boolean).join('\n\n'))}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-700">
+                    {copied === pc.variant ? <Check size={12} /> : <Copy size={12} />} Copy
+                  </button>
+                  <button onClick={() => postToSocial(pc)} disabled={posting === pc.variant}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
+                    {posting === pc.variant ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Post to Social
+                  </button>
+                </div>
               </div>
               {pc.title && <p className="text-sm font-bold text-slate-900 mb-1">{pc.title}</p>}
               {pc.preview_text && <p className="text-xs text-slate-400 mb-1">{pc.preview_text}</p>}

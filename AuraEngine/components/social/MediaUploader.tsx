@@ -1,5 +1,5 @@
 // File: AuraEngine/components/social/MediaUploader.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { UploadIcon, XIcon, RefreshIcon, CameraIcon } from '../Icons';
 
@@ -13,6 +13,29 @@ const MediaUploader: React.FC<Props> = ({ userId, mediaPaths, setMediaPaths }) =
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previews, setPreviews] = useState<string[]>([]);
+  // Signed thumbnails (keyed by path) for media that wasn't uploaded through this
+  // component in the current session — e.g. images handed off from Image Studio or
+  // a restored draft. Without this they'd fall back to the "VIDEO" placeholder.
+  const [resolved, setResolved] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const videoRe = /\.(mp4|mov|webm|avi|m4v)$/i;
+    const need = mediaPaths.filter((p, i) => !previews[i] && !resolved[p] && !videoRe.test(p));
+    if (need.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(need.map(async p => {
+        const { data } = await supabase.storage.from('social_media').createSignedUrl(p, 3600);
+        return [p, data?.signedUrl] as const;
+      }));
+      if (cancelled) return;
+      setResolved(prev => {
+        const next = { ...prev };
+        for (const [p, url] of entries) if (url) next[p] = url;
+        return next;
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [mediaPaths, previews, resolved]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -98,8 +121,8 @@ const MediaUploader: React.FC<Props> = ({ userId, mediaPaths, setMediaPaths }) =
           <div className="flex flex-wrap gap-3">
             {mediaPaths.map((path, i) => (
               <div key={path} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 group">
-                {previews[i] ? (
-                  <img src={previews[i]} alt="" loading="lazy" className="w-full h-full object-cover" />
+                {(previews[i] || resolved[path]) ? (
+                  <img src={previews[i] || resolved[path]} alt="" loading="lazy" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-400 text-[9px] font-bold">
                     VIDEO
