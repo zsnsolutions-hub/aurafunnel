@@ -10,6 +10,9 @@ import {
   type ImportResult,
   type ContactsCapacity,
 } from '../../lib/leadImporter';
+import { supabase } from '../../lib/supabase';
+import { activeBusinessId } from '../../lib/businessScope';
+import { validateEmails, emailValidationEnabled } from '../../lib/emailValidation';
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +59,8 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
   const [capacity, setCapacity] = useState<ContactsCapacity | null>(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [autoValidate, setAutoValidate] = useState(true);
+  const [validatingCount, setValidatingCount] = useState(0);
   const [error, setError] = useState('');
   const [parseError, setParseError] = useState('');
 
@@ -194,12 +199,38 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
       setResult(res);
       setStep(4);
       onImportComplete();
+
+      // Auto-validate the imported emails (server-side, background, chunked) so
+      // their status is ready before campaigning. Gated on the workspace's
+      // email_validation flag + the user's opt-in toggle.
+      setValidatingCount(0);
+      const businessId = activeBusinessId();
+      if (autoValidate && businessId && res.batch_id && res.imported_count > 0) {
+        const valOn = await emailValidationEnabled(userId).catch(() => false);
+        if (valOn) {
+          const { data: rows } = await supabase.from('leads')
+            .select('primary_email')
+            .eq('import_batch_id', res.batch_id);
+          const emails = Array.from(new Set(
+            (rows ?? []).map(r => ((r as { primary_email?: string }).primary_email ?? '').trim().toLowerCase())
+              .filter(e => e.includes('@')),
+          ));
+          if (emails.length > 0) {
+            setValidatingCount(emails.length);
+            void (async () => {
+              for (let i = 0; i < emails.length; i += 50) {
+                try { await validateEmails(businessId, emails.slice(i, i + 50)); } catch { /* best-effort */ }
+              }
+            })();
+          }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed');
     } finally {
       setImporting(false);
     }
-  }, [parsedFile, mapping, dedupe, userId, planName, onImportComplete]);
+  }, [parsedFile, mapping, dedupe, userId, planName, onImportComplete, autoValidate]);
 
   // ── Mapped count for summary ──
   const mappedCount = useMemo(() =>
@@ -487,6 +518,17 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
                 </div>
               </div>
 
+              {/* Auto-validate imported emails */}
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={autoValidate}
+                  onChange={e => setAutoValidate(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Validate email addresses after import <span className="text-slate-400">(recommended · uses validation credits)</span></span>
+              </label>
+
               {/* Summary */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                 <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Import Summary</h4>
@@ -516,6 +558,9 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
                   <CheckIcon className="w-8 h-8" />
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 font-heading">Import Complete</h3>
+                {validatingCount > 0 && (
+                  <p className="text-xs text-indigo-600 font-semibold mt-2">Validating {validatingCount} email{validatingCount !== 1 ? 's' : ''} in the background — statuses appear on the Leads page shortly.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-3">
