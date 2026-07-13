@@ -147,6 +147,7 @@ const eventTypeIcon = (type: string) => {
     case 'warning': return 'bg-amber-100 text-amber-600';
     case 'error': return 'bg-red-100 text-red-600';
     case 'call': return 'bg-emerald-100 text-emerald-600';
+    case 'meeting': return 'bg-blue-100 text-blue-600';
     default: return 'bg-slate-100 text-slate-600';
   }
 };
@@ -183,6 +184,11 @@ const LeadProfile: React.FC = () => {
   const [callOutcome, setCallOutcome] = useState('connected');
   const [callNotes, setCallNotes] = useState('');
   const [savingCall, setSavingCall] = useState(false);
+  const [meetingOpen, setMeetingOpen] = useState(false);
+  const [meetingTitle, setMeetingTitle] = useState('');
+  const [meetingWhen, setMeetingWhen] = useState('');
+  const [meetingNotes, setMeetingNotes] = useState('');
+  const [savingMeeting, setSavingMeeting] = useState(false);
   useEffect(() => { workspaceFlagEnabled(user.id, 'fast_send').then(setFastEnabled).catch(() => {}); }, [user.id]);
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
@@ -673,6 +679,20 @@ const LeadProfile: React.FC = () => {
         detail: c.notes || undefined,
       });
     }
+    // Scheduled meetings
+    const { data: meetings } = await supabase.from('lead_meetings')
+      .select('title, scheduled_at, notes, status')
+      .eq('lead_id', lead.id)
+      .order('scheduled_at', { ascending: false }).limit(50);
+    for (const m of (meetings ?? []) as { title: string; scheduled_at: string; notes: string | null; status: string }[]) {
+      const when = new Date(m.scheduled_at);
+      events.push({
+        date: when,
+        label: `Meeting — ${m.title}${m.status === 'cancelled' ? ' (cancelled)' : ''}`,
+        type: 'meeting',
+        detail: [when.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }), m.notes || ''].filter(Boolean).join(' · '),
+      });
+    }
     events.sort((a, b) => b.date.getTime() - a.date.getTime());
     setTimeline(events);
   }, [lead, currentBusinessId]);
@@ -704,6 +724,33 @@ const LeadProfile: React.FC = () => {
       showFeedback((e as Error).message || 'Could not log the call');
     } finally {
       setSavingCall(false);
+    }
+  };
+
+  const handleScheduleMeeting = async () => {
+    if (!lead) return;
+    if (!meetingTitle.trim()) { showFeedback('Add a meeting title'); return; }
+    if (!meetingWhen) { showFeedback('Pick a date & time'); return; }
+    setSavingMeeting(true);
+    try {
+      const { error } = await supabase.from('lead_meetings').insert({
+        lead_id: lead.id,
+        client_id: user.id,
+        business_id: currentBusinessId,
+        title: meetingTitle.trim(),
+        scheduled_at: new Date(meetingWhen).toISOString(),
+        notes: meetingNotes.trim() || null,
+        created_by: user.id,
+      });
+      if (error) throw new Error(error.message);
+      showFeedback(`Meeting scheduled — ${meetingTitle.trim()}`);
+      setMeetingOpen(false);
+      setMeetingTitle(''); setMeetingWhen(''); setMeetingNotes('');
+      void loadTimeline();
+    } catch (e) {
+      showFeedback((e as Error).message || 'Could not schedule the meeting');
+    } finally {
+      setSavingMeeting(false);
     }
   };
 
@@ -1450,7 +1497,7 @@ const LeadProfile: React.FC = () => {
                 <span>Log Call</span>
               </button>
               <button
-                onClick={() => showFeedback('Meeting scheduler opened')}
+                onClick={() => setMeetingOpen(true)}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-semibold text-sm"
               >
                 <CalendarIcon className="w-4 h-4" />
@@ -2417,6 +2464,56 @@ const LeadProfile: React.FC = () => {
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setLogCallOpen(false)} disabled={savingCall} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 disabled:opacity-50">Cancel</button>
                 <button onClick={handleLogCall} disabled={savingCall} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 disabled:opacity-50">{savingCall ? 'Saving…' : 'Log call'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {meetingOpen && lead && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => !savingMeeting && setMeetingOpen(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><CalendarIcon className="w-4 h-4" /></div>
+                <h3 className="font-bold text-slate-900 font-heading text-sm">Schedule a meeting with {lead.name}</h3>
+              </div>
+              <button onClick={() => !savingMeeting && setMeetingOpen(false)} className="text-slate-400 hover:text-slate-600"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Title</label>
+                <input
+                  type="text"
+                  value={meetingTitle}
+                  onChange={e => setMeetingTitle(e.target.value)}
+                  placeholder="e.g. Discovery call, Product demo"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Date &amp; time</label>
+                <input
+                  type="datetime-local"
+                  value={meetingWhen}
+                  onChange={e => setMeetingWhen(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Notes (optional)</label>
+                <textarea
+                  value={meetingNotes}
+                  onChange={e => setMeetingNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Agenda, link, context…"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 resize-none"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setMeetingOpen(false)} disabled={savingMeeting} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 disabled:opacity-50">Cancel</button>
+                <button onClick={handleScheduleMeeting} disabled={savingMeeting} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50">{savingMeeting ? 'Saving…' : 'Schedule'}</button>
               </div>
             </div>
           </div>
