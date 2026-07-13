@@ -17,7 +17,21 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
       },
-      plugins: [react()],
+      plugins: [
+        react(),
+        {
+          // Emit version.json (build SHA) so the running app can detect when it's
+          // stale vs. the server and self-recover (see lib/versionCheck.ts).
+          name: 'emit-version-json',
+          generateBundle() {
+            this.emitFile({
+              type: 'asset',
+              fileName: 'version.json',
+              source: JSON.stringify({ version: buildSha, buildTime }),
+            });
+          },
+        },
+      ],
       define: {
         'process.env.API_KEY': JSON.stringify(geminiKey),
         'process.env.GEMINI_API_KEY': JSON.stringify(geminiKey),

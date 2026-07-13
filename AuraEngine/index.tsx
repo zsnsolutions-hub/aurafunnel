@@ -4,11 +4,14 @@ import { HashRouter } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { initSentry } from './lib/sentry';
+import { initVersionGuard } from './lib/versionCheck';
 import { ToastProvider } from './components/ui/Toast';
 import App from './App';
 import './index.css';
 
 initSentry();
+// Cache-proofing: self-recover if this build is stale vs. the server.
+initVersionGuard();
 
 // Build stamp — survives esbuild console.* stripping
 declare const __BUILD_SHA__: string;
