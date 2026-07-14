@@ -41,11 +41,14 @@ serve(async (req) => {
     if (duration) { const n = parseInt(duration, 10); if (!isNaN(n)) patch.duration_seconds = n; }
     if (recordingUrl) patch.recording_url = `${recordingUrl}.mp3`;
 
-    if (callLogId && Object.keys(patch).length > 0) {
+    if (Object.keys(patch).length > 0) {
       const admin = adminClient();
-      // Prefer the explicit row; fall back to matching an existing CallSid.
-      const { error } = await admin.from("lead_call_logs").update(patch).eq("id", callLogId);
-      if (error && callSid) {
+      if (callLogId) {
+        // Outbound: row was created with a known id (also fall back to CallSid).
+        const { error } = await admin.from("lead_call_logs").update(patch).eq("id", callLogId);
+        if (error && callSid) await admin.from("lead_call_logs").update(patch).eq("call_sid", callSid);
+      } else if (callSid) {
+        // Inbound: client stamped the row with call_sid on accept.
         await admin.from("lead_call_logs").update(patch).eq("call_sid", callSid);
       }
     }

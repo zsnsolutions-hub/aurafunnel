@@ -19,6 +19,7 @@ import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
 const ActivityPanel = lazy(() => import('../activity/ActivityPanel').then(m => ({ default: m.ActivityPanel })));
 import VoiceAgentLauncher from '../voice/VoiceAgentLauncher';
+import IncomingCallProvider from '../portal/IncomingCallProvider';
 import { BusinessProvider } from '../business/BusinessProvider';
 import { BusinessSwitcher } from '../business/BusinessSwitcher';
 import { setDataPrefetchUser } from '../../lib/dataPrefetch';
@@ -336,6 +337,9 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
             user={user}
           />
         </Suspense>
+      </ErrorBoundary>
+      <ErrorBoundary fallback={null}>
+        <IncomingCallProvider userId={user.id} />
       </ErrorBoundary>
     </BusinessProvider>
   );
