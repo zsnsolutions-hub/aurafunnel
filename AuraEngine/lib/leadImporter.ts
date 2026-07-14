@@ -6,7 +6,7 @@ import { resolvePlanName, TIER_LIMITS } from './credits';
 export type LeadField =
   | 'full_name' | 'first_name' | 'last_name'
   | 'primary_email' | 'additional_emails' | 'primary_phone'
-  | 'company' | 'linkedin_url' | 'title' | 'location'
+  | 'company' | 'website' | 'linkedin_url' | 'title' | 'location'
   | 'source' | 'industry' | 'company_size' | 'insights';
 
 export interface ColumnMapping {
@@ -55,6 +55,9 @@ const AUTO_MAP_RULES: [RegExp, LeadField | `custom:${string}`][] = [
 
   // Company
   [/^(company|company[\s_-]?name|organization|org|employer|account[\s_-]?name|business)$/i, 'company'],
+
+  // Website
+  [/^(website|web[\s_-]?site|url|web[\s_-]?url|company[\s_-]?(website|url)|site|homepage|domain)$/i, 'website'],
 
   // LinkedIn
   [/^(linkedin|linkedin[\s_-]?url|linkedin[\s_-]?profile|li[\s_-]?url|person[\s_-]?linkedin[\s_-]?url)$/i, 'linkedin_url'],
@@ -221,6 +224,7 @@ export const CORE_FIELDS: { value: LeadField; label: string }[] = [
   { value: 'additional_emails', label: 'Additional Email(s)' },
   { value: 'primary_phone', label: 'Phone' },
   { value: 'company', label: 'Company' },
+  { value: 'website', label: 'Website' },
   { value: 'linkedin_url', label: 'LinkedIn URL' },
   { value: 'title', label: 'Job Title' },
   { value: 'location', label: 'Location' },
