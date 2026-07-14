@@ -131,12 +131,20 @@ export const NAV_CONFIG: NavConfigItem[] = [
     divider: true,
     children: [
       {
+        route: '/portal/campaigns',
+        navLabel: 'Manage Campaigns',
+        pageTitle: 'Campaigns',
+        icon: Megaphone,
+        section: 'engage',
+        order: 0,
+      },
+      {
         route: '/portal/content-studio',
         navLabel: 'Content Studio',
         pageTitle: 'Content Studio',
         icon: PenSquare,
         section: 'engage',
-        order: 0,
+        order: 1,
       },
       {
         route: '/portal/image-studio',
@@ -144,7 +152,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
         pageTitle: 'Image Campaign Studio',
         icon: Sparkles,
         section: 'engage',
-        order: 1,
+        order: 2,
       },
       {
         route: '/portal/automation',
@@ -152,7 +160,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
         pageTitle: 'Automations',
         icon: GitBranch,
         section: 'engage',
-        order: 2,
+        order: 3,
       },
     ],
   },
@@ -175,20 +183,12 @@ export const NAV_CONFIG: NavConfigItem[] = [
     ],
   },
   {
-    route: '/portal/campaigns',
-    navLabel: 'Campaigns',
-    pageTitle: 'Campaigns',
-    icon: Megaphone,
-    section: 'engage',
-    order: 2,
-  },
-  {
     route: '/portal/calls',
     navLabel: 'Calls',
     pageTitle: 'Calls',
     icon: Phone,
     section: 'engage',
-    order: 3,
+    order: 2,
   },
 
   // ── Pillar 3 — CONVERT ──
