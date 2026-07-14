@@ -8,9 +8,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Phone, PhoneIncoming, PhoneOutgoing, PlayCircle, Search, RefreshCw, ArrowRight } from 'lucide-react';
+import { Phone, PhoneIncoming, PhoneOutgoing, PlayCircle, Search, RefreshCw, ArrowRight, UserPlus, Loader2 } from 'lucide-react';
 import type { User } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { activeBusinessId } from '../../lib/businessScope';
+import { useToast } from '../../components/ui/Toast';
 import { formatDuration } from '../../lib/twilioVoice';
 
 interface LayoutContext { user: User }
@@ -57,11 +59,13 @@ const relTime = (iso: string): string => {
 const CallsPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [rows, setRows] = useState<CallRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [creatingId, setCreatingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +79,36 @@ const CallsPage: React.FC = () => {
   }, [user.id]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Create a lead from an unknown caller's number, link every past call from
+  // that number to it, then open the new lead to fill in the details.
+  const createLeadFrom = useCallback(async (r: CallRow) => {
+    const number = (r.phone_number ?? '').trim();
+    if (!number) return;
+    setCreatingId(r.id);
+    try {
+      const payload: Record<string, unknown> = {
+        first_name: '', last_name: '',
+        primary_phone: number,
+        client_id: user.id,
+        workspace_id: user.id, // leads.workspace_id is NOT NULL and holds the user id (legacy)
+        business_id: activeBusinessId(),
+        status: 'New',
+        source: 'Inbound call',
+        insights: 'Created from an inbound call',
+        last_activity: new Date().toISOString(),
+      };
+      const { data, error } = await supabase.from('leads').insert([payload]).select('id').single();
+      if (error || !data) throw new Error(error?.message || 'Could not create the lead.');
+      // Attribute this and any other unlinked calls from the same number.
+      await supabase.from('lead_call_logs').update({ lead_id: data.id })
+        .eq('client_id', user.id).eq('phone_number', number).is('lead_id', null);
+      navigate(`/portal/leads/${data.id}`);
+    } catch (e) {
+      toast((e as Error).message || 'Could not create the lead.', 'error');
+      setCreatingId(null);
+    }
+  }, [user.id, navigate, toast]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -171,6 +205,12 @@ const CallsPage: React.FC = () => {
                 <button onClick={() => navigate(`/portal/leads/${r.lead_id}`)} title="Open lead"
                   className="shrink-0 text-slate-300 hover:text-slate-600 transition-colors">
                   <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : r.phone_number ? (
+                <button onClick={() => createLeadFrom(r)} disabled={creatingId === r.id} title="Create a lead from this number"
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 transition-colors">
+                  {creatingId === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">Add lead</span>
                 </button>
               ) : <span className="w-4 shrink-0" />}
             </div>
