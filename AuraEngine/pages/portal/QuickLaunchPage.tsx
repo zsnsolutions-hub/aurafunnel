@@ -936,7 +936,7 @@ const QuickLaunchPage: React.FC = () => {
                   <p className="text-sm font-bold">Sequence launched</p>
                   <p className="text-xs">{launchResult.total} email{launchResult.total === 1 ? '' : 's'} scheduled across {activeLeads.length} recipient{activeLeads.length === 1 ? '' : 's'}.</p>
                 </div>
-                <button onClick={() => navigate('/portal/content')} className="text-xs font-bold underline">View campaigns</button>
+                <button onClick={() => navigate('/portal/campaigns')} className="text-xs font-bold underline">View campaigns</button>
               </div>
             ) : (
               <div className="flex items-center justify-between pt-2">

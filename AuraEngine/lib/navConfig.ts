@@ -122,29 +122,29 @@ export const NAV_CONFIG: NavConfigItem[] = [
 
   // ── Pillar 2 — ENGAGE ──
   {
-    route: '/portal/content',
+    route: '/portal/campaigns',
     navLabel: 'Campaigns',
     pageTitle: 'Campaigns',
-    icon: Sparkles,
+    icon: Megaphone,
     section: 'engage',
     order: 0,
     divider: true,
+  },
+  {
+    route: '/portal/content',
+    navLabel: 'Content',
+    pageTitle: 'Content',
+    icon: Sparkles,
+    section: 'engage',
+    order: 1,
     children: [
-      {
-        route: '/portal/campaigns',
-        navLabel: 'Manage Campaigns',
-        pageTitle: 'Campaigns',
-        icon: Megaphone,
-        section: 'engage',
-        order: 0,
-      },
       {
         route: '/portal/content-studio',
         navLabel: 'Content Studio',
         pageTitle: 'Content Studio',
         icon: PenSquare,
         section: 'engage',
-        order: 1,
+        order: 0,
       },
       {
         route: '/portal/image-studio',
@@ -152,7 +152,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
         pageTitle: 'Image Campaign Studio',
         icon: Sparkles,
         section: 'engage',
-        order: 2,
+        order: 1,
       },
       {
         route: '/portal/automation',
@@ -160,7 +160,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
         pageTitle: 'Automations',
         icon: GitBranch,
         section: 'engage',
-        order: 3,
+        order: 2,
       },
     ],
   },
@@ -170,7 +170,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
     pageTitle: 'Social',
     icon: Send,
     section: 'engage',
-    order: 1,
+    order: 2,
     children: [
       {
         route: '/portal/blog',
@@ -188,7 +188,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
     pageTitle: 'Calls',
     icon: Phone,
     section: 'engage',
-    order: 2,
+    order: 3,
   },
 
   // ── Pillar 3 — CONVERT ──
