@@ -17,6 +17,8 @@ import { leadIntelligenceEnabled } from '../../lib/leadScoring';
 import LeadScorePanel from '../../components/leads/LeadScorePanel';
 import LeadResearchPanel from '../../components/leads/LeadResearchPanel';
 import NextActionPanel from '../../components/leads/NextActionPanel';
+import LeadCallPanel from '../../components/portal/LeadCallPanel';
+import { formatDuration } from '../../lib/twilioVoice';
 import FastSendModal from '../../components/leads/FastSendModal';
 import { workspaceFlagEnabled } from '../../lib/featureFlags';
 import { normalizeLeads, leadDisplayName, leadInitials } from '../../lib/queries';
@@ -666,17 +668,20 @@ const LeadProfile: React.FC = () => {
         });
       }
     }
-    // Logged calls
+    // Logged calls (manual + in-app VOIP)
     const { data: calls } = await supabase.from('lead_call_logs')
-      .select('outcome, notes, created_at')
+      .select('outcome, notes, created_at, duration_seconds, recording_url, status')
       .eq('lead_id', lead.id)
       .order('created_at', { ascending: false }).limit(50);
-    for (const c of (calls ?? []) as { outcome: string; notes: string | null; created_at: string }[]) {
+    for (const c of (calls ?? []) as { outcome: string | null; notes: string | null; created_at: string; duration_seconds: number | null; recording_url: string | null; status: string | null }[]) {
+      const label = CALL_OUTCOME_LABELS[c.outcome ?? ''] ?? (c.outcome || c.status || 'Call');
+      const dur = c.duration_seconds && c.duration_seconds > 0 ? ` (${formatDuration(c.duration_seconds)})` : '';
+      const details = [c.notes || undefined, c.recording_url ? `Recording: ${c.recording_url}` : undefined].filter(Boolean).join('\n');
       events.push({
         date: new Date(c.created_at),
-        label: `Call — ${CALL_OUTCOME_LABELS[c.outcome] ?? c.outcome}`,
+        label: `Call — ${label}${dur}`,
         type: 'call',
-        detail: c.notes || undefined,
+        detail: details || undefined,
       });
     }
     // Scheduled meetings
@@ -1488,6 +1493,17 @@ const LeadProfile: React.FC = () => {
                   <CheckIcon className="w-4 h-4" />
                   <span>{validatingEmail ? 'Validating…' : 'Validate Email'}</span>
                 </button>
+              )}
+              {lead.primary_phone && (
+                <LeadCallPanel
+                  leadId={lead.id}
+                  clientId={user.id}
+                  businessId={currentBusinessId}
+                  phone={lead.primary_phone}
+                  leadName={`${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim()}
+                  onLogged={() => void loadTimeline()}
+                  triggerClassName="w-full flex items-center space-x-3 p-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold text-sm"
+                />
               )}
               <button
                 onClick={() => setLogCallOpen(true)}

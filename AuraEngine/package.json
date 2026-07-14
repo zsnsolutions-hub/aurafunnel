@@ -19,6 +19,7 @@
     "@stripe/stripe-js": "^8.7.0",
     "@supabase/supabase-js": "^2.48.1",
     "@tanstack/react-query": "^5.90.21",
+    "@twilio/voice-sdk": "^2.18.3",
     "jspdf": "^4.1.0",
     "lucide-react": "^0.564.0",
     "react": "^19.2.3",
