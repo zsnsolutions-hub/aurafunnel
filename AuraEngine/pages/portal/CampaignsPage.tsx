@@ -14,7 +14,7 @@ import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { supabase } from '../../lib/supabase';
 import {
   listCampaigns, getSteps, getEnrolledLeads, removeEnrollment, updateCampaign, addStep, updateStep, deleteStep,
-  deleteCampaign, launchCampaign, searchLeadsForCampaign, addLeadToCampaign, previewStepForLead,
+  deleteCampaign, launchCampaign, searchLeadsForCampaign, addLeadToCampaign, previewStepForLead, previewVerbatimForLead,
   type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead, type LeadHit,
 } from '../../lib/campaigns';
 
@@ -119,6 +119,7 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const [name, setName] = useState(campaign.name);
   const [description, setDescription] = useState(campaign.description ?? '');
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
+  const [aiPersonalize, setAiPersonalize] = useState(campaign.ai_personalize);
   const [steps, setSteps] = useState<CampaignStep[]>([]);
   const [audience, setAudience] = useState<EnrolledLead[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -203,12 +204,18 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const onPreview = useCallback(async (step: CampaignStep) => {
     if (!previewLeadId) { toast('Add a lead to the audience first, then pick one to preview.', 'info'); return; }
     setPreviews(prev => ({ ...prev, [step.id]: { loading: true } }));
-    const credit = await consumeCredits(supabase, 'content_suggestions');
-    if (!credit.success) { setPreviews(prev => ({ ...prev, [step.id]: { error: credit.message } })); toast(credit.message, 'error'); return; }
-    const res = await previewStepForLead(campaign, step, previewLeadId);
+    // Verbatim mode is a deterministic merge — instant + free. AI mode costs a credit.
+    let res: { subject: string; body_html: string } | { error: string };
+    if (aiPersonalize) {
+      const credit = await consumeCredits(supabase, 'content_suggestions');
+      if (!credit.success) { setPreviews(prev => ({ ...prev, [step.id]: { error: credit.message } })); toast(credit.message, 'error'); return; }
+      res = await previewStepForLead({ ...campaign, ai_personalize: aiPersonalize }, step, previewLeadId);
+    } else {
+      res = await previewVerbatimForLead(step, previewLeadId);
+    }
     if ('error' in res) setPreviews(prev => ({ ...prev, [step.id]: { error: res.error } }));
     else setPreviews(prev => ({ ...prev, [step.id]: { subject: res.subject, body_html: res.body_html } }));
-  }, [previewLeadId, campaign, toast]);
+  }, [previewLeadId, campaign, aiPersonalize, toast]);
 
   const onSend = useCallback(async () => {
     if (!confirm(`Start sending "${name}" to its enrolled leads now?`)) return;
@@ -258,6 +265,24 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                 className="px-2.5 py-1.5 text-xs font-bold border border-slate-200 rounded-lg capitalize outline-none focus:border-indigo-300">
                 {STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+            </div>
+
+            {/* Content mode */}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+              <div className="pr-2">
+                <p className="text-xs font-bold text-slate-800">{aiPersonalize ? 'AI-personalize each email' : 'Send my text as-is (mail-merge)'}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {aiPersonalize
+                    ? 'The AI rewrites each email per lead using their company, role & context.'
+                    : 'Sends your exact copy with {{first_name}}, {{company}} filled in — no AI rewrite.'}
+                </p>
+              </div>
+              <button
+                onClick={() => { const next = !aiPersonalize; setAiPersonalize(next); setPreviews({}); void updateCampaign(campaign.id, { ai_personalize: next }).then(() => onChanged()); }}
+                className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${aiPersonalize ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                title="Toggle AI personalization">
+                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${aiPersonalize ? 'left-6' : 'left-1'}`} />
+              </button>
             </div>
           </div>
 
@@ -325,7 +350,11 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                 <Plus className="w-3.5 h-3.5" /> Add step
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 -mt-1">Each email is AI-personalized per lead at send. Use Preview to see what a specific lead will get.</p>
+            <p className="text-[11px] text-slate-400 -mt-1">
+              {aiPersonalize
+                ? 'Each email is AI-personalized per lead at send. Use Preview (eye) to see what a lead will get.'
+                : 'Your exact copy is sent with {{fields}} filled per lead. Use Preview (eye) to check it.'}
+            </p>
             {(audience && audience.length > 0) && (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-400 font-semibold">Preview as</span>
@@ -360,7 +389,7 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                   onChange={e => patchLocalStep(s.id, { subject: e.target.value })}
                   onBlur={() => onStepBlur(s.id, { subject: s.subject })}
                   className="w-full px-3 py-2 text-sm font-medium border border-slate-200 rounded-lg outline-none focus:border-indigo-300" />
-                <textarea value={s.body_html} placeholder="Write the gist — the AI personalizes it per lead. {{first_name}}, {{company}} are hints."
+                <textarea value={s.body_html} placeholder={aiPersonalize ? 'Write the gist — the AI personalizes it per lead. {{first_name}}, {{company}} are hints.' : 'Write the exact email. {{first_name}}, {{company}} are filled per lead.'}
                   onChange={e => patchLocalStep(s.id, { body_html: e.target.value })}
                   onBlur={() => onStepBlur(s.id, { body_html: s.body_html })}
                   rows={5}

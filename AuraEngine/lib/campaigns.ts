@@ -20,9 +20,22 @@ export interface Campaign {
   total_sent: number;
   total_opened: number;
   total_clicked: number;
+  ai_personalize: boolean;
   created_at: string;
   step_count?: number;
 }
+
+// Mail-merge (client mirror of the server mergeFields in start-email-sequence-run).
+const mergeClient = (tpl: string, lead: { name?: string; company?: string; title?: string; industry?: string }): string => {
+  const first = (lead.name || '').trim().split(/\s+/)[0] || 'there';
+  const map: Record<string, string> = {
+    first_name: first, last_name: (lead.name || '').trim().split(/\s+/).slice(1).join(' '),
+    name: lead.name || 'there', full_name: lead.name || 'there',
+    company: lead.company || 'your company', title: lead.title || '', industry: lead.industry || '', your_name: '',
+  };
+  return (tpl || '').replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (m, k) => (String(k).toLowerCase() in map ? map[String(k).toLowerCase()] : m));
+};
+const nl2br = (s: string): string => /<(p|br|div|ul|ol|table|a|strong|em|span|h[1-6])\b/i.test(s || '') ? (s || '') : (s || '').replace(/\n/g, '<br>');
 
 export interface CampaignStep {
   id: string;
@@ -36,7 +49,7 @@ export interface CampaignStep {
 /** List the workspace's campaigns (newest first) with a step count each. */
 export async function listCampaigns(userId: string): Promise<Campaign[]> {
   const { data, error } = await supabase.from('email_sequences')
-    .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,created_at')
+    .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,ai_personalize,created_at')
     .eq('workspace_id', userId)
     .order('created_at', { ascending: false });
   if (error || !data) return [];
@@ -141,7 +154,7 @@ export async function removeEnrollment(enrollmentId: string, sequenceId: string)
   await supabase.from('email_sequences').update({ total_leads: count ?? 0 }).eq('id', sequenceId);
 }
 
-export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, 'name' | 'description' | 'status' | 'goal' | 'tone'>>): Promise<string | null> {
+export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, 'name' | 'description' | 'status' | 'goal' | 'tone' | 'ai_personalize'>>): Promise<string | null> {
   const { error } = await supabase.from('email_sequences').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
   return error?.message ?? null;
 }
@@ -176,6 +189,15 @@ async function getMyBusinessProfile(): Promise<Record<string, unknown> | undefin
   if (!user) return undefined;
   const { data } = await supabase.from('profiles').select('businessProfile').eq('id', user.id).single();
   return (data?.businessProfile as Record<string, unknown> | null) ?? undefined;
+}
+
+/** Verbatim/mail-merge preview — deterministic {{field}} substitution, no AI. */
+export async function previewVerbatimForLead(step: CampaignStep, leadId: string): Promise<{ subject: string; body_html: string } | { error: string }> {
+  const { data: lead } = await supabase.from('leads')
+    .select('first_name, last_name, company, title, industry').eq('id', leadId).single();
+  if (!lead) return { error: 'Lead not found.' };
+  const l = { name: [lead.first_name, lead.last_name].filter(Boolean).join(' '), company: lead.company ?? undefined, title: lead.title ?? undefined, industry: lead.industry ?? undefined };
+  return { subject: mergeClient(step.subject, l), body_html: nl2br(mergeClient(step.body_html, l)) };
 }
 
 /** Generate the AI-personalized email a lead would receive for a step — same
@@ -236,7 +258,7 @@ export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; to
   const payload = {
     leads,
     steps: steps.map(s => ({ stepIndex: s.step_number, delayDays: s.delay_days, subject: s.subject, body: s.body_html })),
-    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id, businessProfile },
+    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id, businessProfile, aiPersonalize: campaign.ai_personalize },
   };
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-email-sequence-run`;
   const res = await fetch(url, {

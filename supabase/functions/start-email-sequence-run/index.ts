@@ -27,6 +27,32 @@ interface StepInput {
   body: string;
 }
 
+// Mail-merge: substitute {{field}} tokens from the lead. Known tokens get sensible
+// fallbacks; unknown tokens are left untouched.
+function mergeFields(tpl: string, lead: { name?: string; company?: string; title?: string; industry?: string; email?: string }, fromName: string): string {
+  const first = (lead.name || "").trim().split(/\s+/)[0] || "there";
+  const map: Record<string, string> = {
+    first_name: first,
+    last_name: (lead.name || "").trim().split(/\s+/).slice(1).join(" "),
+    name: lead.name || "there",
+    full_name: lead.name || "there",
+    company: lead.company || "your company",
+    title: lead.title || "",
+    industry: lead.industry || "",
+    email: lead.email || "",
+    your_name: fromName,
+  };
+  return (tpl || "").replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (m, k) => {
+    const key = String(k).toLowerCase();
+    return key in map ? map[key] : m;
+  });
+}
+
+// Convert plain-text bodies to HTML (leave already-HTML bodies as-is).
+function nl2brHtml(s: string): string {
+  return /<(p|br|div|ul|ol|table|a|strong|em|span|h[1-6])\b/i.test(s || "") ? (s || "") : (s || "").replace(/\n/g, "<br>");
+}
+
 interface ConfigInput {
   tone: string;
   goal: string;
@@ -157,15 +183,20 @@ serve(async (req) => {
       throw new Error(`Failed to create run: ${runError?.message}`);
     }
 
+    // Verbatim / mail-merge mode: send the template as-is with {{fields}}
+    // substituted, no AI rewrite. Items are created already "written" so they
+    // skip the AI writing queue and go straight to the sender.
+    const aiPersonalize = (config as { aiPersonalize?: boolean }).aiPersonalize !== false;
+    const fromName = (config as { fromName?: string }).fromName || "";
+
     // Batch-insert all items (lead × step)
     const items = [];
     for (const lead of leads) {
       for (const step of steps) {
-        items.push({
+        const base = {
           run_id: run.id,
           lead_id: lead.id,
           step_index: step.stepIndex,
-          status: "pending",
           lead_email: lead.email,
           lead_name: lead.name || "",
           lead_company: lead.company || "",
@@ -181,7 +212,17 @@ serve(async (req) => {
           template_body: step.body,
           delay_days: step.delayDays,
           attempt_count: 0,
-        });
+        };
+        if (aiPersonalize) {
+          items.push({ ...base, status: "pending" });
+        } else {
+          items.push({
+            ...base,
+            status: "written",
+            ai_subject: mergeFields(step.subject, lead, fromName),
+            ai_body_html: nl2brHtml(mergeFields(step.body, lead, fromName)),
+          });
+        }
       }
     }
 
