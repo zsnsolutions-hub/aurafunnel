@@ -38,6 +38,9 @@ export const AI_CREDIT_COSTS = {
 
   // Voice
   follow_up_questions: 1,
+
+  // Calling (VOIP) — charged per outbound call placed
+  voice_call: 3,
 } as const;
 
 export type AiOperation = keyof typeof AI_CREDIT_COSTS;

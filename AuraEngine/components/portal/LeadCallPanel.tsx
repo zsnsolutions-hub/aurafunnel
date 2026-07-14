@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Device, Call } from '@twilio/voice-sdk';
 import { PhoneIcon } from '../Icons';
 import { supabase } from '../../lib/supabase';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { fetchVoiceToken, toE164, formatDuration } from '../../lib/twilioVoice';
 
 type CallState = 'idle' | 'connecting' | 'ringing' | 'live' | 'ended' | 'error';
@@ -117,6 +118,11 @@ const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phones, 
       const device = await ensureDevice();
       if (!device) { setState('idle'); return; } // notConfigured shown
 
+      // Credit gate — only after we know calling is configured, so we never
+      // charge for a call that can't be placed. Charged per outbound call.
+      const credit = await consumeCredits(supabase, 'voice_call');
+      if (!credit.success) { setError(credit.message); setState('error'); return; }
+
       // Create the log row up-front so the status webhook can enrich it.
       const { data, error: insErr } = await supabase.from('lead_call_logs')
         .insert({ lead_id: leadId, client_id: clientId, business_id: businessId,
@@ -174,6 +180,7 @@ const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phones, 
         >
           <PhoneIcon className="w-4 h-4" />
           <span>{active ? 'On call…' : numbers.length > 1 ? 'Call…' : 'Call'}</span>
+          {!active && <span className="ml-auto text-[10px] font-bold opacity-70">{CREDIT_COSTS.voice_call} cr</span>}
         </button>
 
         {pickerOpen && numbers.length > 1 && !active && (
