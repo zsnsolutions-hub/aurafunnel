@@ -991,12 +991,18 @@ const LeadManagement: React.FC = () => {
       const rows = ids.map(id => ({ sequence_id: seqId, lead_id: id, workspace_id: user.id, status: 'active', current_step: 0 }));
       const { error: enrollErr } = await supabase.from('sequence_enrollments').insert(rows);
       if (enrollErr) throw new Error(enrollErr.message);
+      // Seed an editable starter email step so the campaign is send-ready (best-effort).
+      await supabase.from('sequence_steps').insert({
+        sequence_id: seqId, step_number: 1, delay_days: 0,
+        subject: `Quick question, {{first_name}}`,
+        body_html: `Hi {{first_name}},\n\nI came across {{company}} and wanted to reach out.\n\n[Write your pitch here — what you do and why it's relevant to them.]\n\nWorth a quick chat?\n\n{{your_name}}`,
+      });
       setCampaigns(prev => [{ id: seqId, name: (seq as { name: string }).name, status: (seq as { status: string }).status }, ...prev]);
       setBulkCampaignId(seqId);
       setNewCampaignName('');
       setBulkActionOpen(null);
       setSelectedIds(new Set());
-      toast(`Created "${nm}" with ${ids.length} lead${ids.length !== 1 ? 's' : ''}. Add email steps in the Campaigns area to start sending.`, 'success');
+      toast(`Created "${nm}" with ${ids.length} lead${ids.length !== 1 ? 's' : ''} and a starter email step. Edit it under Campaigns, then start sending.`, 'success');
     } catch (e) { toast((e as Error).message || 'Could not create campaign.', 'error'); }
     finally { setCreatingCampaign(false); }
   };
