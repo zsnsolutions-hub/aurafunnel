@@ -516,6 +516,10 @@ serve(async (req) => {
     } catch (e) {
       console.warn("[send-email] workspace lookup failed:", (e as Error).message);
     }
+    // Legacy fallback: many tables (incl. email_messages.workspace_id NOT NULL)
+    // mirror workspace_id = owner id. Use it when the member lookup finds nothing,
+    // so sends don't hard-fail for owners without a workspace_members row.
+    if (!workspaceId) workspaceId = userId;
 
     // ── B. Auto-pick when no provider supplied ──
     if (!providerWasSpecified && workspaceId) {

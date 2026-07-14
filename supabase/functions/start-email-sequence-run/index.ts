@@ -146,6 +146,7 @@ serve(async (req) => {
           provider: config.provider,
           businessProfile: config.businessProfile,
           sendMode: config.sendMode,
+          campaignId: (config as { campaignId?: string }).campaignId,
         },
         started_at: new Date().toISOString(),
       })

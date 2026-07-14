@@ -196,7 +196,7 @@ export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; to
   const payload = {
     leads,
     steps: steps.map(s => ({ stepIndex: s.step_number, delayDays: s.delay_days, subject: s.subject, body: s.body_html })),
-    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto' },
+    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id },
   };
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-email-sequence-run`;
   const res = await fetch(url, {
