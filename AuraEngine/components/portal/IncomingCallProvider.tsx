@@ -104,15 +104,15 @@ const IncomingCallProvider: React.FC<Props> = ({ userId }) => {
     clearTimer();
     timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
 
-    // Log inbound only when we can attribute it to a lead (lead_id is required).
-    if (caller?.leadId) {
-      const { data } = await supabase.from('lead_call_logs')
-        .insert({ lead_id: caller.leadId, client_id: userId, business_id: caller.businessId,
-                  direction: 'inbound', phone_number: caller.number, status: 'in-progress',
-                  call_sid: String(call.parameters?.CallSid ?? '') || null })
-        .select('id').single();
-      if (data) logIdRef.current = data.id;
-    }
+    // Log every inbound call — attributed to a lead when the caller matched one,
+    // otherwise a lead-less row keyed by the caller's number.
+    const { data } = await supabase.from('lead_call_logs')
+      .insert({ lead_id: caller?.leadId ?? null, client_id: userId, business_id: caller?.businessId ?? null,
+                direction: 'inbound', phone_number: caller?.number ?? null, status: 'in-progress',
+                notes: caller?.leadId ? null : 'Inbound call — no matching lead',
+                call_sid: String(call.parameters?.CallSid ?? '') || null })
+      .select('id').single();
+    if (data) logIdRef.current = data.id;
   }, [caller, userId]);
 
   const decline = useCallback(() => { try { callRef.current?.reject(); } catch { /* noop */ } resetCall(); }, [resetCall]);
