@@ -13,6 +13,10 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { adminClient } from "../_shared/auth.ts";
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+// Dial statuses that mean the inbound call was never answered by a client.
+const UNANSWERED = new Set(["no-answer", "busy", "failed", "canceled"]);
+
 // Twilio Dial statuses → our manual `outcome` vocabulary (connected | voicemail |
 // no_answer | busy | wrong_number). Unmapped ones leave outcome untouched.
 const OUTCOME: Record<string, string> = {
@@ -24,12 +28,22 @@ const OUTCOME: Record<string, string> = {
 
 serve(async (req) => {
   try {
-    const callLogId = new URL(req.url).searchParams.get("callLogId");
+    const url = new URL(req.url);
+    const callLogId = url.searchParams.get("callLogId");
+    const vm = url.searchParams.get("vm");
     const form = await req.formData();
     const p: Record<string, string> = {};
     for (const [k, v] of form.entries()) p[k] = String(v);
 
     const dialStatus = p["DialCallStatus"] ?? p["CallStatus"] ?? "";
+
+    // Inbound call that no client answered → send the caller to voicemail.
+    if (vm === "1" && UNANSWERED.has(dialStatus)) {
+      return new Response(
+        `<?xml version="1.0" encoding="UTF-8"?><Response><Redirect method="POST">${SUPABASE_URL}/functions/v1/twilio-voicemail</Redirect></Response>`,
+        { status: 200, headers: { "Content-Type": "text/xml" } },
+      );
+    }
     const duration = p["DialCallDuration"] ?? p["RecordingDuration"] ?? "";
     const recordingUrl = p["RecordingUrl"] ?? "";
     const callSid = p["DialCallSid"] ?? p["CallSid"] ?? "";

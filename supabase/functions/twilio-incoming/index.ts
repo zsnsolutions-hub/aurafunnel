@@ -34,17 +34,21 @@ serve(async (req) => {
       .order("last_seen", { ascending: false })
       .limit(10);
 
+    const vmUrl = `${SUPABASE_URL}/functions/v1/twilio-voicemail`;
     const identities = (routes ?? []).map((r: { user_id: string }) => r.user_id).filter(Boolean);
     if (identities.length === 0) {
-      return twiml(`<Say>Sorry, no one is available to take your call right now. Please try again later.</Say>`);
+      // Nobody online → straight to voicemail.
+      return twiml(`<Redirect method="POST">${xmlEscape(vmUrl)}</Redirect>`);
     }
 
     const cb = `${SUPABASE_URL}/functions/v1/twilio-call-status`;
+    // vm=1 tells twilio-call-status to send unanswered inbound calls to voicemail.
+    const action = `${cb}?vm=1`;
     const clients = identities.map(id => `<Client>${xmlEscape(id)}</Client>`).join("");
     const dial =
       `<Dial answerOnBridge="true" timeout="25"` +
       ` record="record-from-answer-dual"` +
-      ` action="${xmlEscape(cb)}" method="POST"` +
+      ` action="${xmlEscape(action)}" method="POST"` +
       ` recordingStatusCallback="${xmlEscape(cb)}" recordingStatusCallbackEvent="completed">` +
       clients +
       `</Dial>`;
