@@ -1494,12 +1494,12 @@ const LeadProfile: React.FC = () => {
                   <span>{validatingEmail ? 'Validating…' : 'Validate Email'}</span>
                 </button>
               )}
-              {lead.primary_phone && (
+              {(lead.primary_phone || (lead.phones && lead.phones.length > 0)) && (
                 <LeadCallPanel
                   leadId={lead.id}
                   clientId={user.id}
                   businessId={currentBusinessId}
-                  phone={lead.primary_phone}
+                  phones={[lead.primary_phone, ...(lead.phones ?? [])].filter((p): p is string => Boolean(p && p.trim()))}
                   leadName={`${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim()}
                   onLogged={() => void loadTimeline()}
                   triggerClassName="w-full flex items-center space-x-3 p-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold text-sm"

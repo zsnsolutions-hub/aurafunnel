@@ -9,7 +9,7 @@
 // Calling is gated server-side: if Twilio secrets aren't set, twilio-token
 // returns { configured:false } and we show a friendly "not set up" note.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Device, Call } from '@twilio/voice-sdk';
 import { PhoneIcon } from '../Icons';
 import { supabase } from '../../lib/supabase';
@@ -21,7 +21,8 @@ interface Props {
   leadId: string;
   clientId: string;
   businessId: string | null;
-  phone: string;
+  /** All numbers for the lead (primary first). A picker appears when >1. */
+  phones: string[];
   leadName: string;
   onLogged?: () => void;
   triggerClassName?: string;
@@ -30,7 +31,24 @@ interface Props {
 const DEFAULT_TRIGGER =
   'flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors';
 
-const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phone, leadName, onLogged, triggerClassName }) => {
+const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phones, leadName, onLogged, triggerClassName }) => {
+  // Dedupe by normalized form so "(555) 123-4567" and "+15551234567" collapse.
+  const numbers = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of phones) {
+      const val = (raw ?? '').trim();
+      if (!val) continue;
+      const key = toE164(val);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(val);
+    }
+    return out;
+  }, [phones]);
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [activeNumber, setActiveNumber] = useState('');
   const [state, setState] = useState<CallState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
@@ -87,11 +105,12 @@ const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phone, l
     return device;
   }, []);
 
-  const startCall = useCallback(async () => {
+  const startCall = useCallback(async (rawNumber: string) => {
     setError(null); setNotConfigured(false); setMuted(false); setSeconds(0);
     acceptedRef.current = false;
-    const number = toE164(phone);
+    const number = toE164(rawNumber);
     if (!number || number.length < 8) { setError('This lead has no valid phone number.'); setState('error'); return; }
+    setActiveNumber(number);
 
     setState('connecting');
     try {
@@ -124,7 +143,18 @@ const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phone, l
       setError((e as Error).message || 'Could not place the call.');
       setState('error');
     }
-  }, [phone, leadId, clientId, businessId, ensureDevice, endCall]);
+  }, [leadId, clientId, businessId, ensureDevice, endCall]);
+
+  // One number → dial straight away; multiple → open the picker first.
+  const handleTrigger = useCallback(() => {
+    if (numbers.length <= 1) void startCall(numbers[0] ?? '');
+    else setPickerOpen(o => !o);
+  }, [numbers, startCall]);
+
+  const pickNumber = useCallback((n: string) => {
+    setPickerOpen(false);
+    void startCall(n);
+  }, [startCall]);
 
   const hangUp = useCallback(() => { try { callRef.current?.disconnect(); } catch { /* noop */ } }, []);
   const toggleMute = useCallback(() => {
@@ -136,14 +166,36 @@ const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phone, l
 
   return (
     <>
-      <button
-        onClick={startCall}
-        disabled={active}
-        className={triggerClassName || DEFAULT_TRIGGER}
-      >
-        <PhoneIcon className="w-4 h-4" />
-        <span>{active ? 'On call…' : 'Call'}</span>
-      </button>
+      <div className="relative">
+        <button
+          onClick={handleTrigger}
+          disabled={active}
+          className={triggerClassName || DEFAULT_TRIGGER}
+        >
+          <PhoneIcon className="w-4 h-4" />
+          <span>{active ? 'On call…' : numbers.length > 1 ? 'Call…' : 'Call'}</span>
+        </button>
+
+        {pickerOpen && numbers.length > 1 && !active && (
+          <>
+            <div className="fixed inset-0 z-[110]" onClick={() => setPickerOpen(false)} />
+            <div className="absolute left-0 right-0 mt-2 z-[111] bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+              <p className="px-3 pt-2.5 pb-1 text-[10px] font-black text-slate-400 uppercase tracking-widest">Call which number?</p>
+              {numbers.map((n, i) => (
+                <button
+                  key={`${n}-${i}`}
+                  onClick={() => pickNumber(n)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                >
+                  <PhoneIcon className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="font-medium">{n}</span>
+                  {i === 0 && <span className="ml-auto text-[9px] font-bold text-slate-400 uppercase tracking-wide">Primary</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       {notConfigured && (
         <p className="mt-2 text-xs text-amber-600 font-medium">
@@ -162,7 +214,7 @@ const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phone, l
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-slate-900 truncate">{leadName || 'Lead'}</p>
-              <p className="text-xs text-slate-400 truncate">{toE164(phone)}</p>
+              <p className="text-xs text-slate-400 truncate">{activeNumber}</p>
             </div>
           </div>
 
