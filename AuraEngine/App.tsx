@@ -90,6 +90,7 @@ const ImageStudio = lazyWithRetry(() => import('./pages/portal/ImageStudio'));
 const ContentGen = lazyWithRetry(() => import('./pages/portal/ContentGen'));
 const BlogDrafts = lazyWithRetry(() => import('./pages/portal/BlogDrafts'));
 const AnalyticsPage = lazyWithRetry(() => import('./pages/portal/AnalyticsPage'));
+const CallsPage = lazyWithRetry(() => import('./pages/portal/CallsPage'));
 const AutomationPage = lazyWithRetry(() => import('./pages/portal/AutomationPage'));
 const BillingPage = lazyWithRetry(() => import('./pages/portal/BillingPage'));
 const HelpCenterPage = lazyWithRetry(() => import('./pages/portal/HelpCenterPage'));
@@ -364,6 +365,7 @@ const App: React.FC = () => {
             <Route path="strategy" element={<Navigate to="/portal/team-hub" replace />} />
             <Route path="blog" element={<BlogDrafts />} />
             <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="calls" element={<CallsPage />} />
             <Route path="automation" element={<AutomationPage />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="help" element={<HelpCenterPage />} />

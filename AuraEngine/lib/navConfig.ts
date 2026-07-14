@@ -3,7 +3,7 @@ import {
   Compass, Users, Send, GitBranch, BarChart3, Brain,
   Sparkles, PenSquare, MessageSquare, Plug, Mail,
   SlidersHorizontal, CreditCard, FileText, Settings, BookOpen,
-  HelpCircle, Zap, Target, Key, Webhook, Palette, Rocket,
+  HelpCircle, Zap, Target, Key, Webhook, Palette, Rocket, Phone,
 } from 'lucide-react';
 
 // ── Types ──
@@ -173,6 +173,14 @@ export const NAV_CONFIG: NavConfigItem[] = [
         order: 0,
       },
     ],
+  },
+  {
+    route: '/portal/calls',
+    navLabel: 'Calls',
+    pageTitle: 'Calls',
+    icon: Phone,
+    section: 'engage',
+    order: 2,
   },
 
   // ── Pillar 3 — CONVERT ──
