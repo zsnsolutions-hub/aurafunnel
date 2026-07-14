@@ -150,6 +150,7 @@ const eventTypeIcon = (type: string) => {
     case 'error': return 'bg-red-100 text-red-600';
     case 'call': return 'bg-emerald-100 text-emerald-600';
     case 'meeting': return 'bg-blue-100 text-blue-600';
+    case 'reply': return 'bg-indigo-100 text-indigo-600';
     default: return 'bg-slate-100 text-slate-600';
   }
 };
@@ -696,6 +697,20 @@ const LeadProfile: React.FC = () => {
         label: `Meeting — ${m.title}${m.status === 'cancelled' ? ' (cancelled)' : ''}`,
         type: 'meeting',
         detail: [when.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }), m.notes || ''].filter(Boolean).join(' · '),
+      });
+    }
+    // Inbound replies (unified inbox)
+    const { data: replies } = await supabase.from('inbound_emails')
+      .select('subject, body_text, body_html, received_at')
+      .eq('lead_id', lead.id)
+      .order('received_at', { ascending: false }).limit(50);
+    for (const r of (replies ?? []) as { subject: string | null; body_text: string | null; body_html: string | null; received_at: string }[]) {
+      const snippet = (r.body_text || (r.body_html ? r.body_html.replace(/<[^>]+>/g, ' ') : '') || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+      events.push({
+        date: new Date(r.received_at),
+        label: `Reply received${r.subject ? ` — ${r.subject}` : ''}`,
+        type: 'reply',
+        detail: snippet || undefined,
       });
     }
     events.sort((a, b) => b.date.getTime() - a.date.getTime());
