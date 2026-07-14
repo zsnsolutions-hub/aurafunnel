@@ -6,9 +6,10 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Inbox as InboxIcon, RefreshCw, ArrowRight, CornerUpLeft, Search, Mail } from 'lucide-react';
+import { Inbox as InboxIcon, RefreshCw, ArrowRight, Send, Search, Mail, Loader2 } from 'lucide-react';
 import type { User } from '../../types';
-import { listInbound, markInboundRead, inboundSenderName, type InboundEmail } from '../../lib/inbox';
+import { useToast } from '../../components/ui/Toast';
+import { listInbound, markInboundRead, sendReply, inboundSenderName, type InboundEmail } from '../../lib/inbox';
 
 interface LayoutContext { user: User }
 
@@ -24,12 +25,15 @@ const relTime = (iso: string): string => {
 const InboxPage: React.FC = () => {
   const { user } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [rows, setRows] = useState<InboundEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,11 +45,22 @@ const InboxPage: React.FC = () => {
   const open = useCallback(async (m: InboundEmail) => {
     const next = openId === m.id ? null : m.id;
     setOpenId(next);
+    setReplyBody('');
     if (next && !m.is_read) {
       setRows(prev => prev.map(r => r.id === m.id ? { ...r, is_read: true } : r));
       await markInboundRead(m.id, true);
     }
   }, [openId]);
+
+  const onSendReply = useCallback(async (m: InboundEmail) => {
+    setSending(true);
+    const res = await sendReply(m, replyBody);
+    setSending(false);
+    if (!res.ok) { toast(res.error || 'Reply failed', 'error'); return; }
+    toast(`Reply sent to ${inboundSenderName(m)}`, 'success');
+    setReplyBody('');
+    setOpenId(null);
+  }, [replyBody, toast]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -119,18 +134,25 @@ const InboxPage: React.FC = () => {
                   <div className="text-sm text-slate-700 whitespace-pre-wrap max-h-96 overflow-y-auto border border-slate-100 rounded-xl bg-white p-3">
                     {m.body_text || (m.body_html ? m.body_html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '(empty message)')}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <a href={`mailto:${m.from_email}?subject=${encodeURIComponent('Re: ' + (m.subject ?? ''))}`}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
-                      <CornerUpLeft className="w-3.5 h-3.5" /> Reply
-                    </a>
-                    {m.lead_id && (
-                      <button onClick={() => navigate(`/portal/leads/${m.lead_id}`)}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
-                        <ArrowRight className="w-3.5 h-3.5" /> Open lead
+                  {/* In-app reply */}
+                  <div className="space-y-2">
+                    <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)}
+                      placeholder={`Reply to ${inboundSenderName(m)}…`} rows={4}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-300 resize-y bg-white" />
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => onSendReply(m)} disabled={sending || !replyBody.trim()}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                        {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send reply
                       </button>
-                    )}
-                    {!m.lead_id && <span className="text-[11px] text-slate-400">Not matched to a lead</span>}
+                      {m.lead_id && (
+                        <button onClick={() => navigate(`/portal/leads/${m.lead_id}`)}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                          <ArrowRight className="w-3.5 h-3.5" /> Open lead
+                        </button>
+                      )}
+                      {!m.lead_id && <span className="text-[11px] text-slate-400">Not matched to a lead</span>}
+                    </div>
+                    <p className="text-[11px] text-slate-400">Sends from your connected sender and threads into the conversation.</p>
                   </div>
                 </div>
               )}

@@ -226,7 +226,8 @@ async function sendViaSmtp(
   from: string,
   subject: string,
   html: string,
-  creds: ProviderCreds
+  creds: ProviderCreds,
+  inReplyTo?: string
 ): Promise<{ success: boolean; providerMessageId?: string; error?: string }> {
   const host = creds.smtp_host;
   if (!host)
@@ -309,10 +310,13 @@ async function sendViaSmtp(
     await send("DATA");
 
     const boundary = `boundary-${crypto.randomUUID()}`;
+    // Thread the reply into the original conversation when replying.
+    const threadId = inReplyTo ? `<${inReplyTo.replace(/^<|>$/g, "")}>` : "";
     const message = [
       `From: ${fromDisplay}`,
       `To: ${to}`,
       `Subject: ${subject}`,
+      ...(threadId ? [`In-Reply-To: ${threadId}`, `References: ${threadId}`] : []),
       `MIME-Version: 1.0`,
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
       ``,
@@ -699,7 +703,8 @@ serve(async (req) => {
         senderEmail,
         subject,
         instrumentedHtml,
-        creds
+        creds,
+        body.in_reply_to
       );
     } else {
       sendResult = { success: true };
