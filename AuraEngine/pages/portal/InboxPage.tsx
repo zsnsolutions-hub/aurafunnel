@@ -4,11 +4,12 @@
 // message they replied to. Fed by the inbound-email webhook. Read a reply, jump
 // to the lead, or reply from your mail client.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Inbox as InboxIcon, RefreshCw, ArrowRight, Send, Search, Mail, Loader2 } from 'lucide-react';
 import type { User } from '../../types';
 import { useToast } from '../../components/ui/Toast';
+import RichReplyEditor, { type RichReplyHandle } from '../../components/portal/RichReplyEditor';
 import { listInbound, markInboundRead, sendReply, inboundSenderName, type InboundEmail } from '../../lib/inbox';
 
 interface LayoutContext { user: User }
@@ -32,8 +33,9 @@ const InboxPage: React.FC = () => {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [replyBody, setReplyBody] = useState('');
+  const [replyEmpty, setReplyEmpty] = useState(true);
   const [sending, setSending] = useState(false);
+  const editorRef = useRef<RichReplyHandle>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,7 +47,7 @@ const InboxPage: React.FC = () => {
   const open = useCallback(async (m: InboundEmail) => {
     const next = openId === m.id ? null : m.id;
     setOpenId(next);
-    setReplyBody('');
+    setReplyEmpty(true);
     if (next && !m.is_read) {
       setRows(prev => prev.map(r => r.id === m.id ? { ...r, is_read: true } : r));
       await markInboundRead(m.id, true);
@@ -53,14 +55,15 @@ const InboxPage: React.FC = () => {
   }, [openId]);
 
   const onSendReply = useCallback(async (m: InboundEmail) => {
+    const html = editorRef.current?.getHtml() ?? '';
     setSending(true);
-    const res = await sendReply(m, replyBody);
+    const res = await sendReply(m, html);
     setSending(false);
     if (!res.ok) { toast(res.error || 'Reply failed', 'error'); return; }
     toast(`Reply sent to ${inboundSenderName(m)}`, 'success');
-    setReplyBody('');
+    editorRef.current?.clear();
     setOpenId(null);
-  }, [replyBody, toast]);
+  }, [toast]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -131,16 +134,26 @@ const InboxPage: React.FC = () => {
               {isOpen && (
                 <div className="px-5 pb-4 pt-1 space-y-3 bg-slate-50/40">
                   <p className="text-[11px] text-slate-400">{m.from_name ? `${m.from_name} · ` : ''}{m.from_email}{m.to_email ? ` → ${m.to_email}` : ''}</p>
-                  <div className="text-sm text-slate-700 whitespace-pre-wrap max-h-96 overflow-y-auto border border-slate-100 rounded-xl bg-white p-3">
-                    {m.body_text || (m.body_html ? m.body_html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '(empty message)')}
-                  </div>
+                  {m.body_html ? (
+                    // Untrusted email HTML — isolate it: sandbox blocks scripts,
+                    // forms, same-origin access, and top-level navigation.
+                    <iframe
+                      title="Email body"
+                      sandbox=""
+                      srcDoc={`<!doctype html><meta name="color-scheme" content="light"><base target="_blank"><div style="font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#334155;padding:4px">${m.body_html}</div>`}
+                      className="w-full h-72 border border-slate-100 rounded-xl bg-white"
+                    />
+                  ) : (
+                    <div className="text-sm text-slate-700 whitespace-pre-wrap max-h-96 overflow-y-auto border border-slate-100 rounded-xl bg-white p-3">
+                      {m.body_text || '(empty message)'}
+                    </div>
+                  )}
                   {/* In-app reply */}
                   <div className="space-y-2">
-                    <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)}
-                      placeholder={`Reply to ${inboundSenderName(m)}…`} rows={4}
-                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-300 resize-y bg-white" />
+                    <RichReplyEditor ref={editorRef} placeholder={`Reply to ${inboundSenderName(m)}…`}
+                      onInput={() => setReplyEmpty(editorRef.current?.isEmpty() ?? true)} />
                     <div className="flex items-center gap-2">
-                      <button onClick={() => onSendReply(m)} disabled={sending || !replyBody.trim()}
+                      <button onClick={() => onSendReply(m)} disabled={sending || replyEmpty}
                         className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                         {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send reply
                       </button>
