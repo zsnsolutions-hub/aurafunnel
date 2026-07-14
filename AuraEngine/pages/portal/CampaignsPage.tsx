@@ -11,8 +11,8 @@ import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw } fro
 import type { User } from '../../types';
 import { useToast } from '../../components/ui/Toast';
 import {
-  listCampaigns, getSteps, getEnrolledCount, updateCampaign, addStep, updateStep, deleteStep,
-  deleteCampaign, launchCampaign, type Campaign, type CampaignStep, type CampaignStatus,
+  listCampaigns, getSteps, getEnrolledLeads, removeEnrollment, updateCampaign, addStep, updateStep, deleteStep,
+  deleteCampaign, launchCampaign, type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead,
 } from '../../lib/campaigns';
 
 interface LayoutContext { user: User }
@@ -115,15 +115,21 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, onClose, onChanged, t
   const [description, setDescription] = useState(campaign.description ?? '');
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
   const [steps, setSteps] = useState<CampaignStep[]>([]);
-  const [enrolled, setEnrolled] = useState<number | null>(null);
+  const [audience, setAudience] = useState<EnrolledLead[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
 
   const reload = useCallback(async () => {
     setSteps(await getSteps(campaign.id));
-    setEnrolled(await getEnrolledCount(campaign.id));
+    setAudience(await getEnrolledLeads(campaign.id));
   }, [campaign.id]);
   useEffect(() => { void reload(); }, [reload]);
+
+  const onRemoveLead = useCallback(async (e: EnrolledLead) => {
+    setAudience(prev => (prev ?? []).filter(a => a.enrollmentId !== e.enrollmentId));
+    await removeEnrollment(e.enrollmentId, campaign.id);
+    onChanged();
+  }, [campaign.id, onChanged]);
 
   const saveMeta = useCallback(async (patch: Partial<Pick<Campaign, 'name' | 'description' | 'status'>>) => {
     const err = await updateCampaign(campaign.id, patch);
@@ -195,13 +201,43 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, onClose, onChanged, t
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{enrolled ?? '…'} enrolled</span>
+                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{audience?.length ?? '…'} enrolled</span>
               </div>
               <select value={status} onChange={e => { const s = e.target.value as CampaignStatus; setStatus(s); void saveMeta({ status: s }); }}
                 className="px-2.5 py-1.5 text-xs font-bold border border-slate-200 rounded-lg capitalize outline-none focus:border-indigo-300">
                 {STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* Target audience */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">Target audience</h3>
+              <span className="text-[11px] text-slate-400">{audience?.length ?? 0} lead{(audience?.length ?? 0) !== 1 ? 's' : ''}</span>
+            </div>
+            {audience === null ? (
+              <p className="text-xs text-slate-400">Loading…</p>
+            ) : audience.length === 0 ? (
+              <p className="text-xs text-slate-400">No leads yet. Add them from the <span className="font-semibold">Leads</span> page → select leads → <span className="font-semibold">Add to campaign</span>.</p>
+            ) : (
+              <div className="border border-slate-200 rounded-xl divide-y divide-slate-50 max-h-56 overflow-y-auto">
+                {audience.map(a => (
+                  <div key={a.enrollmentId} className="flex items-center gap-3 px-3 py-2 group">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-800 truncate">{a.name}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{a.email}{a.company ? ` · ${a.company}` : ''}</p>
+                    </div>
+                    <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{a.status}</span>
+                    <button onClick={() => onRemoveLead(a)} title="Remove from campaign"
+                      className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[11px] text-slate-400">Add more from the Leads page — select leads and choose “Add to campaign”.</p>
           </div>
 
           {/* Steps */}

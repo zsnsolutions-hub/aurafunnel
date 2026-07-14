@@ -66,6 +66,40 @@ export async function getEnrolledCount(sequenceId: string): Promise<number> {
   return count ?? 0;
 }
 
+export interface EnrolledLead {
+  enrollmentId: string;
+  leadId: string;
+  name: string;
+  email: string;
+  company: string | null;
+  status: string;
+}
+
+/** The campaign's target audience — the leads enrolled in it. */
+export async function getEnrolledLeads(sequenceId: string): Promise<EnrolledLead[]> {
+  const { data } = await supabase.from('sequence_enrollments')
+    .select('id, lead_id, status, leads(first_name, last_name, primary_email, company)')
+    .eq('sequence_id', sequenceId)
+    .order('enrolled_at', { ascending: false });
+  type Row = { id: string; lead_id: string; status: string; leads: { first_name: string | null; last_name: string | null; primary_email: string | null; company: string | null } | null };
+  return ((data ?? []) as unknown as Row[]).map(r => ({
+    enrollmentId: r.id,
+    leadId: r.lead_id,
+    status: r.status,
+    name: [r.leads?.first_name, r.leads?.last_name].filter(Boolean).join(' ') || (r.leads?.primary_email ?? 'Unknown lead'),
+    email: r.leads?.primary_email ?? '',
+    company: r.leads?.company ?? null,
+  }));
+}
+
+/** Remove a lead from the campaign audience and keep total_leads in sync. */
+export async function removeEnrollment(enrollmentId: string, sequenceId: string): Promise<void> {
+  await supabase.from('sequence_enrollments').delete().eq('id', enrollmentId);
+  const { count } = await supabase.from('sequence_enrollments')
+    .select('id', { count: 'exact', head: true }).eq('sequence_id', sequenceId);
+  await supabase.from('email_sequences').update({ total_leads: count ?? 0 }).eq('id', sequenceId);
+}
+
 export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, 'name' | 'description' | 'status' | 'goal' | 'tone'>>): Promise<string | null> {
   const { error } = await supabase.from('email_sequences').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
   return error?.message ?? null;
