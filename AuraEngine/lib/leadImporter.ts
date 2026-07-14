@@ -18,6 +18,8 @@ export type DedupeStrategy = 'merge' | 'overwrite' | 'skip';
 export interface ImportOptions {
   dedupe_strategy: DedupeStrategy;
   plan_name: string;
+  /** Business to attribute imported leads to (read by import_leads_batch). */
+  business_id?: string;
 }
 
 export interface ImportResult {

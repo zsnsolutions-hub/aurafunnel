@@ -192,7 +192,7 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
         userId,
         mapping,
         parsedFile.rows,
-        { dedupe_strategy: dedupe, plan_name: planName },
+        { dedupe_strategy: dedupe, plan_name: planName, business_id: activeBusinessId() ?? undefined },
         parsedFile.fileName,
         parsedFile.fileType,
       );
