@@ -123,6 +123,14 @@ const getScoreAction = (score: number): { tier: string; color: string; actions: 
 };
 
 const ALL_TAGS: LeadTag[] = ['Hot Lead', 'Cold', 'Nurturing', 'Enterprise', 'Critical', 'Warm'];
+
+// A lead's effective tags: the manually-applied tags when present, otherwise the
+// single score/status-derived tag. Manual tags win so a lead you tag "Hot Lead"
+// shows and filters as Hot Lead regardless of its score.
+const leadTagsOf = (lead: Lead): LeadTag[] => {
+  const manual = ((lead.tags ?? []) as string[]).filter((t): t is LeadTag => (ALL_TAGS as string[]).includes(t));
+  return manual.length ? manual : [getLeadTag(lead)];
+};
 const STATUS_OPTIONS: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted', 'Lost'];
 const PIPELINE_STAGES: Lead['status'][] = ['New', 'Contacted', 'Qualified', 'Converted'];
 const STAGE_COLORS: Record<Lead['status'], { dot: string; active: string }> = {
@@ -351,7 +359,7 @@ const LeadManagement: React.FC = () => {
         return true;
       });
     }
-    if (tagFilter.size > 0) result = result.filter(l => tagFilter.has(getLeadTag(l)));
+    if (tagFilter.size > 0) result = result.filter(l => leadTagsOf(l).some(t => tagFilter.has(t)));
     if (emailEngagementFilter.size > 0) {
       result = result.filter(l => {
         const summary = emailSummaryMap.get(l.id);
@@ -997,14 +1005,24 @@ const LeadManagement: React.FC = () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     setBulkActionOpen(null);
-    const withTag = (l: Lead) => Array.from(new Set([...(((l as { tags?: string[] }).tags) ?? []), bulkTag]));
+    const withTag = (l: Lead) => Array.from(new Set([...(l.tags ?? []), bulkTag]));
     try {
-      await Promise.all(ids.map(id => {
+      // supabase.update resolves with { error } rather than throwing, so check
+      // each result — otherwise a DB failure looks like success.
+      const results = await Promise.all(ids.map(id => {
         const lead = allLeads.find(l => l.id === id);
-        return lead ? supabase.from('leads').update({ tags: withTag(lead) }).eq('id', id) : Promise.resolve();
+        return lead
+          ? supabase.from('leads').update({ tags: withTag(lead) }).eq('id', id)
+          : Promise.resolve({ error: null });
       }));
-      setAllLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, tags: withTag(l) } : l));
-      toast(`Tagged ${ids.length} lead${ids.length > 1 ? 's' : ''} "${bulkTag}"`, 'success');
+      const failed = results.filter(r => (r as { error: unknown }).error).length;
+      if (failed === ids.length) {
+        const msg = (results.find(r => (r as { error: { message?: string } }).error) as { error?: { message?: string } })?.error?.message;
+        toast(msg || 'Bulk tag failed', 'error');
+      } else {
+        setAllLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, tags: withTag(l) } : l));
+        toast(`Tagged ${ids.length - failed} lead${ids.length - failed !== 1 ? 's' : ''} "${bulkTag}"${failed ? ` (${failed} failed)` : ''}`, failed ? 'warning' : 'success');
+      }
     } catch (e) {
       toast((e as Error).message || 'Bulk tag failed', 'error');
     }
@@ -2099,7 +2117,7 @@ const LeadManagement: React.FC = () => {
                       {leads.length === 0 ? (
                         <p className="text-xs text-slate-400 italic text-center py-8">No leads</p>
                       ) : leads.map(lead => {
-                        const tag = getLeadTag(lead);
+                        const tag = leadTagsOf(lead)[0];
                         const nextStage = getNextStage(lead.status);
                         return (
                           <div
@@ -2220,7 +2238,7 @@ const LeadManagement: React.FC = () => {
                       </td>
                     </tr>
                   ) : paginatedLeads.map((lead, idx) => {
-                    const tag = getLeadTag(lead);
+                    const tag = leadTagsOf(lead)[0];
                     const isFocused = idx === focusedIndex;
                     return (
                       <tr key={lead.id} className={`hover:bg-slate-50/80 transition-colors group ${isFocused ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200' : ''}`}>

@@ -166,6 +166,7 @@ export interface Lead {
   knowledgeBase?: KnowledgeBase;
   emails?: string[];
   phones?: string[];
+  tags?: string[];
   linkedin_url?: string;
   location?: string;
   title?: string;

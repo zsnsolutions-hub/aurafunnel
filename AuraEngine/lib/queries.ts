@@ -7,7 +7,7 @@ import { useCurrentBusiness } from '../components/business/BusinessProvider';
 import { scopeLeads, scopeKey } from './businessScope';
 
 // Canonical columns used by the app — avoids SELECT *
-const LEAD_COLUMNS = 'id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,linkedin_url,location,title,industry,company_size,source,import_batch_id,imported_at,custom_fields' as const;
+const LEAD_COLUMNS = 'id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,tags,linkedin_url,location,title,industry,company_size,source,import_batch_id,imported_at,custom_fields' as const;
 
 /** Normalize DB rows → Lead objects with canonical + computed legacy aliases */
 export function normalizeLeads(rows: Record<string, unknown>[]): Lead[] {
