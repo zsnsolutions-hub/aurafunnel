@@ -5,7 +5,7 @@ import { resolvePlanName, TIER_LIMITS } from './credits';
 
 export type LeadField =
   | 'full_name' | 'first_name' | 'last_name'
-  | 'primary_email' | 'primary_phone'
+  | 'primary_email' | 'additional_emails' | 'primary_phone'
   | 'company' | 'linkedin_url' | 'title' | 'location'
   | 'source' | 'industry' | 'company_size' | 'insights';
 
@@ -47,8 +47,8 @@ const AUTO_MAP_RULES: [RegExp, LeadField | `custom:${string}`][] = [
   [/^(first[\s_-]?name|given[\s_-]?name|fname)$/i, 'first_name'],
   [/^(last[\s_-]?name|surname|family[\s_-]?name|lname)$/i, 'last_name'],
 
-  // Email
-  [/^(email|e[\s_-]?mail|email[\s_-]?address|work[\s_-]?email|primary[\s_-]?email)$/i, 'primary_email'],
+  // Email is handled specially in autoMapColumns (first → primary, rest →
+  // additional_emails), so it is intentionally NOT in this generic table.
 
   // Phone
   [/^(phone|phone[\s_-]?number|mobile|tel|telephone|work[\s_-]?phone|direct[\s_-]?phone|primary[\s_-]?phone)$/i, 'primary_phone'],
@@ -78,14 +78,29 @@ const AUTO_MAP_RULES: [RegExp, LeadField | `custom:${string}`][] = [
   [/^(notes|insights|description|comments|remarks)$/i, 'insights'],
 ];
 
+// A "main" email column vs an "extra" one. Any extra always → additional_emails;
+// a main one → primary_email for the FIRST such column (in CSV order), then
+// additional_emails for the rest, so the primary is deterministic.
+const EMAIL_PRIMARY_RE = /^(email|e[\s_-]?mail|email[\s_-]?address|work[\s_-]?email|business[\s_-]?email|primary[\s_-]?email)$/i;
+const EMAIL_EXTRA_RE = /^(email[\s_-]?\d+|email[\s_-]?address[\s_-]?\d+|secondary[\s_-]?email|other[\s_-]?email|personal[\s_-]?email|home[\s_-]?email|alt(?:ernate)?[\s_-]?email|additional[\s_-]?emails?)$/i;
+
 /** Auto-detect column mappings from CSV/XLSX headers. */
 export function autoMapColumns(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {};
   const usedFields = new Set<string>();
+  let primaryEmailTaken = false;
 
   for (const header of headers) {
     const trimmed = header.trim();
     if (!trimmed) continue;
+
+    // Emails first (multiple columns allowed → additional_emails).
+    if (EMAIL_EXTRA_RE.test(trimmed)) { mapping[trimmed] = 'additional_emails'; continue; }
+    if (EMAIL_PRIMARY_RE.test(trimmed)) {
+      mapping[trimmed] = primaryEmailTaken ? 'additional_emails' : 'primary_email';
+      primaryEmailTaken = true;
+      continue;
+    }
 
     let matched = false;
     for (const [pattern, field] of AUTO_MAP_RULES) {
@@ -203,6 +218,7 @@ export const CORE_FIELDS: { value: LeadField; label: string }[] = [
   { value: 'first_name', label: 'First Name' },
   { value: 'last_name', label: 'Last Name' },
   { value: 'primary_email', label: 'Email' },
+  { value: 'additional_emails', label: 'Additional Email(s)' },
   { value: 'primary_phone', label: 'Phone' },
   { value: 'company', label: 'Company' },
   { value: 'linkedin_url', label: 'LinkedIn URL' },

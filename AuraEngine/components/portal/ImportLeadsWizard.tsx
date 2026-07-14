@@ -145,7 +145,9 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
   const assignedFields = useMemo(() => {
     const set = new Set<string>();
     for (const v of Object.values(mapping)) {
-      if (v !== 'skip') set.add(v);
+      // additional_emails is intentionally multi-column (all extra emails are
+      // collected into the lead's emails[]), so it never counts as "used".
+      if (v !== 'skip' && v !== 'additional_emails') set.add(v);
     }
     return set;
   }, [mapping]);
@@ -154,6 +156,7 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
     const seen = new Set<string>();
     for (const v of Object.values(mapping)) {
       if (v === 'skip') continue;
+      if (v === 'additional_emails') continue; // may repeat — merged into emails[]
       if (v.startsWith('custom:')) continue; // custom fields can repeat labels but are unique by name
       if (seen.has(v)) return true;
       seen.add(v);
