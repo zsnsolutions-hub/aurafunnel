@@ -62,8 +62,15 @@ function buildPrompt(
     `Company: ${item.lead_company || "Unknown"}`,
     ctx?.title ? `Title: ${ctx.title}` : null,
     ctx?.industry ? `Industry: ${ctx.industry}` : null,
+    ctx?.company_size ? `Company Size: ${ctx.company_size}` : null,
+    ctx?.location ? `Location: ${ctx.location}` : null,
+    ctx?.website ? `Website: ${ctx.website}` : null,
+    ctx?.linkedin ? `LinkedIn: ${ctx.linkedin}` : null,
+    ctx?.source ? `Lead Source: ${ctx.source}` : null,
     ctx?.score != null ? `Lead Score: ${ctx.score}/100` : null,
     ctx?.insights ? `Insights: ${ctx.insights}` : null,
+    ctx?.custom_fields && Object.keys(ctx.custom_fields as Record<string, unknown>).length
+      ? `Custom Fields: ${JSON.stringify(ctx.custom_fields).slice(0, 400)}` : null,
     ctx?.knowledgeBase
       ? `Additional Context: ${JSON.stringify(ctx.knowledgeBase).slice(0, 500)}`
       : null,
@@ -77,9 +84,11 @@ function buildPrompt(
     `SEQUENCE POSITION: Step ${(item.step_index as number) + 1}\n\n` +
     `INSTRUCTIONS:\n` +
     `- Personalize the subject line to reference the prospect's company, role, or industry\n` +
-    `- Adapt the body to show you've researched the prospect\n` +
-    `- Keep the core message and CTA from the template\n` +
-    `- If this is a follow-up step (step 2+), reference the previous email naturally\n` +
+    `- Open with a specific, researched observation using the details above (their role, industry, location, company size, website/LinkedIn, or lead source) — not a generic greeting\n` +
+    `- Adapt the body to show you've genuinely researched the prospect; weave in 1-2 concrete details naturally (never dump a list)\n` +
+    `- Keep the core message and CTA from the template; end with one clear, low-friction call to action\n` +
+    `- If this is a follow-up step (step 2+), reference the previous email naturally and add a fresh angle\n` +
+    `- Sound human and specific, not templated; avoid filler and clichés\n` +
     `- Return ONLY valid JSON with keys "subject" (string) and "body_html" (string with HTML)`;
 
   return { systemInstruction, userPrompt };

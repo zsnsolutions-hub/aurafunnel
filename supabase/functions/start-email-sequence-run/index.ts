@@ -18,6 +18,13 @@ interface LeadInput {
   knowledgeBase?: Record<string, unknown>;
   industry?: string;
   title?: string;
+  location?: string;
+  website?: string;
+  linkedin?: string;
+  source?: string;
+  company_size?: string;
+  phone?: string;
+  custom_fields?: Record<string, unknown>;
 }
 
 interface StepInput {
@@ -29,7 +36,7 @@ interface StepInput {
 
 // Mail-merge: substitute {{field}} tokens from the lead. Known tokens get sensible
 // fallbacks; unknown tokens are left untouched.
-function mergeFields(tpl: string, lead: { name?: string; company?: string; title?: string; industry?: string; email?: string }, fromName: string): string {
+function mergeFields(tpl: string, lead: LeadInput, fromName: string): string {
   const first = (lead.name || "").trim().split(/\s+/)[0] || "there";
   const map: Record<string, string> = {
     first_name: first,
@@ -39,11 +46,21 @@ function mergeFields(tpl: string, lead: { name?: string; company?: string; title
     company: lead.company || "your company",
     title: lead.title || "",
     industry: lead.industry || "",
+    location: lead.location || "",
+    website: lead.website || "",
+    linkedin: lead.linkedin || "",
+    source: lead.source || "",
+    company_size: lead.company_size || "",
     email: lead.email || "",
+    phone: lead.phone || "",
     your_name: fromName,
   };
-  return (tpl || "").replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (m, k) => {
+  return (tpl || "").replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (m, k) => {
     const key = String(k).toLowerCase();
+    if (key.startsWith("custom.")) {
+      const v = lead.custom_fields?.[key.slice(7)];
+      return v == null ? "" : String(v);
+    }
     return key in map ? map[key] : m;
   });
 }
@@ -207,6 +224,12 @@ serve(async (req) => {
             knowledgeBase: lead.knowledgeBase,
             industry: lead.industry,
             title: lead.title,
+            location: lead.location,
+            website: lead.website,
+            linkedin: lead.linkedin,
+            source: lead.source,
+            company_size: lead.company_size,
+            custom_fields: lead.custom_fields,
           },
           template_subject: step.subject,
           template_body: step.body,

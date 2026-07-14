@@ -5,9 +5,9 @@
 // campaigns were created (e.g. from Leads → "Create campaign") but had no
 // surface to view or launch.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw, Search, UserPlus, Eye } from 'lucide-react';
+import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw, Search, UserPlus, Eye, Braces, ChevronUp, ChevronDown, Copy } from 'lucide-react';
 import type { User } from '../../types';
 import { useToast } from '../../components/ui/Toast';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
@@ -15,6 +15,7 @@ import { supabase } from '../../lib/supabase';
 import {
   listCampaigns, getSteps, getEnrolledLeads, removeEnrollment, updateCampaign, addStep, updateStep, deleteStep,
   deleteCampaign, launchCampaign, searchLeadsForCampaign, addLeadToCampaign, previewStepForLead, previewVerbatimForLead,
+  MERGE_FIELDS,
   type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead, type LeadHit,
 } from '../../lib/campaigns';
 
@@ -217,6 +218,45 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
     else setPreviews(prev => ({ ...prev, [step.id]: { subject: res.subject, body_html: res.body_html } }));
   }, [previewLeadId, campaign, aiPersonalize, toast]);
 
+  const onPreviewAll = useCallback(() => { steps.forEach(s => void onPreview(s)); }, [steps, onPreview]);
+
+  // Insert a {{field}} token at the caret of the last-focused subject/body input.
+  const focusRef = useRef<{ id: string; field: 'subject' | 'body_html'; el: HTMLInputElement | HTMLTextAreaElement } | null>(null);
+  const [fieldMenuStep, setFieldMenuStep] = useState<string | null>(null);
+  const insertToken = useCallback((s: CampaignStep, token: string) => {
+    setFieldMenuStep(null);
+    const f = focusRef.current && focusRef.current.id === s.id ? focusRef.current : null;
+    if (f?.el) {
+      const el = f.el;
+      const start = el.selectionStart ?? el.value.length, end = el.selectionEnd ?? start;
+      const val = el.value.slice(0, start) + token + el.value.slice(end);
+      patchLocalStep(s.id, { [f.field]: val } as Partial<CampaignStep>);
+      void onStepBlur(s.id, { [f.field]: val } as Partial<CampaignStep>);
+      requestAnimationFrame(() => { el.focus(); const p = start + token.length; el.setSelectionRange(p, p); });
+    } else {
+      const val = `${s.body_html}${s.body_html && !s.body_html.endsWith(' ') ? ' ' : ''}${token}`;
+      patchLocalStep(s.id, { body_html: val });
+      void onStepBlur(s.id, { body_html: val });
+    }
+  }, [onStepBlur]);
+
+  const onDuplicateStep = useCallback(async (s: CampaignStep) => {
+    setBusy(true);
+    const next = (steps[steps.length - 1]?.step_number ?? 0) + 1;
+    const created = await addStep(campaign.id, { subject: s.subject, body_html: s.body_html, delay_days: s.delay_days, step_number: next });
+    setBusy(false);
+    if (created) { setSteps(prev => [...prev, created]); onChanged(); } else toast('Could not duplicate step', 'error');
+  }, [campaign.id, steps, onChanged, toast]);
+
+  const onMoveStep = useCallback(async (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= steps.length) return;
+    const a = steps[idx], b = steps[j];
+    // Swap their step_number and reorder locally.
+    setSteps(prev => { const arr = [...prev]; [arr[idx], arr[j]] = [arr[j], arr[idx]]; return arr; });
+    await Promise.all([updateStep(a.id, { step_number: b.step_number }), updateStep(b.id, { step_number: a.step_number })]);
+  }, [steps]);
+
   const onSend = useCallback(async () => {
     if (!confirm(`Start sending "${name}" to its enrolled leads now?`)) return;
     setSending(true);
@@ -345,10 +385,17 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-800">Email steps</h3>
-              <button onClick={onAddStep} disabled={busy}
-                className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
-                <Plus className="w-3.5 h-3.5" /> Add step
-              </button>
+              <div className="flex items-center gap-3">
+                {steps.length > 0 && (
+                  <button onClick={onPreviewAll} className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-indigo-600">
+                    <Eye className="w-3.5 h-3.5" /> Preview all
+                  </button>
+                )}
+                <button onClick={onAddStep} disabled={busy}
+                  className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
+                  <Plus className="w-3.5 h-3.5" /> Add step
+                </button>
+              </div>
             </div>
             <p className="text-[11px] text-slate-400 -mt-1">
               {aiPersonalize
@@ -368,9 +415,13 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
             {steps.map((s, i) => (
               <div key={s.id} className="border border-slate-200 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Step {i + 1}</span>
-                  <div className="flex items-center gap-2">
-                    <label className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Step {i + 1}</span>
+                    <button onClick={() => onMoveStep(i, -1)} disabled={i === 0} title="Move up" className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => onMoveStep(i, 1)} disabled={i === steps.length - 1} title="Move down" className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-[11px] text-slate-500 flex items-center gap-1 mr-1">
                       wait
                       <input type="number" min={0} value={s.delay_days}
                         onChange={e => patchLocalStep(s.id, { delay_days: Math.max(0, parseInt(e.target.value || '0', 10)) })}
@@ -378,19 +429,42 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                         className="w-14 px-2 py-1 text-xs border border-slate-200 rounded-md" />
                       days
                     </label>
+                    <div className="relative">
+                      <button onClick={() => setFieldMenuStep(fieldMenuStep === s.id ? null : s.id)} title="Insert field"
+                        className="p-1 text-slate-400 hover:text-indigo-600"><Braces className="w-3.5 h-3.5" /></button>
+                      {fieldMenuStep === s.id && (
+                        <>
+                          <div className="fixed inset-0 z-[121]" onClick={() => setFieldMenuStep(null)} />
+                          <div className="absolute right-0 mt-1 z-[122] w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1 max-h-64 overflow-y-auto">
+                            <p className="px-3 py-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Insert field</p>
+                            {MERGE_FIELDS.map(f => (
+                              <button key={f.token} onClick={() => insertToken(s, f.token)}
+                                className="w-full flex items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-indigo-50">
+                                <span className="text-slate-700">{f.label}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{f.token.replace(/[{}]/g, '')}</span>
+                              </button>
+                            ))}
+                            <p className="px-3 py-1.5 text-[10px] text-slate-400 border-t border-slate-50 mt-1">Custom: <span className="font-mono">{'{{custom.key}}'}</span></p>
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <button onClick={() => onPreview(s)} disabled={previews[s.id]?.loading} title="Preview for the selected lead"
                       className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-50">
                       {previews[s.id]?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
-                    <button onClick={() => onDeleteStep(s.id)} className="p-1 text-slate-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => onDuplicateStep(s)} disabled={busy} title="Duplicate step" className="p-1 text-slate-300 hover:text-slate-600 disabled:opacity-50"><Copy className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => onDeleteStep(s.id)} title="Delete step" className="p-1 text-slate-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
                 <input value={s.subject} placeholder="Subject line"
                   onChange={e => patchLocalStep(s.id, { subject: e.target.value })}
+                  onFocus={e => { focusRef.current = { id: s.id, field: 'subject', el: e.target }; }}
                   onBlur={() => onStepBlur(s.id, { subject: s.subject })}
                   className="w-full px-3 py-2 text-sm font-medium border border-slate-200 rounded-lg outline-none focus:border-indigo-300" />
                 <textarea value={s.body_html} placeholder={aiPersonalize ? 'Write the gist — the AI personalizes it per lead. {{first_name}}, {{company}} are hints.' : 'Write the exact email. {{first_name}}, {{company}} are filled per lead.'}
                   onChange={e => patchLocalStep(s.id, { body_html: e.target.value })}
+                  onFocus={e => { focusRef.current = { id: s.id, field: 'body_html', el: e.target }; }}
                   onBlur={() => onStepBlur(s.id, { body_html: s.body_html })}
                   rows={5}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-300 resize-y" />

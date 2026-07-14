@@ -25,16 +25,44 @@ export interface Campaign {
   step_count?: number;
 }
 
+interface MergeLead {
+  name?: string; company?: string; title?: string; industry?: string; location?: string;
+  website?: string; linkedin?: string; source?: string; company_size?: string; email?: string;
+  phone?: string; custom_fields?: Record<string, unknown> | null;
+}
+
 // Mail-merge (client mirror of the server mergeFields in start-email-sequence-run).
-const mergeClient = (tpl: string, lead: { name?: string; company?: string; title?: string; industry?: string }): string => {
+const mergeClient = (tpl: string, lead: MergeLead): string => {
   const first = (lead.name || '').trim().split(/\s+/)[0] || 'there';
   const map: Record<string, string> = {
     first_name: first, last_name: (lead.name || '').trim().split(/\s+/).slice(1).join(' '),
     name: lead.name || 'there', full_name: lead.name || 'there',
-    company: lead.company || 'your company', title: lead.title || '', industry: lead.industry || '', your_name: '',
+    company: lead.company || 'your company', title: lead.title || '', industry: lead.industry || '',
+    location: lead.location || '', website: lead.website || '', linkedin: lead.linkedin || '',
+    source: lead.source || '', company_size: lead.company_size || '', email: lead.email || '', phone: lead.phone || '', your_name: '',
   };
-  return (tpl || '').replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (m, k) => (String(k).toLowerCase() in map ? map[String(k).toLowerCase()] : m));
+  return (tpl || '').replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (m, k) => {
+    const key = String(k).toLowerCase();
+    if (key.startsWith('custom.')) { const v = lead.custom_fields?.[key.slice(7)]; return v == null ? '' : String(v); }
+    return key in map ? map[key] : m;
+  });
 };
+
+/** Available merge fields for the editor's field picker. */
+export const MERGE_FIELDS: { token: string; label: string }[] = [
+  { token: '{{first_name}}', label: 'First name' },
+  { token: '{{last_name}}', label: 'Last name' },
+  { token: '{{company}}', label: 'Company' },
+  { token: '{{title}}', label: 'Job title' },
+  { token: '{{industry}}', label: 'Industry' },
+  { token: '{{location}}', label: 'Location' },
+  { token: '{{website}}', label: 'Website' },
+  { token: '{{linkedin}}', label: 'LinkedIn' },
+  { token: '{{source}}', label: 'Lead source' },
+  { token: '{{company_size}}', label: 'Company size' },
+  { token: '{{phone}}', label: 'Phone' },
+  { token: '{{your_name}}', label: 'Your name' },
+];
 const nl2br = (s: string): string => /<(p|br|div|ul|ol|table|a|strong|em|span|h[1-6])\b/i.test(s || '') ? (s || '') : (s || '').replace(/\n/g, '<br>');
 
 export interface CampaignStep {
@@ -194,9 +222,17 @@ async function getMyBusinessProfile(): Promise<Record<string, unknown> | undefin
 /** Verbatim/mail-merge preview — deterministic {{field}} substitution, no AI. */
 export async function previewVerbatimForLead(step: CampaignStep, leadId: string): Promise<{ subject: string; body_html: string } | { error: string }> {
   const { data: lead } = await supabase.from('leads')
-    .select('first_name, last_name, company, title, industry').eq('id', leadId).single();
+    .select('first_name, last_name, company, title, industry, location, website, linkedin_url, source, company_size, primary_phone, primary_email, custom_fields')
+    .eq('id', leadId).single();
   if (!lead) return { error: 'Lead not found.' };
-  const l = { name: [lead.first_name, lead.last_name].filter(Boolean).join(' '), company: lead.company ?? undefined, title: lead.title ?? undefined, industry: lead.industry ?? undefined };
+  const l: MergeLead = {
+    name: [lead.first_name, lead.last_name].filter(Boolean).join(' '),
+    company: lead.company ?? undefined, title: lead.title ?? undefined, industry: lead.industry ?? undefined,
+    location: lead.location ?? undefined, website: lead.website ?? undefined, linkedin: lead.linkedin_url ?? undefined,
+    source: lead.source ?? undefined, company_size: lead.company_size ?? undefined,
+    phone: lead.primary_phone ?? undefined, email: lead.primary_email ?? undefined,
+    custom_fields: (lead.custom_fields as Record<string, unknown> | null) ?? undefined,
+  };
   return { subject: mergeClient(step.subject, l), body_html: nl2br(mergeClient(step.body_html, l)) };
 }
 
@@ -208,7 +244,7 @@ export async function previewStepForLead(
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return { error: 'Session expired — please sign in again.' };
   const { data: lead } = await supabase.from('leads')
-    .select('first_name, last_name, company, title, industry, score, insights, knowledgeBase')
+    .select('first_name, last_name, company, title, industry, score, insights, knowledgeBase, location, website, linkedin_url, source, company_size, custom_fields')
     .eq('id', leadId).single();
   if (!lead) return { error: 'Lead not found.' };
 
@@ -222,6 +258,8 @@ export async function previewStepForLead(
         name: [lead.first_name, lead.last_name].filter(Boolean).join(' '),
         company: lead.company, title: lead.title, industry: lead.industry,
         score: lead.score, insights: lead.insights, knowledgeBase: lead.knowledgeBase,
+        location: lead.location, website: lead.website, linkedin: lead.linkedin_url,
+        source: lead.source, company_size: lead.company_size, custom_fields: lead.custom_fields,
       },
       config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', businessProfile },
     }),
@@ -237,7 +275,7 @@ export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; to
   if (steps.length === 0) return { ok: false, error: 'Add at least one email step before sending.' };
 
   const { data: enr } = await supabase.from('sequence_enrollments')
-    .select('lead_id, leads(id, primary_email, first_name, last_name, company, score, status, insights, industry, title)')
+    .select('lead_id, leads(id, primary_email, first_name, last_name, company, score, status, insights, industry, title, location, website, linkedin_url, source, company_size, primary_phone, custom_fields, knowledgeBase)')
     .eq('sequence_id', campaign.id);
   const leads = (enr ?? [])
     .map(e => (e as unknown as { leads: Record<string, unknown> | null }).leads)
@@ -247,6 +285,9 @@ export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; to
       name: [l.first_name, l.last_name].filter(Boolean).join(' '),
       company: l.company, score: l.score, status: l.status,
       insights: l.insights, industry: l.industry, title: l.title,
+      location: l.location, website: l.website, linkedin: l.linkedin_url,
+      source: l.source, company_size: l.company_size, phone: l.primary_phone,
+      custom_fields: l.custom_fields, knowledgeBase: l.knowledgeBase,
     }));
   if (leads.length === 0) return { ok: false, error: 'No enrolled leads with a valid email.' };
 
