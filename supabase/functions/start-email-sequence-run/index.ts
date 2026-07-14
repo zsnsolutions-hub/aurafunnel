@@ -31,6 +31,7 @@ interface StepInput {
   stepIndex: number;
   delayDays: number;
   subject: string;
+  subjectVariants?: string[];
   body: string;
 }
 
@@ -190,6 +191,7 @@ serve(async (req) => {
           businessProfile: config.businessProfile,
           sendMode: config.sendMode,
           campaignId: (config as { campaignId?: string }).campaignId,
+          sendWindow: (config as { sendWindow?: unknown }).sendWindow,
         },
         started_at: new Date().toISOString(),
       })
@@ -206,10 +208,15 @@ serve(async (req) => {
     const aiPersonalize = (config as { aiPersonalize?: boolean }).aiPersonalize !== false;
     const fromName = (config as { fromName?: string }).fromName || "";
 
-    // Batch-insert all items (lead × step)
+    // Batch-insert all items (lead × step). Subject variants (A/B) rotate across
+    // leads so each variant gets an even share.
     const items = [];
+    let leadIndex = 0;
     for (const lead of leads) {
       for (const step of steps) {
+        const variants = [step.subject, ...(step.subjectVariants ?? [])].filter(v => (v ?? "").trim());
+        const vIdx = variants.length > 1 ? leadIndex % variants.length : 0;
+        const chosenSubject = variants[vIdx] ?? step.subject;
         const base = {
           run_id: run.id,
           lead_id: lead.id,
@@ -231,10 +238,11 @@ serve(async (req) => {
             company_size: lead.company_size,
             custom_fields: lead.custom_fields,
           },
-          template_subject: step.subject,
+          template_subject: chosenSubject,
           template_body: step.body,
           delay_days: step.delayDays,
           attempt_count: 0,
+          subject_variant: vIdx,
         };
         if (aiPersonalize) {
           items.push({ ...base, status: "pending" });
@@ -242,11 +250,12 @@ serve(async (req) => {
           items.push({
             ...base,
             status: "written",
-            ai_subject: mergeFields(step.subject, lead, fromName),
+            ai_subject: mergeFields(chosenSubject, lead, fromName),
             ai_body_html: nl2brHtml(mergeFields(step.body, lead, fromName)),
           });
         }
       }
+      leadIndex++;
     }
 
     // Insert in chunks of 500 to avoid payload limits

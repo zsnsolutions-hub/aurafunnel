@@ -121,6 +121,17 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const [description, setDescription] = useState(campaign.description ?? '');
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
   const [aiPersonalize, setAiPersonalize] = useState(campaign.ai_personalize);
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const [winOn, setWinOn] = useState(campaign.send_window_start != null);
+  const [winStart, setWinStart] = useState(campaign.send_window_start ?? 9);
+  const [winEnd, setWinEnd] = useState(campaign.send_window_end ?? 17);
+  const [winWeekdays, setWinWeekdays] = useState(campaign.send_weekdays_only);
+  const [winTz, setWinTz] = useState(campaign.send_timezone ?? browserTz);
+  const persistWindow = useCallback((on: boolean, start: number, end: number, weekdays: boolean, tz: string) => {
+    void updateCampaign(campaign.id, on
+      ? { send_window_start: start, send_window_end: end, send_weekdays_only: weekdays, send_timezone: tz }
+      : { send_window_start: null, send_window_end: null }).then(() => onChanged());
+  }, [campaign.id, onChanged]);
   const [steps, setSteps] = useState<CampaignStep[]>([]);
   const [audience, setAudience] = useState<EnrolledLead[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -240,10 +251,22 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
     }
   }, [onStepBlur]);
 
+  // A/B subject variants (the main subject is variant A).
+  const setVariants = useCallback((s: CampaignStep, variants: string[]) => {
+    patchLocalStep(s.id, { subject_variants: variants });
+    void onStepBlur(s.id, { subject_variants: variants.map(v => v.trim()).filter(Boolean) });
+  }, [onStepBlur]);
+  const addVariant = useCallback((s: CampaignStep) => setVariants(s, [...(s.subject_variants ?? []), '']), [setVariants]);
+  const patchVariant = useCallback((s: CampaignStep, idx: number, val: string) => {
+    const arr = [...(s.subject_variants ?? [])]; arr[idx] = val; patchLocalStep(s.id, { subject_variants: arr });
+  }, []);
+  const blurVariant = useCallback((s: CampaignStep) => onStepBlur(s.id, { subject_variants: (s.subject_variants ?? []).map(v => v.trim()).filter(Boolean) }), [onStepBlur]);
+  const removeVariant = useCallback((s: CampaignStep, idx: number) => setVariants(s, (s.subject_variants ?? []).filter((_, i) => i !== idx)), [setVariants]);
+
   const onDuplicateStep = useCallback(async (s: CampaignStep) => {
     setBusy(true);
     const next = (steps[steps.length - 1]?.step_number ?? 0) + 1;
-    const created = await addStep(campaign.id, { subject: s.subject, body_html: s.body_html, delay_days: s.delay_days, step_number: next });
+    const created = await addStep(campaign.id, { subject: s.subject, body_html: s.body_html, delay_days: s.delay_days, step_number: next, subject_variants: s.subject_variants });
     setBusy(false);
     if (created) { setSteps(prev => [...prev, created]); onChanged(); } else toast('Could not duplicate step', 'error');
   }, [campaign.id, steps, onChanged, toast]);
@@ -323,6 +346,47 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                 title="Toggle AI personalization">
                 <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${aiPersonalize ? 'left-6' : 'left-1'}`} />
               </button>
+            </div>
+
+            {/* Send window */}
+            <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="pr-2">
+                  <p className="text-xs font-bold text-slate-800">Send only during set hours</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Hold emails until they're inside this window (checked every minute).</p>
+                </div>
+                <button onClick={() => { const next = !winOn; setWinOn(next); persistWindow(next, winStart, winEnd, winWeekdays, winTz); }}
+                  className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${winOn ? 'bg-indigo-600' : 'bg-slate-300'}`} title="Toggle send window">
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${winOn ? 'left-6' : 'left-1'}`} />
+                </button>
+              </div>
+              {winOn && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-400 font-semibold">Between</span>
+                    <select value={winStart} onChange={e => { const v = +e.target.value; setWinStart(v); persistWindow(true, v, winEnd, winWeekdays, winTz); }}
+                      className="px-2 py-1 border border-slate-200 rounded-lg outline-none focus:border-indigo-300">
+                      {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                    </select>
+                    <span className="text-slate-400">and</span>
+                    <select value={winEnd} onChange={e => { const v = +e.target.value; setWinEnd(v); persistWindow(true, winStart, v, winWeekdays, winTz); }}
+                      className="px-2 py-1 border border-slate-200 rounded-lg outline-none focus:border-indigo-300">
+                      {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-400 font-semibold">Timezone</span>
+                    <select value={winTz} onChange={e => { setWinTz(e.target.value); persistWindow(true, winStart, winEnd, winWeekdays, e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-slate-200 rounded-lg outline-none focus:border-indigo-300">
+                      {Array.from(new Set([browserTz, 'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Asia/Karachi', 'Asia/Dubai'])).map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <input type="checkbox" checked={winWeekdays} onChange={e => { setWinWeekdays(e.target.checked); persistWindow(true, winStart, winEnd, e.target.checked, winTz); }} />
+                    Weekdays only (Mon–Fri)
+                  </label>
+                </div>
+              )}
             </div>
           </div>
 
@@ -457,11 +521,25 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                     <button onClick={() => onDeleteStep(s.id)} title="Delete step" className="p-1 text-slate-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
-                <input value={s.subject} placeholder="Subject line"
-                  onChange={e => patchLocalStep(s.id, { subject: e.target.value })}
-                  onFocus={e => { focusRef.current = { id: s.id, field: 'subject', el: e.target }; }}
-                  onBlur={() => onStepBlur(s.id, { subject: s.subject })}
-                  className="w-full px-3 py-2 text-sm font-medium border border-slate-200 rounded-lg outline-none focus:border-indigo-300" />
+                <div className="flex items-center gap-2">
+                  <input value={s.subject} placeholder="Subject line"
+                    onChange={e => patchLocalStep(s.id, { subject: e.target.value })}
+                    onFocus={e => { focusRef.current = { id: s.id, field: 'subject', el: e.target }; }}
+                    onBlur={() => onStepBlur(s.id, { subject: s.subject })}
+                    className="flex-1 px-3 py-2 text-sm font-medium border border-slate-200 rounded-lg outline-none focus:border-indigo-300" />
+                  {(s.subject_variants?.length ?? 0) > 0 && <span className="text-[9px] font-black text-slate-400 uppercase">A</span>}
+                </div>
+                {(s.subject_variants ?? []).map((v, vi) => (
+                  <div key={vi} className="flex items-center gap-2">
+                    <input value={v} placeholder={`Subject variant ${String.fromCharCode(66 + vi)}`}
+                      onChange={e => patchVariant(s, vi, e.target.value)}
+                      onBlur={() => blurVariant(s)}
+                      className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-300" />
+                    <span className="text-[9px] font-black text-slate-400 uppercase">{String.fromCharCode(66 + vi)}</span>
+                    <button onClick={() => removeVariant(s, vi)} className="p-1 text-slate-300 hover:text-rose-500"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ))}
+                <button onClick={() => addVariant(s)} className="text-[11px] font-bold text-slate-400 hover:text-indigo-600">+ A/B subject variant</button>
                 <textarea value={s.body_html} placeholder={aiPersonalize ? 'Write the gist — the AI personalizes it per lead. {{first_name}}, {{company}} are hints.' : 'Write the exact email. {{first_name}}, {{company}} are filled per lead.'}
                   onChange={e => patchLocalStep(s.id, { body_html: e.target.value })}
                   onFocus={e => { focusRef.current = { id: s.id, field: 'body_html', el: e.target }; }}

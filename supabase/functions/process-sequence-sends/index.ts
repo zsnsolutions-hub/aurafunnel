@@ -29,6 +29,20 @@ interface Item {
 }
 interface Run { id: string; owner_id: string; status: string; sequence_config: Record<string, unknown> | null }
 
+// Only send within the campaign's configured hours/weekdays (in its timezone).
+// No window configured → send anytime.
+function inSendWindow(cfg: Record<string, unknown> | null): boolean {
+  const w = (cfg?.sendWindow ?? null) as { start?: number; end?: number; weekdaysOnly?: boolean; timezone?: string } | null;
+  if (!w || w.start == null || w.end == null) return true;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: w.timezone || "UTC", hour: "numeric", hour12: false, weekday: "short" }).formatToParts(new Date());
+    let hour = parseInt(parts.find(p => p.type === "hour")?.value ?? "0", 10); if (hour === 24) hour = 0;
+    const wd = parts.find(p => p.type === "weekday")?.value ?? "";
+    if (w.weekdaysOnly && (wd === "Sat" || wd === "Sun")) return false;
+    return w.start <= w.end ? (hour >= w.start && hour < w.end) : (hour >= w.start || hour < w.end);
+  } catch { return true; }
+}
+
 serve(async (req) => {
   const pre = handleCors(req); if (pre) return pre;
   const cors = getCorsHeaders(req);
@@ -62,6 +76,8 @@ serve(async (req) => {
     for (const it of due) {
       const run = runMap.get(it.run_id);
       if (!run || run.status === "paused" || run.status === "canceled") continue;
+      // Hold until inside the campaign's send window (re-checked each cron).
+      if (!inSendWindow(run.sequence_config)) continue;
 
       // Atomic claim so concurrent invocations can't double-send.
       const { data: claimed } = await admin.from("email_sequence_run_items")

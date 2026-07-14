@@ -21,6 +21,10 @@ export interface Campaign {
   total_opened: number;
   total_clicked: number;
   ai_personalize: boolean;
+  send_window_start: number | null;
+  send_window_end: number | null;
+  send_weekdays_only: boolean;
+  send_timezone: string | null;
   created_at: string;
   step_count?: number;
 }
@@ -70,6 +74,7 @@ export interface CampaignStep {
   sequence_id: string;
   step_number: number;
   subject: string;
+  subject_variants: string[];
   body_html: string;
   delay_days: number;
 }
@@ -77,7 +82,7 @@ export interface CampaignStep {
 /** List the workspace's campaigns (newest first) with a step count each. */
 export async function listCampaigns(userId: string): Promise<Campaign[]> {
   const { data, error } = await supabase.from('email_sequences')
-    .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,ai_personalize,created_at')
+    .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,ai_personalize,send_window_start,send_window_end,send_weekdays_only,send_timezone,created_at')
     .eq('workspace_id', userId)
     .order('created_at', { ascending: false });
   if (error || !data) return [];
@@ -94,7 +99,7 @@ export async function listCampaigns(userId: string): Promise<Campaign[]> {
 
 export async function getSteps(sequenceId: string): Promise<CampaignStep[]> {
   const { data } = await supabase.from('sequence_steps')
-    .select('id,sequence_id,step_number,subject,body_html,delay_days')
+    .select('id,sequence_id,step_number,subject,subject_variants,body_html,delay_days')
     .eq('sequence_id', sequenceId)
     .order('step_number', { ascending: true });
   return (data ?? []) as CampaignStep[];
@@ -182,20 +187,20 @@ export async function removeEnrollment(enrollmentId: string, sequenceId: string)
   await supabase.from('email_sequences').update({ total_leads: count ?? 0 }).eq('id', sequenceId);
 }
 
-export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, 'name' | 'description' | 'status' | 'goal' | 'tone' | 'ai_personalize'>>): Promise<string | null> {
+export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, 'name' | 'description' | 'status' | 'goal' | 'tone' | 'ai_personalize' | 'send_window_start' | 'send_window_end' | 'send_weekdays_only' | 'send_timezone'>>): Promise<string | null> {
   const { error } = await supabase.from('email_sequences').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
   return error?.message ?? null;
 }
 
-export async function addStep(sequenceId: string, step: { subject: string; body_html: string; delay_days: number; step_number: number }): Promise<CampaignStep | null> {
+export async function addStep(sequenceId: string, step: { subject: string; body_html: string; delay_days: number; step_number: number; subject_variants?: string[] }): Promise<CampaignStep | null> {
   const { data, error } = await supabase.from('sequence_steps')
     .insert({ sequence_id: sequenceId, ...step })
-    .select('id,sequence_id,step_number,subject,body_html,delay_days').single();
+    .select('id,sequence_id,step_number,subject,subject_variants,body_html,delay_days').single();
   if (error || !data) return null;
   return data as CampaignStep;
 }
 
-export async function updateStep(id: string, patch: Partial<Pick<CampaignStep, 'subject' | 'body_html' | 'delay_days' | 'step_number'>>): Promise<string | null> {
+export async function updateStep(id: string, patch: Partial<Pick<CampaignStep, 'subject' | 'subject_variants' | 'body_html' | 'delay_days' | 'step_number'>>): Promise<string | null> {
   const { error } = await supabase.from('sequence_steps').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
   return error?.message ?? null;
 }
@@ -296,10 +301,13 @@ export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; to
   if (!token) return { ok: false, error: 'Session expired — please refresh.' };
 
   const businessProfile = await getMyBusinessProfile();
+  const sendWindow = (campaign.send_window_start != null && campaign.send_window_end != null)
+    ? { start: campaign.send_window_start, end: campaign.send_window_end, weekdaysOnly: campaign.send_weekdays_only, timezone: campaign.send_timezone ?? 'UTC' }
+    : undefined;
   const payload = {
     leads,
-    steps: steps.map(s => ({ stepIndex: s.step_number, delayDays: s.delay_days, subject: s.subject, body: s.body_html })),
-    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id, businessProfile, aiPersonalize: campaign.ai_personalize },
+    steps: steps.map(s => ({ stepIndex: s.step_number, delayDays: s.delay_days, subject: s.subject, subjectVariants: s.subject_variants, body: s.body_html })),
+    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id, businessProfile, aiPersonalize: campaign.ai_personalize, sendWindow },
   };
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-email-sequence-run`;
   const res = await fetch(url, {
