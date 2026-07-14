@@ -7,12 +7,14 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw, Search, UserPlus } from 'lucide-react';
+import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw, Search, UserPlus, Eye } from 'lucide-react';
 import type { User } from '../../types';
 import { useToast } from '../../components/ui/Toast';
+import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
+import { supabase } from '../../lib/supabase';
 import {
   listCampaigns, getSteps, getEnrolledLeads, removeEnrollment, updateCampaign, addStep, updateStep, deleteStep,
-  deleteCampaign, launchCampaign, searchLeadsForCampaign, addLeadToCampaign,
+  deleteCampaign, launchCampaign, searchLeadsForCampaign, addLeadToCampaign, previewStepForLead,
   type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead, type LeadHit,
 } from '../../lib/campaigns';
 
@@ -193,6 +195,21 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const patchLocalStep = (id: string, patch: Partial<CampaignStep>) =>
     setSteps(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
 
+  // ── Per-lead preview ──
+  const [previewLeadId, setPreviewLeadId] = useState('');
+  const [previews, setPreviews] = useState<Record<string, { loading?: boolean; subject?: string; body_html?: string; error?: string }>>({});
+  useEffect(() => { if (!previewLeadId && audience && audience.length) setPreviewLeadId(audience[0].leadId); }, [audience, previewLeadId]);
+
+  const onPreview = useCallback(async (step: CampaignStep) => {
+    if (!previewLeadId) { toast('Add a lead to the audience first, then pick one to preview.', 'info'); return; }
+    setPreviews(prev => ({ ...prev, [step.id]: { loading: true } }));
+    const credit = await consumeCredits(supabase, 'content_suggestions');
+    if (!credit.success) { setPreviews(prev => ({ ...prev, [step.id]: { error: credit.message } })); toast(credit.message, 'error'); return; }
+    const res = await previewStepForLead(campaign, step, previewLeadId);
+    if ('error' in res) setPreviews(prev => ({ ...prev, [step.id]: { error: res.error } }));
+    else setPreviews(prev => ({ ...prev, [step.id]: { subject: res.subject, body_html: res.body_html } }));
+  }, [previewLeadId, campaign, toast]);
+
   const onSend = useCallback(async () => {
     if (!confirm(`Start sending "${name}" to its enrolled leads now?`)) return;
     setSending(true);
@@ -308,6 +325,16 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                 <Plus className="w-3.5 h-3.5" /> Add step
               </button>
             </div>
+            <p className="text-[11px] text-slate-400 -mt-1">Each email is AI-personalized per lead at send. Use Preview to see what a specific lead will get.</p>
+            {(audience && audience.length > 0) && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400 font-semibold">Preview as</span>
+                <select value={previewLeadId} onChange={e => setPreviewLeadId(e.target.value)}
+                  className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg outline-none focus:border-indigo-300">
+                  {audience.map(a => <option key={a.enrollmentId} value={a.leadId}>{a.name}{a.company ? ` · ${a.company}` : ''}</option>)}
+                </select>
+              </div>
+            )}
             {steps.length === 0 && <p className="text-xs text-slate-400">No steps yet. Add one to define what gets sent.</p>}
             {steps.map((s, i) => (
               <div key={s.id} className="border border-slate-200 rounded-xl p-3 space-y-2">
@@ -322,6 +349,10 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                         className="w-14 px-2 py-1 text-xs border border-slate-200 rounded-md" />
                       days
                     </label>
+                    <button onClick={() => onPreview(s)} disabled={previews[s.id]?.loading} title="Preview for the selected lead"
+                      className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-50">
+                      {previews[s.id]?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
                     <button onClick={() => onDeleteStep(s.id)} className="p-1 text-slate-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
@@ -329,11 +360,23 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                   onChange={e => patchLocalStep(s.id, { subject: e.target.value })}
                   onBlur={() => onStepBlur(s.id, { subject: s.subject })}
                   className="w-full px-3 py-2 text-sm font-medium border border-slate-200 rounded-lg outline-none focus:border-indigo-300" />
-                <textarea value={s.body_html} placeholder="Email body — use {{first_name}}, {{company}} for personalization"
+                <textarea value={s.body_html} placeholder="Write the gist — the AI personalizes it per lead. {{first_name}}, {{company}} are hints."
                   onChange={e => patchLocalStep(s.id, { body_html: e.target.value })}
                   onBlur={() => onStepBlur(s.id, { body_html: s.body_html })}
                   rows={5}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-300 resize-y" />
+
+                {previews[s.id] && !previews[s.id].loading && (
+                  previews[s.id].error ? (
+                    <p className="text-[11px] text-rose-600">{previews[s.id].error}</p>
+                  ) : (
+                    <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 space-y-1">
+                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Preview for {audience?.find(a => a.leadId === previewLeadId)?.name ?? 'lead'}</p>
+                      <p className="text-xs font-bold text-slate-800">{previews[s.id].subject}</p>
+                      <div className="text-xs text-slate-600 [&_p]:mb-1.5" dangerouslySetInnerHTML={{ __html: previews[s.id].body_html ?? '' }} />
+                    </div>
+                  )
+                )}
               </div>
             ))}
           </div>

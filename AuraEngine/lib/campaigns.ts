@@ -170,6 +170,45 @@ export async function deleteCampaign(id: string): Promise<void> {
   await supabase.from('email_sequences').delete().eq('id', id);
 }
 
+/** The current user's business profile (used as AI context for send + preview). */
+async function getMyBusinessProfile(): Promise<Record<string, unknown> | undefined> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return undefined;
+  const { data } = await supabase.from('profiles').select('businessProfile').eq('id', user.id).single();
+  return (data?.businessProfile as Record<string, unknown> | null) ?? undefined;
+}
+
+/** Generate the AI-personalized email a lead would receive for a step — same
+ *  prompt as the send, so it's an accurate preview. */
+export async function previewStepForLead(
+  campaign: Campaign, step: CampaignStep, leadId: string,
+): Promise<{ subject: string; body_html: string } | { error: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { error: 'Session expired — please sign in again.' };
+  const { data: lead } = await supabase.from('leads')
+    .select('first_name, last_name, company, title, industry, score, insights, knowledgeBase')
+    .eq('id', leadId).single();
+  if (!lead) return { error: 'Lead not found.' };
+
+  const businessProfile = await getMyBusinessProfile();
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/preview-sequence-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({
+      template_subject: step.subject, template_body: step.body_html, step_index: step.step_number - 1,
+      lead: {
+        name: [lead.first_name, lead.last_name].filter(Boolean).join(' '),
+        company: lead.company, title: lead.title, industry: lead.industry,
+        score: lead.score, insights: lead.insights, knowledgeBase: lead.knowledgeBase,
+      },
+      config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', businessProfile },
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) return { error: data.error || `Preview failed (HTTP ${res.status})` };
+  return { subject: data.subject, body_html: data.body_html };
+}
+
 /** Launch a saved campaign: enrolled leads + steps → start-email-sequence-run. */
 export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
   const steps = await getSteps(campaign.id);
@@ -193,10 +232,11 @@ export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; to
   const token = sess.session?.access_token;
   if (!token) return { ok: false, error: 'Session expired — please refresh.' };
 
+  const businessProfile = await getMyBusinessProfile();
   const payload = {
     leads,
     steps: steps.map(s => ({ stepIndex: s.step_number, delayDays: s.delay_days, subject: s.subject, body: s.body_html })),
-    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id },
+    config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id, businessProfile },
   };
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-email-sequence-run`;
   const res = await fetch(url, {
