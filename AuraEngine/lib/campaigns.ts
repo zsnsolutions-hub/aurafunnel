@@ -92,6 +92,47 @@ export async function getEnrolledLeads(sequenceId: string): Promise<EnrolledLead
   }));
 }
 
+export interface LeadHit { id: string; name: string; email: string; company: string | null }
+
+/** Search the user's leads by name/email/company to add to a campaign. */
+export async function searchLeadsForCampaign(userId: string, query: string, excludeIds: string[]): Promise<LeadHit[]> {
+  // Strip characters that would break the PostgREST or() filter grammar.
+  const term = query.trim().replace(/[,()]/g, ' ').trim();
+  if (term.length < 2) return [];
+  const like = `%${term}%`;
+  const { data } = await supabase.from('leads')
+    .select('id, first_name, last_name, primary_email, company')
+    .eq('client_id', userId)
+    .or(`first_name.ilike.${like},last_name.ilike.${like},primary_email.ilike.${like},company.ilike.${like}`)
+    .limit(20);
+  const exclude = new Set(excludeIds);
+  return ((data ?? []) as { id: string; first_name: string | null; last_name: string | null; primary_email: string | null; company: string | null }[])
+    .filter(l => !exclude.has(l.id))
+    .slice(0, 8)
+    .map(l => ({
+      id: l.id,
+      name: [l.first_name, l.last_name].filter(Boolean).join(' ') || (l.primary_email ?? 'Unknown lead'),
+      email: l.primary_email ?? '',
+      company: l.company ?? null,
+    }));
+}
+
+/** Enroll a lead into a campaign (no-op if already enrolled). Returns the new
+ *  enrollment id, or null if it was already enrolled. */
+export async function addLeadToCampaign(sequenceId: string, userId: string, leadId: string): Promise<string | null> {
+  const { data: existing } = await supabase.from('sequence_enrollments')
+    .select('id').eq('sequence_id', sequenceId).eq('lead_id', leadId).maybeSingle();
+  if (existing) return null;
+  const { data, error } = await supabase.from('sequence_enrollments')
+    .insert({ sequence_id: sequenceId, lead_id: leadId, workspace_id: userId, status: 'active', current_step: 0 })
+    .select('id').single();
+  if (error || !data) return null;
+  const { count } = await supabase.from('sequence_enrollments')
+    .select('id', { count: 'exact', head: true }).eq('sequence_id', sequenceId);
+  await supabase.from('email_sequences').update({ total_leads: count ?? 0 }).eq('id', sequenceId);
+  return data.id;
+}
+
 /** Remove a lead from the campaign audience and keep total_leads in sync. */
 export async function removeEnrollment(enrollmentId: string, sequenceId: string): Promise<void> {
   await supabase.from('sequence_enrollments').delete().eq('id', enrollmentId);

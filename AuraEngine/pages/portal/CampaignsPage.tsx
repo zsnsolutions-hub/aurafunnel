@@ -7,12 +7,13 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw } from 'lucide-react';
+import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw, Search, UserPlus } from 'lucide-react';
 import type { User } from '../../types';
 import { useToast } from '../../components/ui/Toast';
 import {
   listCampaigns, getSteps, getEnrolledLeads, removeEnrollment, updateCampaign, addStep, updateStep, deleteStep,
-  deleteCampaign, launchCampaign, type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead,
+  deleteCampaign, launchCampaign, searchLeadsForCampaign, addLeadToCampaign,
+  type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead, type LeadHit,
 } from '../../lib/campaigns';
 
 interface LayoutContext { user: User }
@@ -93,6 +94,7 @@ const CampaignsPage: React.FC = () => {
       {selected && (
         <CampaignDrawer
           campaign={selected}
+          userId={user.id}
           onClose={() => setSelected(null)}
           onChanged={() => void load()}
           toast={toast}
@@ -105,12 +107,13 @@ const CampaignsPage: React.FC = () => {
 // ── Detail drawer ──
 interface DrawerProps {
   campaign: Campaign;
+  userId: string;
   onClose: () => void;
   onChanged: () => void;
   toast: (m: string, k?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
-const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, onClose, onChanged, toast }) => {
+const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onChanged, toast }) => {
   const [name, setName] = useState(campaign.name);
   const [description, setDescription] = useState(campaign.description ?? '');
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
@@ -130,6 +133,37 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, onClose, onChanged, t
     await removeEnrollment(e.enrollmentId, campaign.id);
     onChanged();
   }, [campaign.id, onChanged]);
+
+  // ── Add-leads search ──
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<LeadHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) { setHits([]); return; }
+    setSearching(true);
+    const excludeIds = (audience ?? []).map(a => a.leadId);
+    const t = setTimeout(async () => {
+      setHits(await searchLeadsForCampaign(userId, term, excludeIds));
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, audience, userId]);
+
+  const onAddLead = useCallback(async (hit: LeadHit) => {
+    setAdding(hit.id);
+    const enrollmentId = await addLeadToCampaign(campaign.id, userId, hit.id);
+    setAdding(null);
+    if (enrollmentId) {
+      setAudience(prev => [{ enrollmentId, leadId: hit.id, name: hit.name, email: hit.email, company: hit.company, status: 'active' }, ...(prev ?? [])]);
+      setHits(prev => prev.filter(h => h.id !== hit.id));
+      onChanged();
+    } else {
+      toast('That lead is already in this campaign.', 'info');
+    }
+  }, [campaign.id, userId, onChanged, toast]);
 
   const saveMeta = useCallback(async (patch: Partial<Pick<Campaign, 'name' | 'description' | 'status'>>) => {
     const err = await updateCampaign(campaign.id, patch);
@@ -237,7 +271,32 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, onClose, onChanged, t
                 ))}
               </div>
             )}
-            <p className="text-[11px] text-slate-400">Add more from the Leads page — select leads and choose “Add to campaign”.</p>
+            {/* Add-leads search */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Search leads by name, email, or company to add…"
+                className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-300" />
+              {searching && <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />}
+              {query.trim().length >= 2 && !searching && (
+                <div className="absolute left-0 right-0 mt-1 z-10 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden max-h-60 overflow-y-auto">
+                  {hits.length === 0 ? (
+                    <p className="px-3 py-3 text-xs text-slate-400">No matching leads (or all already added).</p>
+                  ) : hits.map(h => (
+                    <button key={h.id} onClick={() => onAddLead(h)} disabled={adding === h.id}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-indigo-50 transition-colors disabled:opacity-50">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800 truncate">{h.name}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{h.email}{h.company ? ` · ${h.company}` : ''}</p>
+                      </div>
+                      {adding === h.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" /> : <UserPlus className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">…or from the Leads page: select leads and choose “Add to campaign”.</p>
           </div>
 
           {/* Steps */}
