@@ -123,6 +123,7 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const [description, setDescription] = useState(campaign.description ?? '');
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
   const [aiPersonalize, setAiPersonalize] = useState(campaign.ai_personalize);
+  const [abAuto, setAbAuto] = useState(campaign.ab_auto_optimize);
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const [winOn, setWinOn] = useState(campaign.send_window_start != null);
   const [winStart, setWinStart] = useState(campaign.send_window_start ?? 9);
@@ -569,7 +570,17 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
           {/* A/B results */}
           {steps.some(s => (s.subject_variants?.length ?? 0) > 0) && (
             <div className="space-y-3">
-              <h3 className="text-sm font-bold text-slate-800">A/B results</h3>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-bold text-slate-800">A/B results</h3>
+                <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+                  Auto-optimize
+                  <button onClick={() => { const next = !abAuto; setAbAuto(next); void updateCampaign(campaign.id, { ab_auto_optimize: next }).then(() => onChanged()); }}
+                    className={`relative w-10 h-6 rounded-full transition-colors ${abAuto ? 'bg-emerald-600' : 'bg-slate-300'}`} title="Auto-switch remaining sends to the winner">
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${abAuto ? 'left-5' : 'left-1'}`} />
+                  </button>
+                </label>
+              </div>
+              {abAuto && <p className="text-[11px] text-slate-400 -mt-1">Once a variant is a clear winner (enough sends + significant open-rate lead), remaining unsent emails switch to it automatically.</p>}
               {steps.filter(s => (s.subject_variants?.length ?? 0) > 0).map(s => {
                 const stStats = variantStats.filter(v => v.step === s.step_number);
                 const total = Math.max((s.subject_variants?.length ?? 0) + 1, ...stStats.map(v => v.variant + 1), 1);

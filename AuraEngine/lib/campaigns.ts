@@ -21,6 +21,7 @@ export interface Campaign {
   total_opened: number;
   total_clicked: number;
   ai_personalize: boolean;
+  ab_auto_optimize: boolean;
   send_window_start: number | null;
   send_window_end: number | null;
   send_weekdays_only: boolean;
@@ -82,7 +83,7 @@ export interface CampaignStep {
 /** List the workspace's campaigns (newest first) with a step count each. */
 export async function listCampaigns(userId: string): Promise<Campaign[]> {
   const { data, error } = await supabase.from('email_sequences')
-    .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,ai_personalize,send_window_start,send_window_end,send_weekdays_only,send_timezone,created_at')
+    .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,ai_personalize,ab_auto_optimize,send_window_start,send_window_end,send_weekdays_only,send_timezone,created_at')
     .eq('workspace_id', userId)
     .order('created_at', { ascending: false });
   if (error || !data) return [];
@@ -198,7 +199,7 @@ export async function removeEnrollment(enrollmentId: string, sequenceId: string)
   await supabase.from('email_sequences').update({ total_leads: count ?? 0 }).eq('id', sequenceId);
 }
 
-export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, 'name' | 'description' | 'status' | 'goal' | 'tone' | 'ai_personalize' | 'send_window_start' | 'send_window_end' | 'send_weekdays_only' | 'send_timezone'>>): Promise<string | null> {
+export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, 'name' | 'description' | 'status' | 'goal' | 'tone' | 'ai_personalize' | 'ab_auto_optimize' | 'send_window_start' | 'send_window_end' | 'send_weekdays_only' | 'send_timezone'>>): Promise<string | null> {
   const { error } = await supabase.from('email_sequences').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
   return error?.message ?? null;
 }
