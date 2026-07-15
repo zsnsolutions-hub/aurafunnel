@@ -15,9 +15,11 @@ import { supabase } from '../../lib/supabase';
 import {
   listCampaigns, getSteps, getEnrolledLeads, removeEnrollment, updateCampaign, addStep, updateStep, deleteStep,
   deleteCampaign, launchCampaign, searchLeadsForCampaign, addLeadToCampaign, previewStepForLead, previewVerbatimForLead,
-  MERGE_FIELDS,
-  type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead, type LeadHit,
+  getVariantStats, MERGE_FIELDS,
+  type Campaign, type CampaignStep, type CampaignStatus, type EnrolledLead, type LeadHit, type VariantStat,
 } from '../../lib/campaigns';
+
+const variantLabel = (v: number) => String.fromCharCode(65 + v);
 
 interface LayoutContext { user: User }
 
@@ -137,9 +139,11 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
 
+  const [variantStats, setVariantStats] = useState<VariantStat[]>([]);
   const reload = useCallback(async () => {
     setSteps(await getSteps(campaign.id));
     setAudience(await getEnrolledLeads(campaign.id));
+    setVariantStats(await getVariantStats(campaign.id));
   }, [campaign.id]);
   useEffect(() => { void reload(); }, [reload]);
 
@@ -561,6 +565,43 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
               </div>
             ))}
           </div>
+
+          {/* A/B results */}
+          {steps.some(s => (s.subject_variants?.length ?? 0) > 0) && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-slate-800">A/B results</h3>
+              {steps.filter(s => (s.subject_variants?.length ?? 0) > 0).map(s => {
+                const stStats = variantStats.filter(v => v.step === s.step_number);
+                const total = Math.max((s.subject_variants?.length ?? 0) + 1, ...stStats.map(v => v.variant + 1), 1);
+                const rate = (v?: VariantStat) => (v && v.sent > 0 ? v.opened / v.sent : -1);
+                const best = Math.max(-1, ...stStats.map(rate));
+                const anySent = stStats.some(v => v.sent > 0);
+                return (
+                  <div key={s.id} className="border border-slate-200 rounded-xl p-3 space-y-1.5">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Step {steps.indexOf(s) + 1} · subject test</p>
+                    {Array.from({ length: total }, (_, v) => {
+                      const st = stStats.find(x => x.variant === v);
+                      const subj = v === 0 ? s.subject : (s.subject_variants?.[v - 1] ?? '');
+                      const isWinner = anySent && st && st.sent > 0 && rate(st) === best;
+                      const openPct = st && st.sent > 0 ? Math.round((st.opened / st.sent) * 100) : null;
+                      const clickPct = st && st.sent > 0 ? Math.round((st.clicked / st.sent) * 100) : null;
+                      return (
+                        <div key={v} className={`flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 ${isWinner ? 'bg-emerald-50' : ''}`}>
+                          <span className={`w-5 text-[10px] font-black ${isWinner ? 'text-emerald-600' : 'text-slate-400'}`}>{variantLabel(v)}</span>
+                          <span className="flex-1 truncate text-slate-600">{subj || <span className="italic text-slate-300">empty</span>}</span>
+                          <span className="tabular-nums text-slate-500 w-12 text-right">{st?.sent ?? 0} sent</span>
+                          <span className="tabular-nums text-slate-700 font-semibold w-16 text-right">{openPct == null ? '—' : `${openPct}% open`}</span>
+                          <span className="tabular-nums text-slate-400 w-16 text-right">{clickPct == null ? '' : `${clickPct}% click`}</span>
+                          {isWinner && <span className="text-[9px] font-black text-emerald-600 uppercase">Win</span>}
+                        </div>
+                      );
+                    })}
+                    {!anySent && <p className="text-[11px] text-slate-400">No sends yet — results appear once the campaign starts.</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center gap-2 pt-2 border-t border-slate-100">

@@ -637,6 +637,10 @@ serve(async (req) => {
         status: "sent",
         track_opens,
         track_clicks,
+        // Campaign attribution (for A/B analytics); null for one-off sends.
+        sequence_id: body.sequence_id ?? null,
+        sequence_step: body.sequence_step ?? null,
+        subject_variant: body.subject_variant ?? null,
       })
       .select()
       .single();

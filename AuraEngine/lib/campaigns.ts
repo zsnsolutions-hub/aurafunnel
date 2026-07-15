@@ -105,6 +105,17 @@ export async function getSteps(sequenceId: string): Promise<CampaignStep[]> {
   return (data ?? []) as CampaignStep[];
 }
 
+export interface VariantStat { step: number; variant: number; sent: number; opened: number; clicked: number }
+
+/** A/B results: sent/opened/clicked per (step, subject variant). */
+export async function getVariantStats(campaignId: string): Promise<VariantStat[]> {
+  const { data } = await supabase.rpc('campaign_variant_stats', { p_campaign_id: campaignId });
+  return (data ?? []).map((r: Record<string, number>) => ({
+    step: Number(r.step), variant: Number(r.variant),
+    sent: Number(r.sent), opened: Number(r.opened), clicked: Number(r.clicked),
+  }));
+}
+
 export async function getEnrolledCount(sequenceId: string): Promise<number> {
   const { count } = await supabase.from('sequence_enrollments')
     .select('id', { count: 'exact', head: true })

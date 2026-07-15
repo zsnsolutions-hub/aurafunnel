@@ -26,6 +26,7 @@ interface Item {
   id: string; run_id: string; lead_id: string; lead_email: string | null;
   ai_subject: string | null; ai_body_html: string | null;
   delay_days: number; attempt_count: number; created_at: string;
+  step_index: number | null; subject_variant: number | null;
 }
 interface Run { id: string; owner_id: string; status: string; sequence_config: Record<string, unknown> | null }
 
@@ -56,7 +57,7 @@ serve(async (req) => {
       .eq("status", "sending").lt("locked_until", nowIso);
 
     const { data: rawItems } = await admin.from("email_sequence_run_items")
-      .select("id, run_id, lead_id, lead_email, ai_subject, ai_body_html, delay_days, attempt_count, created_at")
+      .select("id, run_id, lead_id, lead_email, ai_subject, ai_body_html, delay_days, attempt_count, created_at, step_index, subject_variant")
       .eq("status", "written")
       .limit(BATCH);
 
@@ -108,6 +109,10 @@ serve(async (req) => {
             from_email: (cfg.from_email as string) || undefined,
             track_opens: true,
             track_clicks: true,
+            // Campaign attribution for A/B analytics.
+            sequence_id: (cfg.campaignId as string) || undefined,
+            sequence_step: it.step_index ?? undefined,
+            subject_variant: it.subject_variant ?? undefined,
           }),
         });
         const result = await res.json().catch(() => ({} as { success?: boolean; error?: string }));
