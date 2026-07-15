@@ -193,6 +193,7 @@ serve(async (req) => {
           sendMode: config.sendMode,
           campaignId: (config as { campaignId?: string }).campaignId,
           sendWindow: (config as { sendWindow?: unknown }).sendWindow,
+          sendBestTime: (config as { sendBestTime?: boolean }).sendBestTime,
         },
         started_at: new Date().toISOString(),
       })
@@ -208,6 +209,33 @@ serve(async (req) => {
     // skip the AI writing queue and go straight to the sender.
     const aiPersonalize = (config as { aiPersonalize?: boolean }).aiPersonalize !== false;
     const fromName = (config as { fromName?: string }).fromName || "";
+
+    // Send-time optimization: learn each lead's most-engaged hour (UTC) from
+    // their historical opens. Opens already reflect local active time, so no
+    // per-lead timezone is needed. Requires >=2 opens; else null (sender defaults).
+    const bestHourByLead: Record<string, number> = {};
+    if ((config as { sendBestTime?: boolean }).sendBestTime && leads.length) {
+      const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+      const { data: opens } = await supabaseAdmin
+        .from("email_events")
+        .select("created_at, email_messages!inner(lead_id)")
+        .eq("event_type", "open")
+        .gte("created_at", since)
+        .in("email_messages.lead_id", leads.map((l) => l.id))
+        .limit(10000);
+      const hist: Record<string, number[]> = {};
+      for (const o of (opens ?? []) as { created_at: string; email_messages: { lead_id: string } | { lead_id: string }[] }[]) {
+        const em = Array.isArray(o.email_messages) ? o.email_messages[0] : o.email_messages;
+        const lid = em?.lead_id; if (!lid) continue;
+        (hist[lid] ??= new Array(24).fill(0))[new Date(o.created_at).getUTCHours()]++;
+      }
+      for (const [lid, counts] of Object.entries(hist)) {
+        if (counts.reduce((a, b) => a + b, 0) < 2) continue;
+        let best = 0, bestC = -1;
+        for (let h = 0; h < 24; h++) if (counts[h] > bestC) { bestC = counts[h]; best = h; }
+        bestHourByLead[lid] = best;
+      }
+    }
 
     // Batch-insert all items (lead × step). Subject variants (A/B) rotate across
     // leads so each variant gets an even share.
@@ -249,6 +277,7 @@ serve(async (req) => {
           delay_days: step.delayDays,
           attempt_count: 0,
           subject_variant: vIdx,
+          best_send_hour: bestHourByLead[lead.id] ?? null,
         };
         if (aiPersonalize) {
           items.push({ ...base, status: "pending" });

@@ -124,6 +124,7 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
   const [aiPersonalize, setAiPersonalize] = useState(campaign.ai_personalize);
   const [abAuto, setAbAuto] = useState(campaign.ab_auto_optimize);
+  const [bestTime, setBestTime] = useState(campaign.send_best_time);
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const [winOn, setWinOn] = useState(campaign.send_window_start != null);
   const [winStart, setWinStart] = useState(campaign.send_window_start ?? 9);
@@ -364,12 +365,24 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
               </button>
             </div>
 
+            {/* Best-time send */}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+              <div className="pr-2">
+                <p className="text-xs font-bold text-slate-800">Send at each lead's best time</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Learns each lead's most-engaged hour from their past opens and sends then (falls back to a default hour). Overrides the fixed window below.</p>
+              </div>
+              <button onClick={() => { const next = !bestTime; setBestTime(next); void updateCampaign(campaign.id, { send_best_time: next }).then(() => onChanged()); }}
+                className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${bestTime ? 'bg-indigo-600' : 'bg-slate-300'}`} title="Toggle best-time send">
+                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${bestTime ? 'left-6' : 'left-1'}`} />
+              </button>
+            </div>
+
             {/* Send window */}
-            <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+            <div className={`rounded-xl border border-slate-200 p-3 space-y-2 ${bestTime ? 'opacity-50' : ''}`}>
               <div className="flex items-center justify-between gap-3">
                 <div className="pr-2">
                   <p className="text-xs font-bold text-slate-800">Send only during set hours</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Hold emails until they're inside this window (checked every minute).</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{bestTime ? 'Ignored while best-time send is on.' : "Hold emails until they're inside this window (checked every minute)."}</p>
                 </div>
                 <button onClick={() => { const next = !winOn; setWinOn(next); persistWindow(next, winStart, winEnd, winWeekdays, winTz); }}
                   className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${winOn ? 'bg-indigo-600' : 'bg-slate-300'}`} title="Toggle send window">

@@ -26,7 +26,7 @@ interface Item {
   id: string; run_id: string; lead_id: string; lead_email: string | null;
   ai_subject: string | null; ai_body_html: string | null;
   delay_days: number; attempt_count: number; created_at: string;
-  step_index: number | null; subject_variant: number | null;
+  step_index: number | null; subject_variant: number | null; best_send_hour: number | null;
 }
 interface Run { id: string; owner_id: string; status: string; sequence_config: Record<string, unknown> | null }
 
@@ -57,7 +57,7 @@ serve(async (req) => {
       .eq("status", "sending").lt("locked_until", nowIso);
 
     const { data: rawItems } = await admin.from("email_sequence_run_items")
-      .select("id, run_id, lead_id, lead_email, ai_subject, ai_body_html, delay_days, attempt_count, created_at, step_index, subject_variant")
+      .select("id, run_id, lead_id, lead_email, ai_subject, ai_body_html, delay_days, attempt_count, created_at, step_index, subject_variant, best_send_hour")
       .eq("status", "written")
       .limit(BATCH);
 
@@ -77,8 +77,13 @@ serve(async (req) => {
     for (const it of due) {
       const run = runMap.get(it.run_id);
       if (!run || run.status === "paused" || run.status === "canceled") continue;
-      // Hold until inside the campaign's send window (re-checked each cron).
-      if (!inSendWindow(run.sequence_config)) continue;
+      // Send-time gating (re-checked each cron):
+      //  • best-time on → hold until this lead's learned hour (default 14 UTC).
+      //  • else → hold until inside the fixed send window.
+      if (run.sequence_config?.sendBestTime) {
+        const target = it.best_send_hour ?? 14;
+        if (new Date().getUTCHours() !== target) continue;
+      } else if (!inSendWindow(run.sequence_config)) continue;
 
       // Atomic claim so concurrent invocations can't double-send.
       const { data: claimed } = await admin.from("email_sequence_run_items")
