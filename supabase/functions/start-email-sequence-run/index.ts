@@ -175,6 +175,7 @@ serve(async (req) => {
       .from("email_sequence_runs")
       .insert({
         owner_id: user.id,
+        workspace_id: user.id, // NOT NULL; mirrors owner id (legacy convention)
         status: "processing",
         lead_count: leads.length,
         step_count: steps.length,
