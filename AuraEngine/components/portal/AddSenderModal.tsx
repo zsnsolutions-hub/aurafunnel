@@ -44,24 +44,21 @@ const AddSenderModal: React.FC<AddSenderModalProps> = ({ workspaceId, planName, 
   // Mailchimp fields
   const [mcApiKey, setMcApiKey] = useState('');
 
-  const selectProvider = async (provider: SenderProvider) => {
+  const selectProvider = (provider: SenderProvider) => {
+    // Advance immediately \u2014 never gate navigation on a network round-trip (a
+    // hung/stale request would otherwise make the card click do nothing).
     setError(null);
-
-    // Check inbox limit for outreach providers
-    if (provider !== 'mailchimp') {
-      try {
-        const { allowed, current, max } = await canAddInbox(workspaceId, planName);
-        if (!allowed) {
-          setError(`You\u2019ve reached your inbox limit (${current}/${max}). Upgrade your plan to add more.`);
-          return;
-        }
-      } catch {
-        setError('Failed to check inbox capacity.');
-        return;
-      }
-    }
-
     setStep(provider);
+
+    // Capacity check is advisory: surface a warning if over limit, but the
+    // connect edge functions enforce the limit server-side regardless.
+    if (provider !== 'mailchimp') {
+      canAddInbox(workspaceId, planName)
+        .then(({ allowed, current, max }) => {
+          if (!allowed) setError(`You\u2019ve reached your inbox limit (${current}/${max}). Upgrade your plan to add more.`);
+        })
+        .catch(() => { /* non-blocking; server-side validation still applies */ });
+    }
   };
 
   const handleConnectSMTP = async () => {
@@ -159,10 +156,10 @@ const AddSenderModal: React.FC<AddSenderModalProps> = ({ workspaceId, planName, 
   const inputCls = 'w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400';
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 overflow-y-auto">
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md" onClick={onClose} />
+    <div className="fixed inset-0 z-[200] flex justify-end">
+      <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300" onClick={onClose} />
 
-      <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-3xl overflow-hidden animate-in zoom-in-95 duration-500">
+      <div className="relative bg-white w-full max-w-md h-full shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-300 ease-out">
         <button onClick={onClose} className="absolute top-5 right-5 text-slate-300 hover:text-slate-500 transition-colors z-10">
           <X size={20} />
         </button>
