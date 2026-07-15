@@ -8,7 +8,7 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
 const BATCH_SIZE = 5;
 const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 interface SequenceConfig {
   tone?: string;
@@ -117,7 +117,11 @@ async function callGemini(
         },
         temperature: 0.8,
         topP: 0.9,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
+        // gemini-2.5-flash reasons by default, which consumes the output-token
+        // budget and truncates the JSON answer. Disable thinking so the whole
+        // budget goes to the structured response.
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }),
   });

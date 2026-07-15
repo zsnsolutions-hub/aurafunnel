@@ -14,7 +14,7 @@ import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 function json(body: unknown, status: number, headers: Record<string, string>): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json" } });
@@ -91,7 +91,9 @@ async function callGemini(systemInstruction: string, userPrompt: string): Promis
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: { type: "OBJECT", properties: { subject: { type: "STRING" }, body_html: { type: "STRING" } }, required: ["subject", "body_html"] },
-        temperature: 0.8, topP: 0.9, maxOutputTokens: 1024,
+        temperature: 0.8, topP: 0.9, maxOutputTokens: 2048,
+        // Disable 2.5-flash thinking so it doesn't eat the budget and truncate JSON.
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }),
   });
