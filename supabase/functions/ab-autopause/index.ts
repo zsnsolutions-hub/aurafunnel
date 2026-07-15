@@ -16,6 +16,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const MIN_PER_VARIANT = 15;   // each compared variant needs this many sends
 const MIN_TOTAL = 40;         // and this many across the step
+const MIN_REPLIES = 3;        // once this many replies land, judge by reply rate (strongest signal)
 const Z_THRESHOLD = 1.64;     // one-sided ~95%
 
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
@@ -83,10 +84,27 @@ serve(async () => {
         }
         const allIds = (msgs as { id: string }[]).map(m => m.id);
         const hit = new Set<string>();
-        const evType = useClicks ? "click" : "open";
+
+        // Replies are the truest conversion signal. Count them first; if enough
+        // have landed, judge the test by reply rate. Otherwise fall back to
+        // click rate (body tests) or open rate (subject tests).
+        const replyHit = new Set<string>();
         for (let i = 0; i < allIds.length; i += 500) {
-          const { data: ev } = await admin.from("email_events").select("message_id").eq("event_type", evType).in("message_id", allIds.slice(i, i + 500));
-          for (const e of (ev ?? []) as { message_id: string }[]) hit.add(e.message_id);
+          const { data: rep } = await admin.from("inbound_emails")
+            .select("reply_to_message_id").not("reply_to_message_id", "is", null)
+            .in("reply_to_message_id", allIds.slice(i, i + 500));
+          for (const r of (rep ?? []) as { reply_to_message_id: string }[]) replyHit.add(r.reply_to_message_id);
+        }
+        let metric: "reply" | "click" | "open";
+        if (replyHit.size >= MIN_REPLIES) {
+          metric = "reply";
+          for (const id of replyHit) hit.add(id);
+        } else {
+          metric = useClicks ? "click" : "open";
+          for (let i = 0; i < allIds.length; i += 500) {
+            const { data: ev } = await admin.from("email_events").select("message_id").eq("event_type", metric).in("message_id", allIds.slice(i, i + 500));
+            for (const e of (ev ?? []) as { message_id: string }[]) hit.add(e.message_id);
+          }
         }
         const cand = [...byVar.entries()]
           .map(([variant, e]) => ({ variant, sent: e.sent, wins: e.ids.filter(id => hit.has(id)).length }))
@@ -115,7 +133,7 @@ serve(async () => {
           await admin.from("email_sequence_run_items").update(patch).eq("id", it.id);
           switched++;
         }
-        outcomes.push(`${c.id.slice(0, 8)} step ${step.step_number}: winner ${String.fromCharCode(65 + winner)} by ${evType}, ${items?.length ?? 0} reassigned`);
+        outcomes.push(`${c.id.slice(0, 8)} step ${step.step_number}: winner ${String.fromCharCode(65 + winner)} by ${metric}, ${items?.length ?? 0} reassigned`);
       }
     }
     return json({ switched, outcomes });

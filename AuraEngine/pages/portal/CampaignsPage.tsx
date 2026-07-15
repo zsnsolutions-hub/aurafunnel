@@ -623,28 +623,33 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                 const stStats = variantStats.filter(v => v.step === s.step_number);
                 const hasBody = (s.body_variants?.length ?? 0) > 0;
                 const hasSubj = (s.subject_variants?.length ?? 0) > 0;
-                const useClicks = hasBody; // body affects clicks, not opens
+                // Replies are the strongest signal — judge by reply rate once enough land,
+                // else click rate (body tests), else open rate (subject tests). Mirrors ab-autopause.
+                const totalReplies = stStats.reduce((n, v) => n + v.replied, 0);
+                const metric: 'reply' | 'click' | 'open' = totalReplies >= 3 ? 'reply' : hasBody ? 'click' : 'open';
                 const total = Math.max((s.subject_variants?.length ?? 0), (s.body_variants?.length ?? 0), ...stStats.map(v => v.variant)) + 1;
-                const rate = (v?: VariantStat) => (v && v.sent > 0 ? (useClicks ? v.clicked : v.opened) / v.sent : -1);
+                const rate = (v?: VariantStat) => (v && v.sent > 0 ? (metric === 'reply' ? v.replied : metric === 'click' ? v.clicked : v.opened) / v.sent : -1);
                 const best = Math.max(-1, ...stStats.map(rate));
                 const anySent = stStats.some(v => v.sent > 0);
                 const testLabel = hasBody && hasSubj ? 'subject + body test' : hasBody ? 'body test' : 'subject test';
                 return (
                   <div key={s.id} className="border border-slate-200 rounded-xl p-3 space-y-1.5">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Step {steps.indexOf(s) + 1} · {testLabel} · winner by {useClicks ? 'clicks' : 'opens'}</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Step {steps.indexOf(s) + 1} · {testLabel} · winner by {metric === 'reply' ? 'replies' : metric === 'click' ? 'clicks' : 'opens'}</p>
                     {Array.from({ length: total }, (_, v) => {
                       const st = stStats.find(x => x.variant === v);
                       const subj = v === 0 ? s.subject : (s.subject_variants?.[v - 1] ?? s.subject);
                       const isWinner = anySent && st && st.sent > 0 && rate(st) === best;
                       const openPct = st && st.sent > 0 ? Math.round((st.opened / st.sent) * 100) : null;
                       const clickPct = st && st.sent > 0 ? Math.round((st.clicked / st.sent) * 100) : null;
+                      const replyPct = st && st.sent > 0 ? Math.round((st.replied / st.sent) * 100) : null;
                       return (
                         <div key={v} className={`flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 ${isWinner ? 'bg-emerald-50' : ''}`}>
                           <span className={`w-5 text-[10px] font-black ${isWinner ? 'text-emerald-600' : 'text-slate-400'}`}>{variantLabel(v)}</span>
                           <span className="flex-1 truncate text-slate-600">{subj || <span className="italic text-slate-300">empty</span>}</span>
                           <span className="tabular-nums text-slate-500 w-12 text-right">{st?.sent ?? 0} sent</span>
-                          <span className="tabular-nums text-slate-700 font-semibold w-16 text-right">{openPct == null ? '—' : `${openPct}% open`}</span>
-                          <span className="tabular-nums text-slate-400 w-16 text-right">{clickPct == null ? '' : `${clickPct}% click`}</span>
+                          <span className={`tabular-nums w-16 text-right ${metric === 'open' ? 'text-slate-700 font-semibold' : 'text-slate-400'}`}>{openPct == null ? '—' : `${openPct}% open`}</span>
+                          <span className={`tabular-nums w-16 text-right ${metric === 'click' ? 'text-slate-700 font-semibold' : 'text-slate-400'}`}>{clickPct == null ? '' : `${clickPct}% click`}</span>
+                          {totalReplies > 0 && <span className={`tabular-nums w-16 text-right ${metric === 'reply' ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>{replyPct == null ? '' : `${replyPct}% reply`}</span>}
                           {isWinner && <span className="text-[9px] font-black text-emerald-600 uppercase">Win</span>}
                         </div>
                       );

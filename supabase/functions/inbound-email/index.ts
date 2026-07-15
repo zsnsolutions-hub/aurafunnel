@@ -30,6 +30,22 @@ const nameOnly = (s: string | undefined | null): string | null => {
   return m ? m[1].trim() : null;
 };
 
+// SendGrid Inbound Parse (and some Mailgun setups) post the full RFC822 header
+// block in a single `headers` field rather than discrete Message-Id/In-Reply-To
+// fields. Parse it so threading — and therefore reply→A/B-variant attribution —
+// works from hosted sources, not just IMAP.
+function parseRawHeaders(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const unfolded = (raw || "").replace(/\r?\n[ \t]+/g, " "); // unfold continuations
+  for (const line of unfolded.split(/\r?\n/)) {
+    const i = line.indexOf(":");
+    if (i < 0) continue;
+    const k = line.slice(0, i).trim().toLowerCase();
+    if (k && !(k in out)) out[k] = line.slice(i + 1).trim();
+  }
+  return out;
+}
+
 serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   if (INBOUND_SECRET && req.headers.get("X-Inbound-Secret") !== INBOUND_SECRET) {
@@ -53,8 +69,14 @@ serve(async (req) => {
     const subject = p.subject ?? p.Subject ?? "";
     const bodyText = p.text ?? p["body-plain"] ?? p.plain ?? "";
     const bodyHtml = p.html ?? p["body-html"] ?? "";
-    const messageId = cleanAngle(p.message_id ?? p["Message-Id"] ?? p["Message-ID"] ?? p.messageId);
-    const inReplyTo = cleanAngle(p.in_reply_to ?? p["In-Reply-To"] ?? p.inReplyTo);
+    // Fall back to the raw header block (SendGrid/Mailgun) for threading fields.
+    const hdr = (p.headers || p.Headers) ? parseRawHeaders(p.headers ?? p.Headers) : {};
+    const messageId = cleanAngle(p.message_id ?? p["Message-Id"] ?? p["Message-ID"] ?? p.messageId ?? hdr["message-id"]);
+    const inReplyTo = cleanAngle(p.in_reply_to ?? p["In-Reply-To"] ?? p.inReplyTo ?? hdr["in-reply-to"]);
+    // References lists the whole thread ancestry; last id is the immediate parent.
+    // Used only as a fallback when In-Reply-To doesn't resolve to one of our messages.
+    const referenceIds = (p.references ?? p.References ?? hdr["references"] ?? "")
+      .split(/\s+/).map(cleanAngle).filter(Boolean).reverse();
     const receivedAt = p.received_at ?? new Date().toISOString();
 
     const fromEmail = emailOnly(fromRaw);
@@ -69,14 +91,18 @@ serve(async (req) => {
     let senderAccountId: string | null = null;
     let replyToMessageId: string | null = null;
 
-    // 1. Thread match by In-Reply-To → the outgoing message.
-    if (inReplyTo) {
+    // 1. Thread match by In-Reply-To → the outgoing message; if that misses, walk
+    //    the References chain (nearest ancestor first) so hosted providers that
+    //    only emit References still attribute the reply to our sent message.
+    const threadCandidates = [inReplyTo, ...referenceIds].filter(Boolean);
+    for (const candidate of threadCandidates) {
       const { data: msg } = await admin.from("email_messages")
         .select("id, owner_id, lead_id, workspace_id, sender_account_id")
-        .eq("provider_message_id", inReplyTo).maybeSingle();
+        .eq("provider_message_id", candidate).maybeSingle();
       if (msg) {
         replyToMessageId = msg.id; ownerId = msg.owner_id; leadId = msg.lead_id;
         workspaceId = msg.workspace_id; senderAccountId = msg.sender_account_id;
+        break;
       }
     }
 

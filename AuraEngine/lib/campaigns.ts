@@ -108,14 +108,14 @@ export async function getSteps(sequenceId: string): Promise<CampaignStep[]> {
   return (data ?? []) as CampaignStep[];
 }
 
-export interface VariantStat { step: number; variant: number; sent: number; opened: number; clicked: number }
+export interface VariantStat { step: number; variant: number; sent: number; opened: number; clicked: number; replied: number }
 
-/** A/B results: sent/opened/clicked per (step, subject variant). */
+/** A/B results: sent/opened/clicked/replied per (step, subject variant). */
 export async function getVariantStats(campaignId: string): Promise<VariantStat[]> {
   const { data } = await supabase.rpc('campaign_variant_stats', { p_campaign_id: campaignId });
   return (data ?? []).map((r: Record<string, number>) => ({
     step: Number(r.step), variant: Number(r.variant),
-    sent: Number(r.sent), opened: Number(r.opened), clicked: Number(r.clicked),
+    sent: Number(r.sent), opened: Number(r.opened), clicked: Number(r.clicked), replied: Number(r.replied ?? 0),
   }));
 }
 
