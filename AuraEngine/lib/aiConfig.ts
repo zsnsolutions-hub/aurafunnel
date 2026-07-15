@@ -16,8 +16,10 @@ export const AI_MODELS = {
   textGrounded: 'gemini-2.5-flash',
   /** Image generation model (Imagen via gemini-proxy kind:"images"). */
   image: 'imagen-4.0-generate-001',
-  /** Lightweight model used for prompt-lab test runs in ModelTraining. */
-  textTesting: 'gemini-2.0-flash',
+  /** Lightweight model used for prompt-lab test runs in ModelTraining.
+   *  gemini-flash-lite-latest is a floating alias that stays current — the
+   *  pinned gemini-2.0-flash was retired (404) and gemini-2.5-flash-lite 404s too. */
+  textTesting: 'gemini-flash-lite-latest',
 } as const;
 
 export const AI_DEFAULTS = {
