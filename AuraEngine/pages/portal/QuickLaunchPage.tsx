@@ -29,7 +29,7 @@ import {
   generateEmailSequence, parseEmailSequenceResponse,
 } from '../../lib/gemini';
 import { track } from '../../lib/analytics';
-import { launchCampaign, previewEmail, type Campaign } from '../../lib/campaigns';
+import { launchCampaign, previewEmail, previewVerbatimFields, type Campaign } from '../../lib/campaigns';
 import { activeBusinessId } from '../../lib/businessScope';
 import { getOutboundLimits } from '../../lib/planLimits';
 import { fetchSuppressedEmails, filterSuppressed } from '../../lib/suppression';
@@ -279,6 +279,16 @@ const QuickLaunchPage: React.FC = () => {
   const [cadence, setCadence] = useState<EmailSequenceConfig['cadence']>(draft0?.cadence ?? 'every_2_days');
   const [sequenceLength, setSequenceLength] = useState(draft0?.sequenceLength ?? 3);
 
+  // ─── Delivery & content options (applied to the campaign at launch) ──
+  const [aiPersonalize, setAiPersonalize] = useState(true);
+  const [bestTime, setBestTime] = useState(false);
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const [winOn, setWinOn] = useState(false);
+  const [winStart, setWinStart] = useState(9);
+  const [winEnd, setWinEnd] = useState(17);
+  const [winWeekdays, setWinWeekdays] = useState(false);
+  const [winTz, setWinTz] = useState(browserTz);
+
   // ─── Sequence state ────────────────────────────────────────────────
   const [steps, setSteps] = useState<SequenceStep[]>(draft0?.steps?.length ? draft0.steps : SAMPLE_STEPS);
   const [generating, setGenerating] = useState(false);
@@ -294,6 +304,8 @@ const QuickLaunchPage: React.FC = () => {
   const [previewCache, setPreviewCache] = useState<Map<string, { subject: string; htmlBody: string }>>(new Map());
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // Cached previews are mode-specific — clear when switching AI ↔ verbatim.
+  useEffect(() => { setPreviewCache(new Map()); }, [aiPersonalize]);
 
   const previewKey = previewLead ? `${previewLead.id}-${previewStepIdx}` : '';
   const previewResult = previewKey ? previewCache.get(previewKey) : undefined;
@@ -308,18 +320,29 @@ const QuickLaunchPage: React.FC = () => {
     }
     setPreviewLoading(true); setPreviewError(null);
     try {
-      // Same shared preview the Campaigns drawer uses → preview matches the send.
-      const res = await previewEmail({
-        templateSubject: step.subject, templateBody: step.body, stepIndex: stepIdx,
-        lead: {
-          name: [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.primary_email?.split('@')[0] || '',
-          company: lead.company, title: lead.title, industry: lead.industry,
-          score: lead.score, insights: lead.insights, knowledgeBase: lead.knowledgeBase,
+      const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.primary_email?.split('@')[0] || '';
+      let res: { subject: string; body_html: string } | { error: string };
+      if (aiPersonalize) {
+        // Same shared preview the Campaigns drawer uses → preview matches the send.
+        res = await previewEmail({
+          templateSubject: step.subject, templateBody: step.body, stepIndex: stepIdx,
+          lead: {
+            name, company: lead.company, title: lead.title, industry: lead.industry,
+            score: lead.score, insights: lead.insights, knowledgeBase: lead.knowledgeBase,
+            location: lead.location, website: (lead as { website?: string }).website, linkedin: lead.linkedin_url,
+            source: lead.source, company_size: lead.company_size, custom_fields: lead.custom_fields,
+          },
+          tone: tone.toString(), goal: offer,
+        });
+      } else {
+        // Verbatim mode → show the deterministic merge, matching the send.
+        res = previewVerbatimFields(step.subject, step.body, {
+          name, company: lead.company, title: lead.title, industry: lead.industry,
           location: lead.location, website: (lead as { website?: string }).website, linkedin: lead.linkedin_url,
-          source: lead.source, company_size: lead.company_size, custom_fields: lead.custom_fields,
-        },
-        tone: tone.toString(), goal: offer,
-      });
+          source: lead.source, company_size: lead.company_size, phone: lead.primary_phone, email: lead.primary_email,
+          custom_fields: lead.custom_fields as Record<string, unknown> | null,
+        });
+      }
       if ('error' in res) { setPreviewError(res.error); return; }
       setPreviewCache((prev) => {
         const next = new Map(prev);
@@ -331,7 +354,7 @@ const QuickLaunchPage: React.FC = () => {
     } finally {
       setPreviewLoading(false);
     }
-  }, [previewCache, steps, tone, offer]);
+  }, [previewCache, steps, tone, offer, aiPersonalize]);
 
   const openPreview = useCallback((lead: Lead) => {
     setPreviewLead(lead);
@@ -541,7 +564,16 @@ const QuickLaunchPage: React.FC = () => {
       // A/B, best-time, analytics, etc.), then launch it via the campaigns engine.
       const name = offer.trim().slice(0, 60) || 'Quick Launch campaign';
       const { data: seq, error: seqErr } = await supabase.from('email_sequences')
-        .insert({ workspace_id: user.id, created_by: user.id, name, status: 'draft', total_leads: recipients.length, tone: tone.toString(), goal: offer })
+        .insert({
+          workspace_id: user.id, created_by: user.id, name, status: 'draft', total_leads: recipients.length,
+          tone: tone.toString(), goal: offer,
+          ai_personalize: aiPersonalize,
+          send_best_time: bestTime,
+          send_window_start: winOn ? winStart : null,
+          send_window_end: winOn ? winEnd : null,
+          send_weekdays_only: winOn ? winWeekdays : false,
+          send_timezone: winOn ? winTz : null,
+        })
         .select('*').single();
       if (seqErr || !seq) throw new Error(seqErr?.message || 'Could not create the campaign.');
       const seqId = (seq as { id: string }).id;
@@ -567,7 +599,7 @@ const QuickLaunchPage: React.FC = () => {
     } finally {
       setLaunching(false);
     }
-  }, [launchAudience, steps, tone, offer, isSampleMode, user]);
+  }, [launchAudience, steps, tone, offer, isSampleMode, user, aiPersonalize, bestTime, winOn, winStart, winEnd, winWeekdays, winTz]);
 
   // ───────────────────────────────────────────────────────────────────
   return (
@@ -936,6 +968,69 @@ const QuickLaunchPage: React.FC = () => {
             >
               <Plus size={14} /> Add step
             </button>
+
+            {/* Delivery & content options (applied to the campaign) */}
+            {!isSampleMode && !launchResult && (
+              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Delivery & content</p>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="pr-2">
+                    <p className="text-xs font-bold text-slate-800">{aiPersonalize ? 'AI-personalize each email' : 'Send my text as-is (mail-merge)'}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{aiPersonalize ? 'AI rewrites each email per lead from their company, role & context.' : 'Sends your exact copy with {{first_name}}, {{company}} filled in.'}</p>
+                  </div>
+                  <button onClick={() => setAiPersonalize(v => !v)} className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${aiPersonalize ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                    <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${aiPersonalize ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-50">
+                  <div className="pr-2">
+                    <p className="text-xs font-bold text-slate-800">Send at each lead's best time</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Learns each lead's most-engaged hour from past opens (falls back to a default). Overrides the window below.</p>
+                  </div>
+                  <button onClick={() => setBestTime(v => !v)} className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${bestTime ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                    <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${bestTime ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                <div className={`pt-1 border-t border-slate-50 space-y-2 ${bestTime ? 'opacity-50' : ''}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="pr-2">
+                      <p className="text-xs font-bold text-slate-800">Send only during set hours</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{bestTime ? 'Ignored while best-time is on.' : 'Hold emails until inside this window.'}</p>
+                    </div>
+                    <button onClick={() => setWinOn(v => !v)} className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${winOn ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                      <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${winOn ? 'left-6' : 'left-1'}`} />
+                    </button>
+                  </div>
+                  {winOn && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-400 font-semibold">Between</span>
+                        <select value={winStart} onChange={e => setWinStart(+e.target.value)} className="px-2 py-1 border border-slate-200 rounded-lg">
+                          {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                        </select>
+                        <span className="text-slate-400">and</span>
+                        <select value={winEnd} onChange={e => setWinEnd(+e.target.value)} className="px-2 py-1 border border-slate-200 rounded-lg">
+                          {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-400 font-semibold">Timezone</span>
+                        <select value={winTz} onChange={e => setWinTz(e.target.value)} className="flex-1 px-2 py-1 border border-slate-200 rounded-lg">
+                          {Array.from(new Set([browserTz, 'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Asia/Karachi', 'Asia/Dubai'])).map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                        </select>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-slate-600">
+                        <input type="checkbox" checked={winWeekdays} onChange={e => setWinWeekdays(e.target.checked)} /> Weekdays only (Mon–Fri)
+                      </label>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">Add A/B variants and more after launch under Campaigns.</p>
+              </div>
+            )}
 
             {launchResult ? (
               <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-4">

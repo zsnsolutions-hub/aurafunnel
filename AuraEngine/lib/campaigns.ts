@@ -238,6 +238,11 @@ async function getMyBusinessProfile(): Promise<Record<string, unknown> | undefin
   return (data?.businessProfile as Record<string, unknown> | null) ?? undefined;
 }
 
+/** Verbatim/mail-merge preview from lead FIELDS (no DB fetch) — deterministic. */
+export function previewVerbatimFields(templateSubject: string, templateBody: string, lead: MergeLead): { subject: string; body_html: string } {
+  return { subject: mergeClient(templateSubject, lead), body_html: nl2br(mergeClient(templateBody, lead)) };
+}
+
 /** Verbatim/mail-merge preview — deterministic {{field}} substitution, no AI. */
 export async function previewVerbatimForLead(step: CampaignStep, leadId: string): Promise<{ subject: string; body_html: string } | { error: string }> {
   const { data: lead } = await supabase.from('leads')
