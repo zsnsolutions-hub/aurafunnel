@@ -29,6 +29,8 @@ import {
   generateEmailSequence, parseEmailSequenceResponse, generatePersonalizedEmail,
 } from '../../lib/gemini';
 import { track } from '../../lib/analytics';
+import { launchCampaign, type Campaign } from '../../lib/campaigns';
+import { activeBusinessId } from '../../lib/businessScope';
 import { getOutboundLimits } from '../../lib/planLimits';
 import { fetchSuppressedEmails, filterSuppressed } from '../../lib/suppression';
 import { ToneType, type User, type EmailSequenceConfig, type Lead } from '../../types';
@@ -518,48 +520,55 @@ const QuickLaunchPage: React.FC = () => {
     setLaunching(true); setLaunchError(null);
     track('quicklaunch_launch', { recipients: recipients.length, steps: steps.length, dupes: launchAudience.dupes, suppressed: launchAudience.suppressed, plan: user.plan ?? 'Free' });
     try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess.session?.access_token;
-      if (!token) throw new Error('No auth session — please refresh and try again.');
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-email-sequence-run`;
-      const payload = {
-        leads: recipients.map((l) => ({
-          id: l.id,
-          email: l.primary_email,
-          name: [l.first_name, l.last_name].filter(Boolean).join(' '),
-          company: l.company,
-          score: l.score, status: l.status, insights: l.insights,
-          industry: l.industry, title: l.title,
-        })),
-        steps: steps.map((s) => ({
-          stepIndex: s.stepIndex,
-          delayDays: s.delayDays,
-          subject: s.subject,
-          body: s.body,
-        })),
-        config: {
-          tone: tone.toString(),
-          goal: offer,
-          cadence,
-          sendMode: 'auto',
-        },
-      };
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      const data = await res.json() as { run_id: string; items_total: number };
-      setLaunchResult({ runId: data.run_id, total: data.items_total });
+      // Pasted emails are ephemeral (id 'paste-N'); persist them as real leads so
+      // enrollments (FK → leads) resolve. Existing/imported leads already have uuids.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let resolved = recipients;
+      const ephemeral = recipients.filter((l) => !UUID_RE.test(l.id));
+      if (ephemeral.length) {
+        const rows = ephemeral.map((l) => ({
+          client_id: user.id, workspace_id: user.id, business_id: activeBusinessId(),
+          first_name: l.first_name || '', last_name: l.last_name || '',
+          primary_email: l.primary_email, company: l.company || '',
+          status: 'New', source: 'Quick Launch', last_activity: new Date().toISOString(),
+        }));
+        const { data: created, error: leadErr } = await supabase.from('leads').insert(rows).select('id, primary_email');
+        if (leadErr) throw new Error(leadErr.message);
+        const byEmail = new Map((created ?? []).map((c) => [c.primary_email, c.id]));
+        resolved = recipients.map((l) => UUID_RE.test(l.id) ? l : ({ ...l, id: byEmail.get(l.primary_email) ?? l.id }));
+      }
+
+      // Create a real, manageable campaign (so it shows in Campaigns and inherits
+      // A/B, best-time, analytics, etc.), then launch it via the campaigns engine.
+      const name = offer.trim().slice(0, 60) || 'Quick Launch campaign';
+      const { data: seq, error: seqErr } = await supabase.from('email_sequences')
+        .insert({ workspace_id: user.id, created_by: user.id, name, status: 'draft', total_leads: recipients.length, tone: tone.toString(), goal: offer })
+        .select('*').single();
+      if (seqErr || !seq) throw new Error(seqErr?.message || 'Could not create the campaign.');
+      const seqId = (seq as { id: string }).id;
+
+      const stepRows = steps.map((s) => ({ sequence_id: seqId, step_number: s.stepIndex, subject: s.subject, body_html: s.body, delay_days: s.delayDays }));
+      const { error: stepErr } = await supabase.from('sequence_steps').insert(stepRows);
+      if (stepErr) throw new Error(stepErr.message);
+
+      const enrollRows = resolved.map((l) => ({ sequence_id: seqId, lead_id: l.id, workspace_id: user.id, status: 'active', current_step: 0 }));
+      const { error: enrErr } = await supabase.from('sequence_enrollments').insert(enrollRows);
+      if (enrErr) throw new Error(enrErr.message);
+
+      // launchCampaign fetches the steps + enrolled leads and posts to
+      // start-email-sequence-run with campaignId + businessProfile + AI mode.
+      const res = await launchCampaign(seq as Campaign);
+      if ('error' in res) throw new Error(res.error);
+
+      setLaunchResult({ runId: seqId, total: res.total });
       setConfirmOpen(false);
-      track('quicklaunch_launch_success', { total: data.items_total });
+      track('quicklaunch_launch_success', { total: res.total });
     } catch (e) {
       setLaunchError((e as Error).message);
     } finally {
       setLaunching(false);
     }
-  }, [launchAudience, steps, tone, offer, cadence, isSampleMode, user]);
+  }, [launchAudience, steps, tone, offer, isSampleMode, user]);
 
   // ───────────────────────────────────────────────────────────────────
   return (
@@ -933,10 +942,10 @@ const QuickLaunchPage: React.FC = () => {
               <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-4">
                 <Check size={18} className="shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-bold">Sequence launched</p>
-                  <p className="text-xs">{launchResult.total} email{launchResult.total === 1 ? '' : 's'} scheduled across {activeLeads.length} recipient{activeLeads.length === 1 ? '' : 's'}.</p>
+                  <p className="text-sm font-bold">Campaign launched</p>
+                  <p className="text-xs">{launchResult.total} email{launchResult.total === 1 ? '' : 's'} scheduled across {activeLeads.length} recipient{activeLeads.length === 1 ? '' : 's'}. Manage it, add A/B variants, or set best-time sending under Campaigns.</p>
                 </div>
-                <button onClick={() => navigate('/portal/campaigns')} className="text-xs font-bold underline">View campaigns</button>
+                <button onClick={() => navigate('/portal/campaigns')} className="text-xs font-bold underline shrink-0">Open campaign</button>
               </div>
             ) : (
               <div className="flex items-center justify-between pt-2">
