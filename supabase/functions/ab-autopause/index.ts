@@ -27,6 +27,10 @@ function zTest(x1: number, n1: number, x2: number, n2: number): number {
   return se === 0 ? 0 : (p1 - p2) / se;
 }
 
+function nl2brHtml(s: string): string {
+  return /<(p|br|div|ul|ol|table|a|strong|em|span|h[1-6])\b/i.test(s || "") ? (s || "") : (s || "").replace(/\n/g, "<br>");
+}
+
 // Mirrors mergeFields in start-email-sequence-run (verbatim re-merge on switch).
 function mergeFields(tpl: string, lead: Record<string, unknown>, fromName = ""): string {
   const name = String(lead.name ?? "");
@@ -55,58 +59,63 @@ serve(async () => {
     let switched = 0; const outcomes: string[] = [];
     for (const c of (campaigns ?? []) as { id: string }[]) {
       const { data: steps } = await admin.from("sequence_steps")
-        .select("step_number, subject, subject_variants").eq("sequence_id", c.id);
-      const abSteps = (steps ?? []).filter((s: { subject_variants?: string[] }) => (s.subject_variants?.length ?? 0) > 0);
+        .select("step_number, subject, subject_variants, body_html, body_variants").eq("sequence_id", c.id);
+      const abSteps = (steps ?? []).filter((s: { subject_variants?: string[]; body_variants?: string[] }) =>
+        (s.subject_variants?.length ?? 0) > 0 || (s.body_variants?.length ?? 0) > 0);
       if (!abSteps.length) continue;
 
       const { data: runs } = await admin.from("email_sequence_runs").select("id").eq("sequence_config->>campaignId", c.id);
       const runIds = (runs ?? []).map((r: { id: string }) => r.id);
       if (!runIds.length) continue;
 
-      for (const step of abSteps as { step_number: number; subject: string; subject_variants: string[] }[]) {
+      for (const step of abSteps as { step_number: number; subject: string; subject_variants: string[]; body_html: string; body_variants: string[] }[]) {
+        // Body differences drive clicks, not opens → judge body tests by click rate.
+        const useClicks = (step.body_variants?.length ?? 0) > 0;
         const { data: msgs } = await admin.from("email_messages")
           .select("id, subject_variant").eq("sequence_id", c.id).eq("sequence_step", step.step_number);
         if (!msgs || msgs.length < MIN_TOTAL) continue;
 
-        const byVar = new Map<number, { sent: number; opened: number; ids: string[] }>();
+        const byVar = new Map<number, { sent: number; ids: string[] }>();
         for (const m of msgs as { id: string; subject_variant: number | null }[]) {
           const v = m.subject_variant ?? 0;
-          const e = byVar.get(v) ?? { sent: 0, opened: 0, ids: [] };
+          const e = byVar.get(v) ?? { sent: 0, ids: [] };
           e.sent++; e.ids.push(m.id); byVar.set(v, e);
         }
-        // opens (chunk the id list)
         const allIds = (msgs as { id: string }[]).map(m => m.id);
-        const opened = new Set<string>();
+        const hit = new Set<string>();
+        const evType = useClicks ? "click" : "open";
         for (let i = 0; i < allIds.length; i += 500) {
-          const { data: ev } = await admin.from("email_events").select("message_id").eq("event_type", "open").in("message_id", allIds.slice(i, i + 500));
-          for (const e of (ev ?? []) as { message_id: string }[]) opened.add(e.message_id);
+          const { data: ev } = await admin.from("email_events").select("message_id").eq("event_type", evType).in("message_id", allIds.slice(i, i + 500));
+          for (const e of (ev ?? []) as { message_id: string }[]) hit.add(e.message_id);
         }
-        for (const [, e] of byVar) e.opened = e.ids.filter(id => opened.has(id)).length;
-
-        const cand = [...byVar.entries()].map(([variant, e]) => ({ variant, ...e })).filter(v => v.sent >= MIN_PER_VARIANT);
+        const cand = [...byVar.entries()]
+          .map(([variant, e]) => ({ variant, sent: e.sent, wins: e.ids.filter(id => hit.has(id)).length }))
+          .filter(v => v.sent >= MIN_PER_VARIANT);
         if (cand.length < 2) continue;
-        cand.sort((a, b) => (b.opened / b.sent) - (a.opened / a.sent));
+        cand.sort((a, b) => (b.wins / b.sent) - (a.wins / a.sent));
         const leader = cand[0], runner = cand[1];
-        if (zTest(leader.opened, leader.sent, runner.opened, runner.sent) < Z_THRESHOLD) continue;
+        if (zTest(leader.wins, leader.sent, runner.wins, runner.sent) < Z_THRESHOLD) continue;
 
         const winner = leader.variant;
-        const winnerSubject = winner === 0 ? step.subject : (step.subject_variants[winner - 1] ?? step.subject);
+        const winnerSubject = winner === 0 ? step.subject : (step.subject_variants?.[winner - 1] ?? step.subject);
+        const winnerBody = winner === 0 ? step.body_html : (step.body_variants?.[winner - 1] ?? step.body_html);
 
-        // Reassign not-yet-sent losers → winner.
+        // Reassign not-yet-sent losers → winner (subject + body).
         const { data: items } = await admin.from("email_sequence_run_items")
           .select("id, status, lead_name, lead_company, lead_context")
           .in("run_id", runIds).eq("step_index", step.step_number)
           .neq("subject_variant", winner).in("status", ["pending", "written"]);
         for (const it of (items ?? []) as { id: string; status: string; lead_name: string; lead_company: string; lead_context: Record<string, unknown> }[]) {
-          const patch: Record<string, unknown> = { subject_variant: winner, template_subject: winnerSubject, updated_at: new Date().toISOString() };
+          const patch: Record<string, unknown> = { subject_variant: winner, template_subject: winnerSubject, template_body: winnerBody, updated_at: new Date().toISOString() };
           if (it.status === "written") {
-            const ctx = it.lead_context ?? {};
-            patch.ai_subject = mergeFields(winnerSubject, { name: it.lead_name, company: it.lead_company, ...ctx });
+            const lead = { name: it.lead_name, company: it.lead_company, ...(it.lead_context ?? {}) };
+            patch.ai_subject = mergeFields(winnerSubject, lead);
+            patch.ai_body_html = nl2brHtml(mergeFields(winnerBody, lead));
           }
           await admin.from("email_sequence_run_items").update(patch).eq("id", it.id);
           switched++;
         }
-        outcomes.push(`${c.id.slice(0, 8)} step ${step.step_number}: winner ${String.fromCharCode(65 + winner)}, ${items?.length ?? 0} reassigned`);
+        outcomes.push(`${c.id.slice(0, 8)} step ${step.step_number}: winner ${String.fromCharCode(65 + winner)} by ${evType}, ${items?.length ?? 0} reassigned`);
       }
     }
     return json({ switched, outcomes });

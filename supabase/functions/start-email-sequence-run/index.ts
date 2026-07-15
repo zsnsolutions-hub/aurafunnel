@@ -32,6 +32,7 @@ interface StepInput {
   delayDays: number;
   subject: string;
   subjectVariants?: string[];
+  bodyVariants?: string[];
   body: string;
 }
 
@@ -214,9 +215,14 @@ serve(async (req) => {
     let leadIndex = 0;
     for (const lead of leads) {
       for (const step of steps) {
-        const variants = [step.subject, ...(step.subjectVariants ?? [])].filter(v => (v ?? "").trim());
-        const vIdx = variants.length > 1 ? leadIndex % variants.length : 0;
-        const chosenSubject = variants[vIdx] ?? step.subject;
+        // A "variant" selects both a subject and a body (independent counts;
+        // missing lane falls back to variant A).
+        const subjExtras = (step.subjectVariants ?? []).filter(v => (v ?? "").trim());
+        const bodyExtras = (step.bodyVariants ?? []).filter(v => (v ?? "").trim());
+        const variantCount = Math.max(subjExtras.length, bodyExtras.length) + 1;
+        const vIdx = variantCount > 1 ? leadIndex % variantCount : 0;
+        const chosenSubject = vIdx === 0 ? step.subject : (subjExtras[vIdx - 1] ?? step.subject);
+        const chosenBody = vIdx === 0 ? step.body : (bodyExtras[vIdx - 1] ?? step.body);
         const base = {
           run_id: run.id,
           lead_id: lead.id,
@@ -239,7 +245,7 @@ serve(async (req) => {
             custom_fields: lead.custom_fields,
           },
           template_subject: chosenSubject,
-          template_body: step.body,
+          template_body: chosenBody,
           delay_days: step.delayDays,
           attempt_count: 0,
           subject_variant: vIdx,
@@ -251,7 +257,7 @@ serve(async (req) => {
             ...base,
             status: "written",
             ai_subject: mergeFields(chosenSubject, lead, fromName),
-            ai_body_html: nl2brHtml(mergeFields(step.body, lead, fromName)),
+            ai_body_html: nl2brHtml(mergeFields(chosenBody, lead, fromName)),
           });
         }
       }

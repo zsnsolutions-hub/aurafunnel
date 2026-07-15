@@ -268,10 +268,21 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
   const blurVariant = useCallback((s: CampaignStep) => onStepBlur(s.id, { subject_variants: (s.subject_variants ?? []).map(v => v.trim()).filter(Boolean) }), [onStepBlur]);
   const removeVariant = useCallback((s: CampaignStep, idx: number) => setVariants(s, (s.subject_variants ?? []).filter((_, i) => i !== idx)), [setVariants]);
 
+  const setBodyVariants = useCallback((s: CampaignStep, variants: string[]) => {
+    patchLocalStep(s.id, { body_variants: variants });
+    void onStepBlur(s.id, { body_variants: variants.map(v => v.trim()).filter(Boolean) });
+  }, [onStepBlur]);
+  const addBodyVariant = useCallback((s: CampaignStep) => setBodyVariants(s, [...(s.body_variants ?? []), '']), [setBodyVariants]);
+  const patchBodyVariant = useCallback((s: CampaignStep, idx: number, val: string) => {
+    const arr = [...(s.body_variants ?? [])]; arr[idx] = val; patchLocalStep(s.id, { body_variants: arr });
+  }, []);
+  const blurBodyVariant = useCallback((s: CampaignStep) => onStepBlur(s.id, { body_variants: (s.body_variants ?? []).map(v => v.trim()).filter(Boolean) }), [onStepBlur]);
+  const removeBodyVariant = useCallback((s: CampaignStep, idx: number) => setBodyVariants(s, (s.body_variants ?? []).filter((_, i) => i !== idx)), [setBodyVariants]);
+
   const onDuplicateStep = useCallback(async (s: CampaignStep) => {
     setBusy(true);
     const next = (steps[steps.length - 1]?.step_number ?? 0) + 1;
-    const created = await addStep(campaign.id, { subject: s.subject, body_html: s.body_html, delay_days: s.delay_days, step_number: next, subject_variants: s.subject_variants });
+    const created = await addStep(campaign.id, { subject: s.subject, body_html: s.body_html, delay_days: s.delay_days, step_number: next, subject_variants: s.subject_variants, body_variants: s.body_variants });
     setBusy(false);
     if (created) { setSteps(prev => [...prev, created]); onChanged(); } else toast('Could not duplicate step', 'error');
   }, [campaign.id, steps, onChanged, toast]);
@@ -551,6 +562,20 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                   onBlur={() => onStepBlur(s.id, { body_html: s.body_html })}
                   rows={5}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-300 resize-y" />
+                {(s.body_variants ?? []).map((v, vi) => (
+                  <div key={vi} className="flex items-start gap-2">
+                    <textarea value={v} placeholder={`Body variant ${String.fromCharCode(66 + vi)}`}
+                      onChange={e => patchBodyVariant(s, vi, e.target.value)}
+                      onFocus={e => { focusRef.current = { id: s.id, field: 'body_html', el: e.target }; }}
+                      onBlur={() => blurBodyVariant(s)} rows={4}
+                      className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-300 resize-y" />
+                    <div className="flex flex-col items-center gap-1 pt-1">
+                      <span className="text-[9px] font-black text-slate-400 uppercase">{String.fromCharCode(66 + vi)}</span>
+                      <button onClick={() => removeBodyVariant(s, vi)} className="p-1 text-slate-300 hover:text-rose-500"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => addBodyVariant(s)} className="text-[11px] font-bold text-slate-400 hover:text-indigo-600">+ A/B body variant</button>
 
                 {previews[s.id] && !previews[s.id].loading && (
                   previews[s.id].error ? (
@@ -568,7 +593,7 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
           </div>
 
           {/* A/B results */}
-          {steps.some(s => (s.subject_variants?.length ?? 0) > 0) && (
+          {steps.some(s => (s.subject_variants?.length ?? 0) > 0 || (s.body_variants?.length ?? 0) > 0) && (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-bold text-slate-800">A/B results</h3>
@@ -580,19 +605,23 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                   </button>
                 </label>
               </div>
-              {abAuto && <p className="text-[11px] text-slate-400 -mt-1">Once a variant is a clear winner (enough sends + significant open-rate lead), remaining unsent emails switch to it automatically.</p>}
-              {steps.filter(s => (s.subject_variants?.length ?? 0) > 0).map(s => {
+              {abAuto && <p className="text-[11px] text-slate-400 -mt-1">Once a variant is a clear winner (enough sends + a significant lead on the relevant metric), remaining unsent emails switch to it automatically.</p>}
+              {steps.filter(s => (s.subject_variants?.length ?? 0) > 0 || (s.body_variants?.length ?? 0) > 0).map(s => {
                 const stStats = variantStats.filter(v => v.step === s.step_number);
-                const total = Math.max((s.subject_variants?.length ?? 0) + 1, ...stStats.map(v => v.variant + 1), 1);
-                const rate = (v?: VariantStat) => (v && v.sent > 0 ? v.opened / v.sent : -1);
+                const hasBody = (s.body_variants?.length ?? 0) > 0;
+                const hasSubj = (s.subject_variants?.length ?? 0) > 0;
+                const useClicks = hasBody; // body affects clicks, not opens
+                const total = Math.max((s.subject_variants?.length ?? 0), (s.body_variants?.length ?? 0), ...stStats.map(v => v.variant)) + 1;
+                const rate = (v?: VariantStat) => (v && v.sent > 0 ? (useClicks ? v.clicked : v.opened) / v.sent : -1);
                 const best = Math.max(-1, ...stStats.map(rate));
                 const anySent = stStats.some(v => v.sent > 0);
+                const testLabel = hasBody && hasSubj ? 'subject + body test' : hasBody ? 'body test' : 'subject test';
                 return (
                   <div key={s.id} className="border border-slate-200 rounded-xl p-3 space-y-1.5">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Step {steps.indexOf(s) + 1} · subject test</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Step {steps.indexOf(s) + 1} · {testLabel} · winner by {useClicks ? 'clicks' : 'opens'}</p>
                     {Array.from({ length: total }, (_, v) => {
                       const st = stStats.find(x => x.variant === v);
-                      const subj = v === 0 ? s.subject : (s.subject_variants?.[v - 1] ?? '');
+                      const subj = v === 0 ? s.subject : (s.subject_variants?.[v - 1] ?? s.subject);
                       const isWinner = anySent && st && st.sent > 0 && rate(st) === best;
                       const openPct = st && st.sent > 0 ? Math.round((st.opened / st.sent) * 100) : null;
                       const clickPct = st && st.sent > 0 ? Math.round((st.clicked / st.sent) * 100) : null;

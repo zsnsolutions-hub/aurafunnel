@@ -77,6 +77,7 @@ export interface CampaignStep {
   subject: string;
   subject_variants: string[];
   body_html: string;
+  body_variants: string[];
   delay_days: number;
 }
 
@@ -100,7 +101,7 @@ export async function listCampaigns(userId: string): Promise<Campaign[]> {
 
 export async function getSteps(sequenceId: string): Promise<CampaignStep[]> {
   const { data } = await supabase.from('sequence_steps')
-    .select('id,sequence_id,step_number,subject,subject_variants,body_html,delay_days')
+    .select('id,sequence_id,step_number,subject,subject_variants,body_html,body_variants,delay_days')
     .eq('sequence_id', sequenceId)
     .order('step_number', { ascending: true });
   return (data ?? []) as CampaignStep[];
@@ -204,15 +205,15 @@ export async function updateCampaign(id: string, patch: Partial<Pick<Campaign, '
   return error?.message ?? null;
 }
 
-export async function addStep(sequenceId: string, step: { subject: string; body_html: string; delay_days: number; step_number: number; subject_variants?: string[] }): Promise<CampaignStep | null> {
+export async function addStep(sequenceId: string, step: { subject: string; body_html: string; delay_days: number; step_number: number; subject_variants?: string[]; body_variants?: string[] }): Promise<CampaignStep | null> {
   const { data, error } = await supabase.from('sequence_steps')
     .insert({ sequence_id: sequenceId, ...step })
-    .select('id,sequence_id,step_number,subject,subject_variants,body_html,delay_days').single();
+    .select('id,sequence_id,step_number,subject,subject_variants,body_html,body_variants,delay_days').single();
   if (error || !data) return null;
   return data as CampaignStep;
 }
 
-export async function updateStep(id: string, patch: Partial<Pick<CampaignStep, 'subject' | 'subject_variants' | 'body_html' | 'delay_days' | 'step_number'>>): Promise<string | null> {
+export async function updateStep(id: string, patch: Partial<Pick<CampaignStep, 'subject' | 'subject_variants' | 'body_html' | 'body_variants' | 'delay_days' | 'step_number'>>): Promise<string | null> {
   const { error } = await supabase.from('sequence_steps').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
   return error?.message ?? null;
 }
@@ -318,7 +319,7 @@ export async function launchCampaign(campaign: Campaign): Promise<{ ok: true; to
     : undefined;
   const payload = {
     leads,
-    steps: steps.map(s => ({ stepIndex: s.step_number, delayDays: s.delay_days, subject: s.subject, subjectVariants: s.subject_variants, body: s.body_html })),
+    steps: steps.map(s => ({ stepIndex: s.step_number, delayDays: s.delay_days, subject: s.subject, subjectVariants: s.subject_variants, body: s.body_html, bodyVariants: s.body_variants })),
     config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', sendMode: 'auto', campaignId: campaign.id, businessProfile, aiPersonalize: campaign.ai_personalize, sendWindow },
   };
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-email-sequence-run`;
