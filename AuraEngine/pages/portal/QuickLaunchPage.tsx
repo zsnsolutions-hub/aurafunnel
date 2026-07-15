@@ -26,10 +26,10 @@ import {
 import { supabase } from '../../lib/supabase';
 import { resolveWorkspaceForUser, createMyWorkspace } from '../../lib/memory';
 import {
-  generateEmailSequence, parseEmailSequenceResponse, generatePersonalizedEmail,
+  generateEmailSequence, parseEmailSequenceResponse,
 } from '../../lib/gemini';
 import { track } from '../../lib/analytics';
-import { launchCampaign, type Campaign } from '../../lib/campaigns';
+import { launchCampaign, previewEmail, type Campaign } from '../../lib/campaigns';
 import { activeBusinessId } from '../../lib/businessScope';
 import { getOutboundLimits } from '../../lib/planLimits';
 import { fetchSuppressedEmails, filterSuppressed } from '../../lib/suppression';
@@ -285,8 +285,8 @@ const QuickLaunchPage: React.FC = () => {
   const [genError, setGenError] = useState<string | null>(null);
 
   // ─── Per-lead email preview ──────────────────────────────────────
-  // Click a lead row → modal calls generatePersonalizedEmail (same engine
-  // process-email-writing-queue uses at send time) and shows the actual
+  // Click a lead row → modal calls the shared previewEmail (preview-sequence-email,
+  // the SAME prompt process-email-writing-queue uses at send time) and shows the actual
   // AI-rewritten email for that lead × step. Results are cached per
   // (lead, step) so re-opening or switching steps doesn't re-burn tokens.
   const [previewLead, setPreviewLead] = useState<Lead | null>(null);
@@ -308,23 +308,22 @@ const QuickLaunchPage: React.FC = () => {
     }
     setPreviewLoading(true); setPreviewError(null);
     try {
-      const firstName = lead.first_name || lead.primary_email?.split('@')[0] || 'there';
-      const company = lead.company || 'your company';
-      const resolveTags = (s: string) =>
-        s.replace(/\{\{\s*first_name\s*\}\}/gi, firstName)
-         .replace(/\{\{\s*company\s*\}\}/gi, company)
-         .replace(/\{\{\s*industry\s*\}\}/gi, lead.industry || '')
-         .replace(/\{\{\s*job_title\s*\}\}/gi, lead.title || '');
-      const result = await generatePersonalizedEmail({
-        subjectTemplate: resolveTags(step.subject),
-        bodyTemplate:    resolveTags(step.body),
-        lead,
-        businessProfile: user.businessProfile ?? undefined,
-        tone,
-      }, user.id);
+      // Same shared preview the Campaigns drawer uses → preview matches the send.
+      const res = await previewEmail({
+        templateSubject: step.subject, templateBody: step.body, stepIndex: stepIdx,
+        lead: {
+          name: [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.primary_email?.split('@')[0] || '',
+          company: lead.company, title: lead.title, industry: lead.industry,
+          score: lead.score, insights: lead.insights, knowledgeBase: lead.knowledgeBase,
+          location: lead.location, website: (lead as { website?: string }).website, linkedin: lead.linkedin_url,
+          source: lead.source, company_size: lead.company_size, custom_fields: lead.custom_fields,
+        },
+        tone: tone.toString(), goal: offer,
+      });
+      if ('error' in res) { setPreviewError(res.error); return; }
       setPreviewCache((prev) => {
         const next = new Map(prev);
-        next.set(key, { subject: result.subject, htmlBody: result.htmlBody });
+        next.set(key, { subject: res.subject, htmlBody: res.body_html });
         return next;
       });
     } catch (e) {
@@ -332,7 +331,7 @@ const QuickLaunchPage: React.FC = () => {
     } finally {
       setPreviewLoading(false);
     }
-  }, [previewCache, steps, tone, user]);
+  }, [previewCache, steps, tone, offer]);
 
   const openPreview = useCallback((lead: Lead) => {
     setPreviewLead(lead);

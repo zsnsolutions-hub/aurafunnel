@@ -255,37 +255,56 @@ export async function previewVerbatimForLead(step: CampaignStep, leadId: string)
   return { subject: mergeClient(step.subject, l), body_html: nl2br(mergeClient(step.body_html, l)) };
 }
 
-/** Generate the AI-personalized email a lead would receive for a step — same
- *  prompt as the send, so it's an accurate preview. */
-export async function previewStepForLead(
-  campaign: Campaign, step: CampaignStep, leadId: string,
-): Promise<{ subject: string; body_html: string } | { error: string }> {
+export interface PreviewLeadFields {
+  name?: string; company?: string | null; title?: string | null; industry?: string | null;
+  score?: number | null; insights?: string | null; knowledgeBase?: unknown;
+  location?: string | null; website?: string | null; linkedin?: string | null;
+  source?: string | null; company_size?: string | null; custom_fields?: unknown;
+}
+
+/** Shared AI preview: runs the SAME prompt as the send (preview-sequence-email).
+ *  Takes lead FIELDS directly (works for saved campaigns AND ad-hoc leads). */
+export async function previewEmail(p: {
+  templateSubject: string; templateBody: string; stepIndex: number;
+  lead: PreviewLeadFields; tone?: string; goal?: string;
+}): Promise<{ subject: string; body_html: string } | { error: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return { error: 'Session expired — please sign in again.' };
-  const { data: lead } = await supabase.from('leads')
-    .select('first_name, last_name, company, title, industry, score, insights, knowledgeBase, location, website, linkedin_url, source, company_size, custom_fields')
-    .eq('id', leadId).single();
-  if (!lead) return { error: 'Lead not found.' };
-
   const businessProfile = await getMyBusinessProfile();
   const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/preview-sequence-email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
     body: JSON.stringify({
-      template_subject: step.subject, template_body: step.body_html, step_index: step.step_number - 1,
-      lead: {
-        name: [lead.first_name, lead.last_name].filter(Boolean).join(' '),
-        company: lead.company, title: lead.title, industry: lead.industry,
-        score: lead.score, insights: lead.insights, knowledgeBase: lead.knowledgeBase,
-        location: lead.location, website: lead.website, linkedin: lead.linkedin_url,
-        source: lead.source, company_size: lead.company_size, custom_fields: lead.custom_fields,
-      },
-      config: { tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '', businessProfile },
+      template_subject: p.templateSubject, template_body: p.templateBody, step_index: p.stepIndex,
+      lead: p.lead,
+      config: { tone: p.tone ?? 'professional', goal: p.goal ?? '', businessProfile },
     }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) return { error: data.error || `Preview failed (HTTP ${res.status})` };
   return { subject: data.subject, body_html: data.body_html };
+}
+
+/** Generate the AI-personalized email a lead would receive for a step — same
+ *  prompt as the send, so it's an accurate preview. */
+export async function previewStepForLead(
+  campaign: Campaign, step: CampaignStep, leadId: string,
+): Promise<{ subject: string; body_html: string } | { error: string }> {
+  const { data: lead } = await supabase.from('leads')
+    .select('first_name, last_name, company, title, industry, score, insights, knowledgeBase, location, website, linkedin_url, source, company_size, custom_fields')
+    .eq('id', leadId).single();
+  if (!lead) return { error: 'Lead not found.' };
+  return previewEmail({
+    templateSubject: step.subject, templateBody: step.body_html, stepIndex: step.step_number - 1,
+    lead: {
+      name: [lead.first_name, lead.last_name].filter(Boolean).join(' '),
+      company: lead.company, title: lead.title, industry: lead.industry,
+      score: lead.score, insights: lead.insights, knowledgeBase: lead.knowledgeBase,
+      location: lead.location, website: lead.website, linkedin: lead.linkedin_url,
+      source: lead.source, company_size: lead.company_size, custom_fields: lead.custom_fields,
+    },
+    tone: campaign.tone ?? 'professional', goal: campaign.goal ?? '',
+  });
 }
 
 /** Launch a saved campaign: enrolled leads + steps → start-email-sequence-run. */
