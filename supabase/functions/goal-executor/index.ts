@@ -18,7 +18,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
-import { SUPABASE_URL, adminClient, bearerToken } from "../_shared/auth.ts";
+import { SUPABASE_URL, adminClient, bearerToken, isServiceRoleToken } from "../_shared/auth.ts";
 import {
   dryRunStep,
   executeStepLive,
@@ -48,9 +48,15 @@ serve(async (req) => {
   if (!userToken) return jsonResponse({ error: "Missing Authorization" }, 401, corsHeaders);
 
   const admin = adminClient();
-  const { data: userRes, error: authErr } = await admin.auth.getUser(userToken);
-  if (authErr || !userRes?.user) return jsonResponse({ error: "Invalid token" }, 401, corsHeaders);
-  const userId = userRes.user.id;
+  // Two callers: a user JWT (manual run from the UI) OR the service-role token
+  // (the cron resume/execute sweep). Skip user resolution for service-role.
+  const isServiceRole = isServiceRoleToken(userToken);
+  let userId: string | null = null;
+  if (!isServiceRole) {
+    const { data: userRes, error: authErr } = await admin.auth.getUser(userToken);
+    if (authErr || !userRes?.user) return jsonResponse({ error: "Invalid token" }, 401, corsHeaders);
+    userId = userRes.user.id;
+  }
 
   const body = await req.json().catch(() => ({} as { goal_id?: string; mode?: string; resume?: boolean }));
   if (!body.goal_id || typeof body.goal_id !== "string") {
@@ -66,13 +72,22 @@ serve(async (req) => {
     .maybeSingle();
   if (goalErr || !goal) return jsonResponse({ error: "Goal not found" }, 404, corsHeaders);
 
-  const { data: membership } = await admin
-    .from("workspace_members")
-    .select("user_id")
-    .eq("workspace_id", goal.workspace_id)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!membership) return jsonResponse({ error: "Forbidden" }, 403, corsHeaders);
+  // Membership is enforced for user callers; the cron (service-role) is trusted.
+  if (!isServiceRole) {
+    const { data: membership } = await admin
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", goal.workspace_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!membership) return jsonResponse({ error: "Forbidden" }, 403, corsHeaders);
+  } else {
+    // Cron path: act as the workspace owner so user-scoped steps (social/team)
+    // resolve the right accounts. Falls back to the ws==user.id convention.
+    const { data: ws } = await admin
+      .from("workspaces").select("owner_id").eq("id", goal.workspace_id).maybeSingle();
+    userId = (ws?.owner_id as string | undefined) ?? goal.workspace_id;
+  }
 
   if (mode === "live") {
     const { data: flagOn } = await admin.rpc("workspace_has_flag", {

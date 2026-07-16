@@ -48,8 +48,8 @@ serve(async (req) => {
     supabase.from("email_sequence_runs").select("id", { count: "exact", head: true }).eq("workspace_id", ws).eq("status", "running"),
     supabase.from("email_sequence_runs").select("id", { count: "exact", head: true }).eq("workspace_id", ws).eq("status", "completed").gte("completed_at", since),
     supabase.from("email_messages").select("id", { count: "exact", head: true }).eq("workspace_id", ws).gte("created_at", since),
-    supabase.from("email_events").select("id", { count: "exact", head: true }).eq("event_type", "open").eq("is_bot", false).gte("created_at", since),
-    supabase.from("email_events").select("id", { count: "exact", head: true }).eq("event_type", "click").eq("is_bot", false).gte("created_at", since),
+    supabase.from("email_events").select("id, email_messages!inner(workspace_id)", { count: "exact", head: true }).eq("event_type", "open").eq("is_bot", false).gte("created_at", since).eq("email_messages.workspace_id", ws),
+    supabase.from("email_events").select("id, email_messages!inner(workspace_id)", { count: "exact", head: true }).eq("event_type", "click").eq("is_bot", false).gte("created_at", since).eq("email_messages.workspace_id", ws),
     supabase.from("email_dlq").select("kind").eq("workspace_id", ws).gte("last_failed_at", since),
     supabase.from("sender_accounts").select("id, health_score, daily_sent_today").eq("workspace_id", ws),
   ]);
@@ -65,11 +65,8 @@ serve(async (req) => {
     ? Math.round(senders.reduce((a, b) => a + (b.health_score ?? 100), 0) / senders.length)
     : null;
 
-  // Note: email opens/clicks counts above span ALL workspaces because
-  // email_events doesn't have workspace_id directly; the join would
-  // require a subquery on email_messages. For Phase 4.2 we accept the
-  // approximation; Phase 4.x can add workspace_id to email_events or
-  // wrap this in a SECURITY DEFINER aggregate.
+  // Opens/clicks are scoped to this workspace via an inner join on
+  // email_messages (email_events has no workspace_id of its own).
 
   return new Response(JSON.stringify({
     range_days: days,
@@ -78,7 +75,7 @@ serve(async (req) => {
     sequences: { active: seqActive.count ?? 0, completed_in_range: seqCompleted.count ?? 0 },
     email: {
       sent_in_range:   emailSent.count   ?? 0,
-      opens_in_range:  emailOpens.count  ?? 0,   // approximate, see note above
+      opens_in_range:  emailOpens.count  ?? 0,
       clicks_in_range: emailClicks.count ?? 0,
     },
     dlq: { count_in_range: (dlqRows.data ?? []).length, by_kind: dlqByKind },
