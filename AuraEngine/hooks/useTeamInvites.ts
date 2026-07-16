@@ -79,15 +79,13 @@ export function useTeamInvites(userEmail: string, userId: string): UseTeamInvite
       if (err?.message?.includes('seat limit') || err?.message?.includes('maximum of')) throw err;
     }
 
-    const { error: memberErr } = await supabase
-      .from('team_members')
-      .insert({ team_id: invite.team_id, user_id: userId, role: invite.role || 'member' });
-    if (memberErr) throw memberErr;
-
-    await supabase
-      .from('team_invites')
-      .update({ status: 'accepted' })
-      .eq('id', invite.id);
+    // Join via the SECURITY DEFINER RPC, which verifies server-side that this
+    // invite is addressed to us, still pending, and unexpired, then joins with
+    // the invite's role and marks it accepted. (Direct team_members inserts are
+    // no longer allowed — this closes the arbitrary self-join hole.)
+    const { data, error } = await supabase.rpc('accept_team_invite', { p_invite_id: invite.id });
+    if (error) throw error;
+    if (data && data.success === false) throw new Error(data.message || 'Could not accept invite');
 
     setPendingInvites(prev => prev.filter(i => i.id !== invite.id));
   }, [userId]);
