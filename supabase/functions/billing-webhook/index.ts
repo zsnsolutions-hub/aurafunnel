@@ -12,12 +12,23 @@ const corsHeaders = {
 
 // ── Verify Stripe webhook signature ──────────────────────────────────────────
 
+// Constant-time hex string comparison.
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+const STRIPE_SIG_TOLERANCE_SEC = 300; // reject events more than 5 minutes skewed (replay protection)
+
 async function verifyStripeSignature(
   payload: string,
   sigHeader: string | null,
   secret: string,
 ): Promise<boolean> {
-  if (!secret || !sigHeader) return true; // skip if not configured
+  // FAIL CLOSED: a missing secret or signature is never treated as valid.
+  if (!secret || !sigHeader) return false;
 
   try {
     const parts: Record<string, string> = {};
@@ -29,6 +40,10 @@ async function verifyStripeSignature(
     const timestamp = parts["t"];
     const expectedSig = parts["v1"];
     if (!timestamp || !expectedSig) return false;
+
+    // Replay/timestamp tolerance.
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > STRIPE_SIG_TOLERANCE_SEC) return false;
 
     const signedPayload = `${timestamp}.${payload}`;
     const key = await crypto.subtle.importKey(
@@ -48,7 +63,7 @@ async function verifyStripeSignature(
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    return computed === expectedSig;
+    return timingSafeEqualHex(computed, expectedSig);
   } catch {
     return false;
   }
@@ -323,17 +338,18 @@ serve(async (req) => {
   try {
     const body = await req.text();
 
-    // Verify Stripe signature
+    // Verify Stripe signature — ALWAYS (fail closed). If STRIPE_WEBHOOK_SECRET is
+    // unset, verification returns false and the request is rejected, rather than
+    // accepting a forged event. The secret MUST be set to the Stripe dashboard's
+    // webhook signing secret for billing events to be processed.
     const sigHeader = req.headers.get("stripe-signature");
-    if (STRIPE_WEBHOOK_SECRET) {
-      const valid = await verifyStripeSignature(body, sigHeader, STRIPE_WEBHOOK_SECRET);
-      if (!valid) {
-        console.error("Invalid Stripe webhook signature");
-        return new Response(JSON.stringify({ error: "Invalid signature" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    const valid = await verifyStripeSignature(body, sigHeader, STRIPE_WEBHOOK_SECRET);
+    if (!valid) {
+      console.error("Invalid or unverifiable Stripe webhook signature (check STRIPE_WEBHOOK_SECRET is set)");
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const event = JSON.parse(body);
