@@ -20,24 +20,60 @@ const EVENT_MAP: Record<string, string> = {
   spamreport: "spam_report",
 };
 
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64.trim());
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// Convert a DER-encoded ECDSA signature (SEQUENCE{INTEGER r, INTEGER s}) into the
+// raw r||s form (64 bytes for P-256) that Web Crypto's ECDSA verify expects.
+function derToRawEcdsa(der: Uint8Array): Uint8Array {
+  if (der[0] !== 0x30) throw new Error("bad DER");
+  let off = 2;
+  if (der[1] & 0x80) off = 2 + (der[1] & 0x7f); // long-form length
+  if (der[off] !== 0x02) throw new Error("bad DER r");
+  const rLen = der[off + 1];
+  let r = der.slice(off + 2, off + 2 + rLen);
+  off = off + 2 + rLen;
+  if (der[off] !== 0x02) throw new Error("bad DER s");
+  const sLen = der[off + 1];
+  let s = der.slice(off + 2, off + 2 + sLen);
+  const norm = (x: Uint8Array): Uint8Array => {
+    if (x.length > 32) x = x.slice(x.length - 32);       // strip leading 0x00
+    const p = new Uint8Array(32); p.set(x, 32 - x.length); // left-pad to 32
+    return p;
+  };
+  const out = new Uint8Array(64);
+  out.set(norm(r), 0);
+  out.set(norm(s), 32);
+  return out;
+}
+
+// SendGrid signs its Event Webhook with ECDSA over P-256 (NOT HMAC):
+//   verify( ECDSA-SHA256, publicKey, sig, timestamp + rawBody ).
+// The verification key is the base64 DER (SPKI) EC public key from SendGrid.
+// The signature header is base64 DER. Returns false on any failure (fail-closed).
 async function verifySignature(
   payload: string,
   signature: string | null,
   timestamp: string | null
 ): Promise<boolean> {
-  if (!SENDGRID_WEBHOOK_VERIFICATION_KEY || !signature || !timestamp) return true; // skip if not configured
+  if (!SENDGRID_WEBHOOK_VERIFICATION_KEY || !signature || !timestamp) return false;
   try {
     const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(SENDGRID_WEBHOOK_VERIFICATION_KEY),
-      { name: "HMAC", hash: "SHA-256" },
+      "spki",
+      b64ToBytes(SENDGRID_WEBHOOK_VERIFICATION_KEY),
+      { name: "ECDSA", namedCurve: "P-256" },
       false,
       ["verify"]
     );
+    const raw = derToRawEcdsa(b64ToBytes(signature));
     const data = new TextEncoder().encode(timestamp + payload);
-    const sig = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0));
-    return await crypto.subtle.verify("HMAC", key, sig, data);
-  } catch {
+    return await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, data);
+  } catch (e) {
+    console.error("SendGrid signature verify error:", (e as Error).message);
     return false;
   }
 }

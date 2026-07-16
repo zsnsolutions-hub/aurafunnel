@@ -10,33 +10,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "content-type",
 };
 
-// Verify Mailchimp webhook signature (HMAC-SHA256)
-async function verifyMailchimpSignature(
-  payload: string,
-  sigHeader: string | null,
-  secret: string
-): Promise<boolean> {
-  if (!secret || !sigHeader) return !secret; // skip only if secret not configured
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const signature = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      new TextEncoder().encode(payload)
-    );
-    const computed = Array.from(new Uint8Array(signature))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    return computed === sigHeader;
-  } catch {
-    return false;
-  }
+// Mailchimp does NOT sign its webhooks (there is no signature header). The
+// documented way to secure the endpoint is a secret token in the webhook URL's
+// query string. Configure the URL as `.../webhooks-mailchimp?secret=<value>` and
+// verify it here (constant-time). Fail-closed when the secret is configured.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 // Map Mailchimp webhook types to our event types
@@ -68,14 +50,12 @@ serve(async (req) => {
     });
   }
 
-  // Verify webhook signature when secret is configured
+  // Verify the URL query secret when configured (Mailchimp sends no signature).
   if (MAILCHIMP_WEBHOOK_SECRET) {
-    const rawBody = await req.clone().text();
-    const sigHeader = req.headers.get("x-mailchimp-signature");
-    const valid = await verifyMailchimpSignature(rawBody, sigHeader, MAILCHIMP_WEBHOOK_SECRET);
-    if (!valid) {
-      console.error("Invalid Mailchimp webhook signature");
-      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+    const provided = new URL(req.url).searchParams.get("secret") ?? "";
+    if (!timingSafeEqual(provided, MAILCHIMP_WEBHOOK_SECRET)) {
+      console.error("Invalid Mailchimp webhook secret");
+      return new Response(JSON.stringify({ error: "Invalid secret" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
