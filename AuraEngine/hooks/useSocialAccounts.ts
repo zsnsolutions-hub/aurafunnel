@@ -32,9 +32,11 @@ export function useSocialAccounts(userId: string | undefined) {
     if (!userId) return;
     setLoading(true);
     try {
+      // Access tokens are NOT selected — the client isn't granted column access
+      // to them; only edge functions (service role) read tokens for publishing.
       const { data } = await supabase
         .from('social_accounts')
-        .select('*')
+        .select('id, user_id, provider, meta_page_id, meta_page_name, meta_ig_user_id, meta_ig_username, linkedin_member_urn, linkedin_org_urn, linkedin_org_name, token_expires_at, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       setAccounts(data || []);

@@ -126,9 +126,11 @@ export async function getTargetProfile(userId: string): Promise<TargetProfile | 
 }
 
 export async function getTargetIntegrations(userId: string) {
+  // Non-secret columns only — support sees whether an integration is configured,
+  // never the credentials.
   const { data } = await supabase
     .from('integrations')
-    .select('*')
+    .select('id, provider, category, status, metadata, updated_at')
     .eq('owner_id', userId);
   return data ?? [];
 }
@@ -136,7 +138,7 @@ export async function getTargetIntegrations(userId: string) {
 export async function getTargetEmailConfigs(userId: string) {
   const { data } = await supabase
     .from('email_provider_configs')
-    .select('*')
+    .select('id, provider, is_active, smtp_host, smtp_port, smtp_user, from_email, from_name, updated_at')
     .eq('owner_id', userId);
   return data ?? [];
 }

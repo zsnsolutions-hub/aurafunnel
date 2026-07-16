@@ -417,18 +417,19 @@ const IntegrationHub: React.FC = () => {
 
     // Pre-fill from existing config if any
     try {
+      // Secrets (api_key, smtp_pass) are NOT read back to the browser — the
+      // client isn't granted column access. Prefill only non-secret fields;
+      // leave the secret inputs blank (they preserve the stored value on save).
       const { data } = await supabase
         .from('email_provider_configs')
-        .select('*')
+        .select('provider, smtp_host, smtp_port, smtp_user, from_email, from_name, is_active')
         .eq('provider', id)
         .limit(1)
         .single();
       if (data) {
-        if (data.api_key) setEmailSetupApiKey(data.api_key);
         if (data.smtp_host) setEmailSetupSmtpHost(data.smtp_host);
         if (data.smtp_port) setEmailSetupSmtpPort(String(data.smtp_port));
         if (data.smtp_user) setEmailSetupSmtpUser(data.smtp_user);
-        if (data.smtp_pass) setEmailSetupSmtpPass(data.smtp_pass);
         if (data.from_email) setEmailSetupFromEmail(data.from_email);
         if (data.from_name) setEmailSetupFromName(data.from_name);
       }
@@ -654,10 +655,10 @@ const IntegrationHub: React.FC = () => {
         row.smtp_host = emailSetupSmtpHost;
         row.smtp_port = parseInt(emailSetupSmtpPort) || 587;
         row.smtp_user = emailSetupSmtpUser;
-        row.smtp_pass = emailSetupSmtpPass;
+        if (emailSetupSmtpPass) row.smtp_pass = emailSetupSmtpPass; // blank = keep the stored secret
         row.api_key = null;
       } else {
-        row.api_key = emailSetupApiKey;
+        if (emailSetupApiKey) row.api_key = emailSetupApiKey; // blank = keep the stored secret
         row.smtp_host = null;
         row.smtp_port = null;
         row.smtp_user = null;
@@ -733,10 +734,10 @@ const IntegrationHub: React.FC = () => {
         row.smtp_host = emailSetupSmtpHost;
         row.smtp_port = parseInt(emailSetupSmtpPort) || 587;
         row.smtp_user = emailSetupSmtpUser;
-        row.smtp_pass = emailSetupSmtpPass;
+        if (emailSetupSmtpPass) row.smtp_pass = emailSetupSmtpPass; // blank = keep the stored secret
         row.api_key = null;
       } else {
-        row.api_key = emailSetupApiKey;
+        if (emailSetupApiKey) row.api_key = emailSetupApiKey; // blank = keep the stored secret
         row.smtp_host = null;
         row.smtp_port = null;
         row.smtp_user = null;

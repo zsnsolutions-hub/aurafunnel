@@ -4,6 +4,7 @@ import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 serve(async (req) => {
   const corsResp = handleCors(req);
@@ -32,11 +33,33 @@ serve(async (req) => {
       );
     }
 
-    const { provider, credentials } = await req.json();
+    const { provider, credentials: bodyCreds } = await req.json();
 
-    if (!provider || !credentials) {
+    if (!provider) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing provider or credentials" }),
+        JSON.stringify({ success: false, error: "Missing provider" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // On initial connect the client passes the credentials it just entered. On
+    // re-validation the client no longer has them (secrets aren't sent to the
+    // browser), so load them server-side (service role) for this user+provider.
+    let credentials = bodyCreds;
+    if (!credentials || Object.keys(credentials).length === 0) {
+      const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: row } = await admin
+        .from("integrations")
+        .select("credentials")
+        .eq("owner_id", user.id)
+        .eq("provider", provider)
+        .maybeSingle();
+      credentials = row?.credentials ?? null;
+    }
+
+    if (!credentials || Object.keys(credentials).length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: "No stored credentials for this provider" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

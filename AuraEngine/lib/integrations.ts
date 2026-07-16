@@ -5,10 +5,15 @@ import type { Integration } from '../types';
 
 // ─── Integration CRUD ───
 
+// NOTE: `credentials` (secrets) is intentionally NOT selected — the client is
+// no longer granted column access to it. Secrets stay server-side; only
+// edge functions (service role) read them. Callers get `credentials: {}`.
+const INTEGRATION_SAFE_COLS = 'id, provider, category, status, metadata, updated_at';
+
 export async function fetchIntegrations(): Promise<Integration[]> {
   const { data, error } = await supabase
     .from('integrations')
-    .select('*')
+    .select(INTEGRATION_SAFE_COLS)
     .order('updated_at', { ascending: false });
 
   if (error) {
@@ -21,7 +26,7 @@ export async function fetchIntegrations(): Promise<Integration[]> {
     provider: row.provider,
     category: row.category,
     status: row.status,
-    credentials: row.credentials || {},
+    credentials: {},
     metadata: row.metadata || {},
     updated_at: row.updated_at,
   }));
@@ -30,7 +35,7 @@ export async function fetchIntegrations(): Promise<Integration[]> {
 export async function fetchIntegration(provider: string): Promise<Integration | null> {
   const { data, error } = await supabase
     .from('integrations')
-    .select('*')
+    .select(INTEGRATION_SAFE_COLS)
     .eq('provider', provider)
     .limit(1)
     .single();
@@ -42,7 +47,7 @@ export async function fetchIntegration(provider: string): Promise<Integration | 
     provider: data.provider,
     category: data.category,
     status: data.status,
-    credentials: data.credentials || {},
+    credentials: {},
     metadata: data.metadata || {},
     updated_at: data.updated_at,
   };
