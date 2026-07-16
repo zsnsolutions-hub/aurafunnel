@@ -377,9 +377,19 @@ const ProfilePage: React.FC = () => {
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    await supabase.auth.signOut();
-    window.location.href = '/';
+    try {
+      // Irreversibly purge all account data + remove the auth user server-side.
+      const { data, error } = await supabase.functions.invoke('delete-account', {
+        body: { confirm: true },
+      });
+      if (error) throw new Error(error.message);
+      if (data && data.success === false) throw new Error(data.error || 'Deletion failed');
+      await supabase.auth.signOut();
+      window.location.href = '/';
+    } catch (err) {
+      setIsDeleting(false);
+      alert(`Account deletion failed: ${err instanceof Error ? err.message : 'Unknown error'}. Please contact support.`);
+    }
   };
 
   // Business Profile handler
