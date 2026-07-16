@@ -86,11 +86,28 @@ async function createCheckoutSession(
   name: string | undefined,
   body: any,
 ): Promise<{ url: string }> {
-  const { plan_name, stripe_price_id, billing_interval = "monthly" } = body;
+  const { stripe_price_id } = body;
 
-  if (!stripe_price_id) {
-    throw new Error("stripe_price_id is required");
+  if (!stripe_price_id || typeof stripe_price_id !== "string" || !/^price_[A-Za-z0-9]+$/.test(stripe_price_id)) {
+    throw new Error("valid stripe_price_id is required");
   }
+
+  // Resolve the plan server-side from the price id — never trust a client-
+  // supplied plan_name. The webhook grants entitlements from metadata.plan_name,
+  // so the price id must map to a real plan and the name must come from the DB.
+  // (Fetch + match in code to avoid PostgREST filter injection on the client value.)
+  const { data: plans } = await supabaseAdmin
+    .from("plans")
+    .select("name, stripe_price_id, stripe_price_id_annual");
+  const planRow = (plans ?? []).find(
+    (p: { stripe_price_id?: string; stripe_price_id_annual?: string }) =>
+      p.stripe_price_id === stripe_price_id || p.stripe_price_id_annual === stripe_price_id,
+  );
+  if (!planRow) {
+    throw new Error("Unknown plan price");
+  }
+  const resolvedPlanName: string = planRow.name;
+  const resolvedInterval = planRow.stripe_price_id_annual === stripe_price_id ? "annual" : "monthly";
 
   const customerId = await getOrCreateCustomer(supabaseAdmin, userId, email, name);
 
@@ -102,16 +119,26 @@ async function createCheckoutSession(
     "success_url": `${APP_URL}/portal/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     "cancel_url": `${APP_URL}/portal/billing?checkout=cancelled`,
     "metadata[user_id]": userId,
-    "metadata[plan_name]": plan_name || "",
-    "metadata[billing_interval]": billing_interval,
+    "metadata[plan_name]": resolvedPlanName,
+    "metadata[billing_interval]": resolvedInterval,
     "subscription_data[metadata][user_id]": userId,
-    "subscription_data[metadata][plan_name]": plan_name || "",
+    "subscription_data[metadata][plan_name]": resolvedPlanName,
     "allow_promotion_codes": "true",
   };
 
   const session = await stripePost("/v1/checkout/sessions", params);
   return { url: session.url };
 }
+
+// Server-side allow-list of purchasable credit packages. Clients must NOT be
+// able to set arbitrary credits/price — the webhook grants credits from the
+// Stripe metadata set here, so an unvalidated pair (e.g. 1,000,000 credits for
+// 1¢) would be honoured. Mirrors AuraEngine/config/creditLimits.ts CREDIT_PACKAGES.
+const CREDIT_PACKAGES: { credits: number; price_cents: number }[] = [
+  { credits: 1_000, price_cents: 1_000 },
+  { credits: 5_000, price_cents: 4_000 },
+  { credits: 20_000, price_cents: 12_000 },
+];
 
 async function createCreditCheckout(
   supabaseAdmin: any,
@@ -124,6 +151,14 @@ async function createCreditCheckout(
 
   if (!credits || !price_cents) {
     throw new Error("credits and price_cents are required");
+  }
+
+  // Reject anything that isn't an exact, known package (blocks price/credit tampering).
+  const pkg = CREDIT_PACKAGES.find(
+    (p) => p.credits === Number(credits) && p.price_cents === Number(price_cents),
+  );
+  if (!pkg) {
+    throw new Error("Invalid credit package");
   }
 
   const customerId = await getOrCreateCustomer(supabaseAdmin, userId, email, name);
