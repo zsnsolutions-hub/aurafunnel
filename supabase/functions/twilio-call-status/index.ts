@@ -12,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { verifyTwilioSignature } from "../_shared/twilio.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 // Dial statuses that mean the inbound call was never answered by a client.
@@ -34,6 +35,11 @@ serve(async (req) => {
     const form = await req.formData();
     const p: Record<string, string> = {};
     for (const [k, v] of form.entries()) p[k] = String(v);
+
+    // Reject spoofed callbacks — Twilio signs every webhook.
+    if (!(await verifyTwilioSignature(req, req.url, p))) {
+      return new Response("<Response/>", { status: 403, headers: { "Content-Type": "text/xml" } });
+    }
 
     const dialStatus = p["DialCallStatus"] ?? p["CallStatus"] ?? "";
 

@@ -10,6 +10,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { verifyTwilioSignature } from "../_shared/twilio.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const PRESENCE_WINDOW_SEC = 120; // only ring clients seen in the last 2 min
@@ -25,6 +26,14 @@ const twiml = (inner: string): Response =>
 
 serve(async (req) => {
   try {
+    // Verify this is really Twilio before doing anything (writes DB rows below).
+    const form = await req.formData().catch(() => null);
+    const params: Record<string, string> = {};
+    if (form) for (const [k, v] of form.entries()) params[k] = String(v);
+    if (!(await verifyTwilioSignature(req, req.url, params))) {
+      return new Response("<Response/>", { status: 403, headers: { "Content-Type": "text/xml" } });
+    }
+
     const admin = adminClient();
     const cutoff = new Date(Date.now() - PRESENCE_WINDOW_SEC * 1000).toISOString();
     const { data: routes } = await admin

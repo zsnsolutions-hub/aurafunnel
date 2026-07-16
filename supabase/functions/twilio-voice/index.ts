@@ -14,9 +14,9 @@
 //          optionally TWILIO_AUTH_TOKEN.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { verifyTwilioSignature } from "../_shared/twilio.ts";
 
 const CALLER_ID = Deno.env.get("TWILIO_CALLER_ID") ?? "";
-const AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 
 const xmlEscape = (s: string): string =>
@@ -28,22 +28,6 @@ const twiml = (inner: string): Response =>
     status: 200, headers: { "Content-Type": "text/xml" },
   });
 
-// Twilio signs requests: HMAC-SHA1(url + sorted POST params) keyed by AuthToken,
-// base64. Only enforced when TWILIO_AUTH_TOKEN is set.
-async function validSignature(req: Request, url: string, params: Record<string, string>): Promise<boolean> {
-  if (!AUTH_TOKEN) return true; // opt-in
-  const sig = req.headers.get("X-Twilio-Signature");
-  if (!sig) return false;
-  let data = url;
-  for (const k of Object.keys(params).sort()) data += k + params[k];
-  const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(AUTH_TOKEN), { name: "HMAC", hash: "SHA-1" }, false, ["sign"],
-  );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
-  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
-  return expected === sig;
-}
-
 serve(async (req) => {
   try {
     const reqUrl = new URL(req.url);
@@ -53,7 +37,7 @@ serve(async (req) => {
     const params: Record<string, string> = {};
     for (const [k, v] of form.entries()) params[k] = String(v);
 
-    if (!(await validSignature(req, req.url, params))) {
+    if (!(await verifyTwilioSignature(req, req.url, params))) {
       return twiml(`<Say>Unauthorized.</Say>`);
     }
 

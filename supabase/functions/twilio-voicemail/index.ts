@@ -11,6 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { verifyTwilioSignature } from "../_shared/twilio.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SELF = `${SUPABASE_URL}/functions/v1/twilio-voicemail`;
@@ -54,6 +55,11 @@ serve(async (req) => {
     const form = await req.formData().catch(() => null);
     const p: Record<string, string> = {};
     if (form) for (const [k, v] of form.entries()) p[k] = String(v);
+
+    // Reject spoofed requests — Twilio signs every webhook.
+    if (!(await verifyTwilioSignature(req, req.url, p))) {
+      return new Response("<Response/>", { status: 403, headers: { "Content-Type": "text/xml" } });
+    }
 
     const recordingUrl = p["RecordingUrl"] ?? "";
 
