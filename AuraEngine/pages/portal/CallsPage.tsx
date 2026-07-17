@@ -11,6 +11,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Phone, PhoneIncoming, PhoneOutgoing, PlayCircle, Search, RefreshCw, ArrowRight, UserPlus, Loader2 } from 'lucide-react';
 import type { User } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { resolveWorkspaceId } from '../../lib/tenancy';
 import { activeBusinessId } from '../../lib/businessScope';
 import { useToast } from '../../components/ui/Toast';
 import { formatDuration } from '../../lib/twilioVoice';
@@ -91,7 +92,7 @@ const CallsPage: React.FC = () => {
         first_name: '', last_name: '',
         primary_phone: number,
         client_id: user.id,
-        workspace_id: user.id, // leads.workspace_id is NOT NULL and holds the user id (legacy)
+        workspace_id: await resolveWorkspaceId(user.id), // resolved via membership (canonical)
         business_id: activeBusinessId(),
         status: 'New',
         source: 'Inbound call',

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadIcon } from '../Icons';
 import { supabase } from '../../lib/supabase';
+import { resolveWorkspaceId } from '../../lib/tenancy';
 import { activeBusinessId } from '../../lib/businessScope';
 
 interface CSVImportModalProps {
@@ -84,9 +85,10 @@ const CSVImportModal: React.FC<CSVImportModalProps> = ({ isOpen, onClose, userId
     setImporting(true);
     setError('');
 
+    const wsId = await resolveWorkspaceId(userId); // resolved via membership (canonical)
     const leadsToInsert = parsedRows.map(row => ({
       client_id: userId,
-      workspace_id: userId, // NOT NULL; holds the user id (legacy, matches existing rows)
+      workspace_id: wsId,
       business_id: activeBusinessId(),
       first_name: row.name.split(' ')[0] || '',
       last_name: row.name.split(' ').slice(1).join(' ') || '',

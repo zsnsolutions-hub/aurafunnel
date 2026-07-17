@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { resolveWorkspaceId } from '../../../lib/tenancy';
 
 // ─── Types ───
 
@@ -243,7 +244,7 @@ export async function fetchFlows(userId: string): Promise<Flow[]> {
 export async function createFlow(userId: string, name: string): Promise<Flow> {
   const { data, error } = await supabase
     .from('teamhub_boards')
-    .insert({ name, created_by: userId, workspace_id: userId })
+    .insert({ name, created_by: userId, workspace_id: await resolveWorkspaceId(userId) })
     .select()
     .single();
   if (error) throw error;
@@ -1120,7 +1121,7 @@ export async function createFlowFromTemplate(
   // Create flow with template_id
   const { data: flow, error: fErr } = await supabase
     .from('teamhub_boards')
-    .insert({ name, created_by: userId, workspace_id: userId, template_id: templateId })
+    .insert({ name, created_by: userId, workspace_id: await resolveWorkspaceId(userId), template_id: templateId })
     .select()
     .single();
   if (fErr) throw fErr;

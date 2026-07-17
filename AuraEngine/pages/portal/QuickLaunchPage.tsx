@@ -545,11 +545,13 @@ const QuickLaunchPage: React.FC = () => {
       // Pasted emails are ephemeral (id 'paste-N'); persist them as real leads so
       // enrollments (FK → leads) resolve. Existing/imported leads already have uuids.
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      // Resolve the workspace via membership (canonical), not workspace_id==user.id.
+      const wsId = (await resolveWorkspaceForUser(user.id)) ?? user.id;
       let resolved = recipients;
       const ephemeral = recipients.filter((l) => !UUID_RE.test(l.id));
       if (ephemeral.length) {
         const rows = ephemeral.map((l) => ({
-          client_id: user.id, workspace_id: user.id, business_id: activeBusinessId(),
+          client_id: user.id, workspace_id: wsId, business_id: activeBusinessId(),
           first_name: l.first_name || '', last_name: l.last_name || '',
           primary_email: l.primary_email, company: l.company || '',
           status: 'New', source: 'Quick Launch', last_activity: new Date().toISOString(),
@@ -565,7 +567,7 @@ const QuickLaunchPage: React.FC = () => {
       const name = offer.trim().slice(0, 60) || 'Quick Launch campaign';
       const { data: seq, error: seqErr } = await supabase.from('email_sequences')
         .insert({
-          workspace_id: user.id, created_by: user.id, name, status: 'draft', total_leads: recipients.length,
+          workspace_id: wsId, created_by: user.id, name, status: 'draft', total_leads: recipients.length,
           tone: tone.toString(), goal: offer,
           ai_personalize: aiPersonalize,
           send_best_time: bestTime,
@@ -582,7 +584,7 @@ const QuickLaunchPage: React.FC = () => {
       const { error: stepErr } = await supabase.from('sequence_steps').insert(stepRows);
       if (stepErr) throw new Error(stepErr.message);
 
-      const enrollRows = resolved.map((l) => ({ sequence_id: seqId, lead_id: l.id, workspace_id: user.id, status: 'active', current_step: 0 }));
+      const enrollRows = resolved.map((l) => ({ sequence_id: seqId, lead_id: l.id, workspace_id: wsId, status: 'active', current_step: 0 }));
       const { error: enrErr } = await supabase.from('sequence_enrollments').insert(enrollRows);
       if (enrErr) throw new Error(enrErr.message);
 

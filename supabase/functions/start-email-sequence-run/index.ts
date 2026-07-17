@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { getMonthlyEmailLimit, resolvePlanName } from "../_shared/plans.ts";
+import { resolveWorkspaceId } from "../_shared/tenancy.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -130,6 +131,9 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Resolve the workspace via membership (not the workspace_id==user.id assumption).
+    const workspaceId = await resolveWorkspaceId(supabaseAdmin, user.id);
+
     const totalItems = leads.length * steps.length;
 
     // Pre-flight: check monthly usage limit via workspace_usage_counters
@@ -139,7 +143,7 @@ serve(async (req) => {
     const { data: usageData } = await supabaseAdmin.rpc(
       "get_workspace_monthly_usage",
       {
-        p_workspace_id: user.id,
+        p_workspace_id: workspaceId,
         p_month_key: monthKey,
       }
     );
@@ -175,7 +179,7 @@ serve(async (req) => {
       .from("email_sequence_runs")
       .insert({
         owner_id: user.id,
-        workspace_id: user.id, // NOT NULL; mirrors owner id (legacy convention)
+        workspace_id: workspaceId, // resolved via membership (canonical)
         status: "processing",
         lead_count: leads.length,
         step_count: steps.length,

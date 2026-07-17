@@ -12,6 +12,7 @@ import {
 import { generateLeadContent, generateDashboardInsights, generateLeadResearch, parseLeadResearchResponse } from '../../lib/gemini';
 
 import { supabase } from '../../lib/supabase';
+import { resolveWorkspaceId } from '../../lib/tenancy';
 import { activeBusinessId } from '../../lib/businessScope';
 import { normalizeLeads, useLeads, useLeadCounts, useEmailSummaries, useSocialStats } from '../../lib/queries';
 import { consumeCredits, resolvePlanName } from '../../lib/credits';
@@ -535,7 +536,7 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ user: initialUser }) 
         company: newLead.company.trim(),
         insights: newLead.insights.trim() || '',
         client_id: user.id,
-        workspace_id: user.id, // NOT NULL; holds the user id (legacy, matches existing rows)
+        workspace_id: await resolveWorkspaceId(user.id), // resolved via membership (canonical)
         business_id: activeBusinessId(),
         score: initialScore,
         status: 'New',

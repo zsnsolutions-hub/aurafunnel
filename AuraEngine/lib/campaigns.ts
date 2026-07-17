@@ -6,6 +6,7 @@
 // QuickLaunch) to actually begin sending.
 
 import { supabase } from './supabase';
+import { resolveWorkspaceId } from './tenancy';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 
@@ -183,8 +184,9 @@ export async function addLeadToCampaign(sequenceId: string, userId: string, lead
   const { data: existing } = await supabase.from('sequence_enrollments')
     .select('id').eq('sequence_id', sequenceId).eq('lead_id', leadId).maybeSingle();
   if (existing) return null;
+  const workspaceId = await resolveWorkspaceId(userId);
   const { data, error } = await supabase.from('sequence_enrollments')
-    .insert({ sequence_id: sequenceId, lead_id: leadId, workspace_id: userId, status: 'active', current_step: 0 })
+    .insert({ sequence_id: sequenceId, lead_id: leadId, workspace_id: workspaceId, status: 'active', current_step: 0 })
     .select('id').single();
   if (error || !data) return null;
   const { count } = await supabase.from('sequence_enrollments')

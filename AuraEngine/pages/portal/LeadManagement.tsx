@@ -4,6 +4,7 @@ import { Lead, User, ContentType } from '../../types';
 import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, FilterIcon, DownloadIcon, PlusIcon, TagIcon, XIcon, CheckIcon, ClockIcon, CalendarIcon, BoltIcon, UsersIcon, EditIcon, PencilIcon, AlertTriangleIcon, TrendUpIcon, TrendDownIcon, GridIcon, ListIcon, BrainIcon, GlobeIcon, LinkedInIcon, TwitterIcon, InstagramIcon, FacebookIcon, ChevronDownIcon, KeyboardIcon, TrashIcon } from '../../components/Icons';
 import { supabase } from '../../lib/supabase';
 import { activeBusinessId } from '../../lib/businessScope';
+import { resolveWorkspaceId } from '../../lib/tenancy';
 import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummaries } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
@@ -157,7 +158,7 @@ const LeadManagement: React.FC = () => {
   // Saved campaigns (email sequences) for the "Add to campaign" bulk action.
   const loadCampaigns = useCallback(async () => {
     const { data } = await supabase.from('email_sequences')
-      .select('id,name,status').eq('workspace_id', user.id).order('created_at', { ascending: false });
+      .select('id,name,status').eq('workspace_id', await resolveWorkspaceId(user.id)).order('created_at', { ascending: false });
     if (data) { setCampaigns(data as { id: string; name: string; status: string }[]); setBulkCampaignId(prev => prev || (data[0]?.id ?? '')); }
   }, [user.id]);
   useEffect(() => { void loadCampaigns(); }, [loadCampaigns]);
@@ -740,7 +741,7 @@ const LeadManagement: React.FC = () => {
         website: newLeadKb.website.trim() ? normalizeUrl(newLeadKb.website.trim()) : null,
         insights: newLead.insights.trim() || '',
         client_id: user.id,
-        workspace_id: user.id, // leads.workspace_id is NOT NULL and holds the user id (legacy)
+        workspace_id: await resolveWorkspaceId(user.id), // resolved via membership (canonical)
         business_id: activeBusinessId(),
         score: initialScore,
         status: 'New',
@@ -962,7 +963,8 @@ const LeadManagement: React.FC = () => {
       const toEnroll = ids.filter(id => !already.has(id));
       const name = campaigns.find(c => c.id === bulkCampaignId)?.name ?? 'campaign';
       if (toEnroll.length === 0) { toast(`All selected leads are already in "${name}".`, 'success'); return; }
-      const rows = toEnroll.map(id => ({ sequence_id: bulkCampaignId, lead_id: id, workspace_id: user.id, status: 'active', current_step: 0 }));
+      const wsId = await resolveWorkspaceId(user.id);
+      const rows = toEnroll.map(id => ({ sequence_id: bulkCampaignId, lead_id: id, workspace_id: wsId, status: 'active', current_step: 0 }));
       const { error } = await supabase.from('sequence_enrollments').insert(rows);
       if (error) throw new Error(error.message);
       // Keep the campaign's lead count accurate (no DB trigger maintains it).
@@ -983,12 +985,13 @@ const LeadManagement: React.FC = () => {
     if (ids.length === 0 || !nm) return;
     setCreatingCampaign(true);
     try {
+      const wsId = await resolveWorkspaceId(user.id);
       const { data: seq, error } = await supabase.from('email_sequences')
-        .insert({ workspace_id: user.id, created_by: user.id, name: nm, status: 'draft', total_leads: ids.length })
+        .insert({ workspace_id: wsId, created_by: user.id, name: nm, status: 'draft', total_leads: ids.length })
         .select('id,name,status').single();
       if (error || !seq) throw new Error(error?.message || 'Could not create campaign.');
       const seqId = (seq as { id: string }).id;
-      const rows = ids.map(id => ({ sequence_id: seqId, lead_id: id, workspace_id: user.id, status: 'active', current_step: 0 }));
+      const rows = ids.map(id => ({ sequence_id: seqId, lead_id: id, workspace_id: wsId, status: 'active', current_step: 0 }));
       const { error: enrollErr } = await supabase.from('sequence_enrollments').insert(rows);
       if (enrollErr) throw new Error(enrollErr.message);
       // Seed an editable starter email step so the campaign is send-ready (best-effort).
