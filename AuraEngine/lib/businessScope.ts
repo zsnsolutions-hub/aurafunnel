@@ -39,6 +39,12 @@ export function scopeKey(): string | null {
  *  a generic here trips TS2589 ("excessively deep"). Callers keep their own types
  *  via the surrounding chain. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function scopeLeads(query: any): any {
+export function scopeBusiness(query: any): any {
   return _enabled && _businessId ? query.eq('business_id', _businessId) : query;
+}
+
+/** Back-compat alias — leads scoping was the first caller. Prefer scopeBusiness. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function scopeLeads(query: any): any {
+  return scopeBusiness(query);
 }

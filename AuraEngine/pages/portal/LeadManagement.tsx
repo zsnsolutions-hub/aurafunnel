@@ -964,7 +964,8 @@ const LeadManagement: React.FC = () => {
       const name = campaigns.find(c => c.id === bulkCampaignId)?.name ?? 'campaign';
       if (toEnroll.length === 0) { toast(`All selected leads are already in "${name}".`, 'success'); return; }
       const wsId = await resolveWorkspaceId(user.id);
-      const rows = toEnroll.map(id => ({ sequence_id: bulkCampaignId, lead_id: id, workspace_id: wsId, status: 'active', current_step: 0 }));
+      const bizId = activeBusinessId();
+      const rows = toEnroll.map(id => ({ sequence_id: bulkCampaignId, lead_id: id, workspace_id: wsId, business_id: bizId, status: 'active', current_step: 0 }));
       const { error } = await supabase.from('sequence_enrollments').insert(rows);
       if (error) throw new Error(error.message);
       // Keep the campaign's lead count accurate (no DB trigger maintains it).
@@ -986,12 +987,13 @@ const LeadManagement: React.FC = () => {
     setCreatingCampaign(true);
     try {
       const wsId = await resolveWorkspaceId(user.id);
+      const bizId = activeBusinessId();
       const { data: seq, error } = await supabase.from('email_sequences')
-        .insert({ workspace_id: wsId, created_by: user.id, name: nm, status: 'draft', total_leads: ids.length })
+        .insert({ workspace_id: wsId, business_id: bizId, created_by: user.id, name: nm, status: 'draft', total_leads: ids.length })
         .select('id,name,status').single();
       if (error || !seq) throw new Error(error?.message || 'Could not create campaign.');
       const seqId = (seq as { id: string }).id;
-      const rows = ids.map(id => ({ sequence_id: seqId, lead_id: id, workspace_id: wsId, status: 'active', current_step: 0 }));
+      const rows = ids.map(id => ({ sequence_id: seqId, lead_id: id, workspace_id: wsId, business_id: bizId, status: 'active', current_step: 0 }));
       const { error: enrollErr } = await supabase.from('sequence_enrollments').insert(rows);
       if (enrollErr) throw new Error(enrollErr.message);
       // Seed an editable starter email step so the campaign is send-ready (best-effort).

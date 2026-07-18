@@ -567,7 +567,7 @@ const QuickLaunchPage: React.FC = () => {
       const name = offer.trim().slice(0, 60) || 'Quick Launch campaign';
       const { data: seq, error: seqErr } = await supabase.from('email_sequences')
         .insert({
-          workspace_id: wsId, created_by: user.id, name, status: 'draft', total_leads: recipients.length,
+          workspace_id: wsId, business_id: activeBusinessId(), created_by: user.id, name, status: 'draft', total_leads: recipients.length,
           tone: tone.toString(), goal: offer,
           ai_personalize: aiPersonalize,
           send_best_time: bestTime,
@@ -584,7 +584,8 @@ const QuickLaunchPage: React.FC = () => {
       const { error: stepErr } = await supabase.from('sequence_steps').insert(stepRows);
       if (stepErr) throw new Error(stepErr.message);
 
-      const enrollRows = resolved.map((l) => ({ sequence_id: seqId, lead_id: l.id, workspace_id: wsId, status: 'active', current_step: 0 }));
+      const bizId = activeBusinessId();
+      const enrollRows = resolved.map((l) => ({ sequence_id: seqId, lead_id: l.id, workspace_id: wsId, business_id: bizId, status: 'active', current_step: 0 }));
       const { error: enrErr } = await supabase.from('sequence_enrollments').insert(enrollRows);
       if (enrErr) throw new Error(enrErr.message);
 

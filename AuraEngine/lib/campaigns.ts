@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import { resolveWorkspaceId } from './tenancy';
+import { scopeBusiness, activeBusinessId } from './businessScope';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 
@@ -85,10 +86,14 @@ export interface CampaignStep {
 
 /** List the workspace's campaigns (newest first) with a step count each. */
 export async function listCampaigns(userId: string): Promise<Campaign[]> {
-  const { data, error } = await supabase.from('email_sequences')
-    .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,ai_personalize,ab_auto_optimize,send_best_time,send_window_start,send_window_end,send_weekdays_only,send_timezone,created_at')
-    .eq('workspace_id', userId)
-    .order('created_at', { ascending: false });
+  // Membership-based workspace + business scoping (business filter is dormant
+  // until the multi_business flag is enabled — same gating as leads).
+  const workspaceId = await resolveWorkspaceId(userId);
+  const { data, error } = await scopeBusiness(
+    supabase.from('email_sequences')
+      .select('id,name,description,status,goal,tone,total_leads,total_sent,total_opened,total_clicked,ai_personalize,ab_auto_optimize,send_best_time,send_window_start,send_window_end,send_weekdays_only,send_timezone,created_at')
+      .eq('workspace_id', workspaceId)
+  ).order('created_at', { ascending: false });
   if (error || !data) return [];
   const campaigns = data as Campaign[];
   const ids = campaigns.map(c => c.id);
@@ -186,7 +191,7 @@ export async function addLeadToCampaign(sequenceId: string, userId: string, lead
   if (existing) return null;
   const workspaceId = await resolveWorkspaceId(userId);
   const { data, error } = await supabase.from('sequence_enrollments')
-    .insert({ sequence_id: sequenceId, lead_id: leadId, workspace_id: workspaceId, status: 'active', current_step: 0 })
+    .insert({ sequence_id: sequenceId, lead_id: leadId, workspace_id: workspaceId, business_id: activeBusinessId(), status: 'active', current_step: 0 })
     .select('id').single();
   if (error || !data) return null;
   const { count } = await supabase.from('sequence_enrollments')
