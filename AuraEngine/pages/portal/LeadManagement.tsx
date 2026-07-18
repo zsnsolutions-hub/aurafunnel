@@ -24,6 +24,7 @@ import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, resolveLea
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
+import { listActivities, logActivity } from '../../lib/leadActivities';
 
 // ── Helpers ──
 const formatRelativeTime = (dateStr: string): string => {
@@ -68,6 +69,7 @@ type ActivityType = 'call' | 'email' | 'meeting' | 'note';
 type BulkAction = 'campaign' | 'assign' | 'status' | 'tag' | 'export' | 'email' | 'workflow' | 'delete';
 
 interface ActivityLog {
+  id?: string;
   type: ActivityType;
   details: string;
   outcome: string;
@@ -1189,27 +1191,36 @@ const LeadManagement: React.FC = () => {
   }, [deleteTargetIds, allLeads]);
 
   // ── Activity Log ──
-  const handleLogActivity = () => {
-    if (!activityDetails.trim()) return;
-    const log: ActivityLog = {
+  // Load this lead's persisted activity history when the modal opens.
+  useEffect(() => {
+    if (!activityLogOpen || !activityLogLead) return;
+    let cancelled = false;
+    listActivities(activityLogLead.id)
+      .then(rows => { if (!cancelled) setActivityLogs(rows.map(r => ({ id: r.id, type: r.type as ActivityType, details: r.details, outcome: r.outcome ?? '', timestamp: r.occurredAt }))); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activityLogOpen, activityLogLead]);
+
+  const handleLogActivity = async (): Promise<boolean> => {
+    if (!activityDetails.trim() || !activityLogLead) return false;
+    const saved = await logActivity(user.id, activityLogLead.id, {
       type: activityType,
-      details: activityDetails,
-      outcome: activityOutcome,
-      timestamp: new Date().toISOString(),
-    };
-    setActivityLogs(prev => [log, ...prev]);
+      details: activityDetails.trim(),
+      outcome: activityOutcome || null,
+      businessId: currentBusinessId ?? null,
+    });
+    if (!saved) { toast('Could not log activity.', 'error'); return false; }
+    setActivityLogs(prev => [{ id: saved.id, type: saved.type as ActivityType, details: saved.details, outcome: saved.outcome ?? '', timestamp: saved.occurredAt }, ...prev]);
     setActivityDetails('');
     setActivityOutcome('');
-
-    if (activityLogLead) {
-      setAllLeads(prev => prev.map(l =>
-        l.id === activityLogLead.id ? {
-          ...l,
-          score: Math.min(100, l.score + (activityType === 'meeting' ? 5 : activityType === 'call' ? 3 : 1)),
-          lastActivity: `${activityType.charAt(0).toUpperCase() + activityType.slice(1)} logged`,
-        } : l
-      ));
-    }
+    // Reflect the freshest activity on the lead card (label only — the score is
+    // computed from real signals, not bumped by logging).
+    setAllLeads(prev => prev.map(l =>
+      l.id === activityLogLead.id
+        ? { ...l, lastActivity: `${activityType.charAt(0).toUpperCase() + activityType.slice(1)} logged` }
+        : l
+    ));
+    return true;
   };
 
   // Cleanup
@@ -2557,8 +2568,8 @@ const LeadManagement: React.FC = () => {
               </div>
 
               <div className="bg-indigo-50 rounded-xl p-3 flex items-start space-x-2">
-                <SparklesIcon className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-indigo-700">AI will update the lead score based on this activity. {activityType === 'meeting' ? 'Meetings add +5 to score.' : activityType === 'call' ? 'Calls add +3 to score.' : 'This activity adds +1 to score.'}</p>
+                <ClockIcon className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-indigo-700">Logged activities are saved to this lead and appear on its timeline.</p>
               </div>
             </div>
 
@@ -2567,7 +2578,7 @@ const LeadManagement: React.FC = () => {
                 Cancel
               </button>
               <button
-                onClick={() => { handleLogActivity(); setActivityLogOpen(false); }}
+                onClick={async () => { if (await handleLogActivity()) setActivityLogOpen(false); }}
                 disabled={!activityDetails.trim()}
                 className="flex items-center space-x-1.5 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-50"
               >

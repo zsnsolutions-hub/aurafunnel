@@ -36,6 +36,7 @@ import LeadColorDot from '../../components/leads/LeadColorDot';
 import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
 import { listNotes, addNote as persistNote, deleteNote as removeNote } from '../../lib/leadNotes';
 import { listTasks, addTask as persistTask, setTaskDone, deleteTask as removeTask } from '../../lib/tasks';
+import { listActivities } from '../../lib/leadActivities';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
@@ -581,7 +582,7 @@ const LeadProfile: React.FC = () => {
     const text = newNote.trim();
     setNewNote('');
     const saved = await persistNote(user.id, lead.id, text);
-    if (saved) setNotes(prev => [{ id: saved.id, text: saved.text, createdAt: saved.createdAt }, ...prev]);
+    if (saved) { setNotes(prev => [{ id: saved.id, text: saved.text, createdAt: saved.createdAt }, ...prev]); void loadTimeline(); }
     else setNewNote(text); // restore on failure
   };
 
@@ -596,7 +597,7 @@ const LeadProfile: React.FC = () => {
     const title = newTask.trim();
     setNewTask('');
     const saved = await persistTask(user.id, lead.id, { title, businessId: currentBusinessId ?? null });
-    if (saved) setTasks(prev => [...prev, { id: saved.id, title: saved.title, done: saved.status === 'done', dueAt: saved.dueAt }]);
+    if (saved) { setTasks(prev => [...prev, { id: saved.id, title: saved.title, done: saved.status === 'done', dueAt: saved.dueAt }]); void loadTimeline(); }
     else setNewTask(title); // restore on failure
   };
 
@@ -607,6 +608,7 @@ const LeadProfile: React.FC = () => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: next } : t)); // optimistic
     const saved = await setTaskDone(id, next);
     if (!saved) setTasks(prev => prev.map(t => t.id === id ? { ...t, done: target.done } : t)); // rollback
+    else void loadTimeline();
   };
 
   const handleDeleteTask = async (id: string) => {
@@ -761,6 +763,26 @@ const LeadProfile: React.FC = () => {
         type: 'reply',
         detail: snippet || undefined,
       });
+    }
+    // Manual activity log (call/email/meeting/note logged from the Leads list)
+    for (const a of await listActivities(lead.id)) {
+      events.push({
+        date: new Date(a.occurredAt),
+        label: `${a.type.charAt(0).toUpperCase() + a.type.slice(1)} logged`,
+        type: a.type,
+        detail: [a.details, a.outcome ? `Outcome: ${a.outcome}` : ''].filter(Boolean).join('\n') || undefined,
+      });
+    }
+    // Notes
+    for (const n of await listNotes(lead.id)) {
+      events.push({ date: new Date(n.createdAt), label: n.isAi ? 'AI note' : 'Note added', type: 'note', detail: n.text || undefined });
+    }
+    // Tasks — created, and completed (if done)
+    for (const t of await listTasks(lead.id)) {
+      events.push({ date: new Date(t.createdAt), label: `Task: ${t.title}`, type: 'task', detail: t.dueAt ? `Due ${new Date(t.dueAt).toLocaleDateString()}` : undefined });
+      if (t.status === 'done' && t.completedAt) {
+        events.push({ date: new Date(t.completedAt), label: `Task completed: ${t.title}`, type: 'task' });
+      }
     }
     events.sort((a, b) => b.date.getTime() - a.date.getTime());
     setTimeline(events);
