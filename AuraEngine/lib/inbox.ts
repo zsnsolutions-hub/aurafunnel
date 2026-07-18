@@ -4,6 +4,7 @@
 // webhook). Owner-scoped by RLS.
 
 import { supabase } from './supabase';
+import { scopeBusiness } from './businessScope';
 
 export interface InboundEmail {
   id: string;
@@ -21,9 +22,9 @@ export interface InboundEmail {
 }
 
 export async function listInbound(userId: string, unreadOnly: boolean): Promise<InboundEmail[]> {
-  let q = supabase.from('inbound_emails')
+  let q = scopeBusiness(supabase.from('inbound_emails')
     .select('id, lead_id, from_email, from_name, to_email, subject, body_text, body_html, message_id, received_at, is_read, leads(first_name, last_name)')
-    .eq('owner_id', userId)
+    .eq('owner_id', userId))
     .order('received_at', { ascending: false })
     .limit(200);
   if (unreadOnly) q = q.eq('is_read', false);
@@ -36,9 +37,9 @@ export async function markInboundRead(id: string, isRead = true): Promise<void> 
 }
 
 export async function unreadInboundCount(userId: string): Promise<number> {
-  const { count } = await supabase.from('inbound_emails')
+  const { count } = await scopeBusiness(supabase.from('inbound_emails')
     .select('id', { count: 'exact', head: true })
-    .eq('owner_id', userId).eq('is_read', false);
+    .eq('owner_id', userId)).eq('is_read', false);
   return count ?? 0;
 }
 

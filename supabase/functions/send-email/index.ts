@@ -629,6 +629,7 @@ serve(async (req) => {
         lead_id: lead_id || null,
         owner_id: userId,
         workspace_id: workspaceId,
+        business_id: body.business_id ?? null, // stamped when the caller passes it (pipeline wiring: Phase 5)
         sender_account_id: senderAccountId,
         provider,
         subject,

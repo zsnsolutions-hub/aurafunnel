@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { scopeBusiness, activeBusinessId } from '../lib/businessScope';
 
 export interface AiThread {
   id: string;
@@ -52,10 +53,10 @@ export function useAiThread({ workspaceId, mode }: UseAiThreadOptions) {
 
     try {
       // Try to load most recent thread for this mode
-      const { data: existing } = await supabase
+      const { data: existing } = await scopeBusiness(supabase
         .from('ai_threads')
         .select('*')
-        .eq('workspace_id', workspaceId)
+        .eq('workspace_id', workspaceId))
         .eq('mode', mode)
         .order('updated_at', { ascending: false })
         .limit(1)
@@ -74,7 +75,7 @@ export function useAiThread({ workspaceId, mode }: UseAiThreadOptions) {
         // Create new thread
         const { data: newThread, error } = await supabase
           .from('ai_threads')
-          .insert({ workspace_id: workspaceId, mode })
+          .insert({ workspace_id: workspaceId, business_id: activeBusinessId(), mode })
           .select()
           .single();
         if (error) throw error;
@@ -98,7 +99,7 @@ export function useAiThread({ workspaceId, mode }: UseAiThreadOptions) {
     try {
       const { data, error } = await supabase
         .from('ai_threads')
-        .insert({ workspace_id: workspaceId, mode })
+        .insert({ workspace_id: workspaceId, business_id: activeBusinessId(), mode })
         .select()
         .single();
       if (error) throw error;

@@ -1,6 +1,7 @@
 // File: AuraEngine/components/social/PublishStatusTable.tsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { scopeBusiness } from '../../lib/businessScope';
 import {
   FacebookIcon, InstagramIcon, LinkedInIcon, CheckIcon, XIcon,
   ClockIcon, RefreshIcon, ActivityIcon, AlertTriangleIcon, CursorClickIcon,
@@ -57,10 +58,10 @@ const PublishStatusTable: React.FC<Props> = ({ userId, refreshKey }) => {
     const fetchPosts = async () => {
       setLoading(true);
       try {
-        const { data: postsData } = await supabase
+        const { data: postsData } = await scopeBusiness(supabase
           .from('social_posts')
           .select('*')
-          .eq('user_id', userId)
+          .eq('user_id', userId))
           .order('created_at', { ascending: false })
           .limit(50);
 
