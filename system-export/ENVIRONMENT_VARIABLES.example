@@ -1,0 +1,100 @@
+# ============================================================================
+# Scaliyo — Environment Variables (NAMES + SAFE PLACEHOLDERS ONLY)
+# ============================================================================
+# NEVER commit real values. All values below are placeholders.
+# Frontend vars (VITE_*) are embedded in the client bundle and are PUBLIC by
+# design — never put a secret in a VITE_ var. Server vars are set as Supabase
+# Edge Function secrets (`supabase secrets set NAME=...`), not in this file.
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FRONTEND (AuraEngine/.env.local) — VITE_ prefix, shipped to the browser
+# ----------------------------------------------------------------------------
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY          # public anon key (RLS-protected)
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_PUBLISHABLE_KEY
+VITE_SENTRY_DSN=https://YOUR_SENTRY_DSN                # error monitoring (optional)
+VITE_TRACKING_DOMAIN=track.yourdomain.com             # open/click tracking host
+VITE_SUPPORT_MODE_ENABLED=false                       # gates support-console UI
+VITE_ELEVENLABS_AGENT_ID=YOUR_ELEVENLABS_AGENT_ID         # marketing voice widget
+VITE_ELEVENLABS_PORTAL_AGENT_ID=YOUR_ELEVENLABS_AGENT_ID  # in-app nav voice widget
+VITE_ELEVENLABS_AUTH_AGENT_ID=YOUR_ELEVENLABS_AGENT_ID    # auth-page voice widget
+
+# ----------------------------------------------------------------------------
+# SUPABASE PLATFORM (auto-injected into Edge Functions runtime)
+# ----------------------------------------------------------------------------
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY       # SECRET — bypasses RLS
+LEGACY_SERVICE_ROLE_KEY=YOUR_LEGACY_SERVICE_ROLE_KEY  # legacy fallback (rotate/remove)
+
+# ----------------------------------------------------------------------------
+# AI PROVIDERS
+# ----------------------------------------------------------------------------
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY                    # Google Gemini + Imagen
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY                    # OpenAI (proxy routing; text currently on Gemini)
+
+# ----------------------------------------------------------------------------
+# EMAIL — AUTH/system delivery (SendGrid) + outbound SMTP for auth hook
+# ----------------------------------------------------------------------------
+SENDGRID_API_KEY=YOUR_SENDGRID_API_KEY
+SENDGRID_WEBHOOK_VERIFICATION_KEY=YOUR_SENDGRID_WEBHOOK_KEY
+SEND_EMAIL_HOOK_SECRET=YOUR_AUTH_HOOK_SECRET          # Supabase auth "send email" hook HMAC
+AUTH_SENDER_EMAIL=noreply@yourdomain.com
+AUTH_SENDER_NAME=Scaliyo
+SMTP_HOST=smtp.yourprovider.com                       # auth-send-email SMTP path
+SMTP_PORT=587
+SMTP_USER=YOUR_SMTP_USERNAME
+SMTP_PASS=YOUR_SMTP_PASSWORD
+
+# ----------------------------------------------------------------------------
+# EMAIL — inbound + tracking
+# ----------------------------------------------------------------------------
+INBOUND_EMAIL_SECRET=YOUR_INBOUND_WEBHOOK_SECRET      # X-Inbound-Secret for inbound-email
+TRACKING_BASE_URL=https://track.yourdomain.com
+TRACKING_FALLBACK_URL=https://yourdomain.com
+MAILS_SO_API_KEY=YOUR_MAILS_SO_API_KEY                # email validation (mails.so) — ROTATE (was exposed)
+
+# ----------------------------------------------------------------------------
+# EMAIL VALIDATION / MAILCHIMP
+# ----------------------------------------------------------------------------
+MAILCHIMP_WEBHOOK_SECRET=YOUR_MAILCHIMP_WEBHOOK_SECRET
+
+# ----------------------------------------------------------------------------
+# BILLING (Stripe)
+# ----------------------------------------------------------------------------
+STRIPE_SECRET_KEY=sk_live_YOUR_STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET=whsec_YOUR_STRIPE_WEBHOOK_SECRET # MUST be set (webhook fails open if empty)
+
+# ----------------------------------------------------------------------------
+# OAUTH — Google/Gmail
+# ----------------------------------------------------------------------------
+GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI=https://YOUR_PROJECT_REF.functions.supabase.co/connect-gmail-oauth
+
+# ----------------------------------------------------------------------------
+# OAUTH — Meta (Facebook/Instagram) + LinkedIn
+# ----------------------------------------------------------------------------
+META_APP_ID=YOUR_META_APP_ID
+META_APP_SECRET=YOUR_META_APP_SECRET
+LINKEDIN_CLIENT_ID=YOUR_LINKEDIN_CLIENT_ID
+LINKEDIN_CLIENT_SECRET=YOUR_LINKEDIN_CLIENT_SECRET
+OAUTH_REDIRECT_BASE=https://YOUR_PROJECT_REF.functions.supabase.co  # shared OAuth callback base
+
+# ----------------------------------------------------------------------------
+# VOIP (Twilio) — feature is dormant until these are set
+# ----------------------------------------------------------------------------
+TWILIO_ACCOUNT_SID=YOUR_TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN=YOUR_TWILIO_AUTH_TOKEN              # also needed for webhook signature checks
+TWILIO_API_KEY_SID=YOUR_TWILIO_API_KEY_SID
+TWILIO_API_KEY_SECRET=YOUR_TWILIO_API_KEY_SECRET
+TWILIO_TWIML_APP_SID=YOUR_TWIML_APP_SID
+TWILIO_CALLER_ID=+10000000000                         # verified caller ID / purchased number
+
+# ----------------------------------------------------------------------------
+# APP URLs (used across edge functions for links/redirects)
+# ----------------------------------------------------------------------------
+APP_URL=https://yourdomain.com
+APP_BASE_URL=https://yourdomain.com
+SITE_URL=https://yourdomain.com

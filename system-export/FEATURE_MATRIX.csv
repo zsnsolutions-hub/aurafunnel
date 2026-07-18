@@ -1,0 +1,63 @@
+Module,Feature,Route,User Role,Frontend Status,Backend Status,Database Status,Integration Status,Overall Status,Priority,Relevant Files,Problems,Recommendation
+Auth,Login/Signup/OAuth,/auth,public,Complete,Complete,Complete,"Google/GitHub,SendGrid",Functional,P3,pages/portal/AuthPage.tsx;auth-send-email,"Dev schema screen can leak; decorative controls",Remove dev artifacts
+Auth,Onboarding,/onboarding,CLIENT,Partial,Stub,Partial,none,Partial,P2,OnboardingPage.tsx,"Cosmetic; provisions nothing; localStorage flag",Provision + persist server-side
+Profile,User settings,/portal/settings,CLIENT,Partial,Partial,Complete,none,Partial,P2,ProfilePage.tsx,"API keys/2FA/deletion/export are mock; deletion fake",Implement or hide mock tabs; real deletion
+Tenancy,Multi-business,/portal/businesses,CLIENT,Complete,Complete,Complete,none,Partial,P1,BusinessesPage.tsx;lib/businesses.ts,"multi_business flag off - scoping inert",Finish leads cutover; enable scoping
+Tenancy,Business settings (brain),/portal/business-settings,CLIENT,Complete,Complete,Complete,none,Functional,P2,BusinessSettingsPage.tsx,"business_profiles under-consumed by AI",Wire brain into generators
+Teams,Team Hub kanban,/portal/team-hub,CLIENT,Complete,Complete,Complete,none,Partial,P2,team-hub/;teamHubApi.ts,"Invite-accept dead-ended; no email",Build invite send+email+accept
+Teams,Team invites,/portal/team-hub,CLIENT,Partial,Broken,Complete,none,Broken,P1,useTeamInvites.ts;GlobalInviteBanner.tsx,"No send path; two disconnected systems",Unify team systems
+RBAC,Roles/permissions,-,all,Partial,Complete,Complete,none,Partial,P2,pg_policies;is_* fns,"No functional job roles; some frontend-only checks",Add real roles or drop pretense
+Leads,Lead discovery,/portal/leads,CLIENT,UI-only,Missing,Dead tables,none,Missing,P1,LeadManagement.tsx;apollo_* tables,"No provider; Apollo is dead scaffolding",Integrate provider or remove
+Leads,Import CSV/XLSX,/portal/leads,CLIENT,Complete,Complete,Complete,none,Functional,P2,lib/leadImporter.ts;import_leads_batch,"Doesn't score/enrich new leads",Trigger enrichment on import
+Leads,Export CSV,/portal/leads,CLIENT,Complete,n/a,n/a,none,Functional,P3,LeadManagement.tsx,"Fixed 6 columns; no field select",Add field selection
+Leads,Enrichment,/portal/leads,CLIENT,Complete,Complete,Complete,Gemini grounded,Functional,P2,enrich-lead;LeadEnrichmentWatcher,"Grounding fallback may invent",Confidence/source display
+Leads,Scoring,/portal/leads/:id,CLIENT,Partial,Complete,Complete,none,Partial,P2,lib/leadScoring.ts;lead_scores,"Real scorer hidden behind flag; visible score is +5 placeholder",Enable flag; surface real score
+Leads,Research profile,/portal/leads/:id,CLIENT,Complete,Complete,Complete,Gemini,Partial,P2,lib/leadResearch.ts;lead_research_profiles,"Flag-gated off by default",Enable by default
+Leads,Notes/Tasks,/portal/leads/:id,CLIENT,UI-only,Missing,Unused table,none,Broken,P1,LeadProfile.tsx:553,"Not persisted - data loss; lead_notes unused",Persist to lead_notes + tasks table
+Leads,Activity timeline,/portal/leads/:id,CLIENT,Complete,Complete,Complete,none,Functional,P3,LeadProfile.tsx:653,"Some log modals UI-only",Persist all activity types
+Leads,Pipeline/CRM,/portal/leads,CLIENT,Partial,Partial,Partial,none,Partial,P1,LeadManagement.tsx,"Status enum only; no deals/opportunities; no drag-drop",Add deals table + DnD
+Leads,Public API,-,api-key,n/a,Complete,Complete,none,Functional,P2,v1-leads,"None significant",Maintain
+AI,Command Center chat,/portal/ai,CLIENT,Complete,Complete,Complete,Gemini,Functional,P2,AICommandCenter.tsx;ai-chat-stream,"No credit ceiling on this path",Add server metering
+AI,Business analysis,/portal/settings,CLIENT,Complete,Partial,Complete,Gemini+fetch-page,Partial,P2,lib/gemini.ts;fetch-page,"Grounding disabled vs prompt; SPA blind spot; no schema",Align prompt; expand scrape; add responseSchema
+AI,Knowledge base,/portal/business-settings,CLIENT,Complete,Partial,Complete,Gemini,Partial,P1,business_profiles;profiles.businessProfile,"Two unsynced stores; memory not business-scoped",Unify + add business_id to memory
+AI,Image generation,/portal/content-studio,CLIENT,Complete,Complete,Complete,Imagen 4,Functional,P3,lib/imageGen.ts,"No history persisted; image-gen edge fn is dead stub",Persist history; delete stub
+AI,Image to content,/portal/image-studio,CLIENT,Complete,Complete,Complete,Gemini vision,Functional,P3,ImageStudio.tsx,"Flag-gated image_studio",Enable/promote
+AI,Voice assistant,-,CLIENT,Complete,n/a,n/a,ElevenLabs,Functional,P3,VoiceAgent.tsx,"Nav widget - not a call co-pilot",Clarify positioning
+Email,Compose/send single,-,CLIENT,Complete,Complete,Complete,SendGrid/SMTP,Functional,P2,send-email,"provider not in set = silent no-op",Validate provider
+Email,Campaigns/sequences,/portal/campaigns,CLIENT,Complete,Complete,Complete,SendGrid/SMTP,Functional,P1,CampaignsPage.tsx;lib/campaigns.ts,"None major",Maintain
+Email,Quick Launch,/portal/quick-launch,CLIENT,Complete,Complete,Complete,SendGrid/SMTP,Functional,P2,QuickLaunchPage.tsx,"Attribution can be sparse",Ensure sequence_id stamped
+Email,Send pipeline,-,system,n/a,Complete,Complete,SendGrid/SMTP,Functional,P1,start-email-sequence-run;process-*,"Latent double-send (finalize vs process-sequence-sends)",Remove finalize tail
+Email,A/B + auto-optimize,/portal/campaigns,CLIENT,Complete,Complete,Complete,none,Functional,P2,ab-autopause;campaign_variant_stats,"Data-starved until volume",Validate at scale
+Email,Templates,-,CLIENT,Missing,Complete,Complete,none,UI-only,P3,email_templates;automationEngine.ts,"No user-facing UI",Build template UI
+Email,Validation,-,CLIENT,Complete,Complete,Complete,mails.so,Functional,P2,mails-validation-worker,"Key rotation pending",Rotate key
+Senders,SMTP connect,/portal/sender-accounts,CLIENT,Complete,Complete,Complete,SMTP,Functional,P2,connect-smtp,"None",Maintain
+Senders,SendGrid connect,/portal/sender-accounts,CLIENT,Complete,Complete,Complete,SendGrid,Functional,P2,connect-sendgrid,"None",Maintain
+Senders,Gmail connect,/portal/sender-accounts,CLIENT,Partial,Broken,Complete,Google OAuth,Broken,P1,connect-gmail-oauth,"No callback; send uses SMTP not Gmail API",Complete OAuth or route to SMTP
+Senders,Outlook connect,-,CLIENT,Missing,Missing,n/a,none,Missing,P2,-,"No Microsoft connector",Add Graph OAuth or document SMTP
+Inbox,Unified inbox/replies,/portal/inbox,CLIENT,Complete,Complete,Complete,IMAP/webhook,Functional,P2,InboxPage.tsx;inbound-email;poll-imap-inbox,"Needs IMAP/hosted source; reply content not fed to AI",Add hosted source; feed replies to memory
+Social,Publishing FB/IG/LinkedIn,/portal/social-scheduler,CLIENT,Complete,Complete,Complete,"Meta/LinkedIn (demo)",Broken,P1,social-post-now;meta/linkedin-oauth,"Prod demo-mode - all publishes fail",Configure+app-review OAuth apps
+Social,TikTok,-,CLIENT,Missing,Missing,n/a,none,Missing,P3,-,"No code",Build or remove from pickers
+Social,Scheduling,/portal/social-scheduler,CLIENT,Complete,Complete,Complete,none,Functional,P2,social-run-scheduler,"Blocked by account problem",Fix accounts (4.1)
+Blog,Authoring/publish,/portal/blog;/admin/blog,CLIENT/ADMIN,Complete,Complete,Complete,Storage,Functional,P3,BlogDrafts.tsx;BlogManager.tsx,"Guest-contributor tables unused",Maintain
+Content,Content generation,/portal/content;/content-studio,CLIENT,Complete,Complete,Complete,Gemini,Functional,P3,ContentGen.tsx;ContentStudio.tsx,"Duplicate content pages",Consolidate
+VOIP,Outbound/inbound calling,/portal/leads/:id;/portal/calls,CLIENT,Complete,Complete,Complete,Twilio,Partial,P2,LeadCallPanel.tsx;twilio-*,"Dormant - needs secrets; webhooks unsigned; client-side credit gate",Activate + secure
+VOIP,Voicemail/recordings,-,CLIENT,Complete,Complete,Complete,Twilio,Partial,P2,twilio-voicemail,"Dormant",Activate
+VOIP,AI call assistance,-,CLIENT,Missing,Missing,n/a,none,Missing,P2,-,"No transcription/co-pilot/summaries",Build transcription+summary
+Billing,Subscription checkout,/portal/billing,CLIENT,Complete,Complete,Complete,Stripe,Functional,P0,billing-checkout;billing-webhook,"Client-supplied price/plan; webhook fails open; annual unreachable",Server-validate; fail-closed
+Billing,Credit purchase,/portal/billing,CLIENT,Complete,Complete,Complete,Stripe,Functional,P0,billing-checkout;AiUpgradeModal.tsx,"Client-supplied credits/price - tampering",Server allow-list
+Billing,Credits/usage,-,CLIENT,Complete,Complete,Complete,none,Functional,P2,credits.ts;enforce_ai_proxy_quota,"Some AI paths bypass ceiling",Route all AI through ceiling
+Billing,Entitlements/flags,-,CLIENT/ADMIN,Partial,Partial,Complete,none,Partial,P2,workspace_entitlements;feature_flags,"Entitlements never read; plan config drift",Single source; wire enforcement
+Billing,CRM invoicing,/portal/invoices,CLIENT,Complete,Complete,Complete,Stripe,Functional,P3,billing-create-invoice;billing-actions,"None major",Maintain
+Automation,Goals/automation,/portal/goals;/portal/automation,CLIENT,Partial,Partial,Complete,Gemini,Partial,P2,goal-executor;goal-replanner,"Flag-gated; workspace-wide not business-scoped; preview model",Scope by business; GA model
+API,Public API/keys,/portal/api-keys,CLIENT,Complete,Complete,Complete,none,Functional,P2,ApiKeysPage.tsx;v1-*,"ProfilePage 'API keys' tab is fake localStorage",Remove fake tab
+Webhooks,Outbound webhooks,/portal/webhooks,CLIENT,Complete,Complete,Complete,none,Functional,P2,webhook-dispatcher;webhook_endpoints,"None major",Maintain
+Webhooks,Inbound (Stripe/SG/MC/Twilio),-,system,n/a,Partial,Complete,"Stripe/SendGrid/Mailchimp/Twilio",Partial,P0,billing-webhook;webhooks-*;twilio-*,"Stripe fails open; SendGrid uses HMAC not ECDSA (never verifies); Mailchimp wrong header; Twilio unsigned - all fail open",Fail closed; correct algorithms
+Security,Admin RPC authorization,-,all,n/a,Broken,Complete,none,Broken,P0,admin_* RPCs;pg_proc.proacl,"Callable by anon via caller-supplied p_admin_id - grant credits/change plans/flip flags",Authorize on auth.uid(); REVOKE from anon
+Security,Subscriptions entitlements,-,CLIENT,n/a,Broken,Complete,none,Broken,P1,subscriptions RLS,"Public INSERT with_check=true; UPDATE no WITH CHECK - self-grant plan/credits",Restrict to service-role
+Security,audit_logs isolation,-,all,n/a,Broken,Complete,none,Broken,P1,audit_logs RLS,"USING(auth.uid() IS NOT NULL) - any user reads all tenants' audit rows",Drop policy
+Notifications,In-app notifications,-,CLIENT,UI-only,Missing,Missing,none,Missing,P2,DailyBriefing.tsx,"No notifications table in migrations; nothing reads/writes/delivers; bell has Math.random mock",Build real system or remove UI
+Analytics,Reporting/dashboards,/portal/analytics;/portal/dashboard,CLIENT,Partial,Partial,Complete,none,Partial,P2,AnalyticsPage.tsx;email_analytics_summary,"No salesperson/deal reporting",Add rep/deal analytics
+Admin,Admin console,/admin/*,ADMIN,Complete,Broken-authz,Complete,none,Partial,P0,pages/admin/*;admin_* RPCs,"admin_* RPCs authorize on caller-supplied p_admin_id + granted to anon = privilege escalation",Authorize on auth.uid(); REVOKE from anon
+Admin,Audit logs,/admin/audit,ADMIN,Complete,Complete,Complete,none,Functional,P3,AuditLogs.tsx;admin-audit-export,"None major",Maintain
+Security,RLS/tenant isolation,-,all,n/a,Partial,Partial,none,Partial,P0,pg_policies;core_schema.sql,"profiles USING(true) PII leak; team self-join; 3 tenancy models",Fix policies; reconcile tenancy
+Privacy,Deletion/retention,/portal/settings,CLIENT,UI-only,Missing,Missing,none,Broken,P0,ProfilePage.tsx:378,"Fake deletion; no retention/erasure",Real deletion + retention

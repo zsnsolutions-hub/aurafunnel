@@ -1,0 +1,59 @@
+Route,Page Name,Purpose,Component File,Related Components,API or Service,Database Tables,Required Role,Current Status
+/,Landing,Marketing home,pages/marketing/LandingPage.tsx,MarketingLayout,none,none,public,Functional
+/features,Features,Marketing features,pages/marketing/FeaturesPage.tsx,MarketingLayout,none,none,public,Functional
+/pricing,Pricing,Plans + CTA,pages/marketing/PricingPage.tsx,MarketingLayout,none,plans,public,Functional
+/blog,Blog list,Published posts,pages/marketing/BlogPage.tsx,MarketingLayout,none,blog_posts,public,Functional
+/blog/:slug,Blog post,Render published post,pages/marketing/BlogPostPage.tsx,MarketingLayout,none,blog_posts,public,Functional
+/about,About,Marketing,pages/marketing/AboutPage.tsx,MarketingLayout,none,none,public,Functional
+/contact,Contact,Marketing contact,pages/marketing/ContactPage.tsx,MarketingLayout,none,none,public,Functional
+/signup,Trial signup,Create account,pages/marketing/TrialSignupPage.tsx,-,supabase.auth,auth.users;profiles,public,Functional
+/auth,Auth,Login/signup/OAuth,pages/portal/AuthPage.tsx,AuthGate;useAuthMachine;VoiceAgentLauncher,supabase.auth;auth-send-email,auth.users;profiles;workspaces,public,Functional
+/reset-password,Reset password,Password recovery,pages/portal/ResetPasswordPage.tsx,-,supabase.auth,auth.users,public,Functional
+/auth/confirm,Confirm email,Email confirmation,pages/portal/ConfirmEmailPage.tsx,-,supabase.auth,auth.users,public,Functional
+/onboarding,Onboarding,Capture role/company/goal,pages/portal/OnboardingPage.tsx,-,supabase (profiles update),profiles,CLIENT,Partial (cosmetic; provisions nothing)
+/portal,Mission Control,Portal home dashboard,pages/portal/MissionControl.tsx,ClientLayout;VoiceAgentLauncher,supabase queries,leads;email_messages;email_events,CLIENT,Functional
+/portal/dashboard,Client Dashboard,Metrics dashboard,pages/portal/ClientDashboard.tsx,-,supabase;analytics,email_analytics_summary;leads,CLIENT,Partial (some derived metrics)
+/portal/leads,Lead Management,Lead list/kanban/import,pages/portal/LeadManagement.tsx,ImportLeadsWizard;LeadEnrichmentWatcher,import_leads_batch;enrich-lead,leads;import_batches;sequence_enrollments,CLIENT,Functional (notes/tasks UI-only)
+/portal/leads/:leadId,Lead Profile,Single lead detail,pages/portal/LeadProfile.tsx,LeadCallPanel;LeadScorePanel;LeadResearchPanel;NextActionPanel,enrich-lead;twilio-*;send-email,leads;lead_call_logs;lead_meetings;lead_scores;inbound_emails,CLIENT,Functional (notes/tasks not persisted; intel flag-gated)
+/portal/intelligence,Lead Intelligence,Lead intel (honest placeholder),pages/portal/LeadIntelligence.tsx,-,none,-,CLIENT,UI-only (placeholder; old fake dashboard removed)
+/portal/campaigns,Campaigns,Sequence management,pages/portal/CampaignsPage.tsx,-,lib/campaigns;start-email-sequence-run,email_sequences;sequence_steps;sequence_enrollments,CLIENT,Functional
+/portal/quick-launch,Quick Launch,Fast campaign on-ramp,pages/portal/QuickLaunchPage.tsx,-,launchCampaign,email_sequences;leads,CLIENT,Functional
+/portal/inbox,Unified Inbox,Reply inbox,pages/portal/InboxPage.tsx,RichReplyEditor,inbound-email;poll-imap-inbox;send-email,inbound_emails;email_messages,CLIENT,Functional (needs IMAP/hosted source)
+/portal/sender-accounts,Sender Accounts,Connect email senders,pages/portal/SenderAccountsPage.tsx,AddSenderModal;SenderHealthPanel,connect-smtp;connect-sendgrid;connect-gmail-oauth;connect-mailchimp-oauth,sender_accounts;sender_account_secrets,CLIENT,Partial (SMTP/SendGrid work; Gmail OAuth; no Outlook)
+/portal/content,Content Gen,AI content generation,pages/portal/ContentGen.tsx,-,gemini-proxy;ai-generate,generated_assets,CLIENT,Functional
+/portal/content-studio,Content Studio,Content + image drawer,pages/portal/ContentStudio.tsx,ImageGeneratorDrawer,gemini-proxy (Imagen),generated_assets;media_assets,CLIENT,Functional
+/portal/image-studio,Image Studio,Image->content (vision),pages/portal/ImageStudio.tsx,-,gemini-proxy (vision),media_assets;generated_assets,CLIENT,Functional (flag-gated image_studio)
+/portal/blog,Blog Drafts,Author blog posts,pages/portal/BlogDrafts.tsx,-,supabase;storage,blog_posts;blog_categories,CLIENT,Functional
+/portal/social-scheduler,Social Scheduler,Schedule/publish posts,pages/portal/SocialScheduler.tsx,Composer;TargetPicker;MediaUploader;SchedulePicker,social-post-now;social-schedule;meta/linkedin oauth,social_posts;social_post_targets;social_accounts,CLIENT,Partial (code real; prod demo-mode fails; no TikTok)
+/portal/calls,Calls,Call history,pages/portal/CallsPage.tsx,-,twilio-*,lead_call_logs,CLIENT,Functional (VOIP rows dormant)
+/portal/analytics,Analytics,Reporting,pages/portal/AnalyticsPage.tsx,-,supabase;analytics RPCs,email_analytics_summary;tracking_events,CLIENT,Partial
+/portal/automation,Automation,Automation/goals UI,pages/portal/AutomationPage.tsx,-,goal-executor;goal-replanner,automation_goals;automation_plans,CLIENT,Partial (verify runtime)
+/portal/goals,Goals,Autonomous goals,pages/portal/GoalsPage.tsx,-,goal-executor,automation_goals;automation_step_runs,CLIENT,Partial (live mode flag-gated)
+/portal/billing,Billing,Subscription + credits,pages/portal/BillingPage.tsx,StripeCheckoutModal;AiUpgradeModal,billing-checkout;billing-webhook,subscriptions;plans;workspace_ai_usage,CLIENT,Functional (security gaps; annual unreachable)
+/portal/invoices,Invoices,CRM invoicing (bill your customers),pages/portal/InvoicesPage.tsx,-,billing-create-invoice;billing-actions,invoices;invoice_line_items;invoice_packages,CLIENT,Functional
+/portal/settings,Profile/Settings,Profile + business profile,pages/portal/ProfilePage.tsx,BusinessProfileWizard,analyzeBusinessFromWeb;clear_business_profile,profiles,CLIENT,Partial (API keys/2FA/deletion/export are mock)
+/portal/businesses,Businesses,Multi-business list,pages/portal/BusinessesPage.tsx,BusinessSwitcher,create_business;get_or_create_default_business,businesses;business_members,CLIENT,Functional (scoping flag-gated)
+/portal/business-settings,Business Settings,Per-business brain,pages/portal/BusinessSettingsPage.tsx,-,upsertBusinessProfile,businesses;business_profiles,CLIENT,Functional
+/portal/team-hub,Team Hub,Kanban collaboration,pages/portal/team-hub/TeamHubBoards.tsx,FlowMembersPanel;useFlowPermissions,teamHubApi,teamhub_boards;teamhub_cards;teamhub_flow_members,CLIENT,Partial (invite-accept dead-ended)
+/portal/ai,AI Command Center,AI chat,pages/portal/AICommandCenter.tsx,-,ai-chat-stream,ai_threads;ai_messages,CLIENT,Functional (no credit ceiling)
+/portal/model-training,Model Training,Prompt-lab test runs,pages/portal/ModelTraining.tsx,-,gemini-proxy,user_prompts,CLIENT,Partial
+/portal/integrations,Integration Hub,Third-party integrations,pages/portal/IntegrationHub.tsx,-,validate-integration;verify-domain,integrations,CLIENT,Partial
+/portal/api-keys,API Keys,Public API keys,pages/portal/ApiKeysPage.tsx,-,supabase,api_keys,CLIENT,Functional (real keys for v1 API)
+/portal/api-docs,API Docs,API documentation,pages/portal/ApiDocsPage.tsx,-,none,-,CLIENT,Functional (docs)
+/portal/webhooks,Webhooks,Outbound webhooks,pages/portal/WebhooksPage.tsx,-,webhook-dispatcher,webhook_endpoints;webhook_deliveries,CLIENT,Functional
+/portal/branding,Branding,Workspace branding/domains,pages/portal/BrandingPage.tsx,-,verify-domain,workspace_branding;workspace_domains,CLIENT,Partial
+/portal/help,Help Center,Help,pages/portal/HelpCenterPage.tsx,-,none,-,CLIENT,Functional (static)
+/portal/manual,User Manual,Docs,pages/portal/UserManualPage.tsx,-,none,-,CLIENT,Functional (static)
+/portal/mobile,Mobile Home,Mobile shell,pages/portal/mobile/MobileHome.tsx,MobileLeads;MobileCampaigns;MobileGoals,supabase,leads;email_sequences,CLIENT,Partial (mobile subset)
+/admin/console,Admin Console,Admin command center,pages/admin/console/AdminConsolePage.tsx,ConfigTab;HealthTab,admin_* RPCs,feature_flags;config_settings,ADMIN,Functional
+/admin/users,User Management,Manage users,pages/admin/UserManagement.tsx,-,admin_* RPCs,profiles;subscriptions,ADMIN,Functional
+/admin/ai,AI Operations,AI ops monitoring,pages/admin/AIOperations.tsx,-,supabase,ai_proxy_usage;ai_usage_logs,ADMIN,Partial
+/admin/prompts,DNA Registry,Prompt registry,pages/admin/prompt-lab/DnaRegistryPage.tsx,DnaEditorPage,supabase,user_prompts;user_prompt_versions,ADMIN,Functional
+/admin/leads,Admin Leads,All-tenant lead view,pages/admin/LeadsManagement.tsx,-,supabase (admin RLS),leads,ADMIN,Functional
+/admin/blog,Blog Manager,Moderate/publish blog,pages/admin/BlogManager.tsx,-,supabase;storage,blog_posts;blog_categories,ADMIN,Functional
+/admin/audit,Audit Logs,Security audit,pages/admin/AuditLogs.tsx,-,admin-audit-export,audit_logs;support_audit_logs,ADMIN,Functional
+/admin/settings,Admin Settings,Platform settings,pages/admin/AdminSettings.tsx,-,supabase,config_settings,ADMIN,Functional
+/admin/pricing,Pricing Management,Manage plans,pages/admin/PricingManagement.tsx,-,admin_update_plan;admin_clone_plan,plans;workspace_entitlements,ADMIN,Functional
+/admin/ops,Ops Center,Operational monitoring,pages/admin/AdminOpsCenter.tsx,-,supabase,jobs;apollo_*;usage,ADMIN,Partial
+/admin/command,Command Center,Admin command,pages/admin/CommandCenter/AdminCommandCenterPage.tsx,-,admin_* RPCs,feature_flags;workspace_entitlements,ADMIN,Functional
+/admin/support,Support Console,Support impersonation,pages/support/SupportConsole.tsx,-,support-debug-integration;support-diagnostic-report,support_sessions;support_audit_logs,ADMIN,Partial (flag VITE_SUPPORT_MODE_ENABLED)
