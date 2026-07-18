@@ -66,13 +66,31 @@ export async function listInvites(status?: WorkspaceInvite['status']): Promise<W
   return (data ?? []) as WorkspaceInvite[];
 }
 
-/** Pending invites addressed to the current user's email (for an accept banner). */
-export async function myPendingInvites(email: string): Promise<WorkspaceInvite[]> {
+/** Pending invites addressed to the current user's email (for an accept banner).
+ *  Includes the token so the banner can accept in-app (RLS lets the invitee read
+ *  their own invite). */
+export async function myPendingInvites(email: string): Promise<(WorkspaceInvite & { token: string })[]> {
   const { data } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, email, role, business_id, name, status, expires_at, created_at')
+    .select('id, workspace_id, email, role, business_id, name, status, expires_at, created_at, token')
     .eq('status', 'pending')
     .ilike('email', email)
     .order('created_at', { ascending: false });
-  return (data ?? []) as WorkspaceInvite[];
+  return (data ?? []) as (WorkspaceInvite & { token: string })[];
+}
+
+/** Send (or resend) the invitation email via the system SendGrid path. Owner/admin
+ *  only (re-checked server-side). Best-effort — the invite exists regardless. */
+export async function sendInviteEmail(params: {
+  email: string; token: string; role?: string; inviterName?: string; workspaceName?: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const { data, error } = await supabase.functions.invoke('send-invite-email', {
+    body: {
+      email: params.email, token: params.token, role: params.role ?? 'member',
+      inviter_name: params.inviterName, workspace_name: params.workspaceName,
+    },
+  });
+  if (error) return { error: error.message };
+  if (data && data.success === false) return { error: data.error ?? 'Failed to send email' };
+  return { ok: true };
 }

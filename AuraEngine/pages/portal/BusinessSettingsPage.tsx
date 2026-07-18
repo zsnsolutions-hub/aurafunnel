@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowLeft, Save } from 'lucide-react';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { getBusinessProfile, updateBusiness, upsertBusinessProfile, BusinessProfilePatch } from '../../lib/businesses';
+import InviteMemberForm from '../../components/team/InviteMemberForm';
 import { useToast } from '../../components/ui/Toast';
 
 type Src = 'business' | 'profile';
@@ -153,6 +154,10 @@ const BusinessSettingsPage: React.FC = () => {
           ))}
         </div>
       )}
+
+      <div className="mt-6">
+        <InviteMemberForm businessId={currentBusinessId} businessName={currentBusiness.name} />
+      </div>
     </div>
   );
 };
