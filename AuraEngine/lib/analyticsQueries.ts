@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { scopeBusiness } from './businessScope';
 
 // ── Types ──
 
@@ -120,10 +121,10 @@ export async function fetchEmailAnalytics(
   };
 
   // Try materialized view first (fast path)
-  const { data: summary, error: mvErr } = await supabase
+  const { data: summary, error: mvErr } = await scopeBusiness(supabase
     .from('email_analytics_summary')
     .select('total_sent, unique_opens, unique_clicks, total_open_events, total_click_events')
-    .eq('owner_id', userId)
+    .eq('owner_id', userId))
     .gte('analytics_date', from)
     .lte('analytics_date', to);
 

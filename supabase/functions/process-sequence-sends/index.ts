@@ -71,6 +71,16 @@ serve(async (req) => {
       .select("id, owner_id, status, sequence_config").in("id", runIds);
     const runMap = new Map<string, Run>(((runs ?? []) as Run[]).map(r => [r.id, r]));
 
+    // Resolve each campaign's business_id once so sent email_messages get stamped.
+    const campaignIds = [...new Set(
+      ((runs ?? []) as Run[]).map(r => (r.sequence_config?.campaignId as string) || "").filter(Boolean),
+    )];
+    const bizByCampaign = new Map<string, string | null>();
+    if (campaignIds.length) {
+      const { data: seqs } = await admin.from("email_sequences").select("id, business_id").in("id", campaignIds);
+      for (const s of (seqs ?? []) as { id: string; business_id: string | null }[]) bizByCampaign.set(s.id, s.business_id);
+    }
+
     let sent = 0, failed = 0;
     const touched = new Set<string>();
 
@@ -118,6 +128,7 @@ serve(async (req) => {
             sequence_id: (cfg.campaignId as string) || undefined,
             sequence_step: it.step_index ?? undefined,
             subject_variant: it.subject_variant ?? undefined,
+            business_id: bizByCampaign.get((cfg.campaignId as string) || "") ?? null,
           }),
         });
         const result = await res.json().catch(() => ({} as { success?: boolean; error?: string }));
