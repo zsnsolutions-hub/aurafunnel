@@ -34,6 +34,7 @@ import { AdvancedOnly } from '../../components/ui-mode';
 import CreateInvoiceDrawer from '../../components/invoices/CreateInvoiceDrawer';
 import LeadColorDot from '../../components/leads/LeadColorDot';
 import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
+import { listNotes, addNote as persistNote, deleteNote as removeNote } from '../../lib/leadNotes';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
@@ -203,6 +204,13 @@ const LeadProfile: React.FC = () => {
 
   // Notes
   const [notes, setNotes] = useState<NoteItem[]>([]);
+  // Load persisted notes for this lead (survives reload).
+  useEffect(() => {
+    if (!lead?.id) return;
+    listNotes(lead.id)
+      .then(rows => setNotes(rows.map(r => ({ id: r.id, text: r.text, createdAt: r.createdAt }))))
+      .catch(() => {});
+  }, [lead?.id]);
   const [newNote, setNewNote] = useState('');
 
   // Tasks — start empty (previous hardcoded mock tasks removed in Phase 0).
@@ -550,10 +558,19 @@ const LeadProfile: React.FC = () => {
     showFeedback(`Score updated to ${newScore}`);
   };
 
-  const handleAddNote = () => {
-    if (!newNote.trim()) return;
-    setNotes(prev => [{ id: Date.now().toString(), text: newNote, createdAt: new Date().toISOString() }, ...prev]);
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !lead?.id) return;
+    const text = newNote.trim();
     setNewNote('');
+    const saved = await persistNote(user.id, lead.id, text);
+    if (saved) setNotes(prev => [{ id: saved.id, text: saved.text, createdAt: saved.createdAt }, ...prev]);
+    else setNewNote(text); // restore on failure
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    const prev = notes;
+    setNotes(p => p.filter(n => n.id !== id)); // optimistic
+    if (!(await removeNote(id))) setNotes(prev); // rollback on failure
   };
 
   const handleAddTask = () => {
@@ -1382,11 +1399,20 @@ const LeadProfile: React.FC = () => {
                   ) : (
                     <div className="space-y-3">
                       {notes.map(note => (
-                        <div key={note.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                          <p className="text-sm text-slate-800">{note.text}</p>
-                          <p className="text-[10px] text-slate-400 mt-2">
-                            {new Date(note.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                          </p>
+                        <div key={note.id} className="group p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{note.text}</p>
+                            <p className="text-[10px] text-slate-400 mt-2">
+                              {new Date(note.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteNote(note.id)}
+                            title="Delete note"
+                            className="shrink-0 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
