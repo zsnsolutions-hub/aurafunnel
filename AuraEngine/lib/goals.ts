@@ -475,6 +475,20 @@ export async function isFlagEnabled(workspaceId: string, flagKey: string): Promi
   return data?.enabled === true;
 }
 
+/** Like isFlagEnabled but DEFAULT ON: returns true unless a workspace_feature_flags
+ *  row explicitly sets enabled=false. Used for canonical-model flags (e.g.
+ *  multi_business) that are now the default but can be opted out per workspace. */
+export async function isFlagEnabledDefaultOn(workspaceId: string, flagKey: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('workspace_feature_flags')
+    .select('enabled')
+    .eq('workspace_id', workspaceId)
+    .eq('flag_key', flagKey)
+    .maybeSingle();
+  if (error) return true; // fail-on (canonical default)
+  return data ? data.enabled === true : true;
+}
+
 export async function setFlagEnabled(workspaceId: string, flagKey: string, enabled: boolean): Promise<void> {
   const { error } = await supabase
     .from('workspace_feature_flags')

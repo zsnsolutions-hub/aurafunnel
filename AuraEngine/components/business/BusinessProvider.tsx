@@ -9,7 +9,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { Business, listBusinesses, getOrCreateDefaultBusinessId } from '../../lib/businesses';
 import { resolveWorkspaceForUser } from '../../lib/memory';
-import { isFlagEnabled } from '../../lib/goals';
+import { isFlagEnabledDefaultOn } from '../../lib/goals';
 import { setBusinessScope } from '../../lib/businessScope';
 
 export interface BusinessContextValue {
@@ -45,8 +45,10 @@ export const BusinessProvider: React.FC<{ userId: string; children: React.ReactN
   const [loading, setLoading] = useState(true);
   // Seed from a cached value so the flag is known synchronously on repeat loads
   // (avoids a flash of unscoped/all-business data before the RPC resolves).
+  // multi_business is on by default now (canonical model) — a workspace_feature_flags
+  // row with enabled=false can explicitly opt out. Seed ON unless cached as '0'.
   const [multiBusinessEnabled, setMultiBusinessEnabled] = useState(() => {
-    try { return localStorage.getItem(flagCacheKey(userId)) === '1'; } catch { return false; }
+    try { return localStorage.getItem(flagCacheKey(userId)) !== '0'; } catch { return true; }
   });
 
   const load = useCallback(async () => {
@@ -75,7 +77,7 @@ export const BusinessProvider: React.FC<{ userId: string; children: React.ReactN
       try {
         const ws = await resolveWorkspaceForUser(userId);
         if (!ws || cancelled) return;
-        const on = await isFlagEnabled(ws, 'multi_business');
+        const on = await isFlagEnabledDefaultOn(ws, 'multi_business');
         if (!cancelled) {
           setMultiBusinessEnabled(on);
           try { localStorage.setItem(flagCacheKey(userId), on ? '1' : '0'); } catch { /* ignore */ }
