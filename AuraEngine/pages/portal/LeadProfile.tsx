@@ -35,6 +35,7 @@ import CreateInvoiceDrawer from '../../components/invoices/CreateInvoiceDrawer';
 import LeadColorDot from '../../components/leads/LeadColorDot';
 import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, DEFAULT_STAGE_COLORS } from '../../lib/leadColors';
 import { listNotes, addNote as persistNote, deleteNote as removeNote } from '../../lib/leadNotes';
+import { listTasks, addTask as persistTask, setTaskDone, deleteTask as removeTask } from '../../lib/tasks';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
@@ -170,7 +171,19 @@ interface TaskItem {
   id: string;
   title: string;
   done: boolean;
-  dueDate: string;
+  dueAt: string | null;
+}
+
+// Short, human due label for a task (e.g. "Jul 24" / "Overdue" / "No due date").
+function dueLabel(dueAt: string | null): string {
+  if (!dueAt) return 'No due date';
+  const d = new Date(dueAt);
+  if (Number.isNaN(d.getTime())) return 'No due date';
+  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
+  if (days < 0) return 'Overdue';
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 const LeadProfile: React.FC = () => {
@@ -213,9 +226,14 @@ const LeadProfile: React.FC = () => {
   }, [lead?.id]);
   const [newNote, setNewNote] = useState('');
 
-  // Tasks — start empty (previous hardcoded mock tasks removed in Phase 0).
-  // Persistent tasks arrive with the real lead_tasks table in a later phase.
+  // Tasks — persisted in the tasks table (survives reload).
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  useEffect(() => {
+    if (!lead?.id) return;
+    listTasks(lead.id)
+      .then(rows => setTasks(rows.map(r => ({ id: r.id, title: r.title, done: r.status === 'done', dueAt: r.dueAt }))))
+      .catch(() => {});
+  }, [lead?.id]);
   const [newTask, setNewTask] = useState('');
 
   // Quick action feedback
@@ -573,14 +591,28 @@ const LeadProfile: React.FC = () => {
     if (!(await removeNote(id))) setNotes(prev); // rollback on failure
   };
 
-  const handleAddTask = () => {
-    if (!newTask.trim()) return;
-    setTasks(prev => [...prev, { id: Date.now().toString(), title: newTask, done: false, dueDate: 'This week' }]);
+  const handleAddTask = async () => {
+    if (!newTask.trim() || !lead?.id) return;
+    const title = newTask.trim();
     setNewTask('');
+    const saved = await persistTask(user.id, lead.id, { title, businessId: currentBusinessId ?? null });
+    if (saved) setTasks(prev => [...prev, { id: saved.id, title: saved.title, done: saved.status === 'done', dueAt: saved.dueAt }]);
+    else setNewTask(title); // restore on failure
   };
 
-  const toggleTask = (id: string) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const toggleTask = async (id: string) => {
+    const target = tasks.find(t => t.id === id);
+    if (!target) return;
+    const next = !target.done;
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: next } : t)); // optimistic
+    const saved = await setTaskDone(id, next);
+    if (!saved) setTasks(prev => prev.map(t => t.id === id ? { ...t, done: target.done } : t)); // rollback
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    const prev = tasks;
+    setTasks(p => p.filter(t => t.id !== id)); // optimistic
+    if (!(await removeTask(id))) setTasks(prev); // rollback on failure
   };
 
   // ── Lead Health ──
@@ -1462,9 +1494,15 @@ const LeadProfile: React.FC = () => {
                         <div className="flex-grow">
                           <p className={`text-sm font-medium ${task.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{task.title}</p>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-400">{task.dueDate}</span>
+                        <span className={`text-[10px] font-bold ${!task.done && dueLabel(task.dueAt) === 'Overdue' ? 'text-rose-500' : 'text-slate-400'}`}>{dueLabel(task.dueAt)}</span>
+                        <button onClick={() => handleDeleteTask(task.id)} title="Delete task" className="text-slate-300 hover:text-rose-500 transition-colors flex-shrink-0">
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
                       </div>
                     ))}
+                    {tasks.length === 0 && (
+                      <p className="text-xs text-slate-400 text-center py-6">No tasks yet. Add a follow-up above.</p>
+                    )}
                   </div>
                 </div>
               )}
