@@ -92,6 +92,7 @@ const BlogDrafts = lazyWithRetry(() => import('./pages/portal/BlogDrafts'));
 const AnalyticsPage = lazyWithRetry(() => import('./pages/portal/AnalyticsPage'));
 const CallsPage = lazyWithRetry(() => import('./pages/portal/CallsPage'));
 const CampaignsPage = lazyWithRetry(() => import('./pages/portal/CampaignsPage'));
+const PipelinePage = lazyWithRetry(() => import('./pages/portal/PipelinePage'));
 const InboxPage = lazyWithRetry(() => import('./pages/portal/InboxPage'));
 const AutomationPage = lazyWithRetry(() => import('./pages/portal/AutomationPage'));
 const BillingPage = lazyWithRetry(() => import('./pages/portal/BillingPage'));
@@ -368,6 +369,7 @@ const App: React.FC = () => {
             <Route path="blog" element={<BlogDrafts />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="calls" element={<CallsPage />} />
+            <Route path="deals" element={<PipelinePage />} />
             <Route path="campaigns" element={<CampaignsPage />} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="automation" element={<AutomationPage />} />

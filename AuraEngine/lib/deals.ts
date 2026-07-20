@@ -62,6 +62,57 @@ export async function listDealsForLead(leadId: string): Promise<Deal[]> {
   return (data ?? []).map(map);
 }
 
+export interface DealWithLead extends Deal {
+  leadName: string | null;
+  leadCompany: string | null;
+}
+
+/** All deals for the pipeline board. RLS already scopes to the caller's
+ *  workspace; pass a businessId to scope to the active business. */
+export async function listDeals(businessId: string | null): Promise<DealWithLead[]> {
+  let q = supabase
+    .from('deals')
+    .select(`${COLS}, lead:lead_id(first_name, last_name, company)`)
+    .order('created_at', { ascending: false });
+  if (businessId) q = q.eq('business_id', businessId);
+  const { data } = await q;
+  return (data ?? []).map(r => {
+    const lead = (r as { lead?: { first_name?: string; last_name?: string; company?: string } | null }).lead;
+    const name = lead ? [lead.first_name, lead.last_name].filter(Boolean).join(' ') : '';
+    return { ...map(r), leadName: name || null, leadCompany: lead?.company ?? null };
+  });
+}
+
+export interface DealForecast {
+  openCount: number;
+  openValue: number;      // sum of open (not won/lost) deal values
+  weightedValue: number;  // sum of value × probability for open deals
+  wonCount: number;
+  wonValue: number;
+  lostCount: number;
+  winRate: number;        // won / (won + lost), 0..1
+}
+
+/** Pure forecast aggregation over a set of deals. */
+export function computeForecast(deals: Deal[]): DealForecast {
+  const open = deals.filter(d => d.stage !== 'won' && d.stage !== 'lost');
+  const won = deals.filter(d => d.stage === 'won');
+  const lost = deals.filter(d => d.stage === 'lost');
+  const openValue = open.reduce((s, d) => s + d.valueAmount, 0);
+  const weightedValue = open.reduce((s, d) => s + d.valueAmount * d.probability / 100, 0);
+  const wonValue = won.reduce((s, d) => s + d.valueAmount, 0);
+  const closed = won.length + lost.length;
+  return {
+    openCount: open.length,
+    openValue,
+    weightedValue: Math.round(weightedValue),
+    wonCount: won.length,
+    wonValue,
+    lostCount: lost.length,
+    winRate: closed > 0 ? won.length / closed : 0,
+  };
+}
+
 export interface NewDeal {
   title: string;
   valueAmount?: number;

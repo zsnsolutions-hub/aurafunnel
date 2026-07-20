@@ -3,7 +3,7 @@ import {
   Compass, Users, Send, GitBranch, BarChart3, Brain,
   Sparkles, PenSquare, MessageSquare, Plug, Mail,
   SlidersHorizontal, CreditCard, FileText, Settings, BookOpen,
-  HelpCircle, Zap, Target, Key, Webhook, Palette, Rocket, Phone, Megaphone, Inbox,
+  HelpCircle, Zap, Target, Key, Webhook, Palette, Rocket, Phone, Megaphone, Inbox, TrendingUp,
 } from 'lucide-react';
 
 // ── Types ──
@@ -210,12 +210,20 @@ export const NAV_CONFIG: NavConfigItem[] = [
     divider: true,
   },
   {
+    route: '/portal/deals',
+    navLabel: 'Deals',
+    pageTitle: 'Deals',
+    icon: TrendingUp,
+    section: 'convert',
+    order: 1,
+  },
+  {
     route: '/portal/team-hub',
     navLabel: 'Pipeline',
     pageTitle: 'Pipeline',
     icon: Zap,
     section: 'convert',
-    order: 1,
+    order: 2,
   },
   {
     route: '/portal/invoices',
@@ -223,7 +231,7 @@ export const NAV_CONFIG: NavConfigItem[] = [
     pageTitle: 'Invoices',
     icon: FileText,
     section: 'convert',
-    order: 2,
+    order: 3,
   },
 
   // ── Pillar 4 — INTELLIGENCE ──
