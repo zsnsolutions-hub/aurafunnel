@@ -13,6 +13,9 @@ import {
 import { supabase } from '../../lib/supabase';
 import { activeBusinessId } from '../../lib/businessScope';
 import { validateEmails, emailValidationEnabled } from '../../lib/emailValidation';
+import { recalcLeadScoresBulk } from '../../lib/leadScoring';
+import { normalizeLeads } from '../../lib/queries';
+import { resolveWorkspaceId } from '../../lib/tenancy';
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -227,6 +230,26 @@ const ImportLeadsWizard: React.FC<ImportLeadsWizardProps> = ({
             })();
           }
         }
+      }
+
+      // Auto-score the imported leads (firmographic baseline) so they never show
+      // a 0 in the table. Deterministic, no AI/credits. Best-effort/background;
+      // refreshes the parent list when done. Deliverability refines later once
+      // the auto-validation above lands.
+      if (businessId && res.batch_id && res.imported_count > 0) {
+        void (async () => {
+          try {
+            const { data: rows } = await supabase.from('leads')
+              .select('id,primary_email,first_name,last_name,primary_phone,company,title,industry,company_size,linkedin_url,status,last_activity,created_at')
+              .eq('import_batch_id', res.batch_id);
+            const leads = normalizeLeads((rows ?? []) as Record<string, unknown>[]);
+            if (leads.length > 0) {
+              const workspaceId = await resolveWorkspaceId(userId);
+              await recalcLeadScoresBulk(businessId, workspaceId, leads);
+              onImportComplete(); // refresh so the new scores show
+            }
+          } catch { /* best-effort; user can hit "Score" later */ }
+        })();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed');

@@ -178,6 +178,20 @@ export async function getLeadScore(leadId: string): Promise<LeadScoreBreakdown |
   return (data as LeadScoreBreakdown | null) ?? null;
 }
 
+/** Fetch score breakdowns for many leads at once (for table hover/reason).
+ *  Chunked to stay under PostgREST .in() URL limits. */
+export async function getLeadScoresBulk(leadIds: string[]): Promise<Map<string, LeadScoreBreakdown>> {
+  const map = new Map<string, LeadScoreBreakdown>();
+  if (leadIds.length === 0) return map;
+  const CHUNK = 200;
+  for (let i = 0; i < leadIds.length; i += CHUNK) {
+    const chunk = leadIds.slice(i, i + CHUNK);
+    const { data } = await supabase.from('lead_scores').select('*').in('lead_id', chunk);
+    for (const r of ((data ?? []) as LeadScoreBreakdown[])) map.set(r.lead_id, r);
+  }
+  return map;
+}
+
 /** Batched recompute for many leads. Gathers validation / engagement /
  *  suppression once per chunk (instead of per lead), bulk-upserts lead_scores,
  *  and syncs leads.score. Deterministic — no AI, no credits. Returns count

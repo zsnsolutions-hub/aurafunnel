@@ -25,7 +25,7 @@ import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/lead
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
 import { listActivities, logActivity } from '../../lib/leadActivities';
-import { recalcLeadScoresBulk } from '../../lib/leadScoring';
+import { recalcLeadScoresBulk, getLeadScoresBulk, type LeadScoreBreakdown } from '../../lib/leadScoring';
 
 // ── Helpers ──
 const formatRelativeTime = (dateStr: string): string => {
@@ -218,6 +218,8 @@ const LeadManagement: React.FC = () => {
   // ── Bulk score recompute ──
   const [scoring, setScoring] = useState(false);
   const [scoreProgress, setScoreProgress] = useState<{ done: number; total: number } | null>(null);
+  // Score breakdowns for the loaded leads → reason tooltip on the score cell.
+  const [scoreDetails, setScoreDetails] = useState<Map<string, LeadScoreBreakdown>>(new Map());
 
   // ── Pagination ──
   const [currentPage, setCurrentPage] = useState(1);
@@ -1215,6 +1217,21 @@ const LeadManagement: React.FC = () => {
     }
   }, [currentBusinessId, allLeads, scoring, user.id, refetchLeads, toast]);
 
+  // Load score breakdowns for the loaded leads (for the reason tooltip). Re-runs
+  // when the lead set changes (incl. after a rescore refetch).
+  useEffect(() => {
+    if (allLeads.length === 0) { setScoreDetails(new Map()); return; }
+    let cancelled = false;
+    getLeadScoresBulk(allLeads.map(l => l.id)).then(m => { if (!cancelled) setScoreDetails(m); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [allLeads]);
+
+  const scoreTooltip = useCallback((lead: Lead): string => {
+    const d = scoreDetails.get(lead.id);
+    if (!d) return `Score ${lead.score}/100. Use “Score” to compute the signal-based breakdown.`;
+    return `${d.total_score}/100 — ${d.reason_summary} (confidence ${Math.round((d.confidence ?? 0) * 100)}%)`;
+  }, [scoreDetails]);
+
   // ── Activity Log ──
   // Load this lead's persisted activity history when the modal opens.
   useEffect(() => {
@@ -2196,7 +2213,7 @@ const LeadManagement: React.FC = () => {
                               </div>
                             </button>
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 cursor-help" title={scoreTooltip(lead)}>
                                 <div className="w-8 h-1 bg-slate-100 rounded-full overflow-hidden">
                                   <div className={`h-full rounded-full ${lead.score >= 76 ? 'bg-rose-500' : lead.score >= 51 ? 'bg-amber-500' : lead.score >= 26 ? 'bg-emerald-500' : 'bg-blue-400'}`} style={{ width: `${lead.score}%` }}></div>
                                 </div>
@@ -2332,7 +2349,7 @@ const LeadManagement: React.FC = () => {
                         </td>
                         <td className="px-4 py-3.5 text-sm text-slate-600 font-medium">{lead.company}</td>
                         <td className="px-3 py-3">
-                          <div className="flex items-center gap-1.5 justify-center">
+                          <div className="flex items-center gap-1.5 justify-center cursor-help" title={scoreTooltip(lead)}>
                             <div className="w-10 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all duration-500 ${
