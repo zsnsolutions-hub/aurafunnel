@@ -39,6 +39,8 @@ import { listTasks, addTask as persistTask, setTaskDone, deleteTask as removeTas
 import { listActivities } from '../../lib/leadActivities';
 import { resolveWorkspaceId } from '../../lib/tenancy';
 import { listDealsForLead, createDeal, setDealStage, deleteDeal, DEAL_STAGES, type Deal, type DealStage } from '../../lib/deals';
+import { listCampaigns, addLeadToCampaign, type Campaign } from '../../lib/campaigns';
+import { listWorkspaceMembers, type WorkspaceMember } from '../../lib/members';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
@@ -249,6 +251,17 @@ const LeadProfile: React.FC = () => {
     listDealsForLead(lead.id).then(setDeals).catch(() => {});
   }, [lead?.id]);
 
+  // Tag / assignment / campaign quick actions (real, persisted).
+  const [tagModalOpen, setTagModalOpen] = useState(false);
+  const [newTag, setNewTag] = useState('');
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [campaignModalOpen, setCampaignModalOpen] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [enrollingId, setEnrollingId] = useState<string | null>(null);
+
   // Quick action feedback
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
@@ -320,7 +333,7 @@ const LeadProfile: React.FC = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('leads')
-      .select('id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,linkedin_url,location,title,source,industry,company_size,import_batch_id,imported_at,custom_fields')
+      .select('id,client_id,first_name,last_name,primary_email,primary_phone,company,score,status,last_activity,insights,created_at,updated_at,knowledgeBase,emails,phones,tags,assigned_to,linkedin_url,location,title,source,industry,company_size,import_batch_id,imported_at,custom_fields')
       .eq('id', leadId)
       .single();
     if (error) {
@@ -658,6 +671,65 @@ const LeadProfile: React.FC = () => {
     const prev = deals;
     setDeals(p => p.filter(d => d.id !== id)); // optimistic
     if (!(await deleteDeal(id))) setDeals(prev); // rollback
+  };
+
+  // ── Tags (leads.tags text[]) ──
+  const persistTags = async (tags: string[]) => {
+    if (!lead) return;
+    const prev = lead.tags ?? [];
+    setLead({ ...lead, tags }); // optimistic
+    const { error } = await supabase.from('leads').update({ tags }).eq('id', lead.id);
+    if (error) { console.error('tags update:', error.message); setLead({ ...lead, tags: prev }); showFeedback('Could not save tag'); }
+  };
+  const handleAddTag = async () => {
+    const tag = newTag.trim();
+    if (!tag || !lead) return;
+    const existing = lead.tags ?? [];
+    if (existing.some(t => t.toLowerCase() === tag.toLowerCase())) { setNewTag(''); return; }
+    setNewTag('');
+    await persistTags([...existing, tag]);
+  };
+  const handleRemoveTag = async (tag: string) => {
+    if (!lead) return;
+    await persistTags((lead.tags ?? []).filter(t => t !== tag));
+  };
+
+  // ── Assignment (leads.assigned_to) ──
+  const openAssign = async () => {
+    setAssignModalOpen(true);
+    if (members.length === 0) {
+      setLoadingMembers(true);
+      try { setMembers(await listWorkspaceMembers(user.id)); } catch { /* noop */ }
+      setLoadingMembers(false);
+    }
+  };
+  const handleAssign = async (memberId: string | null) => {
+    if (!lead) return;
+    const prev = lead.assigned_to ?? null;
+    setLead({ ...lead, assigned_to: memberId });
+    const { error } = await supabase.from('leads').update({ assigned_to: memberId }).eq('id', lead.id);
+    if (error) { console.error('assign:', error.message); setLead({ ...lead, assigned_to: prev }); showFeedback('Could not assign lead'); return; }
+    const name = memberId ? (members.find(m => m.userId === memberId)?.name ?? 'member') : null;
+    showFeedback(name ? `Assigned to ${name}` : 'Assignment cleared');
+    setAssignModalOpen(false);
+  };
+
+  // ── Add to campaign (real enrollment) ──
+  const openCampaignModal = async () => {
+    setCampaignModalOpen(true);
+    if (campaigns.length === 0) {
+      setLoadingCampaigns(true);
+      try { setCampaigns(await listCampaigns(user.id)); } catch { /* noop */ }
+      setLoadingCampaigns(false);
+    }
+  };
+  const handleEnroll = async (sequenceId: string, name: string) => {
+    if (!lead) return;
+    setEnrollingId(sequenceId);
+    const enrollmentId = await addLeadToCampaign(sequenceId, user.id, lead.id);
+    setEnrollingId(null);
+    showFeedback(enrollmentId ? `Added to “${name}”` : `Already in “${name}”`);
+    setCampaignModalOpen(false);
   };
 
   // ── Lead Health ──
@@ -1590,7 +1662,7 @@ const LeadProfile: React.FC = () => {
                     <p className="text-sm font-bold text-slate-700 mb-1">No active campaigns</p>
                     <p className="text-xs text-slate-400 mb-4">Add this lead to a campaign to start automated outreach.</p>
                     <button
-                      onClick={() => showFeedback('Lead added to nurture campaign')}
+                      onClick={openCampaignModal}
                       className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors"
                     >
                       Add to Campaign
@@ -1729,18 +1801,18 @@ const LeadProfile: React.FC = () => {
                 <span>Schedule Meeting</span>
               </button>
               <button
-                onClick={() => showFeedback('Lead added to nurture campaign')}
+                onClick={openCampaignModal}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors font-semibold text-sm"
               >
                 <TargetIcon className="w-4 h-4" />
                 <span>Add to Campaign</span>
               </button>
               <button
-                onClick={() => showFeedback('Tag "Priority" added')}
+                onClick={() => setTagModalOpen(true)}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors font-semibold text-sm"
               >
                 <TagIcon className="w-4 h-4" />
-                <span>Add Tag</span>
+                <span>Manage Tags</span>
               </button>
               <button
                 onClick={handleScoreUpdate}
@@ -1750,11 +1822,11 @@ const LeadProfile: React.FC = () => {
                 <span>Recalculate Score</span>
               </button>
               <button
-                onClick={() => showFeedback('Assignment dialog opened')}
+                onClick={openAssign}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-slate-50 text-slate-700 hover:bg-slate-100 transition-colors font-semibold text-sm"
               >
                 <UsersIcon className="w-4 h-4" />
-                <span>Assign to Team</span>
+                <span>{lead.assigned_to ? 'Reassign lead' : 'Assign to Team'}</span>
               </button>
               <button
                 onClick={async () => {
@@ -1799,7 +1871,7 @@ const LeadProfile: React.FC = () => {
           {/* ── Email Engagement Card ── */}
           <EmailEngagementCard
             leadId={lead.id}
-            onSendEmailClick={() => showFeedback('Email composer opened')}
+            onSendEmailClick={() => setFastSendOpen(true)}
           />
 
           {/* ── Warm Lead Callout ── */}
@@ -2740,6 +2812,127 @@ const LeadProfile: React.FC = () => {
                 <button onClick={() => setMeetingOpen(false)} disabled={savingMeeting} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 disabled:opacity-50">Cancel</button>
                 <button onClick={handleScheduleMeeting} disabled={savingMeeting} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50">{savingMeeting ? 'Saving…' : 'Schedule'}</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MANAGE TAGS MODAL ── */}
+      {tagModalOpen && lead && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setTagModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center"><TagIcon className="w-4 h-4" /></div>
+                <h3 className="font-bold text-slate-900 font-heading text-sm">Tags for {lead.name}</h3>
+              </div>
+              <button onClick={() => setTagModalOpen(false)} className="text-slate-400 hover:text-slate-600"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={e => setNewTag(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+                  placeholder="Add a tag…"
+                  className="flex-grow p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300"
+                />
+                <button onClick={handleAddTag} disabled={!newTag.trim()} className="px-4 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 disabled:opacity-50">Add</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(lead.tags ?? []).map(tag => (
+                  <span key={tag} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-semibold">
+                    {tag}
+                    <button onClick={() => handleRemoveTag(tag)} className="text-amber-400 hover:text-amber-700"><XIcon className="w-3 h-3" /></button>
+                  </span>
+                ))}
+                {(lead.tags ?? []).length === 0 && <p className="text-xs text-slate-400">No tags yet.</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ASSIGN LEAD MODAL ── */}
+      {assignModalOpen && lead && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setAssignModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center"><UsersIcon className="w-4 h-4" /></div>
+                <h3 className="font-bold text-slate-900 font-heading text-sm">Assign {lead.name}</h3>
+              </div>
+              <button onClick={() => setAssignModalOpen(false)} className="text-slate-400 hover:text-slate-600"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto space-y-1.5">
+              {loadingMembers ? (
+                <p className="text-xs text-slate-400 text-center py-6">Loading team…</p>
+              ) : (
+                <>
+                  {members.map(m => {
+                    const active = lead.assigned_to === m.userId;
+                    return (
+                      <button key={m.userId} onClick={() => handleAssign(m.userId)}
+                        className={`w-full flex items-center justify-between gap-3 p-3 rounded-xl text-left transition-colors ${active ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-slate-50 border border-transparent'}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{m.name}{m.userId === user.id ? ' (you)' : ''}</p>
+                          {m.email && <p className="text-xs text-slate-400 truncate">{m.email}</p>}
+                        </div>
+                        {active && <CheckIcon className="w-4 h-4 text-indigo-600 flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
+                  {members.length === 0 && <p className="text-xs text-slate-400 text-center py-6">No team members found.</p>}
+                  {lead.assigned_to && (
+                    <button onClick={() => handleAssign(null)} className="w-full p-3 rounded-xl text-left text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-colors">
+                      Unassign
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD TO CAMPAIGN MODAL ── */}
+      {campaignModalOpen && lead && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setCampaignModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center"><TargetIcon className="w-4 h-4" /></div>
+                <h3 className="font-bold text-slate-900 font-heading text-sm">Add {lead.name} to a campaign</h3>
+              </div>
+              <button onClick={() => setCampaignModalOpen(false)} className="text-slate-400 hover:text-slate-600"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto space-y-1.5">
+              {loadingCampaigns ? (
+                <p className="text-xs text-slate-400 text-center py-6">Loading campaigns…</p>
+              ) : (
+                <>
+                  {campaigns.map(c => (
+                    <button key={c.id} onClick={() => handleEnroll(c.id, c.name)} disabled={enrollingId === c.id}
+                      className="w-full flex items-center justify-between gap-3 p-3 rounded-xl text-left hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors disabled:opacity-50">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
+                        <p className="text-xs text-slate-400 capitalize">{c.status} · {c.total_leads} lead{c.total_leads === 1 ? '' : 's'}</p>
+                      </div>
+                      <span className="text-xs font-bold text-purple-600 flex-shrink-0">{enrollingId === c.id ? 'Adding…' : 'Add'}</span>
+                    </button>
+                  ))}
+                  {campaigns.length === 0 && (
+                    <div className="text-center py-6">
+                      <p className="text-xs text-slate-400 mb-3">No campaigns yet.</p>
+                      <button onClick={() => navigate('/portal/campaigns')} className="text-xs font-bold text-indigo-600 hover:underline">Create a campaign →</button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

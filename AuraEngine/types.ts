@@ -167,6 +167,7 @@ export interface Lead {
   emails?: string[];
   phones?: string[];
   tags?: string[];
+  assigned_to?: string | null;
   linkedin_url?: string;
   location?: string;
   title?: string;
