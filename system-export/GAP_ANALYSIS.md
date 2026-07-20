@@ -16,7 +16,7 @@
 | **Nurture** (sequences/replies) | **Mostly complete** | Sequences, A/B, best-time, reply attribution work; but reply *content* isn't fed to AI and memory isn't injected into the pipeline. |
 | **Call** (VOIP) | **Partially complete (dormant)** | Fully built; blocked on Twilio secrets. |
 | **Call — AI assistance** | **Missing** | No transcription/co-pilot/summaries. "AI-assisted calls" doesn't exist. |
-| **Convert** (pipeline/CRM) | **Partially complete / Needs redesign** | Only a status enum; no deals/opportunities/value/forecast. "Convert" = status change. |
+| **Convert** (pipeline/CRM) | **Improved (Phase 4.E)** | `deals` table now adds value/stage/probability/close-date/forecast per lead (per-lead Deals tab); status enum retained. Standalone pipeline board still TODO. |
 | **Retain** (post-sale) | **Missing** | No renewal/health/retention/customer-success features; CRM invoicing exists but no retention loop. |
 | **Manage multiple businesses** | **Partially complete** | Real CRUD, but scoping is flag-off by default and AI context leaks across businesses. |
 | **Manage teams** | **Broken** | Two disconnected team systems; no working invite path. |
@@ -33,7 +33,7 @@
 | Lead scoring (signal-based) | **Partially complete** | built but flag-hidden |
 | Personalized lead profiles | **Partially complete** | built but flag-hidden |
 | Company/contact intelligence | **Partially complete** | enrichment only; no firmographic provider |
-| Pipeline / CRM stages | **Partially complete** | status enum, no deals |
+| Pipeline / CRM stages | **Improved (4.E)** | status enum + `deals` (value/stage/probability/forecast) |
 | Notes / tasks / reminders | **✅ Fixed (4.A/4.B)** | Notes→`lead_notes`, tasks→`tasks` table; persisted + RLS-verified. Reminder *delivery* still pending. |
 | Activity log / timeline | **✅ Fixed (4.C)** | Activity log→`lead_activities`; unified `LeadProfile` timeline (notes/tasks/activities/calls/meetings/replies). |
 | Lead score | **✅ Fixed (4.D)** | "Recalculate Score" wired to the canonical `recalcLeadScore` (`lib/leadScoring.ts`); arbitrary "+5" removed. |

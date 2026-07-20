@@ -53,18 +53,21 @@
 
 ## Phase 1 — Core CRM & Lead Intelligence
 
-### 1.1 Persist notes/tasks/activities (BUG-005)
+### 1.1 Persist notes/tasks/activities (BUG-005) — ✅ DONE (Phase 4.A–4.C)
 - **Objective:** write to `lead_notes` + a tasks table; stop data loss.
 - **User value:** trustworthy CRM. **Business value:** table-stakes retention.
 - **Dependencies:** none. **Acceptance:** notes/tasks survive reload; appear in timeline. **Order:** 1. **Complexity:** M.
+- ✅ Notes→`lead_notes`, tasks→`tasks`, activity log→`lead_activities`; unified `LeadProfile` timeline; deals→`deals` (4.E). All RLS-verified.
 
-### 1.2 Surface the real lead score & intelligence (BUG-018)
+### 1.2 Surface the real lead score & intelligence (BUG-018) — 🟡 PARTIAL (Phase 4.D)
 - **Objective:** enable `lead_intelligence` by default; show the signal-based score in table/kanban.
 - **Value:** the product's best AI becomes visible. **Dependencies:** validation data present. **Acceptance:** table shows real score; research/next-action visible. **Order:** 2. **Complexity:** S.
+- ✅ Manual "Recalculate Score" now calls the canonical `recalcLeadScore` (real signals → `lead_scores` + `leads.score`). **Still TODO:** flip `lead_intelligence` on by default and auto-surface research/next-action in the table/kanban.
 
-### 1.3 Deals / opportunities pipeline (GAP: convert)
+### 1.3 Deals / opportunities pipeline (GAP: convert) — 🟡 PARTIAL (Phase 4.E)
 - **Objective:** add a `deals` table (value, stage, owner, close date) + forecast.
 - **Value:** real CRM/convert. **Dependencies:** 1.1. **Risks:** scope creep. **Acceptance:** create/advance/close deals; pipeline value report. **Order:** 4. **Complexity:** L.
+- ✅ `deals` table + `lib/deals.ts` + per-lead Deals tab (create/advance stage/win/lose/delete; open + weighted totals); `tasks.deal_id` FK wired. **Still TODO:** a standalone cross-lead pipeline board + org-wide forecast report.
 
 ### 1.4 Lead discovery integration (GAP: discover)
 - **Objective:** wire a real provider (Apollo/PDL) into the `jobs`/`apollo_*` infra.
