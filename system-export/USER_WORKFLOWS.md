@@ -134,7 +134,7 @@ flowchart LR
 
 ## 24. Reporting on campaign & salesperson performance ⚠️
 - **Campaign:** `campaign_variant_stats` (sent/opened/clicked/replied per variant), `email_analytics_summary` MV, A/B results panel. Real.
-- **Salesperson performance:** **not modeled** — no per-rep attribution/quota/leaderboard (no functional sales roles). `assigned_to` exists on leads but there's no rep-performance report.
+- **Salesperson performance:** **partially modeled** — leads can now be assigned to a workspace member (`leads.assigned_to`, settable from the lead profile), but there's still no per-rep attribution/quota/leaderboard report on top of it.
 - **⚠️ Missing:** per-user/per-rep reporting, deal-based revenue reporting.
 
 ---

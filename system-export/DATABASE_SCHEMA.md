@@ -30,7 +30,7 @@
 ### 2.2 Leads & CRM
 | Table | Purpose | Key columns | Notes |
 |---|---|---|---|
-| `leads` | Core lead record | `id`, `client_id`(owner), `workspace_id`, `business_id`, `primary_email`, `emails[]`, `company`, `status`, `score`, `tags[]`, `knowledgeBase` jsonb, `insights`, `custom_fields`, `assigned_to`, `last_activity` | RLS OR's legacy `client_id` + new `is_business_member(business_id)`. `score` is a raw column (placeholder). |
+| `leads` | Core lead record | `id`, `client_id`(owner), `workspace_id`, `business_id`, `primary_email`, `emails[]`, `company`, `status`, `score`, `tags[]`, `knowledgeBase` jsonb, `insights`, `custom_fields`, `assigned_to`, `last_activity` | RLS OR's legacy `client_id` + new `is_business_member(business_id)`. `score` is synced from the canonical scorer (`lead_scores`, Phase 4.D); `tags[]` + `assigned_to` are UI-settable (Phase: quick-actions). |
 | `lead_scores` | Real signal-based score breakdown | fit/intent/engagement/quality/deliverability/urgency/risk sub-scores | Written by `leadScoring.ts`; surfaced only if `lead_intelligence` flag on |
 | `lead_research_profiles` | Structured AI research (no-fabrication) | company/needs/outreach, `confidence` | Flag-gated |
 | `lead_enrichment_jobs` | Durable background enrichment job state | `status`(queued/processing/done/error) | Polled by `LeadEnrichmentWatcher` |
