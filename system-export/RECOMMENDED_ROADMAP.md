@@ -59,10 +59,10 @@
 - **Dependencies:** none. **Acceptance:** notes/tasks survive reload; appear in timeline. **Order:** 1. **Complexity:** M.
 - ✅ Notes→`lead_notes`, tasks→`tasks`, activity log→`lead_activities`; unified `LeadProfile` timeline; deals→`deals` (4.E). All RLS-verified.
 
-### 1.2 Surface the real lead score & intelligence (BUG-018) — 🟡 PARTIAL (Phase 4.D)
+### 1.2 Surface the real lead score & intelligence (BUG-018) — ✅ DONE (Phase 4.D + 1.2)
 - **Objective:** enable `lead_intelligence` by default; show the signal-based score in table/kanban.
 - **Value:** the product's best AI becomes visible. **Dependencies:** validation data present. **Acceptance:** table shows real score; research/next-action visible. **Order:** 2. **Complexity:** S.
-- ✅ Manual "Recalculate Score" now calls the canonical `recalcLeadScore` (real signals → `lead_scores` + `leads.score`). **Still TODO:** flip `lead_intelligence` on by default and auto-surface research/next-action in the table/kanban.
+- ✅ Manual "Recalculate Score" calls the canonical `recalcLeadScore`; `lead_intelligence` is now ON by default so the Score/Research/Next-action panels show; a bulk "Score" action (`recalcLeadScoresBulk`) recomputes every lead in the business so the table/kanban show real scores. **Follow-on niceties:** reason on hover in the table; auto-score on import.
 
 ### 1.3 Deals / opportunities pipeline (GAP: convert) — 🟡 PARTIAL (Phase 4.E)
 - **Objective:** add a `deals` table (value, stage, owner, close date) + forecast.

@@ -38,7 +38,7 @@
 
 **Lead enrichment** — ✅ · Files `enrich-lead` fn, `LeadEnrichmentWatcher`. Table `lead_enrichment_jobs`, `leads`. Durable background job; Gemini grounded (googleSearch+urlContext); credit-gated (fail-closed). Survives reload.
 
-**Lead scoring** — ✅ (Phase 4.D) · The LeadProfile "Recalculate Score" button now calls the real signal-based scorer `lib/leadScoring.ts` `recalcLeadScore` → persists `lead_scores` + syncs `leads.score`. The old `+5` placeholder button is gone. (The `lead_intelligence` flag still gates the *automatic* research/next-action surfacing elsewhere, but manual recalculation works regardless.)
+**Lead scoring** — ✅ (Phase 4.D + Roadmap 1.2) · Real signal-based scorer `lib/leadScoring.ts` (`recalcLeadScore` / `recalcLeadScoresBulk`) → `lead_scores` + synced `leads.score`; `+5` placeholder gone. `lead_intelligence` is now **ON by default**, so the Score/Research/Next-action panels show on every lead; a bulk **"Score"** action on the Leads page recomputes all leads in the business so the table/kanban reflect real scores. AI research/next-action still gated behind explicit credit-gated buttons.
 
 **Lead research profile** — 🟡 (hidden) · `lib/leadResearch.ts` → `lead_research_profiles`; strict no-fabrication + confidence. Flag-gated (`lead_intelligence`).
 
