@@ -252,6 +252,14 @@ export const NAV_CONFIG: NavConfigItem[] = [
     section: 'intelligence',
     order: 1,
   },
+  {
+    route: '/portal/team-performance',
+    navLabel: 'Team Report',
+    pageTitle: 'Team Report',
+    icon: Users,
+    section: 'intelligence',
+    order: 2,
+  },
 
   // ── Workspace shelf ──
   {
