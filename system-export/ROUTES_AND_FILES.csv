@@ -26,6 +26,7 @@ Route,Page Name,Purpose,Component File,Related Components,API or Service,Databas
 /portal/blog,Blog Drafts,Author blog posts,pages/portal/BlogDrafts.tsx,-,supabase;storage,blog_posts;blog_categories,CLIENT,Functional
 /portal/social-scheduler,Social Scheduler,Schedule/publish posts,pages/portal/SocialScheduler.tsx,Composer;TargetPicker;MediaUploader;SchedulePicker,social-post-now;social-schedule;meta/linkedin oauth,social_posts;social_post_targets;social_accounts,CLIENT,Partial (code real; prod demo-mode fails; no TikTok)
 /portal/calls,Calls,Call history,pages/portal/CallsPage.tsx,-,twilio-*,lead_call_logs,CLIENT,Functional (VOIP rows dormant)
+/portal/deals,Deals,Cross-lead pipeline board + forecast,pages/portal/PipelinePage.tsx,-,lib/deals,deals;leads,CLIENT,Functional
 /portal/analytics,Analytics,Reporting,pages/portal/AnalyticsPage.tsx,-,supabase;analytics RPCs,email_analytics_summary;tracking_events,CLIENT,Partial
 /portal/automation,Automation,Automation/goals UI,pages/portal/AutomationPage.tsx,-,goal-executor;goal-replanner,automation_goals;automation_plans,CLIENT,Partial (verify runtime)
 /portal/goals,Goals,Autonomous goals,pages/portal/GoalsPage.tsx,-,goal-executor,automation_goals;automation_step_runs,CLIENT,Partial (live mode flag-gated)

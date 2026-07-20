@@ -64,10 +64,10 @@
 - **Value:** the product's best AI becomes visible. **Dependencies:** validation data present. **Acceptance:** table shows real score; research/next-action visible. **Order:** 2. **Complexity:** S.
 - ✅ Manual "Recalculate Score" calls the canonical `recalcLeadScore`; `lead_intelligence` is now ON by default so the Score/Research/Next-action panels show; a bulk "Score" action (`recalcLeadScoresBulk`) recomputes every lead in the business so the table/kanban show real scores. ✅ Follow-on niceties done too: score `reason_summary` tooltip on the table/kanban score cell (`getLeadScoresBulk`); imports auto-score the new batch so leads never show 0.
 
-### 1.3 Deals / opportunities pipeline (GAP: convert) — 🟡 PARTIAL (Phase 4.E)
+### 1.3 Deals / opportunities pipeline (GAP: convert) — ✅ DONE (Phase 4.E + pipeline board)
 - **Objective:** add a `deals` table (value, stage, owner, close date) + forecast.
 - **Value:** real CRM/convert. **Dependencies:** 1.1. **Risks:** scope creep. **Acceptance:** create/advance/close deals; pipeline value report. **Order:** 4. **Complexity:** L.
-- ✅ `deals` table + `lib/deals.ts` + per-lead Deals tab (create/advance stage/win/lose/delete; open + weighted totals); `tasks.deal_id` FK wired. **Still TODO:** a standalone cross-lead pipeline board + org-wide forecast report.
+- ✅ `deals` table + `lib/deals.ts` + per-lead Deals tab; `tasks.deal_id` FK; **standalone pipeline board** `/portal/deals` (`PipelinePage`) — cross-lead stage kanban + weighted forecast (open/weighted/won/win-rate) via `listDeals`/`computeForecast`. **Future nicety:** drag-drop between columns (currently a stage select); per-period (this-quarter) forecast windowing.
 
 ### 1.4 Lead discovery integration (GAP: discover)
 - **Objective:** wire a real provider (Apollo/PDL) into the `jobs`/`apollo_*` infra.

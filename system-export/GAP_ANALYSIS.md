@@ -16,7 +16,7 @@
 | **Nurture** (sequences/replies) | **Mostly complete** | Sequences, A/B, best-time, reply attribution work; but reply *content* isn't fed to AI and memory isn't injected into the pipeline. |
 | **Call** (VOIP) | **Partially complete (dormant)** | Fully built; blocked on Twilio secrets. |
 | **Call — AI assistance** | **Missing** | No transcription/co-pilot/summaries. "AI-assisted calls" doesn't exist. |
-| **Convert** (pipeline/CRM) | **Improved (Phase 4.E)** | `deals` table now adds value/stage/probability/close-date/forecast per lead (per-lead Deals tab); status enum retained. Standalone pipeline board still TODO. |
+| **Convert** (pipeline/CRM) | **Mostly complete** | `deals` (value/stage/probability/close-date) per lead **and** a standalone cross-lead pipeline board with weighted forecast (`/portal/deals`); status enum retained. |
 | **Retain** (post-sale) | **Missing** | No renewal/health/retention/customer-success features; CRM invoicing exists but no retention loop. |
 | **Manage multiple businesses** | **Partially complete** | Real CRUD, but scoping is flag-off by default and AI context leaks across businesses. |
 | **Manage teams** | **Broken** | Two disconnected team systems; no working invite path. |

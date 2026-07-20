@@ -46,7 +46,7 @@
 
 **Company/contact intelligence** — 🟡 · Enrichment writes `leads.knowledgeBase`/`insights`. No third-party firmographic provider.
 
-**Pipeline / CRM** — 🟡→✅ · `leads.status` enum (New/Contacted/Qualified/Converted/Lost). Kanban with **next-stage button (no drag-drop)**. **Deals now exist** (Phase 4.E): `deals` table + `lib/deals.ts` + a Deals tab on the lead profile with value, stage (discovery→won/lost), probability, expected close, and open/weighted pipeline totals. (A standalone cross-lead pipeline board is still a future add; deals are currently managed per-lead.)
+**Pipeline / CRM** — ✅ · `leads.status` enum (New/Contacted/Qualified/Converted/Lost). Lead kanban with next-stage button. **Deals** (Phase 4.E): `deals` table + `lib/deals.ts` + a Deals tab on the lead profile. **Standalone pipeline board** (`/portal/deals`, `PipelinePage`): cross-lead stage kanban (discovery→won/lost) with per-column totals + a forecast summary (open pipeline, probability-weighted forecast, won, win rate); move deals by stage, create/delete, jump to the linked lead. `listDeals`/`computeForecast` in `lib/deals.ts`.
 
 **Notes** — ✅ (Phase 4.A) · Persisted to `lead_notes` (`lib/leadNotes.ts`); load-on-mount + add/delete; RLS by workspace membership + author. Survives reload.
 
