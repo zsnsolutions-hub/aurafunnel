@@ -9,14 +9,18 @@
 import { supabase } from './supabase';
 import { Lead } from '../types';
 import { fetchBatchEmailSummary } from './emailTracking';
-import { isFlagEnabled } from './goals';
+import { isFlagEnabledDefaultOn } from './goals';
 import { resolveWorkspaceForUser } from './memory';
 
+// Lead intelligence (score / research / next-action panels) is ON by default —
+// a workspace_feature_flags row with enabled=false opts a workspace out. The
+// panels only READ cached data on mount; AI generation stays behind explicit
+// buttons (credit-gated), so default-on never burns credits unprompted.
 export async function leadIntelligenceEnabled(userId: string): Promise<boolean> {
   try {
     const ws = await resolveWorkspaceForUser(userId);
-    return ws ? await isFlagEnabled(ws, 'lead_intelligence') : false;
-  } catch { return false; }
+    return ws ? await isFlagEnabledDefaultOn(ws, 'lead_intelligence') : true;
+  } catch { return true; }
 }
 
 export interface LeadScoreBreakdown {
@@ -172,4 +176,71 @@ export async function recalcLeadScore(
 export async function getLeadScore(leadId: string): Promise<LeadScoreBreakdown | null> {
   const { data } = await supabase.from('lead_scores').select('*').eq('lead_id', leadId).maybeSingle();
   return (data as LeadScoreBreakdown | null) ?? null;
+}
+
+/** Batched recompute for many leads. Gathers validation / engagement /
+ *  suppression once per chunk (instead of per lead), bulk-upserts lead_scores,
+ *  and syncs leads.score. Deterministic — no AI, no credits. Returns count
+ *  scored; calls onProgress(done,total) after each chunk. */
+export async function recalcLeadScoresBulk(
+  businessId: string,
+  workspaceId: string,
+  leads: Lead[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<number> {
+  const total = leads.length;
+  if (total === 0) return 0;
+  const CHUNK = 100;
+  let done = 0;
+
+  for (let i = 0; i < total; i += CHUNK) {
+    const batch = leads.slice(i, i + CHUNK);
+    const emails = [...new Set(batch.map(l => (l.primary_email ?? '').trim().toLowerCase()).filter(Boolean))];
+    const ids = batch.map(l => l.id);
+
+    const [valRes, engMap, supRes] = await Promise.all([
+      emails.length
+        ? supabase.from('email_validations').select('email,status,is_disposable,is_role').eq('business_id', businessId).in('email', emails)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      fetchBatchEmailSummary(ids),
+      emails.length
+        ? supabase.from('suppressions').select('email').in('email', emails)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    ]);
+
+    const valByEmail = new Map<string, Inputs['validation']>();
+    for (const v of ((valRes as { data: Record<string, unknown>[] | null }).data ?? [])) {
+      valByEmail.set(String(v.email).toLowerCase(), v as Inputs['validation']);
+    }
+    const suppressed = new Set<string>(
+      ((supRes as { data: Record<string, unknown>[] | null }).data ?? []).map(s => String(s.email).toLowerCase()),
+    );
+
+    const scoreRows = batch.map(lead => {
+      const email = (lead.primary_email ?? '').trim().toLowerCase();
+      const s = computeScore(lead, {
+        validation: valByEmail.get(email) ?? null,
+        engagement: engMap.get(lead.id) ?? { hasSent: false, hasOpened: false, hasClicked: false, openCount: 0 },
+        suppressed: suppressed.has(email),
+      });
+      return {
+        lead_id: s.lead_id, business_id: businessId, workspace_id: workspaceId,
+        total_score: s.total_score, fit_score: s.fit_score, intent_score: s.intent_score,
+        engagement_score: s.engagement_score, data_quality_score: s.data_quality_score,
+        deliverability_score: s.deliverability_score, urgency_score: s.urgency_score,
+        risk_score: s.risk_score, confidence: s.confidence, reason_summary: s.reason_summary,
+        scoring_inputs: s.scoring_inputs, last_calculated_at: new Date().toISOString(),
+      };
+    });
+
+    const { error } = await supabase.from('lead_scores').upsert(scoreRows, { onConflict: 'lead_id' });
+    if (error) throw new Error(error.message);
+
+    // Sync the denormalized leads.score (one column update per lead, concurrent).
+    await Promise.all(scoreRows.map(r => supabase.from('leads').update({ score: r.total_score }).eq('id', r.lead_id)));
+
+    done += batch.length;
+    onProgress?.(done, total);
+  }
+  return done;
 }

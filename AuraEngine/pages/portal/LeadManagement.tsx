@@ -25,6 +25,7 @@ import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/lead
 import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
 import { listActivities, logActivity } from '../../lib/leadActivities';
+import { recalcLeadScoresBulk } from '../../lib/leadScoring';
 
 // ── Helpers ──
 const formatRelativeTime = (dateStr: string): string => {
@@ -213,6 +214,10 @@ const LeadManagement: React.FC = () => {
 
   // ── Selection State ──
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // ── Bulk score recompute ──
+  const [scoring, setScoring] = useState(false);
+  const [scoreProgress, setScoreProgress] = useState<{ done: number; total: number } | null>(null);
 
   // ── Pagination ──
   const [currentPage, setCurrentPage] = useState(1);
@@ -1190,6 +1195,26 @@ const LeadManagement: React.FC = () => {
     setDeleteTargetIds([]);
   }, [deleteTargetIds, allLeads]);
 
+  // Recompute real lead scores for every lead in the current business, then
+  // refresh the table. Deterministic (no AI/credits) — see lib/leadScoring.
+  const handleRecalcScores = useCallback(async () => {
+    if (!currentBusinessId) { toast('Select a business first.', 'error'); return; }
+    if (allLeads.length === 0 || scoring) return;
+    setScoring(true);
+    setScoreProgress({ done: 0, total: allLeads.length });
+    try {
+      const workspaceId = await resolveWorkspaceId(user.id);
+      const n = await recalcLeadScoresBulk(currentBusinessId, workspaceId, allLeads, (done, total) => setScoreProgress({ done, total }));
+      await refetchLeads();
+      toast(`Recalculated ${n.toLocaleString()} lead score${n === 1 ? '' : 's'}.`, 'success');
+    } catch (e) {
+      toast((e as Error).message || 'Could not recalculate scores', 'error');
+    } finally {
+      setScoring(false);
+      setScoreProgress(null);
+    }
+  }, [currentBusinessId, allLeads, scoring, user.id, refetchLeads, toast]);
+
   // ── Activity Log ──
   // Load this lead's persisted activity history when the modal opens.
   useEffect(() => {
@@ -1333,6 +1358,15 @@ const LeadManagement: React.FC = () => {
             >
               <BoltIcon className="w-3.5 h-3.5" />
               <span className="hidden xl:inline">Engagement</span>
+            </button>
+            <button
+              onClick={handleRecalcScores}
+              disabled={scoring || allLeads.length === 0}
+              title="Recalculate every lead's score from real signals"
+              className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all disabled:opacity-50"
+            >
+              <BrainIcon className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">{scoring && scoreProgress ? `Scoring ${scoreProgress.done}/${scoreProgress.total}` : 'Score'}</span>
             </button>
             <button
               onClick={() => setShowScoreIntelligence(prev => !prev)}
