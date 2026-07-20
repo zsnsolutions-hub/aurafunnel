@@ -2,7 +2,8 @@
 //
 // Cross-lead sales pipeline board + forecast. Every deal in the active business
 // (deals table), grouped into stage columns with a weighted forecast summary.
-// Move a deal by changing its stage; click a deal's lead to open the lead.
+// Move a deal by dragging its card between stage columns (or the per-card stage
+// select); click a deal's lead to open the lead.
 // Scoped to the current business via BusinessProvider (RLS already scopes to the
 // workspace). Deterministic — no AI.
 

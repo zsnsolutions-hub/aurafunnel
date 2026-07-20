@@ -67,7 +67,7 @@
 ### 1.3 Deals / opportunities pipeline (GAP: convert) — ✅ DONE (Phase 4.E + pipeline board)
 - **Objective:** add a `deals` table (value, stage, owner, close date) + forecast.
 - **Value:** real CRM/convert. **Dependencies:** 1.1. **Risks:** scope creep. **Acceptance:** create/advance/close deals; pipeline value report. **Order:** 4. **Complexity:** L.
-- ✅ `deals` table + `lib/deals.ts` + per-lead Deals tab; `tasks.deal_id` FK; **standalone pipeline board** `/portal/deals` (`PipelinePage`) — cross-lead stage kanban + weighted forecast (open/weighted/won/win-rate) via `listDeals`/`computeForecast`. **Future nicety:** drag-drop between columns (currently a stage select); per-period (this-quarter) forecast windowing.
+- ✅ `deals` table + `lib/deals.ts` + per-lead Deals tab; `tasks.deal_id` FK; **standalone pipeline board** `/portal/deals` (`PipelinePage`) — cross-lead stage kanban + weighted forecast (open/weighted/won/win-rate) via `listDeals`/`computeForecast`; **drag-and-drop between stage columns** (native HTML5; stage `<select>` kept as the a11y/touch fallback). **Future nicety:** per-period (this-quarter) forecast windowing.
 
 ### 1.4 Lead discovery integration (GAP: discover)
 - **Objective:** wire a real provider (Apollo/PDL) into the `jobs`/`apollo_*` infra.
