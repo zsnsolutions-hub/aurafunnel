@@ -182,7 +182,7 @@
 
 **Notifications** — 👻 **Missing (UI-only)** · No `notifications` table in the migration chain; **nothing reads/writes/delivers** notifications; the header bell opens `DailyBriefing.tsx` (self-contained, contains a `Math.random()` mock, "mark read" just closes). Not a real system. Rec: build it or remove the bell.
 
-**Analytics / reporting** — 🟡 · Route `/portal/analytics`, dashboards. `email_analytics_summary` MV, tracking events. Real campaign analytics; **no salesperson/deal reporting.**
+**Analytics / reporting** — 🟡→✅ · Route `/portal/analytics`, dashboards. `email_analytics_summary` MV, tracking events. Real campaign analytics. **Deal forecast** (pipeline board) + **per-rep Team Report** (`/portal/team-performance`, `lib/repPerformance.ts`): assigned leads, deal pipeline/win-rate, activities, tasks per member.
 
 **Branding / domains** — 🟡 · Route `/portal/branding`. `workspace_branding`, `workspace_domains`, vanity TLS.
 

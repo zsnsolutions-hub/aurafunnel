@@ -97,7 +97,7 @@
 | Public API | **Complete** | v1-* with keys/idempotency |
 | Webhooks (in/out) | **Mostly complete** | some unverified (Twilio; Stripe fail-open) |
 | Notifications | **Missing (UI only)** | no table in migrations; nothing reads/writes/delivers; bell has a Math.random mock |
-| Analytics / reporting | **Partially complete** | campaign analytics real; no salesperson/deal reporting |
+| Analytics / reporting | **Improved** | campaign analytics real; **deal forecast** (pipeline board) + **per-rep Team Report** now added |
 | Automation / goals | **Partially complete** | executor + crons; flag-gated; workspace-wide |
 | Admin console | **Complete** | full admin suite |
 | Audit logs | **Complete** | audit + support sessions |
@@ -109,6 +109,6 @@
 - **Complete / Mostly complete:** email engine, enrichment, import, blog, content/image generation, public API, CRM invoicing, admin, audit, campaign analytics. **This is a strong email-marketing + content core.**
 - **Partially complete / Needs redesign:** lead scoring/intel (hidden), business analysis, multi-business scoping, pipeline/CRM, automation, billing security, tenancy model.
 - **Broken:** social publishing (prod), team invites, Gmail connect, lead notes/tasks.
-- **Missing:** lead discovery, AI call assistance, Outlook, TikTok, external calendar, retention/customer-success, salesperson reporting, deals/opportunities.
+- **Missing:** lead discovery, AI call assistance, Outlook, TikTok, external calendar, retention/customer-success. *(Salesperson reporting and deals/opportunities are now built — see Team Report + deals pipeline.)*
 
 **Verdict:** Scaliyo today is a **capable AI email-outreach + content platform with a strong backend**, not yet the "complete discover→convert→retain, multi-business, multi-team" platform the vision describes. The two ends of the funnel (**discover** and **convert/retain**) and **team collaboration** are the largest gaps; **social** and **calling** are built but not operational; **multi-business isolation** needs to be made real and safe.
