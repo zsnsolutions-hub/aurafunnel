@@ -38,7 +38,7 @@
 
 **Lead enrichment** — ✅ · Files `enrich-lead` fn, `LeadEnrichmentWatcher`. Table `lead_enrichment_jobs`, `leads`. Durable background job; Gemini grounded (googleSearch+urlContext); credit-gated (fail-closed). Survives reload.
 
-**Lead scoring** — 🟡 (two systems) · Visible score = **placeholder** (`leads.score`, `+5` button). Real signal-based scorer `lib/leadScoring.ts` → `lead_scores` is **hidden behind `lead_intelligence` flag (off)**. Rec: enable by default / surface real score.
+**Lead scoring** — ✅ (Phase 4.D) · The LeadProfile "Recalculate Score" button now calls the real signal-based scorer `lib/leadScoring.ts` `recalcLeadScore` → persists `lead_scores` + syncs `leads.score`. The old `+5` placeholder button is gone. (The `lead_intelligence` flag still gates the *automatic* research/next-action surfacing elsewhere, but manual recalculation works regardless.)
 
 **Lead research profile** — 🟡 (hidden) · `lib/leadResearch.ts` → `lead_research_profiles`; strict no-fabrication + confidence. Flag-gated (`lead_intelligence`).
 
@@ -52,7 +52,7 @@
 
 **Tasks / reminders / follow-ups** — ✅ (Phase 4.B) · Persisted to the canonical `tasks` table (migration `20260818150000`, `lib/tasks.ts`): lead-scoped, assignable, due_at/priority/status/completed_at, per-business. Add/toggle/delete + real due labels in `LeadProfile`. Reminder delivery (`reminder_at`) column exists; not yet wired to a sender.
 
-**Activities / activity log** — 🟡 · LeadManagement modal is UI-only. But `LeadProfile` timeline aggregates **real** events (created, validation, calls, meetings, inbound replies). Status changes → `audit_logs`.
+**Activities / activity log** — ✅ (Phase 4.C) · LeadManagement "Log Activity" modal now persists to `lead_activities` (`lib/leadActivities.ts`; loads history on open). The `LeadProfile` timeline aggregates **real** events — created, validation, calls, meetings, inbound replies, **plus notes, tasks and the freeform activity log**. Status changes → `audit_logs`.
 
 **Calls / meetings (records)** — ✅ · `lead_call_logs`, `lead_meetings` persisted (manual + VOIP).
 

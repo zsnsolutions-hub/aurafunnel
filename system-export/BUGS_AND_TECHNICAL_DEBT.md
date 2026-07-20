@@ -48,7 +48,7 @@
 - **Module:** Leads/CRM. **Description:** notes, tasks, and the LeadManagement activity log live only in local React state; typed data is lost on reload. `lead_notes` table exists but is never read/written.
 - **Impact:** users lose CRM work; erodes trust. **Cause:** handlers only `setState`. **Files:** `LeadProfile.tsx:553-567`, `LeadManagement.tsx:1187-1195`.
 - **Fix:** persist to `lead_notes` (+ a tasks table). **Complexity:** M. **Dependencies:** none.
-- ✅ **FIXED (Phase 4.A/4.B):** notes now persist to `lead_notes` (`lib/leadNotes.ts`) and tasks to the new canonical `tasks` table (migration `20260818150000`, `lib/tasks.ts`) — both wired into `LeadProfile` with load-on-mount + optimistic add/toggle/delete. RLS verified live (owner CRUD; spoofed `created_by` blocked; cross-tenant read = 0). Both survive reloads. **Remaining:** LeadManagement activity log persistence + unified activity timeline (Phase 4.C).
+- ✅ **FIXED (Phase 4.A/4.B/4.C):** notes → `lead_notes` (`lib/leadNotes.ts`); tasks → canonical `tasks` table (migration `20260818150000`, `lib/tasks.ts`); the Leads-list "Log Activity" modal → `lead_activities` table (migration `20260818160000`, `lib/leadActivities.ts`, loads history on open + persists on submit). All three survive reloads; RLS verified live (owner CRUD; spoofed author/created_by blocked; cross-tenant read = 0). The `LeadProfile` timeline now **unifies** notes, tasks (created + completed) and the freeform activity log with the existing created/validation/call/meeting/reply events. The activity modal's fake "+5 score" bump was removed.
 
 ### BUG-006 — Latent double-send in email pipeline
 - **Module:** Email send. **Description:** `process-email-writing-queue` calls `finalize_email_sequence_run` (inserts `scheduled_emails`, triggers `process-scheduled-emails`) while `process-sequence-sends` independently sends the same `written` items. Dormant today, but if finalize succeeds concurrently, recipients get two emails.
@@ -133,6 +133,7 @@
 
 ### BUG-018 — Real lead intelligence hidden behind default-off flag
 - **Module:** Leads. The honest scorer/research/next-action are gated by `lead_intelligence` (off), so users see a placeholder `+5` score. **Fix:** enable by default / surface real score. **Complexity:** S.
+- ✅ **FIXED (Phase 4.D):** the arbitrary "+5 per click" score bump is gone. The LeadProfile "Recalculate Score" button now calls the **existing canonical scorer** `lib/leadScoring.ts` `recalcLeadScore(businessId, workspaceId, lead)` — a deterministic formula over firmographics, email engagement (opens/clicks), Mails.so deliverability, recency and suppression — which persists the full breakdown to `lead_scores` and syncs `leads.score`. (Previously that scorer existed but the button used the +5 hack instead of calling it; no new/duplicate scoring system was introduced.) Still surfaces regardless of the `lead_intelligence` flag.
 
 ### BUG-019 — AI credit-ceiling bypass paths
 - **Module:** AI/billing. `ai-chat-stream`, `process-email-writing-queue`, `preview-sequence-email`, goal-steps, `image-gen` bypass `enforce_ai_proxy_quota`. **Fix:** route through the ceiling or add metering. **Complexity:** M.

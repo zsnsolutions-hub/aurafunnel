@@ -140,7 +140,7 @@ flowchart LR
 ---
 
 ## Cross-cutting workflow problems
-- **Silent data loss:** ✅ FIXED for notes (`lead_notes`) and tasks (new `tasks` table) — both persist across reloads (Phase 4.A/4.B). The LeadManagement activity-log is still UI-only (Phase 4.C).
+- **Silent data loss:** ✅ FIXED — notes (`lead_notes`), tasks (new `tasks` table) and the Leads-list activity log (`lead_activities`) all persist across reloads (Phase 4.A/4.B/4.C) and feed one unified lead timeline.
 - **Hidden real features:** the honest lead scorer, research profile, and next-action are all behind `lead_intelligence` (off by default), so the app shows placeholders instead.
 - **Demo-that-fails:** social "connected" accounts are demo tokens that always fail on publish with no clear UI distinction.
 - **Flag-gated tenancy:** multi-business switching doesn't isolate data until `multi_business` is enabled.

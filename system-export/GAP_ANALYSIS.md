@@ -35,6 +35,8 @@
 | Company/contact intelligence | **Partially complete** | enrichment only; no firmographic provider |
 | Pipeline / CRM stages | **Partially complete** | status enum, no deals |
 | Notes / tasks / reminders | **✅ Fixed (4.A/4.B)** | Notes→`lead_notes`, tasks→`tasks` table; persisted + RLS-verified. Reminder *delivery* still pending. |
+| Activity log / timeline | **✅ Fixed (4.C)** | Activity log→`lead_activities`; unified `LeadProfile` timeline (notes/tasks/activities/calls/meetings/replies). |
+| Lead score | **✅ Fixed (4.D)** | "Recalculate Score" wired to the canonical `recalcLeadScore` (`lib/leadScoring.ts`); arbitrary "+5" removed. |
 | Activities timeline | **Partially complete** | real timeline; some log modals UI-only |
 
 ### AI

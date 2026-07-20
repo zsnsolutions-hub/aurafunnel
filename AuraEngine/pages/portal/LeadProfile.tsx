@@ -13,7 +13,7 @@ import { supabase } from '../../lib/supabase';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
 import { emailValidationEnabled, validateEmail } from '../../lib/emailValidation';
 import EmailValidationControl from '../../components/validation/EmailValidationControl';
-import { leadIntelligenceEnabled } from '../../lib/leadScoring';
+import { leadIntelligenceEnabled, recalcLeadScore } from '../../lib/leadScoring';
 import LeadScorePanel from '../../components/leads/LeadScorePanel';
 import LeadResearchPanel from '../../components/leads/LeadResearchPanel';
 import NextActionPanel from '../../components/leads/NextActionPanel';
@@ -37,7 +37,7 @@ import { fetchStageColors, fetchColorOverrides, setLeadColorOverride, DEFAULT_ST
 import { listNotes, addNote as persistNote, deleteNote as removeNote } from '../../lib/leadNotes';
 import { listTasks, addTask as persistTask, setTaskDone, deleteTask as removeTask } from '../../lib/tasks';
 import { listActivities } from '../../lib/leadActivities';
-import { computeLeadScore, type ValidationState } from '../../lib/leadScore';
+import { resolveWorkspaceId } from '../../lib/tenancy';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
@@ -566,42 +566,21 @@ const LeadProfile: React.FC = () => {
     setMenuOpen(false);
   };
 
-  // Recompute the lead score from real signals (engagement, replies, calls/
-  // meetings, status, deliverability, completeness, recency) and persist it.
-  // Replaces the old arbitrary "+5 per click".
+  // Recompute the lead score from real signals via the canonical scorer
+  // (lib/leadScoring: firmographics, email engagement, deliverability, recency,
+  // suppression → lead_scores + synced leads.score). Replaces the old "+5/click".
   const handleScoreUpdate = async () => {
     if (!lead) return;
-    // Derive validation state from the most recent validation event on the timeline.
-    const vEvent = timeline.find(e => e.type === 'validated' || e.type === 'error' || e.type === 'warning');
-    const validation: ValidationState = vEvent
-      ? (vEvent.type === 'validated' ? 'valid' : vEvent.type === 'error' ? 'invalid' : 'risky')
-      : 'unknown';
-    const { score, breakdown } = computeLeadScore({
-      status: lead.status,
-      validation,
-      hasEmail: !!(lead.primary_email || '').trim(),
-      hasPhone: !!(lead.primary_phone || '').trim(),
-      hasCompany: !!(lead.company || '').trim(),
-      hasTitle: !!(lead.title || '').trim(),
-      hasLinkedin: !!(lead.linkedin_url || '').trim(),
-      uniqueOpens: emailEngagement?.uniqueOpens ?? 0,
-      uniqueClicks: emailEngagement?.uniqueClicks ?? 0,
-      bounced: emailEngagement?.totalBounced ?? 0,
-      replies: timeline.filter(e => e.type === 'reply').length,
-      meetings: timeline.filter(e => e.type === 'meeting').length,
-      calls: timeline.filter(e => e.type === 'call').length,
-      activities: timeline.filter(e => ['note', 'email', 'task'].includes(e.type)).length,
-      createdAt: lead.created_at,
-    });
-    const { error } = await supabase.from('leads').update({ score }).eq('id', lead.id);
-    if (error) {
-      console.error('Score update error:', error.message);
-      showFeedback('Could not update score');
-      return;
+    if (!currentBusinessId) { showFeedback('Select a business to score this lead'); return; }
+    try {
+      const workspaceId = await resolveWorkspaceId(user.id);
+      const s = await recalcLeadScore(currentBusinessId, workspaceId, lead);
+      setLead({ ...lead, score: s.total_score });
+      showFeedback(`Score recalculated to ${s.total_score} — ${s.reason_summary}`);
+    } catch (e) {
+      console.error('Score recalc error:', (e as Error).message);
+      showFeedback('Could not recalculate score');
     }
-    setLead({ ...lead, score });
-    const top = breakdown.filter(x => x.points > 0).sort((a, b) => b.points - a.points).slice(0, 2).map(x => x.label);
-    showFeedback(`Score recalculated to ${score}${top.length ? ` — driven by ${top.join(', ').toLowerCase()}` : ''}`);
   };
 
   const handleAddNote = async () => {
