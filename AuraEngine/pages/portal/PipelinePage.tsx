@@ -47,6 +47,11 @@ const PipelinePage: React.FC = () => {
   const [stage, setStage] = useState<DealStage>('discovery');
   const [saving, setSaving] = useState(false);
 
+  // Drag-and-drop (native HTML5). The <select> on each card stays as the
+  // keyboard/touch-accessible fallback.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<DealStage | null>(null);
+
   const bizId = multiBusinessEnabled ? currentBusinessId : null;
 
   const load = useCallback(async () => {
@@ -87,6 +92,15 @@ const PipelinePage: React.FC = () => {
     const prev = deals;
     setDeals(p => p.filter(d => d.id !== id)); // optimistic
     if (!(await deleteDeal(id))) { setDeals(prev); toast('Could not delete deal', 'error'); }
+  };
+
+  const handleDropOn = (col: DealStage) => {
+    const id = draggingId;
+    setDraggingId(null);
+    setDragOverStage(null);
+    if (!id) return;
+    const dragged = deals.find(d => d.id === id);
+    if (dragged && dragged.stage !== col) void handleMove(id, col);
   };
 
   const cards: { label: string; value: string; icon: React.ReactNode; tint: string }[] = [
@@ -141,8 +155,15 @@ const PipelinePage: React.FC = () => {
               const items = byStage[col];
               const colValue = items.reduce((s, d) => s + d.valueAmount, 0);
               const meta = STAGE_META[col];
+              const isDropTarget = dragOverStage === col && draggingId !== null;
               return (
-                <div key={col} className="w-72 flex-shrink-0">
+                <div
+                  key={col}
+                  onDragOver={e => { if (draggingId) { e.preventDefault(); if (dragOverStage !== col) setDragOverStage(col); } }}
+                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverStage(s => (s === col ? null : s)); }}
+                  onDrop={e => { e.preventDefault(); handleDropOn(col); }}
+                  className={`w-72 flex-shrink-0 rounded-2xl transition-colors ${isDropTarget ? 'bg-indigo-50/70 ring-2 ring-indigo-200' : ''}`}
+                >
                   <div className="flex items-center justify-between px-1 mb-2">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
@@ -153,7 +174,13 @@ const PipelinePage: React.FC = () => {
                   </div>
                   <div className="space-y-2">
                     {items.map(d => (
-                      <div key={d.id} className="group bg-white border border-slate-200 rounded-xl p-3 hover:border-indigo-200 hover:shadow-sm transition-all">
+                      <div
+                        key={d.id}
+                        draggable
+                        onDragStart={e => { setDraggingId(d.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', d.id); }}
+                        onDragEnd={() => { setDraggingId(null); setDragOverStage(null); }}
+                        className={`group bg-white border border-slate-200 rounded-xl p-3 hover:border-indigo-200 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing ${draggingId === d.id ? 'opacity-40' : ''}`}
+                      >
                         <div className="flex items-start justify-between gap-2">
                           <p className={`text-sm font-semibold ${col === 'lost' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{d.title}</p>
                           <button onClick={() => handleDelete(d.id)} title="Delete deal" className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
