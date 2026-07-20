@@ -38,6 +38,7 @@ import { listNotes, addNote as persistNote, deleteNote as removeNote } from '../
 import { listTasks, addTask as persistTask, setTaskDone, deleteTask as removeTask } from '../../lib/tasks';
 import { listActivities } from '../../lib/leadActivities';
 import { resolveWorkspaceId } from '../../lib/tenancy';
+import { listDealsForLead, createDeal, setDealStage, deleteDeal, DEAL_STAGES, type Deal, type DealStage } from '../../lib/deals';
 import type { ColorToken, StageColorMap, ColorOverrideMap } from '../../lib/leadColors';
 
 // ── Helpers ──
@@ -159,7 +160,7 @@ const eventTypeIcon = (type: string) => {
   }
 };
 
-type TabKey = 'ai-insights' | 'activity' | 'notes' | 'campaigns' | 'tasks' | 'files' | 'invoices';
+type TabKey = 'ai-insights' | 'activity' | 'notes' | 'deals' | 'campaigns' | 'tasks' | 'files' | 'invoices';
 
 // ── Notes State ──
 interface NoteItem {
@@ -237,6 +238,16 @@ const LeadProfile: React.FC = () => {
       .catch(() => {});
   }, [lead?.id]);
   const [newTask, setNewTask] = useState('');
+
+  // Deals / opportunities (persisted).
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [newDealTitle, setNewDealTitle] = useState('');
+  const [newDealValue, setNewDealValue] = useState('');
+  const [creatingDeal, setCreatingDeal] = useState(false);
+  useEffect(() => {
+    if (!lead?.id) return;
+    listDealsForLead(lead.id).then(setDeals).catch(() => {});
+  }, [lead?.id]);
 
   // Quick action feedback
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -623,6 +634,32 @@ const LeadProfile: React.FC = () => {
     if (!(await removeTask(id))) setTasks(prev); // rollback on failure
   };
 
+  const handleCreateDeal = async () => {
+    if (!newDealTitle.trim() || !lead?.id) return;
+    setCreatingDeal(true);
+    const value = parseFloat(newDealValue.replace(/[^0-9.]/g, '')) || 0;
+    const saved = await createDeal(user.id, {
+      title: newDealTitle.trim(), valueAmount: value, leadId: lead.id, businessId: currentBusinessId ?? null,
+    });
+    setCreatingDeal(false);
+    if (saved) { setDeals(prev => [saved, ...prev]); setNewDealTitle(''); setNewDealValue(''); }
+    else showFeedback('Could not create deal');
+  };
+
+  const handleDealStage = async (id: string, stage: DealStage) => {
+    const prev = deals;
+    setDeals(p => p.map(d => d.id === id ? { ...d, stage } : d)); // optimistic
+    const saved = await setDealStage(id, stage);
+    if (saved) setDeals(p => p.map(d => d.id === id ? saved : d));
+    else setDeals(prev); // rollback
+  };
+
+  const handleDeleteDeal = async (id: string) => {
+    const prev = deals;
+    setDeals(p => p.filter(d => d.id !== id)); // optimistic
+    if (!(await deleteDeal(id))) setDeals(prev); // rollback
+  };
+
   // ── Lead Health ──
   const leadHealth = useMemo(() => {
     if (!lead) return { healthScore: 0, tier: 'Cold', factors: [] as { name: string; value: number; max: number }[], risks: [] as string[], strengths: [] as string[], freshness: 0, statusScore: 0, daysSinceCreated: 0 };
@@ -906,6 +943,7 @@ const LeadProfile: React.FC = () => {
     { key: 'ai-insights', label: 'AI Insights' },
     { key: 'activity', label: 'Activity' },
     { key: 'notes', label: 'Notes' },
+    { key: 'deals', label: 'Deals' },
     { key: 'campaigns', label: 'Campaigns' },
     { key: 'tasks', label: 'Tasks' },
     { key: 'files', label: 'Files' },
@@ -1477,6 +1515,70 @@ const LeadProfile: React.FC = () => {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ── DEALS TAB ── */}
+              {activeTab === 'deals' && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={newDealTitle}
+                      onChange={e => setNewDealTitle(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateDeal()}
+                      placeholder="Deal name (e.g. Annual plan)"
+                      className="flex-grow p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors"
+                    />
+                    <input
+                      type="text"
+                      value={newDealValue}
+                      onChange={e => setNewDealValue(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateDeal()}
+                      placeholder="Value ($)"
+                      className="w-full sm:w-32 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors"
+                    />
+                    <button onClick={handleCreateDeal} disabled={creatingDeal || !newDealTitle.trim()} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                      Add deal
+                    </button>
+                  </div>
+
+                  {deals.some(d => d.stage !== 'won' && d.stage !== 'lost') && (
+                    <div className="flex gap-4 px-1">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open pipeline</p>
+                        <p className="text-lg font-black text-slate-900">${deals.filter(d => d.stage !== 'won' && d.stage !== 'lost').reduce((s, d) => s + d.valueAmount, 0).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weighted</p>
+                        <p className="text-lg font-black text-indigo-600">${Math.round(deals.filter(d => d.stage !== 'won' && d.stage !== 'lost').reduce((s, d) => s + d.valueAmount * d.probability / 100, 0)).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    {deals.map(deal => (
+                      <div key={deal.id} className="flex items-center gap-3 p-3.5 bg-white border border-slate-100 rounded-xl hover:border-indigo-100 transition-colors">
+                        <div className="flex-grow min-w-0">
+                          <p className={`text-sm font-semibold truncate ${deal.stage === 'lost' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{deal.title}</p>
+                          <p className="text-xs text-slate-500">${deal.valueAmount.toLocaleString()} {deal.currency} · {deal.probability}% likely{deal.expectedCloseDate ? ` · close ${new Date(deal.expectedCloseDate).toLocaleDateString()}` : ''}</p>
+                        </div>
+                        <select
+                          value={deal.stage}
+                          onChange={e => handleDealStage(deal.id, e.target.value as DealStage)}
+                          className={`text-xs font-bold rounded-lg px-2 py-1.5 border outline-none cursor-pointer ${deal.stage === 'won' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : deal.stage === 'lost' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
+                        >
+                          {DEAL_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                        </select>
+                        <button onClick={() => handleDeleteDeal(deal.id)} title="Delete deal" className="text-slate-300 hover:text-rose-500 transition-colors flex-shrink-0">
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {deals.length === 0 && (
+                      <p className="text-xs text-slate-400 text-center py-6">No deals yet. Create one above to track value and forecast.</p>
+                    )}
+                  </div>
                 </div>
               )}
 
