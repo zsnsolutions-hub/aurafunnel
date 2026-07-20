@@ -62,7 +62,7 @@
 ### 1.2 Surface the real lead score & intelligence (BUG-018) — ✅ DONE (Phase 4.D + 1.2)
 - **Objective:** enable `lead_intelligence` by default; show the signal-based score in table/kanban.
 - **Value:** the product's best AI becomes visible. **Dependencies:** validation data present. **Acceptance:** table shows real score; research/next-action visible. **Order:** 2. **Complexity:** S.
-- ✅ Manual "Recalculate Score" calls the canonical `recalcLeadScore`; `lead_intelligence` is now ON by default so the Score/Research/Next-action panels show; a bulk "Score" action (`recalcLeadScoresBulk`) recomputes every lead in the business so the table/kanban show real scores. **Follow-on niceties:** reason on hover in the table; auto-score on import.
+- ✅ Manual "Recalculate Score" calls the canonical `recalcLeadScore`; `lead_intelligence` is now ON by default so the Score/Research/Next-action panels show; a bulk "Score" action (`recalcLeadScoresBulk`) recomputes every lead in the business so the table/kanban show real scores. ✅ Follow-on niceties done too: score `reason_summary` tooltip on the table/kanban score cell (`getLeadScoresBulk`); imports auto-score the new batch so leads never show 0.
 
 ### 1.3 Deals / opportunities pipeline (GAP: convert) — 🟡 PARTIAL (Phase 4.E)
 - **Objective:** add a `deals` table (value, stage, owner, close date) + forecast.
