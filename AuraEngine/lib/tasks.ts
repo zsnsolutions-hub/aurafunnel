@@ -57,6 +57,7 @@ export interface NewTask {
   description?: string | null;
   priority?: TaskPriority;
   dueAt?: string | null;
+  reminderAt?: string | null;
   assignedTo?: string | null;
   businessId?: string | null;
 }
@@ -75,6 +76,7 @@ export async function addTask(userId: string, leadId: string, task: NewTask): Pr
       description: task.description ?? null,
       priority: task.priority ?? 'normal',
       due_at: task.dueAt ?? null,
+      reminder_at: task.reminderAt ?? null,
     })
     .select(COLS)
     .single();

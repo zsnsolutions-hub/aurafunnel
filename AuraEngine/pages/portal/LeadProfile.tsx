@@ -240,6 +240,7 @@ const LeadProfile: React.FC = () => {
       .catch(() => {});
   }, [lead?.id]);
   const [newTask, setNewTask] = useState('');
+  const [newTaskReminder, setNewTaskReminder] = useState('');
 
   // Deals / opportunities (persisted).
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -625,10 +626,13 @@ const LeadProfile: React.FC = () => {
   const handleAddTask = async () => {
     if (!newTask.trim() || !lead?.id) return;
     const title = newTask.trim();
+    const reminderAt = newTaskReminder ? new Date(newTaskReminder).toISOString() : null;
     setNewTask('');
-    const saved = await persistTask(user.id, lead.id, { title, businessId: currentBusinessId ?? null });
+    setNewTaskReminder('');
+    // A reminder date with no explicit due date also serves as the due date.
+    const saved = await persistTask(user.id, lead.id, { title, reminderAt, dueAt: reminderAt, businessId: currentBusinessId ?? null });
     if (saved) { setTasks(prev => [...prev, { id: saved.id, title: saved.title, done: saved.status === 'done', dueAt: saved.dueAt }]); void loadTimeline(); }
-    else setNewTask(title); // restore on failure
+    else { setNewTask(title); setNewTaskReminder(reminderAt ? newTaskReminder : ''); } // restore on failure
   };
 
   const toggleTask = async (id: string) => {
@@ -1674,18 +1678,35 @@ const LeadProfile: React.FC = () => {
               {/* ── TASKS TAB ── */}
               {activeTab === 'tasks' && (
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="flex space-x-3">
-                    <input
-                      type="text"
-                      value={newTask}
-                      onChange={e => setNewTask(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleAddTask()}
-                      placeholder="Add a task..."
-                      className="flex-grow p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors"
-                    />
-                    <button onClick={handleAddTask} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors">
-                      Add
-                    </button>
+                  <div className="space-y-2">
+                    <div className="flex space-x-3">
+                      <input
+                        type="text"
+                        value={newTask}
+                        onChange={e => setNewTask(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddTask()}
+                        placeholder="Add a task..."
+                        className="flex-grow p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors"
+                      />
+                      <button onClick={handleAddTask} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors">
+                        Add
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-slate-500 pl-1">
+                      <ClockIcon className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Remind me</span>
+                      <input
+                        type="datetime-local"
+                        value={newTaskReminder}
+                        onChange={e => setNewTaskReminder(e.target.value)}
+                        className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-300"
+                      />
+                      {newTaskReminder && (
+                        <button onClick={() => setNewTaskReminder('')} className="text-slate-400 hover:text-slate-600" title="Clear reminder">
+                          <XIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </label>
                   </div>
                   <div className="space-y-2">
                     {tasks.map(task => (

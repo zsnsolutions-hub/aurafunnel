@@ -15,6 +15,7 @@ import { BrandLogo } from './BrandLogo';
 import { useIntegrations } from '../../lib/integrations';
 import { TIER_LIMITS, resolvePlanName } from '../../lib/credits';
 import { NAV_CONFIG, NavConfigItem } from '../../lib/navConfig';
+import { unreadCount } from '../../lib/notifications';
 import { UIModeSwitcher } from '../ui-mode';
 import { useUIMode } from '../ui-mode/UIModeProvider';
 const ActivityPanel = lazy(() => import('../activity/ActivityPanel').then(m => ({ default: m.ActivityPanel })));
@@ -44,6 +45,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsAutoShown, setNotificationsAutoShown] = useState(false);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gPressedRef = useRef(false);
   const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,6 +129,19 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
     }, 800);
     return () => clearTimeout(timer);
   }, [notificationsAutoShown]);
+
+  // ─── Unread notification count for the Bell badge (poll + refresh on close) ───
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => { unreadCount().then(n => { if (!cancelled) setUnreadNotifs(n); }).catch(() => {}); };
+    refresh();
+    const iv = setInterval(refresh, 60000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, []);
+  // Refresh the badge whenever the notifications panel closes (reads mark them read).
+  useEffect(() => {
+    if (!notificationsOpen) unreadCount().then(setUnreadNotifs).catch(() => {});
+  }, [notificationsOpen]);
 
   // ─── Custom event: open command palette from voice agent ───
   useEffect(() => {
@@ -236,14 +251,19 @@ const ClientLayout: React.FC<ClientLayoutProps> = memo(({ user, onLogout, refres
       </button>
       <button
         onClick={openNotifications}
-        className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
-        aria-label="Notifications"
+        className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all duration-150 ease-out"
+        aria-label={unreadNotifs > 0 ? `Notifications (${unreadNotifs} unread)` : 'Notifications'}
         title="Notifications"
       >
         <Bell size={16} />
+        {unreadNotifs > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+            {unreadNotifs > 9 ? '9+' : unreadNotifs}
+          </span>
+        )}
       </button>
     </div>
-  ), [openCommandPalette, openNotifications]);
+  ), [openCommandPalette, openNotifications, unreadNotifs]);
 
   const sidebarFooter = useMemo(() =>
     sidebarCollapsed ? (

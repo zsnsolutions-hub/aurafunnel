@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { listNotifications, markRead, type AppNotification } from '../../lib/notifications';
 import {
   FlameIcon, CalendarIcon, TargetIcon, SparklesIcon, BoltIcon,
   CheckIcon, XIcon, ArrowRightIcon, ClockIcon, UsersIcon, ChartIcon, SendIcon
@@ -42,6 +43,18 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
   });
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const [error, setError] = useState(false);
+  const [notifs, setNotifs] = useState<AppNotification[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    listNotifications(8).then(setNotifs).catch(() => {});
+  }, [open]);
+
+  const handleNotifClick = useCallback((n: AppNotification) => {
+    void markRead(n.id);
+    setNotifs(prev => prev.filter(x => x.id !== n.id));
+    if (n.link) { onClose(); navigate(n.link); }
+  }, [navigate, onClose]);
 
   // ─── Fetch briefing data from Supabase ───
   const fetchBriefing = useCallback(async () => {
@@ -179,6 +192,29 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
           </div>
         ) : (
           <div className="px-8 py-6 space-y-5 max-h-[55vh] overflow-y-auto">
+
+            {/* Notifications & reminders */}
+            {notifs.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2.5">Reminders &amp; alerts ({notifs.length})</p>
+                <div className="space-y-1.5">
+                  {notifs.map(n => (
+                    <button
+                      key={n.id}
+                      onClick={() => handleNotifClick(n)}
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left transition-colors ${n.isRead ? 'bg-slate-50 hover:bg-slate-100' : 'bg-indigo-50/60 hover:bg-indigo-50'}`}
+                    >
+                      <ClockIcon className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800 truncate">{n.title}</p>
+                        {n.message && <p className="text-[11px] text-slate-500 truncate">{n.message}</p>}
+                      </div>
+                      {n.link && <ArrowRightIcon className="w-3.5 h-3.5 text-slate-300 mt-0.5 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Today's Metrics */}
             <div>
