@@ -69,6 +69,20 @@ export function clearPromptCache(userId?: string, promptKey?: string): void {
 
 // ─── Resolver ───
 
+// Bound a prompt-config query so a stuck Supabase auth/session lock can never
+// hang prompt resolution — and therefore any AI feature — forever. On timeout we
+// resolve to a miss ({ data: null }) and fall through to the next tier, ultimately
+// the hardcoded fallback below. Same defensive pattern as lib/memory.ts.
+function queryOrTimeout<R extends { data: unknown }>(
+  q: PromiseLike<R>,
+  ms = 8_000,
+): Promise<R | { data: null }> {
+  return Promise.race([
+    q,
+    new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), ms)),
+  ]);
+}
+
 export async function resolvePrompt(
   promptKey: string,
   userId?: string,
@@ -82,13 +96,15 @@ export async function resolvePrompt(
 
   // 1. Try user's active custom prompt
   if (userId) {
-    const { data: userPrompt } = await supabase
-      .from('user_prompts')
-      .select('system_instruction, prompt_template, temperature, top_p, version')
-      .eq('owner_id', userId)
-      .eq('prompt_key', promptKey)
-      .eq('is_active', true)
-      .single();
+    const { data: userPrompt } = await queryOrTimeout(
+      supabase
+        .from('user_prompts')
+        .select('system_instruction, prompt_template, temperature, top_p, version')
+        .eq('owner_id', userId)
+        .eq('prompt_key', promptKey)
+        .eq('is_active', true)
+        .single()
+    );
 
     if (userPrompt) {
       const resolved: ResolvedPrompt = {
@@ -105,14 +121,16 @@ export async function resolvePrompt(
   }
 
   // 2. Try system default from DB
-  const { data: systemPrompt } = await supabase
-    .from('user_prompts')
-    .select('system_instruction, prompt_template, temperature, top_p, version')
-    .is('owner_id', null)
-    .eq('prompt_key', promptKey)
-    .eq('is_default', true)
-    .eq('is_active', true)
-    .single();
+  const { data: systemPrompt } = await queryOrTimeout(
+    supabase
+      .from('user_prompts')
+      .select('system_instruction, prompt_template, temperature, top_p, version')
+      .is('owner_id', null)
+      .eq('prompt_key', promptKey)
+      .eq('is_default', true)
+      .eq('is_active', true)
+      .single()
+  );
 
   if (systemPrompt) {
     const resolved: ResolvedPrompt = {

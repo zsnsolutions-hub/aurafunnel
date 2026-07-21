@@ -460,14 +460,32 @@ const ProfilePage: React.FC = () => {
     setEnrichmentElapsed(0);
     setEnrichmentError('');
     setEnrichmentFieldsAdded(0);
+    // Hard deadlines so the wizard can NEVER spin forever. Both consumeCredits and
+    // the prompt lookup inside analyzeBusinessFromWeb await the Supabase session
+    // token, which can wedge indefinitely on a stuck auth/session lock. The AI path
+    // is internally bounded to ~3.5 min, so the 4-min ceiling only kills a true
+    // hang — it never truncates a legitimately-slow-but-working run.
+    const withDeadline = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
+      ]);
     try {
       // The document path already charged the credit before its AI call, so only
       // charge here for the URL path.
       if (!docResult) {
-        const creditResult = await consumeCredits(supabase, 'business_analysis');
+        const creditResult = await withDeadline(
+          consumeCredits(supabase, 'business_analysis'),
+          15_000,
+          'Could not verify your credits (the request timed out). Please try again.',
+        );
         if (!creditResult.success) throw new Error(creditResult.message || 'Insufficient credits.');
       }
-      const result = docResult ?? await analyzeBusinessFromWeb(fullUrl, socials);
+      const result = docResult ?? await withDeadline(
+        analyzeBusinessFromWeb(fullUrl, socials),
+        240_000,
+        'Analysis timed out. Please try again, or fill in your details manually.',
+      );
       if (!result.analysis) throw new Error('Could not extract a profile. Edit your fields manually or try a different URL/document.');
 
       // Merge into whatever the user has now. Two rules:
