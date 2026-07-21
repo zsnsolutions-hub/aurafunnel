@@ -46,15 +46,18 @@ const timedFetch: typeof fetch = (input, init) => {
   });
 };
 
+// React StrictMode double-mounts in DEV only, which can deadlock navigator.locks
+// (the original reason this override existed). So we disable locking with a no-op
+// in dev, but in PRODUCTION we let supabase-js fall back to its default
+// navigatorLock — restoring cross-tab serialization so multiple open tabs don't
+// race each other's token refresh (the refresh token rotates, so unsynchronized
+// refreshes can invalidate a sibling tab's session). This is safe because
+// timedFetch caps every lock-held request at 30s, so a lock can never be held
+// indefinitely and acquisition can never wait forever.
+const noopLock = async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> =>
+  await fn();
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    // Bypass navigator.locks which deadlocks under React StrictMode's double-mount.
-    // Within-tab serialization is still provided by gotrue's internal pendingInLock;
-    // this only drops cross-tab locking. Safe now that timedFetch guarantees every
-    // lock-held request settles, so the lock can no longer wedge permanently.
-    lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => {
-      return await fn();
-    },
-  },
+  auth: import.meta.env.DEV ? { lock: noopLock } : {},
   global: { fetch: timedFetch },
 });
