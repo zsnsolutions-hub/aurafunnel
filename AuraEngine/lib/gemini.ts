@@ -1366,7 +1366,15 @@ export type ProfileGenField =
   | 'competitiveAdvantage'
   | 'companyStory'
   | 'teamHighlights'
-  | 'contentTone';
+  | 'contentTone'
+  | 'brandVoice'
+  | 'visualStyle'
+  | 'preferredCtas'
+  | 'uniqueSellingPoints'
+  | 'offers'
+  | 'competitors'
+  | 'objections'
+  | 'caseStudies';
 
 const PROFILE_FIELD_BRIEFS: Record<ProfileGenField, { label: string; constraint: string }> = {
   businessDescription:  { label: 'About Your Business',     constraint: 'Write 2-3 plain-language sentences explaining what this business does and who it serves. No marketing jargon.' },
@@ -1379,6 +1387,14 @@ const PROFILE_FIELD_BRIEFS: Record<ProfileGenField, { label: string; constraint:
   companyStory:         { label: 'Company Story',           constraint: 'A 3-4 sentence origin / founding story. Why this exists. Avoid being self-congratulatory.' },
   teamHighlights:       { label: 'Team Highlights',         constraint: 'A 1-2 sentence team intro (size + 1-2 notable credentials or experience points). No fluff.' },
   contentTone:          { label: 'Brand Tone',              constraint: 'One short descriptor of the brand voice (e.g., "direct, technical, no-nonsense" or "warm, conversational, expert").' },
+  brandVoice:           { label: 'Brand Voice',             constraint: 'Write 1-2 sentences describing how this brand should SOUND in writing (e.g., "Confident and warm, plain-spoken, never salesy; explains without condescending"). Describe the voice — do not write marketing copy.' },
+  visualStyle:          { label: 'Visual Style Notes',      constraint: 'Write 1-2 sentences describing a fitting visual style for this brand (colour feel, imagery, mood, typography feel). Keep it concrete and grounded in the business.' },
+  preferredCtas:        { label: 'Preferred CTAs',          constraint: 'Produce 3-5 short call-to-action phrases suited to this business, comma-separated on ONE line (e.g., "Book a demo, Start free trial, Talk to sales"). Output ONLY the comma-separated list — no numbering, no sentences.' },
+  uniqueSellingPoints:  { label: 'Unique Selling Points',   constraint: 'Produce 3-5 specific, concrete unique selling points for this business, comma-separated on ONE line. Each USP is a short phrase, not a sentence. Output ONLY the comma-separated list.' },
+  offers:               { label: 'Offers',                  constraint: 'Write 1-2 sentences describing plausible current offers, promotions, or lead magnets this business could run (e.g., a free audit, a trial, a starter package). Concrete and specific.' },
+  competitors:          { label: 'Competitors',             constraint: 'Describe the main competitors or alternatives this business is up against in one short sentence or a comma-separated list. Name categories/approaches rather than specific company names unless clearly implied by the context.' },
+  objections:           { label: 'Common Objections',       constraint: 'Write 3-4 common objections a prospect raises before buying from this business, each on its own line, phrased as the buyer’s own concern (e.g., "We already have a tool for this"). No preamble.' },
+  caseStudies:          { label: 'Case Studies',            constraint: 'Write 1-2 sentences describing the kind of customer outcome or success story this business can point to (a concrete result + who it was for). If specifics are unknown, describe a representative outcome the reader can edit.' },
 };
 
 function profileContextLines(profile: BusinessProfile): string {
