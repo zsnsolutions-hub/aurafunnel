@@ -23,6 +23,7 @@ export const AI_CREDIT_COSTS = {
   // Intelligence
   lead_research: 2,
   lead_scoring: 1,
+  lead_discovery: 3,
   business_analysis: 5,
   clear_business_profile: 2,
   profile_field_generation: 1,

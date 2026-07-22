@@ -86,6 +86,7 @@ const LeadManagement = lazyWithRetry(() => import('./pages/portal/LeadManagement
 const LeadProfile = lazyWithRetry(() => import('./pages/portal/LeadProfile'));
 const BusinessesPage = lazyWithRetry(() => import('./pages/portal/BusinessesPage'));
 const BusinessSettingsPage = lazyWithRetry(() => import('./pages/portal/BusinessSettingsPage'));
+const DiscoverPage = lazyWithRetry(() => import('./pages/portal/DiscoverPage'));
 const ImageStudio = lazyWithRetry(() => import('./pages/portal/ImageStudio'));
 const ContentGen = lazyWithRetry(() => import('./pages/portal/ContentGen'));
 const BlogDrafts = lazyWithRetry(() => import('./pages/portal/BlogDrafts'));
@@ -362,8 +363,9 @@ const App: React.FC = () => {
             {/* Legacy alias — old links to /portal/mission still resolve. */}
             <Route path="mission" element={<Navigate to="/portal" replace />} />
             <Route path="leads" element={<LeadManagement />} />
-            {/* Legacy alias — Apollo search was retired; route any deep link back to leads. */}
-            <Route path="leads/apollo" element={<Navigate to="/portal/leads" replace />} />
+            <Route path="leads/discover" element={<DiscoverPage />} />
+            {/* Legacy alias — Apollo search was retired; route any deep link to the new discovery page. */}
+            <Route path="leads/apollo" element={<Navigate to="/portal/leads/discover" replace />} />
             <Route path="leads/:leadId" element={<LeadProfile />} />
             <Route path="content" element={<ContentGen />} />
             <Route path="strategy" element={<Navigate to="/portal/team-hub" replace />} />
