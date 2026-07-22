@@ -5,6 +5,7 @@ import { leadDisplayName } from "./queries";
 import { getGeminiClient } from "./geminiClient";
 import { AI_MODELS } from "./aiConfig";
 import { buildMemoryContext, resolveWorkspaceForUser } from "./memory";
+import { resolveBrain } from "./businessBrain";
 
 // AI Memory injection (Phase 2 — outreach-only scope).
 //
@@ -195,7 +196,7 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
         operation: 'content_generation',
         contents: finalPrompt,
         config: {
-          systemInstruction: systemInstruction + buildBusinessContext(businessProfile) + memoryCtx,
+          systemInstruction: systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)) + memoryCtx,
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,
@@ -295,7 +296,7 @@ Keep response under 300 words. Be specific, not generic.`,
       operation: 'dashboard_insights',
       contents: prompt,
       config: {
-        systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
+        systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)),
         temperature: resolved.temperature,
         topP: resolved.topP,
       }
@@ -403,7 +404,7 @@ BODY:
   });
 
   const genConfig = {
-    systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile) + memoryCtx,
+    systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)) + memoryCtx,
     temperature: resolved.temperature,
     topP: resolved.topP,
     topK: 40,
@@ -553,7 +554,7 @@ export const generateContentByCategory = async (
         operation: 'content_generation',
         contents: finalCategoryPrompt,
         config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,
@@ -780,7 +781,7 @@ Return ONE structured JSON object in this exact schema (no commentary outside th
   // so there is no leadId yet, and research isn't a campaign.
   const memoryCtx = await safeMemoryContext({ userId });
 
-  const systemInstruction = resolved.systemInstruction + buildBusinessContext(businessProfile) + memoryCtx;
+  const systemInstruction = resolved.systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)) + memoryCtx;
 
   // Prepare-only: return the built prompt so a server-side background job can run
   // the (slow) grounded generation itself, surviving client navigation/reload.
@@ -1627,7 +1628,7 @@ ${leadContext || 'No leads in pipeline.'}`;
   });
 
   const genConfig = {
-    systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
+    systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)),
     temperature: resolved.temperature,
     topP: resolved.topP,
     topK: 40,
@@ -1744,7 +1745,7 @@ Return exactly 5 suggestions.`,
         operation: 'content_suggestions',
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)),
           temperature: resolved.temperature,
           topP: resolved.topP,
         }
@@ -1858,7 +1859,7 @@ Be specific and data-driven.`,
         operation: 'pipeline_strategy',
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(input.businessProfile),
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(input.businessProfile)),
           temperature: resolved.temperature,
           topP: resolved.topP,
         }
@@ -2028,7 +2029,7 @@ EXISTING CONTENT TO EXPAND:
     .replace('{{keyword_guide}}', keywordGuide);
 
   const genConfig = {
-    systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
+    systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(params.businessProfile)),
     temperature: resolved.temperature,
     topP: resolved.topP,
     topK: 40,
@@ -2165,7 +2166,7 @@ Output ONLY the caption text.`,
       operation: 'social_caption',
       contents: prompt,
       config: {
-        systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
+        systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(params.businessProfile)),
         temperature: resolved.temperature,
         topP: resolved.topP,
       }
@@ -2262,7 +2263,7 @@ BODY: [rewritten HTML email body]`,
           operation: 'email_generation',
           contents: prompt,
           config: {
-            systemInstruction: resolved.systemInstruction + buildBusinessContext(input.businessProfile),
+            systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(input.businessProfile)),
             temperature: resolved.temperature,
             topP: resolved.topP,
           }
@@ -2418,7 +2419,7 @@ Return each suggestion on its own line, prefixed with "- ".`,
         operation: 'workflow_optimization',
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(businessProfile),
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(businessProfile)),
           temperature: resolved.temperature,
           topP: resolved.topP,
         }
@@ -2519,7 +2520,7 @@ Respond in EXACTLY this format:
         operation: 'guest_post_pitch',
         contents: prompt,
         config: {
-          systemInstruction: resolved.systemInstruction + buildBusinessContext(params.businessProfile),
+          systemInstruction: resolved.systemInstruction + buildBusinessContext(await resolveBrain(params.businessProfile)),
           temperature: resolved.temperature,
           topP: resolved.topP,
           topK: 40,

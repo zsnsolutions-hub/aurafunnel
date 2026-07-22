@@ -8,6 +8,7 @@
 import { supabase } from './supabase';
 import { resolveWorkspaceId } from './tenancy';
 import { scopeBusiness, activeBusinessId } from './businessScope';
+import { getActiveBusinessBrain } from './businessBrain';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 
@@ -237,8 +238,12 @@ export async function deleteCampaign(id: string): Promise<void> {
   await supabase.from('email_sequences').delete().eq('id', id);
 }
 
-/** The current user's business profile (used as AI context for send + preview). */
+/** The business profile used as AI context for send + preview. Prefers the
+ *  ACTIVE business's brain (Roadmap 2.1); falls back to the old per-user profile
+ *  when the per-business brain has no substantive content. */
 async function getMyBusinessProfile(): Promise<Record<string, unknown> | undefined> {
+  const brain = await getActiveBusinessBrain();
+  if (brain) return brain as unknown as Record<string, unknown>;
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return undefined;
   const { data } = await supabase.from('profiles').select('businessProfile').eq('id', user.id).single();
