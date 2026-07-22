@@ -26,6 +26,7 @@ import { PageHeader } from '../../components/layout/PageHeader';
 import { AdvancedOnly } from '../../components/ui-mode';
 import { listActivities, logActivity } from '../../lib/leadActivities';
 import { recalcLeadScoresBulk, getLeadScoresBulk, type LeadScoreBreakdown } from '../../lib/leadScoring';
+import { setLeadStatus } from '../../lib/leads';
 
 // ── Helpers ──
 const formatRelativeTime = (dateStr: string): string => {
@@ -296,6 +297,10 @@ const LeadManagement: React.FC = () => {
 
   // ── View & Sort State ──
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
+  // Kanban drag-and-drop (mirrors the deals PipelinePage pattern). The per-card
+  // "advance stage" chevron stays as the keyboard/touch fallback.
+  const [draggingLeadId, setDraggingLeadId] = useState<string | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<Lead['status'] | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'score' | 'company' | 'activity'>('score');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -617,7 +622,7 @@ const LeadManagement: React.FC = () => {
     if (selectedLead?.id === leadId) {
       setSelectedLead({ ...selectedLead, status: newStatus, last_activity: newActivity, lastActivity: newActivity });
     }
-    const { error: updateError } = await supabase.from('leads').update({ status: newStatus, last_activity: newActivity }).eq('id', leadId);
+    const { error: updateError } = await setLeadStatus(leadId, newStatus, newActivity);
     if (updateError) {
       // Rollback on failure
       setAllLeads(prev => prev.map(l =>
@@ -626,8 +631,8 @@ const LeadManagement: React.FC = () => {
       if (selectedLead?.id === leadId) {
         setSelectedLead({ ...selectedLead, status: prevStatus!, last_activity: prevActivity!, lastActivity: prevActivity! });
       }
-      console.error('Lead status update error:', updateError.message);
-      toast(`Couldn’t update lead status: ${updateError.message}`, 'error');
+      console.error('Lead status update error:', updateError);
+      toast(`Couldn’t update lead status: ${updateError}`, 'error');
       return;
     }
     // Audit log (fire-and-forget)
@@ -644,6 +649,19 @@ const LeadManagement: React.FC = () => {
     const idx = PIPELINE_STAGES.indexOf(currentStatus);
     if (idx === -1 || idx >= PIPELINE_STAGES.length - 1) return null;
     return PIPELINE_STAGES[idx + 1];
+  };
+
+  // Drop a dragged lead onto a kanban column → move it to that status. Reuses
+  // handleStatusUpdate (optimistic + rollback + audit log). No-op if the lead is
+  // already in that column.
+  const handleLeadDropOnStatus = (status: Lead['status']) => {
+    const id = draggingLeadId;
+    setDraggingLeadId(null);
+    setDragOverStatus(null);
+    if (!id) return;
+    const lead = allLeads.find(l => l.id === id);
+    if (!lead || lead.status === status) return;
+    handleStatusUpdate(id, status);
   };
 
   const handleExportSelected = () => {
@@ -2175,8 +2193,15 @@ const LeadManagement: React.FC = () => {
                 };
                 const sc = statusColors[status] || statusColors.New;
                 const leads = kanbanColumns[status] || [];
+                const isDropTarget = dragOverStatus === status && draggingLeadId != null;
                 return (
-                  <div key={status} className={`${sc.bg} rounded-2xl border ${sc.border} p-4`}>
+                  <div
+                    key={status}
+                    onDragOver={(e) => { if (draggingLeadId) { e.preventDefault(); if (dragOverStatus !== status) setDragOverStatus(status); } }}
+                    onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverStatus(prev => (prev === status ? null : prev)); }}
+                    onDrop={(e) => { e.preventDefault(); handleLeadDropOnStatus(status); }}
+                    className={`${sc.bg} rounded-2xl border p-4 transition-all ${isDropTarget ? 'border-indigo-400 ring-2 ring-indigo-200' : sc.border}`}
+                  >
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-2">
                         <div className={`w-2.5 h-2.5 rounded-full ${sc.dot}`}></div>
@@ -2195,7 +2220,10 @@ const LeadManagement: React.FC = () => {
                         return (
                           <div
                             key={lead.id}
-                            className={`w-full text-left bg-white rounded-xl border border-slate-100 p-2.5 hover:shadow-md hover:border-indigo-200 transition-all group border-l-2 ${getColorClasses(resolveLeadColor(lead, stageColors, colorOverrides)).border}`}
+                            draggable
+                            onDragStart={(e) => { setDraggingLeadId(lead.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', lead.id); }}
+                            onDragEnd={() => { setDraggingLeadId(null); setDragOverStatus(null); }}
+                            className={`w-full text-left bg-white rounded-xl border border-slate-100 p-2.5 hover:shadow-md hover:border-indigo-200 transition-all group border-l-2 cursor-grab active:cursor-grabbing ${draggingLeadId === lead.id ? 'opacity-40' : ''} ${getColorClasses(resolveLeadColor(lead, stageColors, colorOverrides)).border}`}
                           >
                             <button
                               onClick={() => navigate(`/portal/leads/${lead.id}`)}
