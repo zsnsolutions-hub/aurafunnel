@@ -80,15 +80,15 @@ export interface InvoicePackage {
 export async function fetchInvoices(): Promise<Invoice[]> {
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, leads(name, email), invoice_line_items(*)')
+    .select('*, leads(first_name, last_name, primary_email), invoice_line_items(*)')
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(error.message);
 
   return (data || []).map((row: any) => ({
     ...row,
-    lead_name: row.leads?.name ?? '',
-    lead_email: row.leads?.email ?? '',
+    lead_name: [row.leads?.first_name, row.leads?.last_name].filter(Boolean).join(' '),
+    lead_email: row.leads?.primary_email ?? '',
     line_items: row.invoice_line_items ?? [],
     leads: undefined,
     invoice_line_items: undefined,
@@ -98,7 +98,7 @@ export async function fetchInvoices(): Promise<Invoice[]> {
 export async function fetchLeadInvoices(leadId: string): Promise<Invoice[]> {
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, leads(name, email), invoice_line_items(*)')
+    .select('*, leads(first_name, last_name, primary_email), invoice_line_items(*)')
     .eq('lead_id', leadId)
     .order('created_at', { ascending: false });
 
@@ -106,8 +106,8 @@ export async function fetchLeadInvoices(leadId: string): Promise<Invoice[]> {
 
   return (data || []).map((row: any) => ({
     ...row,
-    lead_name: row.leads?.name ?? '',
-    lead_email: row.leads?.email ?? '',
+    lead_name: [row.leads?.first_name, row.leads?.last_name].filter(Boolean).join(' '),
+    lead_email: row.leads?.primary_email ?? '',
     line_items: row.invoice_line_items ?? [],
     leads: undefined,
     invoice_line_items: undefined,

@@ -73,7 +73,7 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
             .gte('created_at', todayStart.toISOString()),
           supabase
             .from('leads')
-            .select('name, company, score')
+            .select('first_name, last_name, company, score')
             .eq('client_id', user.id)
             .gte('score', 75)
             .order('score', { ascending: false })
@@ -91,7 +91,7 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
 
         const totalToday = leadsRes.count || 0;
         const hotLeads = (hotLeadsRes.data || []).map(l => ({
-          name: l.name || 'Unknown',
+          name: [l.first_name, l.last_name].filter(Boolean).join(' ') || l.company || 'Unknown',
           company: l.company || 'Unknown',
           score: l.score || 0,
         }));

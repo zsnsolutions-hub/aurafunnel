@@ -62,10 +62,16 @@ const CreateInvoiceDrawer: React.FC<CreateInvoiceDrawerProps> = ({
     (async () => {
       const { data } = await supabase
         .from('leads')
-        .select('id, name, email')
-        .order('name', { ascending: true })
+        .select('id, first_name, last_name, primary_email')
+        .order('first_name', { ascending: true })
         .limit(500);
-      setLeads((data || []).filter((l: any) => l.email));
+      setLeads((data || [])
+        .map((l: any) => ({
+          id: l.id,
+          name: [l.first_name, l.last_name].filter(Boolean).join(' ') || l.primary_email,
+          email: l.primary_email,
+        }))
+        .filter((l: any) => l.email));
     })();
     fetchPackages().then(setPackages).catch(e => console.warn('[Invoices] package load failed:', e));
   }, [open]);
