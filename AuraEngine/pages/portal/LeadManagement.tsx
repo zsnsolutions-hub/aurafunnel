@@ -5,7 +5,7 @@ import { TargetIcon, FlameIcon, SparklesIcon, MailIcon, PhoneIcon, EyeIcon, Filt
 import { supabase } from '../../lib/supabase';
 import { activeBusinessId } from '../../lib/businessScope';
 import { resolveWorkspaceId } from '../../lib/tenancy';
-import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummaries } from '../../lib/queries';
+import { normalizeLeads, leadDisplayName, leadInitials, useLeads, useEmailSummaries, LEAD_FETCH_CAP } from '../../lib/queries';
 import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
 import { useCurrentBusiness } from '../../components/business/BusinessProvider';
@@ -188,8 +188,17 @@ const LeadManagement: React.FC = () => {
   const crmConnected = useMemo(() => integrationStatuses.some(i => (i.provider === 'hubspot' || i.provider === 'salesforce') && i.status === 'connected'), [integrationStatuses]);
   const [syncingCrm, setSyncingCrm] = useState<string | null>(null);
 
+  // ── Search (debounced → server-side fetch, BUG-028) ──
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   // ── Data State (React Query cache seeds local state for instant render) ──
-  const { data: cachedLeads = [], isLoading: queryLoading, refetch: refetchLeads } = useLeads(user.id);
+  // Search runs server-side; the returned set is already narrowed + capped.
+  const { data: cachedLeads = [], isLoading: queryLoading, refetch: refetchLeads } = useLeads(user.id, { search: debouncedSearch });
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -211,7 +220,6 @@ const LeadManagement: React.FC = () => {
   const [tagFilter, setTagFilter] = useState<Set<LeadTag>>(new Set());
   const [emailEngagementFilter, setEmailEngagementFilter] = useState<Set<'sent' | 'opened' | 'clicked'>>(new Set());
   const [followUpFilter, setFollowUpFilter] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   // ── Selection State ──
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -348,16 +356,9 @@ const LeadManagement: React.FC = () => {
 
   // ── Filtering ──
   const filteredLeads = useMemo(() => {
+    // Note: text search (name/email/company) is applied SERVER-SIDE in useLeads,
+    // so `allLeads` is already the search-narrowed set — no client search here.
     let result = [...allLeads];
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(l =>
-        (l.name || '').toLowerCase().includes(q) ||
-        (l.email || '').toLowerCase().includes(q) ||
-        (l.company || '').toLowerCase().includes(q)
-      );
-    }
     if (statusFilter !== 'All') result = result.filter(l => l.status === statusFilter);
     if (scoreFilter === '50-100') result = result.filter(l => l.score >= 50);
     if (scoreFilter === 'below-50') result = result.filter(l => l.score < 50);
@@ -1603,6 +1604,11 @@ const LeadManagement: React.FC = () => {
           placeholder="Search leads by name, email, or company..."
           className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-50 transition-all shadow-sm"
         />
+        {allLeads.length >= LEAD_FETCH_CAP && (
+          <p className="mt-2 text-xs text-slate-500 px-1">
+            Showing the top {LEAD_FETCH_CAP.toLocaleString()} leads by score. Use search to find any others.
+          </p>
+        )}
       </div>
 
       {/* ── Bulk Progress Monitor ── */}

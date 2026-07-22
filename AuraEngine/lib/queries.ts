@@ -43,19 +43,43 @@ export function leadInitials(lead: Pick<Lead, 'first_name' | 'last_name'>): stri
   return [lead.first_name?.[0], lead.last_name?.[0]].filter(Boolean).join('').toUpperCase() || '?';
 }
 
-/** Fetches all leads for a client with only the columns used by the UI.
- *  When the multi_business flag is on, results are scoped to the current
- *  business; the businessId is part of the query key so switching refetches. */
-export function useLeads(userId: string | undefined) {
+/** Hard ceiling on how many lead rows a single fetch pulls into the browser.
+ *  Replaces the old unbounded SELECT (BUG-028): with a text search the server
+ *  narrows first, so the cap only bites on an unfiltered fetch in a huge
+ *  workspace — where "top {cap} by score, search to find the rest" is the right
+ *  behaviour. Exported so the UI can show a "showing first N" hint when hit. */
+export const LEAD_FETCH_CAP = 2000;
+
+/** Build the server-side text-search filter, token-aware so "john smith" matches
+ *  first_name~john AND last_name~smith. Chained .or() calls AND together, so each
+ *  token must match some field. Returns the tokens (≤3) or [] if too short. */
+export function leadSearchTokens(search: string | undefined): string[] {
+  const cleaned = (search ?? '').trim().replace(/[,()]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (cleaned.length < 2) return [];
+  return cleaned.split(' ').filter(t => t.length >= 2).slice(0, 3);
+}
+
+/** Fetches leads for a client with only the columns the UI needs, bounded by
+ *  LEAD_FETCH_CAP and (when `search` is given) filtered SERVER-SIDE across
+ *  first/last name, email and company. When the multi_business flag is on,
+ *  results are scoped to the current business; businessId + search are part of
+ *  the query key so switching/typing refetches. */
+export function useLeads(userId: string | undefined, opts?: { search?: string }) {
   const { currentBusinessId, multiBusinessEnabled } = useCurrentBusiness();
   const bizId = multiBusinessEnabled ? currentBusinessId : null;
+  const tokens = leadSearchTokens(opts?.search);
   return useQuery<Lead[]>({
-    queryKey: ['leads', userId, bizId],
+    queryKey: ['leads', userId, bizId, tokens.join('|')],
     queryFn: async () => {
       if (!userId) return [];
       let q = supabase.from('leads').select(LEAD_COLUMNS).eq('client_id', userId);
       if (bizId) q = q.eq('business_id', bizId);
-      const { data, error } = await q.order('score', { ascending: false });
+      // One .or() per token → tokens are AND-ed, fields within a token are OR-ed.
+      for (const t of tokens) {
+        const like = `%${t}%`;
+        q = q.or(`first_name.ilike.${like},last_name.ilike.${like},primary_email.ilike.${like},company.ilike.${like}`);
+      }
+      const { data, error } = await q.order('score', { ascending: false }).limit(LEAD_FETCH_CAP);
       if (error) throw error;
       return normalizeLeads(data || []);
     },
