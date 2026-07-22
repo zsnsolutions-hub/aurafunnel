@@ -6,6 +6,7 @@ import { getGeminiClient } from "./geminiClient";
 import { AI_MODELS } from "./aiConfig";
 import { buildMemoryContext, resolveWorkspaceForUser } from "./memory";
 import { resolveBrain } from "./businessBrain";
+import { activeBusinessId } from "./businessScope";
 
 // AI Memory injection (Phase 2 — outreach-only scope).
 //
@@ -24,6 +25,7 @@ async function safeMemoryContext(opts: {
     if (!workspaceId) return '';
     return await buildMemoryContext({
       workspaceId,
+      businessId: activeBusinessId(),
       leadId: opts.leadId,
       campaignKind: opts.campaignKind,
       campaignId: opts.campaignId,

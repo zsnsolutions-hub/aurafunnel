@@ -126,8 +126,16 @@ export interface CampaignMemoryRow {
 
 // ── Workspace memory ──
 
+// Recall returns rows for the active business PLUS truly-global rows
+// (business_id IS NULL — e.g. workspace-level goal outcomes). Passing no
+// businessId keeps the old workspace-wide behaviour. This is the core BUG-016
+// fix: without it, Business A's learned facts bleed into Business B generation.
+const businessScopeFilter = (businessId?: string | null) =>
+  businessId ? `business_id.eq.${businessId},business_id.is.null` : null;
+
 export async function recallWorkspaceMemory(opts: {
   workspaceId: string;
+  businessId?: string | null;
   kinds?: string[];
   tags?: string[];
   limit?: number;
@@ -138,6 +146,8 @@ export async function recallWorkspaceMemory(opts: {
     .eq('workspace_id', opts.workspaceId)
     .order('updated_at', { ascending: false })
     .limit(opts.limit ?? 25);
+  const bf = businessScopeFilter(opts.businessId);
+  if (bf) q = q.or(bf);
   if (opts.kinds?.length) q = q.in('kind', opts.kinds);
   if (opts.tags?.length) q = q.contains('tags', opts.tags);
   const { data, error } = await q;
@@ -147,6 +157,7 @@ export async function recallWorkspaceMemory(opts: {
 
 export async function rememberWorkspace(opts: {
   workspaceId: string;
+  businessId?: string | null;
   kind: string;
   value: unknown;
   key?: string;
@@ -157,6 +168,7 @@ export async function rememberWorkspace(opts: {
 }): Promise<void> {
   const { error } = await supabase.from('workspace_memory').insert({
     workspace_id: opts.workspaceId,
+    business_id: opts.businessId ?? null,
     kind: opts.kind,
     key: opts.key ?? null,
     value: opts.value,
@@ -173,9 +185,12 @@ export async function rememberWorkspace(opts: {
 export async function recallLeadMemory(opts: {
   workspaceId: string;
   leadId: string;
+  businessId?: string | null;
   kinds?: string[];
   limit?: number;
 }): Promise<LeadMemoryRow[]> {
+  // lead_memory is already lead-scoped (a lead belongs to one business), so
+  // there's no cross-business bleed here; the business filter is defence-in-depth.
   let q = supabase
     .from('lead_memory')
     .select('*')
@@ -183,6 +198,8 @@ export async function recallLeadMemory(opts: {
     .eq('lead_id', opts.leadId)
     .order('created_at', { ascending: false })
     .limit(opts.limit ?? 25);
+  const bf = businessScopeFilter(opts.businessId);
+  if (bf) q = q.or(bf);
   if (opts.kinds?.length) q = q.in('kind', opts.kinds);
   const { data, error } = await q;
   if (error) throw error;
@@ -192,6 +209,7 @@ export async function recallLeadMemory(opts: {
 export async function rememberLead(opts: {
   workspaceId: string;
   leadId: string;
+  businessId?: string | null;
   kind: string;
   value: unknown;
   source?: string;
@@ -202,6 +220,7 @@ export async function rememberLead(opts: {
   const { error } = await supabase.from('lead_memory').insert({
     workspace_id: opts.workspaceId,
     lead_id: opts.leadId,
+    business_id: opts.businessId ?? null,
     kind: opts.kind,
     value: opts.value,
     source: opts.source ?? 'system',
@@ -216,6 +235,7 @@ export async function rememberLead(opts: {
 
 export async function recallCampaignMemory(opts: {
   workspaceId: string;
+  businessId?: string | null;
   campaignKind?: string;
   campaignId?: string;
   kinds?: string[];
@@ -227,6 +247,8 @@ export async function recallCampaignMemory(opts: {
     .eq('workspace_id', opts.workspaceId)
     .order('observed_at', { ascending: false })
     .limit(opts.limit ?? 25);
+  const bf = businessScopeFilter(opts.businessId);
+  if (bf) q = q.or(bf);
   if (opts.campaignKind) q = q.eq('campaign_kind', opts.campaignKind);
   if (opts.campaignId) q = q.eq('campaign_id', opts.campaignId);
   if (opts.kinds?.length) q = q.in('kind', opts.kinds);
@@ -237,6 +259,7 @@ export async function recallCampaignMemory(opts: {
 
 export async function rememberCampaign(opts: {
   workspaceId: string;
+  businessId?: string | null;
   campaignKind: string;
   campaignId: string;
   kind: string;
@@ -248,6 +271,7 @@ export async function rememberCampaign(opts: {
 }): Promise<void> {
   const { error } = await supabase.from('campaign_memory').insert({
     workspace_id: opts.workspaceId,
+    business_id: opts.businessId ?? null,
     campaign_kind: opts.campaignKind,
     campaign_id: opts.campaignId,
     kind: opts.kind,
@@ -268,6 +292,7 @@ export async function rememberCampaign(opts: {
 
 export async function buildMemoryContext(opts: {
   workspaceId: string;
+  businessId?: string | null;
   leadId?: string;
   campaignKind?: string;
   campaignId?: string;
@@ -276,12 +301,14 @@ export async function buildMemoryContext(opts: {
   const [ws, lead, campaign] = await Promise.all([
     recallWorkspaceMemory({
       workspaceId: opts.workspaceId,
+      businessId: opts.businessId,
       kinds: opts.workspaceKinds,
       limit: 12,
     }).catch(() => []),
     opts.leadId
       ? recallLeadMemory({
           workspaceId: opts.workspaceId,
+          businessId: opts.businessId,
           leadId: opts.leadId,
           limit: 8,
         }).catch(() => [])
@@ -289,6 +316,7 @@ export async function buildMemoryContext(opts: {
     opts.campaignId && opts.campaignKind
       ? recallCampaignMemory({
           workspaceId: opts.workspaceId,
+          businessId: opts.businessId,
           campaignKind: opts.campaignKind,
           campaignId: opts.campaignId,
           limit: 8,
