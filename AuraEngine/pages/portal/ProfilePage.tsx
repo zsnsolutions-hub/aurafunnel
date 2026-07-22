@@ -82,13 +82,12 @@ const WriteWithAIChip: React.FC<{
       const msg = (err as Error).message || 'Generation failed';
       console.error('[WriteWithAI] failed:', msg);
       setError(msg);
-      setTimeout(() => setError(null), 12000);
     } finally {
       setLoading(false);
     }
   };
   return (
-    <div className="inline-flex items-center gap-2">
+    <>
       <button
         type="button"
         onClick={handleClick}
@@ -101,8 +100,20 @@ const WriteWithAIChip: React.FC<{
           : <span className="text-indigo-600">✨</span>}
         {loading ? 'Writing…' : 'Write with AI · 1 cr'}
       </button>
-      {error && <span className="text-[10px] font-bold text-rose-600 max-w-[320px] leading-tight" title={error}>{error}</span>}
-    </div>
+      {error && (
+        <div role="alert" className="basis-full order-last flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <AlertTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0 text-rose-500" />
+          <div className="flex-1 min-w-0">
+            <p className="font-bold leading-snug">Couldn't write this field with AI</p>
+            <p className="font-medium leading-snug break-words">{error}</p>
+          </div>
+          <button type="button" onClick={handleClick} disabled={loading} className="flex-shrink-0 font-bold text-rose-700 underline hover:text-rose-900 disabled:opacity-60">Retry</button>
+          <button type="button" onClick={() => setError(null)} title="Dismiss" aria-label="Dismiss error" className="flex-shrink-0 text-rose-400 hover:text-rose-600">
+            <XIcon className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+    </>
   );
 };
 
