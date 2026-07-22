@@ -975,7 +975,7 @@ const parseAnalysisJSON = (text: string): BusinessAnalysisResult | null => {
 async function streamGenerateText(
   prompt: string,
   systemInstruction: string,
-  opts: { temperature?: number; topP?: number; operation?: string } = {},
+  opts: { temperature?: number; topP?: number; operation?: string; responseMimeType?: string; responseSchema?: unknown } = {},
 ): Promise<string> {
   const supabaseUrl = (import.meta as unknown as { env: Record<string, string> }).env.VITE_SUPABASE_URL;
   if (!supabaseUrl) throw new Error('VITE_SUPABASE_URL not configured');
@@ -986,7 +986,7 @@ async function streamGenerateText(
   const res = await fetch(`${supabaseUrl}/functions/v1/ai-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ prompt, systemInstruction, temperature: opts.temperature, topP: opts.topP, operation: opts.operation }),
+    body: JSON.stringify({ prompt, systemInstruction, temperature: opts.temperature, topP: opts.topP, operation: opts.operation, responseMimeType: opts.responseMimeType, responseSchema: opts.responseSchema }),
   });
   if (!res.ok || !res.body) {
     const t = await res.text().catch(() => '');
@@ -1245,6 +1245,9 @@ Rules:
       const accumulate = (async () => {
         text = await streamGenerateText(prompt, systemInstruction, {
           temperature: resolved.temperature, topP: resolved.topP, operation: 'business_analysis',
+          // JSON mode → guaranteed-valid JSON, so parseAnalysisJSON never fails on
+          // prose/markdown wrapping (Roadmap 2.2).
+          responseMimeType: 'application/json',
         });
       })();
       await Promise.race([accumulate, timeoutPromise()]);

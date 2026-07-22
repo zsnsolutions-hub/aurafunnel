@@ -54,7 +54,7 @@ serve(async (req) => {
 
   if (!GEMINI_API_KEY) return json({ error: "GEMINI_API_KEY not configured" }, 500);
 
-  let body: { prompt?: string; systemInstruction?: string; temperature?: number; topP?: number; operation?: string };
+  let body: { prompt?: string; systemInstruction?: string; temperature?: number; topP?: number; operation?: string; responseMimeType?: string; responseSchema?: unknown };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body" }, 400); }
   const prompt = body.prompt;
   if (!prompt || typeof prompt !== "string") return json({ error: "prompt is required" }, 400);
@@ -79,6 +79,11 @@ serve(async (req) => {
     topP: typeof body.topP === "number" ? body.topP : 0.9,
   };
   if (body.systemInstruction) config.systemInstruction = body.systemInstruction;
+  // Structured-output passthrough (Roadmap 2.2). responseMimeType:'application/json'
+  // puts Gemini in JSON mode so callers like the business analyzer get valid JSON
+  // instead of prose to best-effort-parse. Optional responseSchema constrains shape.
+  if (body.responseMimeType) config.responseMimeType = body.responseMimeType;
+  if (body.responseSchema) config.responseSchema = body.responseSchema;
 
   const encoder = new TextEncoder();
   const readable = new ReadableStream({

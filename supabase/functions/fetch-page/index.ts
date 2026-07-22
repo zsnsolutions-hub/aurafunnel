@@ -14,7 +14,18 @@ import { adminClient } from "../_shared/auth.ts";
 
 const MAX_CHARS = 45_000;
 const PER_PAGE_TIMEOUT_MS = 10_000;
-const SUBPATHS = ["", "/about", "/about-us", "/services", "/products", "/pricing", "/solutions"];
+const MAX_PAGES = 12;              // homepage + up to this many discovered pages
+const MAX_SITEMAP_CHILDREN = 3;    // cap child sitemaps we expand from an index
+const MAX_CANDIDATES = 400;        // safety bound on URLs considered
+
+// Path keywords that signal high-value business pages, best first. Used to rank
+// discovered links + sitemap URLs so we crawl the pages that describe the business.
+const PRIORITY = [
+  "about", "company", "who-we-are", "services", "solutions", "products", "product",
+  "platform", "features", "pricing", "plans", "team", "leadership", "customers",
+  "case-stud", "clients", "industries", "faq", "contact",
+];
+const SKIP_EXT = /\.(pdf|jpe?g|png|gif|svg|webp|mp4|mp3|zip|css|js|xml|json|ico|woff2?)($|\?)/i;
 
 function json(body: unknown, status: number, headers: Record<string, string>): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json" } });
@@ -57,21 +68,92 @@ function extractHead(html: string): string {
   return parts.join("\n");
 }
 
-async function fetchOne(url: string): Promise<{ head: string; body: string }> {
+// Fetch a URL and return the raw HTML (or "" on any failure / non-HTML).
+async function fetchRaw(url: string, accept = "text/html"): Promise<string> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), PER_PAGE_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
       redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; ScaliyoBot/1.0; +https://scaliyo.com)", "Accept": "text/html" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; ScaliyoBot/1.0; +https://scaliyo.com)", "Accept": accept },
     });
-    if (!res.ok) return { head: "", body: "" };
+    if (!res.ok) return "";
     const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("html") && !ct.includes("text")) return { head: "", body: "" };
-    const html = await res.text();
-    return { head: extractHead(html), body: htmlToText(html) };
-  } catch { return { head: "", body: "" }; } finally { clearTimeout(t); }
+    if (!ct.includes("html") && !ct.includes("text") && !ct.includes("xml")) return "";
+    return await res.text();
+  } catch { return ""; } finally { clearTimeout(t); }
+}
+
+// Same-registrable-host check (SSRF + relevance): only crawl the target's origin.
+function sameHost(u: URL, base: URL): boolean {
+  return u.hostname.toLowerCase() === base.hostname.toLowerCase();
+}
+
+function normalize(href: string, base: URL): string | null {
+  try {
+    const u = new URL(href, base);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    if (!sameHost(u, base)) return null;
+    if (SKIP_EXT.test(u.pathname)) return null;
+    u.hash = "";
+    u.search = "";
+    return u.toString().replace(/\/$/, "");
+  } catch { return null; }
+}
+
+// Discover same-origin links from a page's <a href> attributes.
+function discoverLinks(html: string, base: URL): string[] {
+  const out = new Set<string>();
+  for (const m of html.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["']/gi)) {
+    const n = normalize(m[1], base);
+    if (n) out.add(n);
+    if (out.size >= MAX_CANDIDATES) break;
+  }
+  return [...out];
+}
+
+// Fetch sitemap.xml (following one level of sitemap-index) and return page URLs.
+async function fetchSitemapUrls(base: URL): Promise<string[]> {
+  const origin = `${base.protocol}//${base.host}`;
+  const xml = await fetchRaw(`${origin}/sitemap.xml`, "application/xml");
+  if (!xml) return [];
+  const locs = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1].trim());
+  const isIndex = /<sitemapindex/i.test(xml);
+  const out = new Set<string>();
+  if (isIndex) {
+    for (const child of locs.slice(0, MAX_SITEMAP_CHILDREN)) {
+      const childXml = await fetchRaw(child, "application/xml");
+      for (const m of childXml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)) {
+        const n = normalize(m[1].trim(), base);
+        if (n) out.add(n);
+        if (out.size >= MAX_CANDIDATES) break;
+      }
+    }
+  } else {
+    for (const l of locs) {
+      const n = normalize(l, base);
+      if (n) out.add(n);
+      if (out.size >= MAX_CANDIDATES) break;
+    }
+  }
+  return [...out];
+}
+
+// Rank a URL by how likely it is to describe the business (priority keywords +
+// shallow paths first).
+function scoreUrl(url: string): number {
+  const path = url.toLowerCase();
+  let score = 0;
+  PRIORITY.forEach((kw, i) => { if (path.includes(kw)) score += PRIORITY.length - i; });
+  const depth = (new URL(url).pathname.match(/\//g) || []).length;
+  score -= depth; // prefer shallower pages
+  return score;
+}
+
+async function fetchText(url: string): Promise<string> {
+  const html = await fetchRaw(url);
+  return html ? htmlToText(html) : "";
 }
 
 serve(async (req) => {
@@ -101,22 +183,44 @@ serve(async (req) => {
     return json({ error: "URL not allowed" }, 400, cors);
   }
 
-  const origin = `${base.protocol}//${base.host}`;
-  const results = await Promise.all(SUBPATHS.map((p) => fetchOne(p === "" ? raw : `${origin}${p}`)));
+  // 1. Homepage: raw HTML gives us the richest head metadata AND the nav/footer
+  //    links to discover the rest of the site.
+  const homeHtml = await fetchRaw(raw);
+  const head = homeHtml ? extractHead(homeHtml) : "";
+  const homeText = homeHtml ? htmlToText(homeHtml) : "";
 
-  // Head metadata (title / description / OG / JSON-LD) from the homepage first —
-  // this is the richest signal for SPAs whose <body> is empty on a raw fetch.
-  const head = results.find((r) => r.head)?.head ?? "";
+  // 2. Discover candidate pages from the homepage links + sitemap.xml, rank by
+  //    business relevance, and pick the top N same-origin pages to crawl.
+  const homeUrl = normalize(raw, base) ?? raw.replace(/\/$/, "");
+  const [links, sitemap] = await Promise.all([
+    Promise.resolve(discoverLinks(homeHtml, base)),
+    fetchSitemapUrls(base).catch(() => [] as string[]),
+  ]);
+  const candidates = [...new Set([...links, ...sitemap])].filter((u) => u !== homeUrl);
+  const chosen = candidates
+    .map((u) => ({ u, s: scoreUrl(u) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, MAX_PAGES)
+    .map((x) => x.u);
+
+  // 3. Fetch the chosen pages and assemble deduped text (head + homepage first).
+  const pageTexts = await Promise.all(chosen.map((u) => fetchText(u).catch(() => "")));
+
   let text = head;
   const seen = new Set<string>();
-  for (const r of results) {
-    const body = r.body;
-    if (!body || body.length < 40 || seen.has(body.slice(0, 200))) continue;
-    seen.add(body.slice(0, 200));
+  const append = (body: string) => {
+    if (!body || body.length < 40) return;
+    const key = body.slice(0, 200);
+    if (seen.has(key)) return;
+    seen.add(key);
     text += (text ? "\n\n" : "") + body;
+  };
+  append(homeText);
+  for (const t of pageTexts) {
     if (text.length >= MAX_CHARS) break;
+    append(t);
   }
   text = text.slice(0, MAX_CHARS);
 
-  return json({ text, chars: text.length, url: raw }, 200, cors);
+  return json({ text, chars: text.length, url: raw, pages_crawled: 1 + chosen.length }, 200, cors);
 });
