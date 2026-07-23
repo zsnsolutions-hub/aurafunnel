@@ -164,6 +164,7 @@ serve(async (req) => {
 
     // In-memory config cache
     const configCache = new Map<string, SequenceConfig>();
+    const wsCache = new Map<string, string | null>(); // run_id → workspace_id (for the AI ceiling)
 
     let processed = 0;
     let remaining = 0;
@@ -190,14 +191,36 @@ serve(async (req) => {
         if (!configCache.has(runId)) {
           const { data: run } = await supabaseAdmin
             .from("email_sequence_runs")
-            .select("sequence_config")
+            .select("sequence_config, workspace_id")
             .eq("id", runId)
             .single();
 
           configCache.set(runId, (run?.sequence_config ?? {}) as SequenceConfig);
+          wsCache.set(runId, (run?.workspace_id as string | null) ?? null);
         }
 
         const config = configCache.get(runId)!;
+
+        // AI ceiling enforcement (Roadmap 2.4 — this background worker was a
+        // metering bypass). Charge the run's workspace per email written. If the
+        // cap is hit, release the claimed item (back to pending) and stop — the
+        // remaining items resume on a later tick once credits free up.
+        const wsId = wsCache.get(runId) ?? null;
+        if (wsId) {
+          const { data: quota, error: qErr } = await supabaseAdmin.rpc("enforce_ai_proxy_quota_ws", {
+            p_workspace_id: wsId, p_operation: "email_generation", p_kind: "content",
+          });
+          const q = quota as { allowed?: boolean } | null;
+          if (!qErr && q && q.allowed === false) {
+            await supabaseAdmin
+              .from("email_sequence_run_items")
+              .update({ status: "pending", locked_until: null, attempt_count: item.attempt_count - 1, updated_at: new Date().toISOString() })
+              .eq("id", item.id);
+            console.warn(`[writing-queue] workspace ${wsId} over AI ceiling — deferring run ${runId}`);
+            break;
+          }
+        }
+
         const { systemInstruction, userPrompt } = buildPrompt(item, config);
 
         // Call Gemini

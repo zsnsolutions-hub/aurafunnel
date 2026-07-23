@@ -3,7 +3,7 @@
 // lead_score: scores up to SCORE_MAX_LEADS workspace leads 0-100 against ICP
 // using Gemini, writes back to leads.score, and tallies hot/warm/cold.
 
-import { geminiGenerate } from "./gemini.ts";
+import { geminiGenerate, enforceGoalQuota } from "./gemini.ts";
 import type { PlanStep, StepContext, StepResult } from "./types.ts";
 
 export const kind = "lead_score";
@@ -39,6 +39,7 @@ export async function live(ctx: StepContext, _step: PlanStep): Promise<StepResul
     let scored = 0, failed = 0, hot = 0, warm = 0, cold = 0;
     for (const l of leads) {
       const prompt = `Score this B2B prospect 0-100 for ICP fit. Output JSON ONLY: {"score": int, "tier": "hot"|"warm"|"cold", "reason": "one sentence"}.\n\nProspect: ${l.first_name} ${l.last_name}, ${l.title} at ${l.company} (${l.industry ?? "unknown industry"}).\nInsights: ${l.insights ?? "(none)"}`;
+      if (!(await enforceGoalQuota(admin, workspaceId, "lead_scoring")).allowed) break; // AI ceiling — stop, keep what's scored
       try {
         const { text } = await geminiGenerate(geminiApiKey, prompt, "You are a B2B ICP scorer. Output strict JSON only.", { responseMimeType: "application/json" });
         const cleaned = text.replace(/^```(?:json)?\s*/, "").replace(/```\s*$/, "").trim();

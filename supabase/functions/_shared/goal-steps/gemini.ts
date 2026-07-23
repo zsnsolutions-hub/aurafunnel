@@ -8,6 +8,28 @@ import { AI_MODELS, geminiEndpoint } from "../aiModels.ts";
 
 const GEMINI_ENDPOINT = geminiEndpoint(AI_MODELS.goals);
 
+// Minimal shape of the service-role client's rpc() — avoids importing the SDK type.
+interface QuotaClient { rpc(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: unknown }> }
+
+// AI ceiling enforcement for goal-step LLM calls (Roadmap 2.4). goal-executor runs
+// under service role with no request user, so meter against the goal's WORKSPACE
+// directly (enforce_ai_proxy_quota_ws) — check-and-increment per call. Each live()
+// step handler calls this before its geminiGenerate call(s); a per-lead loop
+// breaks on !allowed (partial success), a single-shot step throws. Fails OPEN on
+// an infra/RPC error so a quota-service blip never wedges automation.
+export async function enforceGoalQuota(
+  admin: QuotaClient, workspaceId: string, operation: string,
+): Promise<{ allowed: boolean; reason?: string }> {
+  try {
+    const { data, error } = await admin.rpc("enforce_ai_proxy_quota_ws", {
+      p_workspace_id: workspaceId, p_operation: operation, p_kind: "content",
+    });
+    if (error) return { allowed: true }; // fail open
+    const q = data as { allowed?: boolean; reason?: string } | null;
+    return { allowed: q?.allowed !== false, reason: q?.reason };
+  } catch { return { allowed: true }; }
+}
+
 export async function geminiGenerate(
   apiKey: string,
   prompt: string,

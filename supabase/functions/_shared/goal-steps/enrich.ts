@@ -3,7 +3,7 @@
 // enrich_leads: pulls up to ENRICH_MAX_LEADS workspace leads with empty
 // insights and writes a 2-3 sentence Gemini-produced research note onto each.
 
-import { geminiGenerate } from "./gemini.ts";
+import { geminiGenerate, enforceGoalQuota } from "./gemini.ts";
 import type { PlanStep, StepContext, StepResult } from "./types.ts";
 
 export const kind = "enrich_leads";
@@ -40,6 +40,7 @@ export async function live(ctx: StepContext, _step: PlanStep): Promise<StepResul
     let failed = 0;
     for (const l of leads) {
       const prompt = `Research this B2B prospect and produce a 2-3 sentence insight on their likely pain points and the best opening hook for outreach. Return plain text, no preamble.\n\nName: ${l.first_name ?? ""} ${l.last_name ?? ""}\nTitle: ${l.title ?? "unknown"}\nCompany: ${l.company ?? "unknown"}\nEmail: ${l.primary_email ?? "(none)"}\nLinkedIn: ${l.linkedin_url ?? "(none)"}`;
+      if (!(await enforceGoalQuota(admin, workspaceId, "lead_research")).allowed) break; // AI ceiling — stop, keep what's enriched
       try {
         const { text } = await geminiGenerate(geminiApiKey, prompt, "You are a B2B sales researcher producing terse, useful prospect insights.");
         await admin.from("leads").update({ insights: text.slice(0, 1000), updated_at: new Date().toISOString() }).eq("id", l.id);

@@ -6,7 +6,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isServiceRoleToken } from "../auth.ts";
-import { geminiGenerate } from "./gemini.ts";
+import { geminiGenerate, enforceGoalQuota } from "./gemini.ts";
 import { flagEnabled, gatedSkip, SEND_SOCIAL_FLAG } from "./flags.ts";
 import type { PlanStep, StepContext, StepResult } from "./types.ts";
 
@@ -118,6 +118,12 @@ export async function live(ctx: StepContext, step: PlanStep): Promise<StepResult
     };
   }
 
+  // AI ceiling (Roadmap 2.4). Return a clean result — the executor does NOT
+  // try/catch step handlers, so throwing here would crash the whole run.
+  const gate = await enforceGoalQuota(admin, workspaceId, "social_caption");
+  if (!gate.allowed) {
+    return { status: "skipped", output: { live: true, summary: "Deferred — workspace is over its AI credit ceiling." }, error: `AI ceiling reached (${gate.reason ?? "insufficient_credits"}).` };
+  }
   let copy: string;
   try {
     copy = await generateSocialCopy(geminiApiKey, target.channel, topic, goal.statement);

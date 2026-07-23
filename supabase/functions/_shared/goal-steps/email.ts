@@ -4,7 +4,7 @@
 // and POSTs to start-email-sequence-run. Gated on goal_executor_send_email.
 
 import { isServiceRoleToken } from "../auth.ts";
-import { geminiGenerate } from "./gemini.ts";
+import { geminiGenerate, enforceGoalQuota } from "./gemini.ts";
 import { flagEnabled, gatedSkip, SEND_EMAIL_FLAG } from "./flags.ts";
 import { resolveLeads } from "./leads.ts";
 import type { PlanStep, StepContext, StepResult } from "./types.ts";
@@ -125,6 +125,12 @@ export async function live(ctx: StepContext, step: PlanStep): Promise<StepResult
   }
 
   let generated: GeneratedStep[];
+  // AI ceiling (Roadmap 2.4). Return a clean result — the executor does NOT
+  // try/catch step handlers, so throwing here would crash the whole run.
+  const gate = await enforceGoalQuota(admin, workspaceId, "email_generation");
+  if (!gate.allowed) {
+    return { status: "skipped", output: { live: true, summary: "Deferred — workspace is over its AI credit ceiling." }, error: `AI ceiling reached (${gate.reason ?? "insufficient_credits"}).` };
+  }
   try {
     const sampleTitle = leads[0]?.title ?? "";
     const sampleIndustry = leads.find((l) => !!l.industry)?.industry ?? "";
