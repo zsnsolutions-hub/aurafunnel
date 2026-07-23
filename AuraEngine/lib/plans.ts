@@ -40,7 +40,7 @@ export interface DbPlan {
 
 // ── Default limits (fallback when DB is unreachable) ─────────────────────────
 
-const DEFAULT_LIMITS: Record<string, PlanLimits> = {
+export const DEFAULT_LIMITS: Record<string, PlanLimits> = {
   Free: {
     credits: CREDIT_LIMITS.free, aiCredits: CREDIT_LIMITS.free, contacts: 5, seats: 1, emails: 5, storage: 200,
     maxInboxes: 1, emailsPerDayPerInbox: 5, emailsPerMonth: 5,

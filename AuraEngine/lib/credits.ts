@@ -1,17 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AI_CREDIT_COSTS, getOperationCost } from '../config/aiCreditCosts';
 import { CREDIT_LIMITS, getAiCreditLimit } from '../config/creditLimits';
+import { DEFAULT_LIMITS } from './plans';
 
 // ── Credit costs per AI operation (re-exported from config) ──
 export const CREDIT_COSTS = AI_CREDIT_COSTS;
 
 // ── Tier limits (reads AI credits from config/creditLimits.ts) ────────────
-export const TIER_LIMITS: Record<string, { credits: number; aiCredits: number; contacts: number; seats: number; emails: number; storage: number }> = {
-  Free:     { credits: CREDIT_LIMITS.free,    aiCredits: CREDIT_LIMITS.free,    contacts: 5,     seats: 1,  emails: 5,     storage: 200   },
-  Starter:  { credits: CREDIT_LIMITS.starter, aiCredits: CREDIT_LIMITS.starter, contacts: 1000,  seats: 1,  emails: 2000,  storage: 1000  },
-  Growth:   { credits: CREDIT_LIMITS.growth,  aiCredits: CREDIT_LIMITS.growth,  contacts: 10000, seats: 3,  emails: 15000, storage: 10000 },
-  Scale:    { credits: CREDIT_LIMITS.scale,   aiCredits: CREDIT_LIMITS.scale,   contacts: 50000, seats: 10, emails: 40000, storage: 50000 },
-};
+// Roadmap 6.2 (BUG-021): the compact subset of DEFAULT_LIMITS (lib/plans) — a
+// single source for seats/contacts/emails/storage, not a hand-maintained second
+// copy. (Credit/aiCredit numbers already derive from CREDIT_LIMITS in both.)
+export const TIER_LIMITS: Record<string, { credits: number; aiCredits: number; contacts: number; seats: number; emails: number; storage: number }> =
+  Object.fromEntries(
+    Object.entries(DEFAULT_LIMITS).map(([tier, v]) => [tier, {
+      credits: v.credits, aiCredits: v.aiCredits, contacts: v.contacts,
+      seats: v.seats, emails: v.emails, storage: v.storage,
+    }]),
+  );
 
 // ── Backward-compat plan name resolver ─────────────────────────────────────
 // Canonical implementation lives in lib/plans.ts; re-exported here so the
