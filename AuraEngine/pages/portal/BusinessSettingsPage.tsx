@@ -23,6 +23,7 @@ import { consumeCredits } from '../../lib/credits';
 import { analyzeBusinessFromWeb, generateProfileField, type ProfileGenField } from '../../lib/gemini';
 import type { BusinessProfile } from '../../types';
 import InviteMemberForm from '../../components/team/InviteMemberForm';
+import MembersPanel from '../../components/team/MembersPanel';
 import { useToast } from '../../components/ui/Toast';
 
 type Src = 'business' | 'profile';
@@ -314,7 +315,8 @@ const BusinessSettingsPage: React.FC = () => {
         </div>
       )}
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-6">
+        <MembersPanel />
         <InviteMemberForm businessId={currentBusinessId} businessName={currentBusiness.name} />
       </div>
     </div>

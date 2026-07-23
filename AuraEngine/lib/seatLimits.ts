@@ -45,17 +45,19 @@ export async function getTeamSeatInfo(
   const maxSeats = planCfg.maxUsers ?? null;
   const extraSeatPrice = planCfg.extraSeatPrice ?? 0;
 
-  // 4. Count current members
+  // 4. Count current members — Roadmap 6.1: the CANONICAL workspace_members model
+  //    (workspace.id == the owner's uid), matching the real invite path, not the
+  //    legacy team_members table the seat counter used before.
   const { count: memberCount } = await supabase
-    .from('team_members')
-    .select('id', { count: 'exact', head: true })
-    .eq('team_id', teamId);
+    .from('workspace_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('workspace_id', ownerId);
 
-  // 5. Count pending invites
+  // 5. Count pending invites (canonical workspace_invites pipeline)
   const { count: inviteCount } = await supabase
-    .from('team_invites')
+    .from('workspace_invites')
     .select('id', { count: 'exact', head: true })
-    .eq('team_id', teamId)
+    .eq('workspace_id', ownerId)
     .eq('status', 'pending');
 
   // 6. Get extra seats bought

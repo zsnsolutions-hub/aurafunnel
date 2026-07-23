@@ -6,11 +6,28 @@
 import { supabase } from './supabase';
 import { resolveWorkspaceId } from './tenancy';
 
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer';
+export const ASSIGNABLE_ROLES: WorkspaceRole[] = ['admin', 'member', 'viewer'];
+
 export interface WorkspaceMember {
   userId: string;
   name: string;
   email: string;
   role: string | null;
+}
+
+/** Change a member's role (owner/admin only; last owner protected — server-enforced). */
+export async function updateWorkspaceMemberRole(userId: string, role: WorkspaceRole): Promise<{ success: boolean; message?: string }> {
+  const { data, error } = await supabase.rpc('update_workspace_member_role', { p_user_id: userId, p_role: role });
+  if (error) return { success: false, message: error.message };
+  return data as { success: boolean; message?: string };
+}
+
+/** Remove a member (owner/admin, or self-leave; last owner protected — server-enforced). */
+export async function removeWorkspaceMember(userId: string): Promise<{ success: boolean; message?: string }> {
+  const { data, error } = await supabase.rpc('remove_workspace_member', { p_user_id: userId });
+  if (error) return { success: false, message: error.message };
+  return data as { success: boolean; message?: string };
 }
 
 export async function listWorkspaceMembers(userId: string): Promise<WorkspaceMember[]> {
