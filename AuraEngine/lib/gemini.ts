@@ -1477,6 +1477,53 @@ Output: just the field text. Plain text. No labels, no quotes.`;
   };
 }
 
+// ─── Pre-call AI script (Roadmap 5.2) ─────────────────────────────────────
+// Builds a short, natural call script for a lead from the lead's fields + the
+// active business brain. Standalone — works without Twilio.
+export async function generateCallScript(leadId: string): Promise<string> {
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('first_name,last_name,company,title,industry,location,primary_email,insights,score,status')
+    .eq('id', leadId)
+    .maybeSingle();
+  if (!lead) throw new Error('Lead not found.');
+
+  const brain = await resolveBrain();
+  const businessCtx = buildBusinessContext(brain);
+  const leadCtx = [
+    `Name: ${[lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'the prospect'}`,
+    lead.title && `Title: ${lead.title}`,
+    lead.company && `Company: ${lead.company}`,
+    lead.industry && `Industry: ${lead.industry}`,
+    lead.location && `Location: ${lead.location}`,
+    lead.status && `Pipeline stage: ${lead.status}`,
+    typeof lead.score === 'number' && `Lead score: ${lead.score}/100`,
+    lead.insights && `Research/insights: ${lead.insights}`,
+  ].filter(Boolean).join('\n');
+
+  const systemInstruction = `You are an expert B2B sales coach. You write concise, natural phone-call scripts a rep can actually say out loud — not robotic. Structure the output with clear short sections and NO markdown headers heavier than a bold line. Keep the whole thing under ~250 words.`;
+  const prompt = `Write a warm outbound call script for this prospect.${businessCtx}
+
+PROSPECT:
+${leadCtx}
+
+Include, briefly:
+1. A natural opener that references something specific about them.
+2. A one-sentence reason for the call tied to a value prop.
+3. 2-3 discovery questions.
+4. One likely objection + a short response.
+5. A low-friction close (book a next step).
+
+Output plain text the rep can read. No preamble.`;
+
+  const text = await streamGenerateText(prompt, systemInstruction, {
+    temperature: 0.7, topP: 0.9, operation: 'call_script',
+  });
+  const out = text.trim();
+  if (!out) throw new Error('The AI returned nothing — please try again.');
+  return out;
+}
+
 export const generateFollowUpQuestions = async (
   currentProfile: BusinessProfile,
   previousQA?: { field: string; question: string; answer: string }[],

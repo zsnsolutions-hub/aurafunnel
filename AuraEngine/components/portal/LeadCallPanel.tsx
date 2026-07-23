@@ -15,6 +15,7 @@ import { PhoneIcon } from '../Icons';
 import { supabase } from '../../lib/supabase';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
 import { fetchVoiceToken, toE164, formatDuration } from '../../lib/twilioVoice';
+import CallScriptButton from './CallScriptButton';
 
 type CallState = 'idle' | 'connecting' | 'ringing' | 'live' | 'ended' | 'error';
 
@@ -202,6 +203,11 @@ const LeadCallPanel: React.FC<Props> = ({ leadId, clientId, businessId, phones, 
             </div>
           </>
         )}
+      </div>
+
+      {/* Pre-call AI script (Roadmap 5.2) — works even without Twilio configured. */}
+      <div className="mt-2">
+        <CallScriptButton leadId={leadId} leadName={leadName} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100" />
       </div>
 
       {notConfigured && (

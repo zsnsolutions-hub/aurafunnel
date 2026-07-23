@@ -36,18 +36,10 @@ function toE164(raw: string): string {
 interface LeadMatch { id: string; client_id: string; business_id: string | null }
 
 async function matchLead(admin: ReturnType<typeof adminClient>, from: string): Promise<LeadMatch | null> {
-  const target = toE164(from);
-  const { data } = await admin
-    .from("leads")
-    .select("id, client_id, business_id, primary_phone, phones")
-    .not("primary_phone", "is", null)
-    .limit(3000);
-  for (const r of (data ?? []) as { id: string; client_id: string; business_id: string | null; primary_phone: string | null; phones: string[] | null }[]) {
-    if ((r.primary_phone && toE164(r.primary_phone) === target) || (r.phones ?? []).some(p => toE164(p) === target)) {
-      return { id: r.id, client_id: r.client_id, business_id: r.business_id };
-    }
-  }
-  return null;
+  // Roadmap 5.1 (BUG-035) — indexed reverse lookup instead of a 3000-row scan.
+  const { data } = await admin.rpc("find_lead_by_phone", { p_phone: from });
+  const r = (Array.isArray(data) ? data[0] : null) as { id: string; client_id: string; business_id: string | null } | null;
+  return r ? { id: r.id, client_id: r.client_id, business_id: r.business_id } : null;
 }
 
 serve(async (req) => {

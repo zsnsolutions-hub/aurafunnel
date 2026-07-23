@@ -55,25 +55,19 @@ const IncomingCallProvider: React.FC<Props> = ({ userId }) => {
   // Reverse-lookup the caller number → a lead owned by this user (best-effort,
   // normalized match on primary_phone / phones[]).
   const matchLead = useCallback(async (from: string): Promise<Caller> => {
-    const target = toE164(from);
+    // Roadmap 5.1 (BUG-035) — indexed reverse lookup RPC (RLS scopes to the
+    // user's workspace leads) instead of pulling 2000 rows and matching in JS.
     const fallback: Caller = { name: 'Unknown caller', number: from, leadId: null, businessId: null };
     try {
-      const { data } = await supabase.from('leads')
-        .select('id, first_name, last_name, primary_phone, phones, business_id')
-        .eq('client_id', userId)
-        .not('primary_phone', 'is', null)
-        .limit(2000);
-      for (const r of (data ?? []) as { id: string; first_name: string | null; last_name: string | null; primary_phone: string | null; phones: string[] | null; business_id: string | null }[]) {
-        const hit = (r.primary_phone && toE164(r.primary_phone) === target) ||
-                    (r.phones ?? []).some(p => toE164(p) === target);
-        if (hit) {
-          const name = `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || from;
-          return { name, number: from, leadId: r.id, businessId: r.business_id };
-        }
+      const { data } = await supabase.rpc('find_lead_by_phone', { p_phone: from });
+      const r = (Array.isArray(data) ? data[0] : null) as { id: string; first_name: string | null; last_name: string | null; business_id: string | null } | null;
+      if (r) {
+        const name = `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || from;
+        return { name, number: from, leadId: r.id, businessId: r.business_id };
       }
     } catch { /* fall through to unknown */ }
     return fallback;
-  }, [userId]);
+  }, []);
 
   const onIncoming = useCallback((call: Call) => {
     // Ignore a second call while one is active.

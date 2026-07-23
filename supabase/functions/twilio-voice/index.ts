@@ -14,10 +14,12 @@
 //          optionally TWILIO_AUTH_TOKEN.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyTwilioSignature } from "../_shared/twilio.ts";
 
 const CALLER_ID = Deno.env.get("TWILIO_CALLER_ID") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const xmlEscape = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -44,6 +46,26 @@ serve(async (req) => {
     const to = (params["To"] ?? "").trim();
     if (!to || !CALLER_ID) {
       return twiml(`<Say>This number can't be called right now.</Say>`);
+    }
+
+    // Server-side credit gate (Roadmap 5.1 / BUG-010). The browser also charges
+    // (workspace_ai_usage), but that's bypassable; enforce the workspace AI
+    // ceiling here too — a distinct counter (ai_proxy_usage). Identity comes from
+    // the signed Voice token: From = "client:<userId>". Fail OPEN on any infra
+    // error so a metering blip never blocks a legitimate call.
+    const from = params["From"] ?? "";
+    const callerUserId = from.startsWith("client:") ? from.slice("client:".length) : "";
+    if (callerUserId && SUPABASE_URL && SERVICE_ROLE_KEY) {
+      try {
+        const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+        const { data, error } = await admin.rpc("enforce_ai_proxy_quota", {
+          p_user_id: callerUserId, p_operation: "voice_call", p_kind: "content",
+        });
+        const q = data as { allowed?: boolean } | null;
+        if (!error && q && q.allowed === false) {
+          return twiml(`<Say>You have reached your calling credit limit for this month. Please upgrade your plan to keep making calls.</Say>`);
+        }
+      } catch (_e) { /* fail open */ }
     }
 
     // Where Twilio reports the finished call (duration + recording + status).

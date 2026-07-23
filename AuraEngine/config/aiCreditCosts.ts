@@ -39,6 +39,7 @@ export const AI_CREDIT_COSTS = {
 
   // Voice
   follow_up_questions: 1,
+  call_script: 2,
 
   // Calling (VOIP) — charged per outbound call placed
   voice_call: 3,
