@@ -66,6 +66,11 @@ serve(async (req) => {
             from_email: email.from_email || undefined,
             track_opens: true,
             track_clicks: true,
+            // Roadmap 3.3: carry attribution so any sequence-linked scheduled row
+            // still stamps email_messages (block_index = the step). subject_variant
+            // isn't stored on scheduled_emails, so it stays null on this path.
+            sequence_id: email.sequence_id || undefined,
+            sequence_step: email.block_index ?? undefined,
           }),
         });
 

@@ -7,7 +7,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw, Search, UserPlus, Eye, Braces, ChevronUp, ChevronDown, Copy } from 'lucide-react';
+import { Megaphone, Plus, Trash2, Send, X, Users, Mail, Loader2, RefreshCw, Search, UserPlus, Eye, Braces, ChevronUp, ChevronDown, Copy, FileText, Save } from 'lucide-react';
+import TemplatePickerModal from '../../components/campaigns/TemplatePickerModal';
 import type { User } from '../../types';
 import { useToast } from '../../components/ui/Toast';
 import { consumeCredits, CREDIT_COSTS } from '../../lib/credits';
@@ -137,6 +138,8 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
       : { send_window_start: null, send_window_end: null }).then(() => onChanged());
   }, [campaign.id, onChanged]);
   const [steps, setSteps] = useState<CampaignStep[]>([]);
+  // Roadmap 3.3 — template picker (per step). saveAs set → open prefilled create.
+  const [tplModal, setTplModal] = useState<{ stepId: string; saveAs?: { subject: string; body: string } } | null>(null);
   const [audience, setAudience] = useState<EnrolledLead[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
@@ -546,6 +549,8 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
                       className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-50">
                       {previews[s.id]?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
+                    <button onClick={() => setTplModal({ stepId: s.id })} title="Insert a template" className="p-1 text-slate-300 hover:text-indigo-600"><FileText className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setTplModal({ stepId: s.id, saveAs: { subject: s.subject, body: s.body_html } })} title="Save this step as a template" className="p-1 text-slate-300 hover:text-indigo-600"><Save className="w-3.5 h-3.5" /></button>
                     <button onClick={() => onDuplicateStep(s)} disabled={busy} title="Duplicate step" className="p-1 text-slate-300 hover:text-slate-600 disabled:opacity-50"><Copy className="w-3.5 h-3.5" /></button>
                     <button onClick={() => onDeleteStep(s.id)} title="Delete step" className="p-1 text-slate-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
@@ -672,6 +677,17 @@ const CampaignDrawer: React.FC<DrawerProps> = ({ campaign, userId, onClose, onCh
               Delete
             </button>
           </div>
+
+          {tplModal && (
+            <TemplatePickerModal
+              onClose={() => setTplModal(null)}
+              initialSaveAs={tplModal.saveAs}
+              onUse={(t) => {
+                patchLocalStep(tplModal.stepId, { subject: t.subject_template, body_html: t.body_template });
+                void onStepBlur(tplModal.stepId, { subject: t.subject_template, body_html: t.body_template });
+              }}
+            />
+          )}
         </div>
       </div>
     </div>
