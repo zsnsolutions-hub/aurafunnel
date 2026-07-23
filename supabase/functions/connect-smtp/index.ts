@@ -30,7 +30,11 @@ serve(async (req) => {
       );
     }
 
-    const { workspaceId, host, port, user: smtpUser, pass, fromEmail, fromName, skipValidation } = await req.json();
+    const { workspaceId, host, port, user: smtpUser, pass, fromEmail, fromName, skipValidation, provider: providerHint } = await req.json();
+    // Roadmap 3.2: Gmail App-Password connections come through this SMTP flow but
+    // should stay branded 'gmail' (send-email routes both to SMTP). Everything
+    // else (incl. Outlook, whose host reveals it) is stored as generic 'smtp'.
+    const provider = providerHint === "gmail" ? "gmail" : "smtp";
 
     if (!workspaceId || !host || !smtpUser || !pass || !fromEmail) {
       return new Response(
@@ -113,8 +117,8 @@ serve(async (req) => {
     // ── 2. Store sender account + secrets via RPC ──
     const { error: rpcError } = await supabaseAdmin.rpc("connect_sender_account", {
       p_workspace_id: workspaceId,
-      p_provider: "smtp",
-      p_display_name: fromName ? `${fromName} (SMTP)` : fromEmail,
+      p_provider: provider,
+      p_display_name: fromName ? `${fromName} (${provider === "gmail" ? "Gmail" : "SMTP"})` : fromEmail,
       p_from_email: fromEmail,
       p_from_name: fromName ?? "",
       p_use_for_outreach: true,

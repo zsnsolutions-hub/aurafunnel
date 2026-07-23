@@ -170,7 +170,7 @@ export const PROVIDER_META: Record<SenderProvider, {
 }> = {
   gmail: {
     label: 'Gmail / Google Workspace',
-    description: 'Connect with OAuth. Best for personalized cold outreach.',
+    description: 'Connect with an App Password. Best for personalized cold outreach.',
     outreachSafe: true,
     complianceNote: '',
   },

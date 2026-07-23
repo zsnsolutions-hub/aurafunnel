@@ -129,6 +129,11 @@ const DEFAULT_INTEGRATIONS: Integration[] = [
     objects: ['Email Sending'], icon: '✉️', color: '#EA4335', dataVolume: 0,
   },
   {
+    id: 'outlook', name: 'Outlook SMTP', category: 'email', status: 'disconnected',
+    lastSync: 'Never', syncDirection: 'outbound',
+    objects: ['Email Sending'], icon: '📧', color: '#0078D4', dataVolume: 0,
+  },
+  {
     id: 'smtp', name: 'Custom SMTP', category: 'email', status: 'disconnected',
     lastSync: 'Never', syncDirection: 'outbound',
     objects: ['Email Sending'], icon: '📮', color: '#6B7280', dataVolume: 0,
@@ -212,7 +217,7 @@ const IntegrationHub: React.FC = () => {
   const [configureId, setConfigureId] = useState<string | null>(null);
   const [configForm, setConfigForm] = useState<{ syncDirection: SyncDirection; objects: string[]; syncInterval: string }>({ syncDirection: 'bidirectional', objects: [], syncInterval: '5' });
 
-  const EMAIL_PROVIDERS = useMemo(() => new Set(['sendgrid', 'gmail', 'smtp', 'mailchimp']), []);
+  const EMAIL_PROVIDERS = useMemo(() => new Set(['sendgrid', 'gmail', 'outlook', 'smtp', 'mailchimp']), []);
 
   // ─── Load email provider configs from DB + non-email configs from DB ───
   useEffect(() => {
@@ -400,11 +405,11 @@ const IntegrationHub: React.FC = () => {
   }, []);
 
   // ─── Email Provider Setup Modal Handlers (defined early to avoid forward-ref issues) ───
-  const isSmtpProvider = (id: string) => id === 'smtp' || id === 'gmail';
+  const isSmtpProvider = (id: string) => id === 'smtp' || id === 'gmail' || id === 'outlook';
 
   const openEmailSetup = useCallback(async (id: string) => {
     setEmailSetupApiKey('');
-    setEmailSetupSmtpHost(id === 'gmail' ? 'smtp.gmail.com' : '');
+    setEmailSetupSmtpHost(id === 'gmail' ? 'smtp.gmail.com' : id === 'outlook' ? 'smtp-mail.outlook.com' : '');
     setEmailSetupSmtpPort(id === 'gmail' ? '587' : '587');
     setEmailSetupSmtpUser('');
     setEmailSetupSmtpPass('');
@@ -764,6 +769,7 @@ const IntegrationHub: React.FC = () => {
           fromEmail: emailSetupFromEmail,
           fromName: emailSetupFromName,
           skipValidation: true, // Already validated via test email
+          provider: emailSetupId === 'gmail' ? 'gmail' : undefined, // keep Gmail branded; outlook stored as smtp
         };
       } else if (emailSetupId === 'sendgrid') {
         edgeFn = 'connect-sendgrid';
@@ -2420,11 +2426,11 @@ const IntegrationHub: React.FC = () => {
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <span className="text-xl">
-                  {emailSetupId === 'sendgrid' ? '📧' : emailSetupId === 'gmail' ? '✉️' : emailSetupId === 'mailchimp' ? '🐵' : '📮'}
+                  {emailSetupId === 'sendgrid' ? '📧' : emailSetupId === 'gmail' ? '✉️' : emailSetupId === 'outlook' ? '📧' : emailSetupId === 'mailchimp' ? '🐵' : '📮'}
                 </span>
                 <div>
                   <h3 className="font-bold text-slate-900 font-heading">
-                    {emailSetupId === 'sendgrid' ? 'SendGrid' : emailSetupId === 'gmail' ? 'Gmail SMTP' : emailSetupId === 'mailchimp' ? 'Mailchimp' : 'Custom SMTP'} Setup
+                    {emailSetupId === 'sendgrid' ? 'SendGrid' : emailSetupId === 'gmail' ? 'Gmail SMTP' : emailSetupId === 'outlook' ? 'Outlook SMTP' : emailSetupId === 'mailchimp' ? 'Mailchimp' : 'Custom SMTP'} Setup
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">Enter your credentials to connect</p>
                 </div>
@@ -2503,18 +2509,23 @@ const IntegrationHub: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                      Password {emailSetupId === 'gmail' && <span className="normal-case text-indigo-500">(App Password)</span>}
+                      Password {(emailSetupId === 'gmail' || emailSetupId === 'outlook') && <span className="normal-case text-indigo-500">(App Password)</span>}
                     </label>
                     <input
                       type="password"
                       value={emailSetupSmtpPass}
                       onChange={e => setEmailSetupSmtpPass(e.target.value)}
-                      placeholder={emailSetupId === 'gmail' ? '16-character app password' : 'SMTP password'}
+                      placeholder={emailSetupId === 'gmail' ? '16-character app password' : emailSetupId === 'outlook' ? 'app password' : 'SMTP password'}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
                     />
                     {emailSetupId === 'gmail' && (
                       <p className="text-[10px] text-slate-400 mt-1">
                         Go to Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App Passwords to generate one.
+                      </p>
+                    )}
+                    {emailSetupId === 'outlook' && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        If 2-step verification is on: Microsoft account &rarr; Security &rarr; Advanced security options &rarr; App passwords. Otherwise use your normal password.
                       </p>
                     )}
                   </div>
