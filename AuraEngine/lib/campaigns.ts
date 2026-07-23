@@ -48,7 +48,10 @@ const mergeClient = (tpl: string, lead: MergeLead): string => {
     name: lead.name || 'there', full_name: lead.name || 'there',
     company: lead.company || 'your company', title: lead.title || '', industry: lead.industry || '',
     location: lead.location || '', website: lead.website || '', linkedin: lead.linkedin || '',
-    source: lead.source || '', company_size: lead.company_size || '', email: lead.email || '', phone: lead.phone || '', your_name: '',
+    source: lead.source || '', company_size: lead.company_size || '', email: lead.email || '', phone: lead.phone || '',
+    // Sender-side / send-time tokens — resolved with real values server-side at
+    // send; blanked (not left as literal {{token}}) in the client preview.
+    your_name: '', sender_company: '', ai_insight: '',
   };
   return (tpl || '').replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (m, k) => {
     const key = String(k).toLowerCase();
@@ -71,6 +74,8 @@ export const MERGE_FIELDS: { token: string; label: string }[] = [
   { token: '{{company_size}}', label: 'Company size' },
   { token: '{{phone}}', label: 'Phone' },
   { token: '{{your_name}}', label: 'Your name' },
+  { token: '{{sender_company}}', label: 'Your company' },
+  { token: '{{ai_insight}}', label: 'AI insight (send-time)' },
 ];
 const nl2br = (s: string): string => /<(p|br|div|ul|ol|table|a|strong|em|span|h[1-6])\b/i.test(s || '') ? (s || '') : (s || '').replace(/\n/g, '<br>');
 

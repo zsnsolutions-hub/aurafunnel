@@ -244,7 +244,15 @@ serve(async (req) => {
 
         let result: { id?: string; error?: string } = { error: "Unknown channel" };
 
-        if (target.channel === "facebook_page") {
+        // Roadmap 4.1: demo accounts hold a fake token — surface a clear message
+        // rather than a confusing provider API error.
+        const acctForTarget = (accounts || []).find((a: any) =>
+          (a.provider === "meta" && (a.meta_page_id === target.target_id || a.meta_ig_user_id === target.target_id)) ||
+          (a.provider === "linkedin" && (a.linkedin_member_urn === target.target_id || a.linkedin_org_urn === target.target_id))
+        );
+        if (acctForTarget?.is_demo) {
+          result = { error: "This is a demo account — connect a real account in Integrations to publish." };
+        } else if (target.channel === "facebook_page") {
           const acc = (accounts || []).find(
             (a: any) => a.provider === "meta" && a.meta_page_id === target.target_id
           );
