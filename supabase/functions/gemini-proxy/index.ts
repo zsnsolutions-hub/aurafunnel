@@ -27,6 +27,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { AI_MODELS } from "../_shared/aiModels.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
@@ -42,7 +43,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   }
 }
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const GEMINI_GROUNDED_FALLBACK = "gemini-2.5-flash";
+const GEMINI_GROUNDED_FALLBACK = AI_MODELS.text;
 
 // ── Provider routing ─────────────────────────────────────────────────────────
 // Text generation runs on OpenAI (faster/cheaper). Image generation and any

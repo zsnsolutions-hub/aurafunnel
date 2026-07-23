@@ -6,6 +6,7 @@
  */
 
 import { getGeminiClient } from './geminiClient';
+import { AI_MODELS } from './aiConfig';
 import { buildImagePrompt } from './imagePromptBuilder';
 import type {
   ImageGenRequest,
@@ -40,7 +41,7 @@ export async function generateImages(req: ImageGenRequest): Promise<ImageGenResp
   const ai = getGeminiClient();
 
   const response = await ai.models.generateImages({
-    model: 'imagen-4.0-generate-001',
+    model: AI_MODELS.image,
     operation: 'image_generation',
     prompt: fullPrompt,
     config: {

@@ -4,8 +4,9 @@
 // The browser route goes through gemini-proxy; this one is internal and
 // uses the GEMINI_API_KEY directly (already in the edge function env).
 
-const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
+import { AI_MODELS, geminiEndpoint } from "../aiModels.ts";
+
+const GEMINI_ENDPOINT = geminiEndpoint(AI_MODELS.goals);
 
 export async function geminiGenerate(
   apiKey: string,

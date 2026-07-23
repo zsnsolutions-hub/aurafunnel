@@ -13,9 +13,10 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { AI_MODELS } from "../_shared/aiModels.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = AI_MODELS.text;
 const AI_RESEARCH_HEADER = "--- AI Research Brief ---";
 
 type KB = Record<string, unknown>;

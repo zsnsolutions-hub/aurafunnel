@@ -13,9 +13,10 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { AI_MODELS } from "../_shared/aiModels.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = AI_MODELS.text;
 const RATE_LIMIT_PER_MIN = 30;
 
 async function checkRateLimit(

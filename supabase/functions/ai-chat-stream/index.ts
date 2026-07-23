@@ -2,9 +2,10 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { AI_MODELS } from "../_shared/aiModels.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = AI_MODELS.text;
 
 // Cluster-wide rate limit (20 req/min per user) via Postgres consume_ai_rate_limit.
 // Tighter than gemini-proxy because streaming sessions are heavier per request.
@@ -139,6 +140,27 @@ serve(async (req) => {
         JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // ── AI ceiling enforcement (Roadmap 2.4 — chat was a metering bypass) ──
+    // Counts against the workspace's monthly AI cap, mirroring ai-generate/
+    // gemini-proxy. null operation → the default content cost.
+    try {
+      const { data: quota, error: qErr } = await supabaseAdmin.rpc("enforce_ai_proxy_quota", {
+        p_user_id: user.id, p_operation: null, p_kind: "content",
+      });
+      if (qErr) {
+        return new Response(JSON.stringify({ error: "AI credit check failed. Please try again." }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const q = quota as { allowed?: boolean; reason?: string; remaining?: number } | null;
+      if (!q?.allowed) {
+        return new Response(JSON.stringify({ error: "Insufficient AI credits.", reason: q?.reason, remaining: q?.remaining }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    } catch {
+      return new Response(JSON.stringify({ error: "AI credit check failed. Please try again." }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ── Build Gemini request ──

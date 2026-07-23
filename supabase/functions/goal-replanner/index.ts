@@ -27,6 +27,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient, bearerToken, isServiceRoleToken } from "../_shared/auth.ts";
+import { AI_MODELS, geminiEndpoint } from "../_shared/aiModels.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
@@ -45,7 +46,7 @@ function jsonResponse(b: unknown, status: number, h: Record<string, string>): Re
 
 async function geminiGenerate(systemInstruction: string, userPrompt: string): Promise<{ text: string; tokens: number }> {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=" + GEMINI_API_KEY;
+  const url = geminiEndpoint(AI_MODELS.goals) + "?key=" + GEMINI_API_KEY;
   const body = {
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
     systemInstruction: { parts: [{ text: systemInstruction }] },

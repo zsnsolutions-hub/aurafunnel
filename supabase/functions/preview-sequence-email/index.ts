@@ -12,9 +12,10 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
+import { AI_MODELS, geminiEndpoint } from "../_shared/aiModels.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const GEMINI_ENDPOINT = geminiEndpoint(AI_MODELS.text);
 
 function json(body: unknown, status: number, headers: Record<string, string>): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json" } });
@@ -110,12 +111,25 @@ serve(async (req) => {
   try {
     const auth = req.headers.get("Authorization");
     if (!auth) return json({ error: "Missing Authorization" }, 401, cors);
-    const { data: { user }, error } = await adminClient().auth.getUser(auth.replace("Bearer ", ""));
+    const admin = adminClient();
+    const { data: { user }, error } = await admin.auth.getUser(auth.replace("Bearer ", ""));
     if (error || !user) return json({ error: "Unauthorized" }, 401, cors);
     if (!GEMINI_API_KEY) return json({ error: "AI is not configured." }, 200, cors);
 
     const body = await req.json() as Body;
     if (!body?.template_body || !body?.lead) return json({ error: "Missing step content or lead." }, 400, cors);
+
+    // AI ceiling enforcement (Roadmap 2.4 — preview was a metering bypass).
+    try {
+      const { data: quota, error: qErr } = await admin.rpc("enforce_ai_proxy_quota", {
+        p_user_id: user.id, p_operation: null, p_kind: "content",
+      });
+      if (qErr) return json({ error: "AI credit check failed. Please try again." }, 503, cors);
+      const q = quota as { allowed?: boolean; reason?: string; remaining?: number } | null;
+      if (!q?.allowed) return json({ error: "Insufficient AI credits.", reason: q?.reason, remaining: q?.remaining }, 402, cors);
+    } catch {
+      return json({ error: "AI credit check failed. Please try again." }, 503, cors);
+    }
 
     const { systemInstruction, userPrompt } = buildPrompt(body);
     const result = await callGemini(systemInstruction, userPrompt);
