@@ -306,14 +306,17 @@ serve(async (req) => {
         .in("status", ["pending", "writing"]);
 
       if (pendingCount === 0) {
-        // Finalize: insert into scheduled_emails + mark run completed
+        // Finalize: mark the run completed (Roadmap 3.1 — no longer seeds
+        // scheduled_emails; run_items are the single source for sending).
         await supabaseAdmin.rpc("finalize_email_sequence_run", {
           p_run_id: runId,
         });
 
-        // Trigger immediate sending of due emails (step 0 / delay_days=0)
+        // Immediate send of due emails (step 0 / delay_days=0) via the CANONICAL
+        // path (process-sequence-sends), matching the per-minute cron. Previously
+        // this kicked process-scheduled-emails (Path B) which double-sent.
         try {
-          await fetch(`${SUPABASE_URL}/functions/v1/process-scheduled-emails`, {
+          await fetch(`${SUPABASE_URL}/functions/v1/process-sequence-sends`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -321,7 +324,7 @@ serve(async (req) => {
             },
           });
         } catch (sendErr) {
-          console.error("Failed to trigger scheduled email processing:", sendErr);
+          console.error("Failed to trigger sequence sending:", sendErr);
         }
       }
     }

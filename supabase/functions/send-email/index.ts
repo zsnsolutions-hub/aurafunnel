@@ -622,6 +622,28 @@ serve(async (req) => {
     const senderEmail =
       from_email || creds.from_email || creds.smtp_user || "noreply@example.com";
 
+    // ── Roadmap 3.1: idempotency guard (defense-in-depth) ──
+    // A sequence email is uniquely (lead_id, sequence_id, sequence_step). If one
+    // was already SENT, short-circuit — never double-deliver, no matter how many
+    // times this is invoked. One-off/test sends (no sequence_id) are unaffected.
+    if (lead_id && body.sequence_id != null && body.sequence_step != null) {
+      const { data: dup } = await supabaseAdmin
+        .from("email_messages")
+        .select("id")
+        .eq("lead_id", lead_id)
+        .eq("sequence_id", body.sequence_id)
+        .eq("sequence_step", body.sequence_step)
+        .eq("status", "sent")
+        .limit(1)
+        .maybeSingle();
+      if (dup) {
+        return new Response(
+          JSON.stringify({ success: true, message_id: dup.id, deduplicated: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // 1. Create email_messages record
     const { data: emailMsg, error: msgError } = await supabaseAdmin
       .from("email_messages")
