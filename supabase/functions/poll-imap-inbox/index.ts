@@ -11,6 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -207,6 +208,12 @@ serve(async () => {
         imap_host: meta.imap_host, imap_port: meta.imap_port,
       } : null;
     }).filter(Boolean) as Parameters<typeof pollAccount>[1][];
+
+    // smtp_pass is encrypted at rest — decrypt before using it as the IMAP
+    // password (legacy plaintext passes through unchanged).
+    for (const a of accounts) {
+      a.smtp_pass = (await decryptToken(admin, a.smtp_pass)) as string;
+    }
 
     let total = 0; const errors: string[] = [];
     for (const a of accounts) {

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient, bearerToken, isServiceRoleJwt } from "../_shared/auth.ts";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
 
 const TRACKING_BASE_URL = Deno.env.get("TRACKING_BASE_URL") ?? "";
 
@@ -54,11 +55,12 @@ async function loadProviderCreds(
 
   if (data) {
     return {
-      api_key: data.api_key ?? undefined,
+      // Secrets are encrypted at rest — decrypt (legacy plaintext passes through).
+      api_key: (await decryptToken(supabaseAdmin, data.api_key)) ?? undefined,
       smtp_host: data.smtp_host ?? undefined,
       smtp_port: data.smtp_port ?? 587,
       smtp_user: data.smtp_user ?? undefined,
-      smtp_pass: data.smtp_pass ?? undefined,
+      smtp_pass: (await decryptToken(supabaseAdmin, data.smtp_pass)) ?? undefined,
       from_email: data.from_email ?? undefined,
       from_name: data.from_name ?? undefined,
     };
@@ -107,11 +109,11 @@ async function loadSenderAccountCreds(
     if (!hasUsable) return null;
 
     return {
-      api_key:    secrets.api_key   ?? undefined,
+      api_key:    (await decryptToken(supabaseAdmin, secrets.api_key))   ?? undefined,
       smtp_host:  secrets.smtp_host ?? undefined,
       smtp_port:  secrets.smtp_port ?? 587,
       smtp_user:  secrets.smtp_user ?? undefined,
-      smtp_pass:  secrets.smtp_pass ?? undefined,
+      smtp_pass:  (await decryptToken(supabaseAdmin, secrets.smtp_pass)) ?? undefined,
       from_email: (data as any).from_email ?? undefined,
       from_name:  (data as any).from_name  ?? undefined,
     };
