@@ -18,6 +18,9 @@ async function safeMemoryContext(opts: {
   leadId?: string;
   campaignKind?: string;
   campaignId?: string;
+  // Roadmap 2.3: the generation intent / lead context. When set, workspace memory
+  // is retrieved by semantic similarity to it instead of pure recency.
+  query?: string;
 }): Promise<string> {
   if (!opts.userId) return '';
   try {
@@ -29,6 +32,7 @@ async function safeMemoryContext(opts: {
       leadId: opts.leadId,
       campaignKind: opts.campaignKind,
       campaignId: opts.campaignId,
+      queryText: opts.query,
     });
   } catch (err) {
     console.warn('[memory] context build failed; proceeding without memory:', err);
@@ -185,7 +189,11 @@ Avoid generic corporate jargon. Focus on the prospect's pain points and industry
     .replace('{{tone}}', lead.score > 80 ? 'high-priority and urgent' : 'helpful and consultative');
 
   // AI memory: pull workspace prefs + this lead's prior interactions.
-  const memoryCtx = await safeMemoryContext({ userId, leadId: lead.id });
+  const memoryCtx = await safeMemoryContext({
+    userId,
+    leadId: lead.id,
+    query: `${type} for ${lead.company || 'prospect'}${lead.industry ? ` (${lead.industry})` : ''}: ${lead.insights || ''}`.trim(),
+  });
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -403,6 +411,7 @@ BODY:
   const memoryCtx = await safeMemoryContext({
     userId,
     campaignKind: 'email_sequence',
+    query: `${goalLabel} email sequence, ${config.tone} tone`,
   });
 
   const genConfig = {

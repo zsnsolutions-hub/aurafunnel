@@ -13,7 +13,12 @@ export const AI_MODELS = {
   goals: "gemini-3-flash-preview",
   /** Image generation. */
   image: "imagen-4.0-generate-001",
+  /** Text embeddings for RAG (Roadmap 2.3). OpenAI text-embedding-3-small → 1536 dims. */
+  embedding: "text-embedding-3-small",
 } as const;
+
+/** Vector dimension of AI_MODELS.embedding — must match the `vector(N)` column. */
+export const EMBEDDING_DIMS = 1536;
 
 /** Build a Generative Language REST endpoint for a model (callers that POST the
  *  raw v1beta API rather than using the SDK client). */

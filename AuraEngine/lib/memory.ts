@@ -13,6 +13,7 @@
 // JSONB and a follow-up migration will add the pgvector column.
 
 import { supabase } from './supabase';
+import { embedText } from './embeddings';
 
 export type MemoryScope = 'workspace' | 'lead' | 'campaign';
 
@@ -166,6 +167,9 @@ export async function rememberWorkspace(opts: {
   tags?: string[];
   expiresAt?: Date;
 }): Promise<void> {
+  // Embed on write for semantic recall (Roadmap 2.3). Best-effort — a failed
+  // embedding just leaves embedding NULL, and recall falls back to recency.
+  const embedding = await embedText([opts.key, stringify(opts.value)].filter(Boolean).join(': '));
   const { error } = await supabase.from('workspace_memory').insert({
     workspace_id: opts.workspaceId,
     business_id: opts.businessId ?? null,
@@ -176,8 +180,37 @@ export async function rememberWorkspace(opts: {
     confidence: opts.confidence ?? 0.7,
     tags: opts.tags ?? [],
     expires_at: opts.expiresAt?.toISOString() ?? null,
+    embedding: embedding ?? null,
   });
   if (error) throw error;
+}
+
+// ── Semantic recall (Roadmap 2.3) ──
+// Embed the query context and pull the most SIMILAR workspace-memory rows (not
+// just the most recent). Business-scoped like recallWorkspaceMemory. Returns []
+// on any failure so buildMemoryContext falls back to recency.
+export interface SemanticMemoryRow extends WorkspaceMemoryRow { similarity: number }
+
+export async function recallWorkspaceMemorySemantic(opts: {
+  workspaceId: string;
+  businessId?: string | null;
+  queryText: string;
+  kinds?: string[];
+  limit?: number;
+}): Promise<SemanticMemoryRow[]> {
+  const embedding = await embedText(opts.queryText);
+  if (!embedding) return [];
+  const { data, error } = await supabase.rpc('match_workspace_memory', {
+    p_workspace_id: opts.workspaceId,
+    p_business_id: opts.businessId ?? null,
+    // Pass as a JSON-array string — pgvector's exact text input format — and cast
+    // to vector server-side. Avoids PostgREST number-array→vector coercion issues.
+    p_query: JSON.stringify(embedding),
+    p_k: opts.limit ?? 12,
+    p_kinds: opts.kinds ?? null,
+  });
+  if (error) { console.warn('[memory] semantic recall failed; falling back:', error.message); return []; }
+  return (data ?? []) as SemanticMemoryRow[];
 }
 
 // ── Lead memory ──
@@ -297,14 +330,30 @@ export async function buildMemoryContext(opts: {
   campaignKind?: string;
   campaignId?: string;
   workspaceKinds?: string[];
+  // Roadmap 2.3: when provided, workspace memory is retrieved by SEMANTIC
+  // similarity to this text (the generation intent/lead context) instead of pure
+  // recency, with the similarity surfaced as attribution. Falls back to recency
+  // if embeddings are unavailable or nothing matches.
+  queryText?: string;
 }): Promise<string> {
+  const wsRecall = opts.queryText
+    ? recallWorkspaceMemorySemantic({
+        workspaceId: opts.workspaceId,
+        businessId: opts.businessId,
+        queryText: opts.queryText,
+        kinds: opts.workspaceKinds,
+        limit: 12,
+      })
+        .then((rows) => (rows.length ? rows : recallWorkspaceMemory({ workspaceId: opts.workspaceId, businessId: opts.businessId, kinds: opts.workspaceKinds, limit: 12 })))
+        .catch(() => [])
+    : recallWorkspaceMemory({
+        workspaceId: opts.workspaceId,
+        businessId: opts.businessId,
+        kinds: opts.workspaceKinds,
+        limit: 12,
+      }).catch(() => []);
   const [ws, lead, campaign] = await Promise.all([
-    recallWorkspaceMemory({
-      workspaceId: opts.workspaceId,
-      businessId: opts.businessId,
-      kinds: opts.workspaceKinds,
-      limit: 12,
-    }).catch(() => []),
+    wsRecall,
     opts.leadId
       ? recallLeadMemory({
           workspaceId: opts.workspaceId,
@@ -330,7 +379,12 @@ export async function buildMemoryContext(opts: {
     sections.push(
       'WORKSPACE MEMORY (preferences, tone, winning patterns):\n' +
         ws
-          .map((r) => `- [${r.kind}${r.key ? `:${r.key}` : ''}] ${stringify(r.value)}`)
+          .map((r) => {
+            // Surface retrieval confidence when this came from semantic search.
+            const sim = (r as { similarity?: number }).similarity;
+            const tag = sim != null ? `${r.kind}${r.key ? `:${r.key}` : ''} · ${(sim * 100).toFixed(0)}%` : `${r.kind}${r.key ? `:${r.key}` : ''}`;
+            return `- [${tag}] ${stringify(r.value)}`;
+          })
           .join('\n'),
     );
   }
