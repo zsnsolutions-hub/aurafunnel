@@ -1,6 +1,7 @@
 // File: supabase/functions/meta-oauth-callback/index.ts
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/tokenCrypto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -124,7 +125,9 @@ serve(async (req) => {
       accounts.push({
         meta_page_id: page.id,
         meta_page_name: page.name,
-        meta_page_access_token_encrypted: page.access_token,
+        // Encrypt the page token before it is ever stored (both insert + update
+        // paths below read this already-encrypted value).
+        meta_page_access_token_encrypted: (await encryptToken(adminClient, page.access_token)) as string,
         meta_ig_user_id: igUserId,
         meta_ig_username: igUsername,
       });

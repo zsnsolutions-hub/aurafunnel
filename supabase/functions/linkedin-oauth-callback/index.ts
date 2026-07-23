@@ -1,6 +1,7 @@
 // File: supabase/functions/linkedin-oauth-callback/index.ts
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/tokenCrypto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -130,7 +131,8 @@ serve(async (req) => {
       linkedin_member_urn: memberUrn,
       linkedin_org_urn: orgUrn,
       linkedin_org_name: orgName,
-      linkedin_access_token_encrypted: accessToken,
+      // Encrypt at rest before storing.
+      linkedin_access_token_encrypted: (await encryptToken(adminClient, accessToken)) as string,
       token_expires_at: tokenExpiry,
       is_demo: false, // real connection supersedes any demo placeholder
     };

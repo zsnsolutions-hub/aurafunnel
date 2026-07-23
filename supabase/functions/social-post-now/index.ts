@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
+import { decryptAccountTokens } from "../_shared/tokenCrypto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -324,6 +325,8 @@ serve(async (req) => {
       .from("social_accounts")
       .select("*")
       .eq("user_id", user.id);
+    // Decrypt token columns in place so the publish helpers below get plaintext.
+    await decryptAccountTokens(adminClient, accounts);
 
     const results: any[] = [];
 
