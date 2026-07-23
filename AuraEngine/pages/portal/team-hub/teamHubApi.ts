@@ -123,8 +123,10 @@ export interface FlowInvite {
   email: string;
   role: FlowRole;
   invited_by: string;
-  status: 'pending' | 'accepted';
+  status: 'pending' | 'accepted' | 'revoked';
   created_at: string;
+  token?: string;
+  expires_at?: string | null;
 }
 
 // ─── Dashboard stats ───
@@ -725,15 +727,40 @@ export async function removeFlowMember(flowId: string, memberId: string): Promis
   await logActivity(flowId, null, 'member_removed', { member_id: memberId });
 }
 
-export async function inviteToFlow(flowId: string, email: string, role: FlowRole, invitedBy: string): Promise<FlowInvite> {
-  const { data, error } = await supabase
-    .from('teamhub_invites')
-    .insert({ board_id: flowId, email, role, invited_by: invitedBy })
-    .select()
-    .single();
+// Create a board invite through the secure SECURITY DEFINER RPC (owner/admin
+// gated, token + 7-day expiry). Then best-effort email the invitee an accept
+// link. `invitedBy` is derived server-side from auth.uid(); kept for signature
+// compatibility with the caller.
+export async function inviteToFlow(flowId: string, email: string, role: FlowRole, _invitedBy?: string): Promise<{ inviteId: string; token: string }> {
+  const { data, error } = await supabase.rpc('create_teamhub_invite', {
+    p_board_id: flowId,
+    p_email: email,
+    p_role: role,
+  });
   if (error) throw error;
+  if (!data?.success) throw new Error(data?.message ?? 'Could not create invite');
+
+  // Best-effort notification email — the invite exists and is acceptable
+  // in-app regardless of whether this succeeds.
+  try {
+    const [{ data: board }, { data: userRes }] = await Promise.all([
+      supabase.from('teamhub_boards').select('name').eq('id', flowId).maybeSingle(),
+      supabase.auth.getUser(),
+    ]);
+    await supabase.functions.invoke('send-invite-email', {
+      body: {
+        kind: 'teamhub',
+        email,
+        token: data.token,
+        role,
+        inviter_name: userRes?.user?.user_metadata?.full_name ?? userRes?.user?.email ?? 'A teammate',
+        board_name: board?.name ?? 'a board',
+      },
+    });
+  } catch { /* email is best-effort */ }
+
   await logActivity(flowId, null, 'invite_sent', { email, role });
-  return data;
+  return { inviteId: data.invite_id, token: data.token };
 }
 
 export async function fetchFlowInvites(flowId: string): Promise<FlowInvite[]> {
@@ -755,20 +782,33 @@ export async function revokeInvite(inviteId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function acceptInvite(inviteId: string, userId: string): Promise<void> {
-  const { data: invite, error } = await supabase
-    .from('teamhub_invites')
-    .select('*')
-    .eq('id', inviteId)
-    .single();
+// Accept a board invite by its secret token. The server RPC verifies the token,
+// the invitee's email, pending status and expiry, then joins the board — the
+// invitee cannot self-join any other way (member_insert RLS blocks it).
+export async function acceptInvite(token: string): Promise<{ boardId: string }> {
+  const { data, error } = await supabase.rpc('accept_teamhub_invite', { p_token: token });
   if (error) throw error;
+  if (!data?.success) throw new Error(data?.message ?? 'Could not accept invite');
+  return { boardId: data.board_id };
+}
 
-  await addFlowMember(invite.board_id, userId, invite.role);
-
-  await supabase
+// Pending board invites addressed to the current user's email — for an in-app
+// accept banner. RLS (invite_select_own) lets the invitee read only their own.
+export async function myPendingBoardInvites(email: string): Promise<(FlowInvite & { board_name?: string })[]> {
+  const { data } = await supabase
     .from('teamhub_invites')
-    .update({ status: 'accepted' })
-    .eq('id', inviteId);
+    .select('id, board_id, email, role, invited_by, status, created_at, token, expires_at')
+    .eq('status', 'pending')
+    .ilike('email', email)
+    .order('created_at', { ascending: false });
+  const invites = (data ?? []) as FlowInvite[];
+  if (invites.length === 0) return [];
+  // Board names are readable to the invitee via teamhub_boards RLS only after
+  // joining, so fetch best-effort and fall back to a generic label.
+  const ids = [...new Set(invites.map(i => i.board_id))];
+  const { data: boards } = await supabase.from('teamhub_boards').select('id, name').in('id', ids);
+  const nameById = new Map((boards ?? []).map((b: { id: string; name: string }) => [b.id, b.name]));
+  return invites.map(i => ({ ...i, board_name: nameById.get(i.board_id) }));
 }
 
 // ─── Item-Lead Linking ───
