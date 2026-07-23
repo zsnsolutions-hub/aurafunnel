@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Drawer } from '../ui/Drawer';
 import PreviewGrid from './PreviewGrid';
 import { MODULE_PRESETS } from '../../lib/imagePromptBuilder';
-import { generateImages } from '../../lib/imageGen';
+import { generateImages, fetchGenerationHistory } from '../../lib/imageGen';
 import { supabase } from '../../lib/supabase';
 import type {
   ImageModuleType,
@@ -65,6 +65,12 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [insertingIds, setInsertingIds] = useState<Set<string>>(new Set());
+  // Roadmap 4.3 — persisted generation gallery.
+  const [history, setHistory] = useState<ImageGenGeneratedImage[]>([]);
+  const loadHistory = React.useCallback(async () => {
+    setHistory(await fetchGenerationHistory({ moduleType, limit: 24 }));
+  }, [moduleType]);
+  useEffect(() => { if (open) void loadHistory(); }, [open, loadHistory]);
 
   useEffect(() => {
     if (open) setModuleType(initialModuleType);
@@ -143,7 +149,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
         module_id: moduleId,
         prompt: prompt.trim(),
         aspect_ratio: aspectRatio,
-        provider: 'stub',
+        provider: 'gemini',
         base_image_url: img.baseImageUrl,
         final_image_url: img.finalImageUrl,
         brand_settings: brand,
@@ -151,6 +157,7 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
       } as ImageGenGeneratedImage));
 
       setGenerated(images);
+      void loadHistory(); // refresh the persisted gallery with the new images
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
@@ -309,6 +316,28 @@ const ImageGeneratorDrawer: React.FC<ImageGeneratorDrawerProps> = ({
           insertingIds={insertingIds}
           aspectRatio={aspectRatio}
         />
+
+        {/* Persisted gallery (Roadmap 4.3) — survives reload */}
+        {history.length > 0 && (
+          <div className="pt-2 border-t border-slate-100">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recent generations</span>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {history.map(h => (
+                <div key={h.id} className="group relative rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-square">
+                  <img src={h.base_image_url} alt={h.prompt} title={h.prompt} loading="lazy" className="w-full h-full object-cover" />
+                  {onInsertImage && (
+                    <button
+                      onClick={() => onInsertImage(h.base_image_url)}
+                      className="absolute inset-x-0 bottom-0 py-1 bg-indigo-600/90 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      {insertLabel ?? 'Insert'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Drawer>
   );
