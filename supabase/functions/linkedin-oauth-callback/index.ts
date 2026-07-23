@@ -28,7 +28,7 @@ serve(async (req) => {
     // Validate state
     const { data: stateRow } = await adminClient
       .from("social_post_events")
-      .select("user_id")
+      .select("id, user_id, created_at")
       .eq("event_type", "started")
       .filter("payload->>oauth_state", "eq", state)
       .filter("payload->>provider", "eq", "linkedin")
@@ -39,6 +39,17 @@ serve(async (req) => {
     if (!stateRow) {
       return Response.redirect(
         `${APP_BASE_URL}/portal/social-scheduler?error=invalid_state`,
+        302
+      );
+    }
+
+    // Roadmap 4.1 (BUG-008): OAuth state must expire and be single-use (CSRF).
+    const STATE_TTL_MS = 10 * 60 * 1000;
+    const stale = Date.now() - new Date(stateRow.created_at).getTime() > STATE_TTL_MS;
+    await adminClient.from("social_post_events").delete().eq("id", stateRow.id);
+    if (stale) {
+      return Response.redirect(
+        `${APP_BASE_URL}/portal/social-scheduler?error=expired_state`,
         302
       );
     }
@@ -121,6 +132,7 @@ serve(async (req) => {
       linkedin_org_name: orgName,
       linkedin_access_token_encrypted: accessToken,
       token_expires_at: tokenExpiry,
+      is_demo: false, // real connection supersedes any demo placeholder
     };
 
     if (existing) {

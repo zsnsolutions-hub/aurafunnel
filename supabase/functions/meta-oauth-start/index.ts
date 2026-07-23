@@ -60,6 +60,7 @@ serve(async (req) => {
           meta_ig_user_id: demoIgId,
           meta_ig_username: "mybusiness",
           token_expires_at: demoExpiry,
+          is_demo: true, // Roadmap 4.1 — placeholder, not a real publishing account
         });
       }
 

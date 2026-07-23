@@ -36,6 +36,20 @@ const AccountsConnectPanel: React.FC<Props> = ({
 
   const metaAccounts = accounts.filter(a => a.provider === 'meta');
   const linkedInAccounts = accounts.filter(a => a.provider === 'linkedin');
+  // Roadmap 4.1: a demo connection exists but can't publish to a real account.
+  const metaDemo = metaAccounts.length > 0 && metaAccounts.every(a => a.is_demo);
+  const linkedInDemo = linkedInAccounts.length > 0 && linkedInAccounts.every(a => a.is_demo);
+
+  const StatusBadge: React.FC<{ demo: boolean }> = ({ demo }) => demo ? (
+    <span className="flex items-center space-x-1 px-2.5 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-black" title="Demo account — not connected to a real page. Real publishing requires the platform app to be configured & reviewed.">
+      <span>Demo</span>
+    </span>
+  ) : (
+    <span className="flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black">
+      <CheckIcon className="w-3 h-3" />
+      <span>Connected</span>
+    </span>
+  );
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -65,8 +79,8 @@ const AccountsConnectPanel: React.FC<Props> = ({
             <div>
               <p className="text-sm font-bold text-slate-800">Meta (Facebook + Instagram)</p>
               {hasMetaConnected ? (
-                <p className="text-[10px] text-emerald-600 font-semibold">
-                  {metaAccounts.length} page{metaAccounts.length !== 1 ? 's' : ''} connected
+                <p className={`text-[10px] font-semibold ${metaDemo ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {metaDemo ? 'Demo account — not publishing to a real page' : `${metaAccounts.length} page${metaAccounts.length !== 1 ? 's' : ''} connected`}
                 </p>
               ) : (
                 <p className="text-[10px] text-slate-400">Connect your Facebook Pages & Instagram</p>
@@ -74,10 +88,7 @@ const AccountsConnectPanel: React.FC<Props> = ({
             </div>
           </div>
           {hasMetaConnected ? (
-            <span className="flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black">
-              <CheckIcon className="w-3 h-3" />
-              <span>Connected</span>
-            </span>
+            <StatusBadge demo={metaDemo} />
           ) : (
             <button
               onClick={() => handleConnect('meta')}
@@ -99,17 +110,16 @@ const AccountsConnectPanel: React.FC<Props> = ({
             <div>
               <p className="text-sm font-bold text-slate-800">LinkedIn</p>
               {hasLinkedInConnected ? (
-                <p className="text-[10px] text-emerald-600 font-semibold">Profile connected</p>
+                <p className={`text-[10px] font-semibold ${linkedInDemo ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {linkedInDemo ? 'Demo account — not publishing to a real profile' : 'Profile connected'}
+                </p>
               ) : (
                 <p className="text-[10px] text-slate-400">Connect your LinkedIn profile & org page</p>
               )}
             </div>
           </div>
           {hasLinkedInConnected ? (
-            <span className="flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black">
-              <CheckIcon className="w-3 h-3" />
-              <span>Connected</span>
-            </span>
+            <StatusBadge demo={linkedInDemo} />
           ) : (
             <button
               onClick={() => handleConnect('linkedin')}

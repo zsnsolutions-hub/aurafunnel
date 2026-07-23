@@ -58,6 +58,7 @@ serve(async (req) => {
           linkedin_org_name: "My Company",
           linkedin_access_token_encrypted: "demo_token",
           token_expires_at: demoExpiry,
+          is_demo: true, // Roadmap 4.1 — placeholder, not a real publishing account
         });
       }
 

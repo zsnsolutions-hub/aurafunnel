@@ -14,6 +14,7 @@ export interface SocialAccount {
   linkedin_org_urn: string | null;
   linkedin_org_name: string | null;
   token_expires_at: string | null;
+  is_demo: boolean;
   created_at: string;
 }
 
@@ -36,7 +37,7 @@ export function useSocialAccounts(userId: string | undefined) {
       // to them; only edge functions (service role) read tokens for publishing.
       const { data } = await supabase
         .from('social_accounts')
-        .select('id, user_id, provider, meta_page_id, meta_page_name, meta_ig_user_id, meta_ig_username, linkedin_member_urn, linkedin_org_urn, linkedin_org_name, token_expires_at, created_at')
+        .select('id, user_id, provider, meta_page_id, meta_page_name, meta_ig_user_id, meta_ig_username, linkedin_member_urn, linkedin_org_urn, linkedin_org_name, token_expires_at, is_demo, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       setAccounts(data || []);
@@ -90,6 +91,11 @@ export function useSocialAccounts(userId: string | undefined) {
 
   const hasMetaConnected = accounts.some(a => a.provider === 'meta');
   const hasLinkedInConnected = accounts.some(a => a.provider === 'linkedin');
+  // Roadmap 4.1: a REAL (non-demo) connection actually publishes. Demo accounts
+  // (created when the platform app isn't configured) exist but can't post.
+  const hasMetaReal = accounts.some(a => a.provider === 'meta' && !a.is_demo);
+  const hasLinkedInReal = accounts.some(a => a.provider === 'linkedin' && !a.is_demo);
+  const hasDemoAccounts = accounts.some(a => a.is_demo);
 
   const disconnectAccount = async (accountId: string) => {
     await supabase.from('social_accounts').delete().eq('id', accountId);
@@ -101,6 +107,9 @@ export function useSocialAccounts(userId: string | undefined) {
     availableTargets,
     hasMetaConnected,
     hasLinkedInConnected,
+    hasMetaReal,
+    hasLinkedInReal,
+    hasDemoAccounts,
     loading,
     refetch: fetchAccounts,
     disconnectAccount,
