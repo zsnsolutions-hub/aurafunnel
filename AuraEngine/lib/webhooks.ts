@@ -9,7 +9,6 @@ export interface WebhookEndpoint {
   workspace_id: string;
   created_by: string | null;
   url: string;
-  secret: string;
   description: string | null;
   event_types: string[];
   enabled: boolean;
@@ -60,22 +59,34 @@ export function mintWebhookSecret(): string {
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** Everything except `secret`, which is encrypted at rest and no longer granted
+ *  to the browser (migration 20260819110000). A `select('*')` here would now be
+ *  rejected outright, not silently trimmed. */
+const ENDPOINT_SAFE_COLS =
+  'id, workspace_id, created_by, url, description, event_types, enabled, ' +
+  'failure_count, disabled_at, last_attempt_at, last_success_at, created_at, updated_at';
+
 export async function listWebhookEndpoints(workspaceId: string): Promise<WebhookEndpoint[]> {
   const { data, error } = await supabase
     .from('webhook_endpoints')
-    .select('*')
+    .select(ENDPOINT_SAFE_COLS)
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return (data ?? []) as WebhookEndpoint[];
+  return (data ?? []) as unknown as WebhookEndpoint[];
 }
 
+/** Creating an endpoint is the one moment the signing key is visible. The value
+ *  returned here comes from the locally-minted `secret`, NOT from the row we
+ *  read back — the DB trigger encrypts it on the way in, so the stored column
+ *  is ciphertext and the column isn't readable anyway. Show it once, then it's
+ *  gone (rotateWebhookSecret mints a replacement). */
 export async function createWebhookEndpoint(opts: {
   workspaceId: string;
   url: string;
   description?: string;
   eventTypes?: string[];
-}): Promise<WebhookEndpoint> {
+}): Promise<{ endpoint: WebhookEndpoint; secret: string }> {
   if (!/^https:\/\//i.test(opts.url)) throw new Error('URL must start with https://');
   const secret = mintWebhookSecret();
   const { data, error } = await supabase
@@ -87,10 +98,18 @@ export async function createWebhookEndpoint(opts: {
       description:  opts.description ?? null,
       event_types:  opts.eventTypes ?? [],
     })
-    .select()
+    .select(ENDPOINT_SAFE_COLS)
     .single();
   if (error) throw error;
-  return data as WebhookEndpoint;
+  return { endpoint: data as unknown as WebhookEndpoint, secret };
+}
+
+/** Mint a replacement signing key server-side and reveal it once. The old key
+ *  stops verifying immediately, so the customer's receiver must be updated. */
+export async function rotateWebhookSecret(id: string): Promise<string> {
+  const { data, error } = await supabase.rpc('rotate_webhook_secret', { p_id: id });
+  if (error) throw error;
+  return data as string;
 }
 
 export async function updateWebhookEndpoint(
@@ -102,10 +121,10 @@ export async function updateWebhookEndpoint(
     .from('webhook_endpoints')
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select()
+    .select(ENDPOINT_SAFE_COLS)
     .single();
   if (error) throw error;
-  return data as WebhookEndpoint;
+  return data as unknown as WebhookEndpoint;
 }
 
 export async function deleteWebhookEndpoint(id: string): Promise<void> {

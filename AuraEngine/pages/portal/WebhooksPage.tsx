@@ -7,14 +7,14 @@ import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Webhook, Plus, Trash2, Power, AlertTriangle, CheckCircle, Send, Clipboard, Check,
-  ChevronDown, ChevronRight, RefreshCw,
+  ChevronDown, ChevronRight, RefreshCw, KeyRound,
 } from 'lucide-react';
 import type { User } from '../../types';
 import { supabase } from '../../lib/supabase';
 import {
   listWebhookEndpoints, createWebhookEndpoint, updateWebhookEndpoint,
   deleteWebhookEndpoint, listRecentDeliveries, retryDelivery, sendTestEvent,
-  WEBHOOK_EVENTS, type WebhookEndpoint,
+  rotateWebhookSecret, WEBHOOK_EVENTS, type WebhookEndpoint,
 } from '../../lib/webhooks';
 
 interface LayoutContext { user: User }
@@ -66,6 +66,23 @@ const WebhooksPage: React.FC = () => {
     if (!confirm(`Delete "${e.url}"? Pending deliveries will be cancelled.`)) return;
     await deleteWebhookEndpoint(e.id);
     refresh();
+  };
+
+  // The stored secret is encrypted and never sent to the browser, so this is
+  // the only way back to a readable signing key — at the cost of invalidating
+  // the old one the instant it's minted.
+  const rotate = async (e: WebhookEndpoint) => {
+    if (!confirm(
+      `Rotate the signing secret for "${e.url}"?\n\n` +
+      `The current secret stops working immediately — update your receiver with ` +
+      `the new one right away or deliveries will fail signature verification.`
+    )) return;
+    try {
+      setSecretJustRevealed(await rotateWebhookSecret(e.id));
+      refresh();
+    } catch (err) {
+      alert((err as Error).message);
+    }
   };
 
   const test = async (e: WebhookEndpoint) => {
@@ -129,6 +146,7 @@ assert hmac.compare_digest(expected, sig)`}</code></pre>
               onToggle={() => toggle(e)}
               onTest={() => test(e)}
               onDelete={() => remove(e)}
+              onRotate={() => rotate(e)}
             />
           ))}
         </div>
@@ -165,7 +183,8 @@ const EndpointCard: React.FC<{
   onToggle: () => void;
   onTest: () => void;
   onDelete: () => void;
-}> = ({ endpoint: e, expanded, onExpand, onToggle, onTest, onDelete }) => {
+  onRotate: () => void;
+}> = ({ endpoint: e, expanded, onExpand, onToggle, onTest, onDelete, onRotate }) => {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white">
       <div className="p-4 flex items-start gap-3">
@@ -206,6 +225,9 @@ const EndpointCard: React.FC<{
         <div className="flex items-center gap-1">
           <button onClick={onTest} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50" title="Send test">
             <Send size={14} />
+          </button>
+          <button onClick={onRotate} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50" title="Rotate signing secret">
+            <KeyRound size={14} />
           </button>
           <button onClick={onToggle} className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50" title={e.enabled ? 'Disable' : 'Enable'}>
             <Power size={14} />
@@ -291,13 +313,13 @@ const CreateModal: React.FC<{
     if (!url.trim()) { setError('URL is required'); return; }
     setCreating(true);
     try {
-      const created = await createWebhookEndpoint({
+      const { secret } = await createWebhookEndpoint({
         workspaceId,
         url: url.trim(),
         description: description.trim() || undefined,
         eventTypes,
       });
-      onCreated(created.secret);
+      onCreated(secret);
     } catch (e) {
       setError((e as Error).message);
     } finally {

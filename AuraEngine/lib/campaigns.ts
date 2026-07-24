@@ -249,10 +249,11 @@ export async function deleteCampaign(id: string): Promise<void> {
 async function getMyBusinessProfile(): Promise<Record<string, unknown> | undefined> {
   const brain = await getActiveBusinessBrain();
   if (brain) return brain as unknown as Record<string, unknown>;
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return undefined;
-  const { data } = await supabase.from('profiles').select('businessProfile').eq('id', user.id).single();
-  return (data?.businessProfile as Record<string, unknown> | null) ?? undefined;
+  // `profiles.businessProfile` is not granted to the authenticated role
+  // (migration 20260819120000) — self-reads go through get_own_profile().
+  const { data } = await supabase.rpc('get_own_profile');
+  const profile = data as { businessProfile?: Record<string, unknown> | null } | null;
+  return profile?.businessProfile ?? undefined;
 }
 
 /** Verbatim/mail-merge preview from lead FIELDS (no DB fetch) — deterministic. */

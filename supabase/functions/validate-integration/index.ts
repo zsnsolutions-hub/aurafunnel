@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
+import { decryptCredentials } from "../_shared/tokenCrypto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -54,7 +55,11 @@ serve(async (req) => {
         .eq("owner_id", user.id)
         .eq("provider", provider)
         .maybeSingle();
-      credentials = row?.credentials ?? null;
+      // Stored credentials are encrypted at rest (migration 20260819100000);
+      // decrypt before handing them to the provider validators.
+      credentials = row?.credentials
+        ? await decryptCredentials(admin, row.credentials)
+        : null;
     }
 
     if (!credentials || Object.keys(credentials).length === 0) {

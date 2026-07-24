@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
+import { decryptCredentials } from "../_shared/tokenCrypto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -17,8 +18,11 @@ async function getStripeKeyForUser(supabaseAdmin: any, userId: string): Promise<
     .limit(1)
     .single();
 
-  if (data?.credentials?.secret_key) {
-    return data.credentials.secret_key;
+  // credentials is encrypted at rest (migration 20260819100000) — decrypt the
+  // blob before indexing into it. Passthrough for any not-yet-backfilled row.
+  const creds = data?.credentials ? await decryptCredentials(supabaseAdmin, data.credentials) : null;
+  if (creds?.secret_key) {
+    return creds.secret_key;
   }
 
   if (STRIPE_SECRET_KEY) {

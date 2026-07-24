@@ -21,6 +21,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { adminClient, bearerToken, isServiceRoleToken } from "../_shared/auth.ts";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
 
 const BATCH_SIZE = 50;
 const TIMEOUT_MS = 8_000;
@@ -106,7 +107,17 @@ serve(async (req) => {
   }
 
   const results = await Promise.all(pending.map(async (d) => {
-    const r = await deliver(d);
+    // The signing key is encrypted at rest (migration 20260819110000). Decrypt
+    // per use, right before the HMAC — plaintext never outlives this call.
+    // A decrypt failure must NOT be signed with ciphertext (the customer's
+    // receiver would reject every event and we'd burn the retry budget), so
+    // fail the delivery explicitly instead.
+    let r: { ok: boolean; status?: number; error?: string };
+    try {
+      r = await deliver({ ...d, secret: (await decryptToken(admin, d.secret)) ?? d.secret });
+    } catch (e) {
+      r = { ok: false, error: `signing key unavailable: ${(e as Error).message}` };
+    }
     await admin.rpc("mark_webhook_delivery_result", {
       p_delivery_id: d.delivery_id,
       p_succeeded:   r.ok,

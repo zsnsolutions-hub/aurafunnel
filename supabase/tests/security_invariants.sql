@@ -106,7 +106,89 @@ begin
   reset role;
   if not v_denied then raise exception 'FAIL 6: authenticated could read email_provider_configs.api_key'; end if;
 
-  raise notice '✅ ALL SECURITY TESTS PASSED (6/6)';
+  ---------------------------------------------------------------------------
+  -- 7. authenticated CANNOT read the other secret columns either
+  --    (webhook signing key, profile commercial/billing columns)
+  ---------------------------------------------------------------------------
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    perform secret from public.webhook_endpoints limit 1;
+  exception when insufficient_privilege then v_denied := true;
+    when others then if sqlstate='42501' then v_denied := true; else raise; end if;
+  end;
+  reset role;
+  if not v_denied then raise exception 'FAIL 7a: authenticated could read webhook_endpoints.secret'; end if;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    perform "businessProfile" from public.profiles limit 1;
+  exception when insufficient_privilege then v_denied := true;
+    when others then if sqlstate='42501' then v_denied := true; else raise; end if;
+  end;
+  reset role;
+  if not v_denied then raise exception 'FAIL 7b: authenticated could read profiles.businessProfile'; end if;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    perform stripe_customer_id from public.profiles limit 1;
+  exception when insufficient_privilege then v_denied := true;
+    when others then if sqlstate='42501' then v_denied := true; else raise; end if;
+  end;
+  reset role;
+  if not v_denied then raise exception 'FAIL 7c: authenticated could read profiles.stripe_customer_id'; end if;
+
+  ---------------------------------------------------------------------------
+  -- 8. the crypto helpers are not a decrypt oracle for the browser.
+  --    Supabase's default privileges grant EXECUTE on new public functions to
+  --    anon/authenticated BY NAME, so this has to be re-checked every time a
+  --    helper is added — revoking from PUBLIC alone does not undo it.
+  ---------------------------------------------------------------------------
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    perform public.app_decrypt_jsonb('{"a":"b"}'::jsonb);
+  exception when insufficient_privilege then v_denied := true;
+    when others then if sqlstate='42501' then v_denied := true; else raise; end if;
+  end;
+  reset role;
+  if not v_denied then raise exception 'FAIL 8a: authenticated could call app_decrypt_jsonb'; end if;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    perform public.app_decrypt_secret('v1:x');
+  exception when insufficient_privilege then v_denied := true;
+    when others then if sqlstate='42501' then v_denied := true; else raise; end if;
+  end;
+  reset role;
+  if not v_denied then raise exception 'FAIL 8b: authenticated could call app_decrypt_secret'; end if;
+
+  ---------------------------------------------------------------------------
+  -- 9. secrets are ciphertext AT REST, not just hidden behind grants
+  ---------------------------------------------------------------------------
+  select count(*) into v_cnt
+    from public.integrations i, jsonb_each_text(i.credentials) kv
+   where i.credentials is not null and kv.value <> '' and kv.value not like 'v1:%';
+  if v_cnt > 0 then raise exception 'FAIL 9a: % plaintext integration credential leaves on disk', v_cnt; end if;
+
+  select count(*) into v_cnt from public.webhook_endpoints
+   where secret is not null and secret not like 'v1:%';
+  if v_cnt > 0 then raise exception 'FAIL 9b: % plaintext webhook signing keys on disk', v_cnt; end if;
+
+  select count(*) into v_cnt from public.sender_account_secrets
+   where (smtp_pass is not null and smtp_pass <> '' and smtp_pass not like 'v1:%')
+      or (api_key   is not null and api_key   <> '' and api_key   not like 'v1:%');
+  if v_cnt > 0 then raise exception 'FAIL 9c: % plaintext sender secrets on disk', v_cnt; end if;
+
+  raise notice '✅ ALL SECURITY TESTS PASSED (9/9)';
 end $$;
 
 rollback;

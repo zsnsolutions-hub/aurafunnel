@@ -23,6 +23,23 @@ export async function decryptToken(admin: any, ciphertext: string | null | undef
 }
 
 /**
+ * Decrypt an `integrations.credentials` JSONB blob. Every string leaf was
+ * encrypted individually by the encrypt_credentials trigger, so the object
+ * comes back with the same keys and the same shape — callers keep indexing by
+ * name (`credentials.secret_key`, `.apiKey`, `.webhookUrl`).
+ *
+ * Returns the value unchanged on null/empty. Legacy plaintext rows decrypt to
+ * themselves (no 'v1:' prefix -> passthrough), so this is safe to call whether
+ * or not the backfill has run.
+ */
+export async function decryptCredentials(admin: any, credentials: any): Promise<any> {
+  if (credentials == null) return credentials;
+  const { data, error } = await admin.rpc("app_decrypt_jsonb", { p_value: credentials });
+  if (error) throw new Error(`credential decryption failed: ${error.message}`);
+  return data;
+}
+
+/**
  * Decrypt the token columns of a list of social_accounts rows IN PLACE so every
  * downstream read (`acc.meta_page_access_token_encrypted`, etc.) is plaintext.
  * Best-effort per row: a decrypt failure on one account leaves its token as the

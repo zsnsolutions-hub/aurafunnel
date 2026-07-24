@@ -145,18 +145,21 @@ export function useAuthMachine() {
   // ── Fetch profile ──
   const fetchProfile = useCallback(async (userId: string): Promise<User | null> => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*, subscription:subscriptions(*)')
-        .eq('id', userId)
-        .maybeSingle();
+      // `businessProfile` and `stripe_customer_id` are no longer granted to the
+      // `authenticated` role (migration 20260819120000) so tenant co-members
+      // can't read each other's — which also means a `select('*')` here would
+      // be rejected outright. get_own_profile() is the self-read path; it
+      // returns the same shape (full row + latest subscription embedded),
+      // scoped server-side to auth.uid().
+      const { data, error } = await supabase.rpc('get_own_profile');
 
-      if (error) return null;
-      if (data) {
-        const subData = Array.isArray(data.subscription) ? data.subscription[0] : data.subscription;
-        return { ...data, subscription: subData } as unknown as User;
-      }
-      return null;
+      if (error || !data) return null;
+      const profile = data as unknown as User;
+      // The RPC resolves the user from the JWT, not from `userId`. If those
+      // ever disagree we're mid-session-swap — treat it as no profile rather
+      // than hydrating the app as the wrong person.
+      if (profile.id !== userId) return null;
+      return profile;
     } catch {
       return null;
     }
