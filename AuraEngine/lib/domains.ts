@@ -21,12 +21,17 @@ export interface WorkspaceDomain {
   created_at: string;
 }
 
+/**
+ * `verification_token` is encrypted at rest and not granted to the browser
+ * (migration 20260819130000), so this goes through a membership-checked RPC
+ * that decrypts it — the user still has to paste the token into their DNS
+ * panel, so unlike a signing key it can't just be hidden. Rows come back in
+ * the same shape as the old `select('*')`, newest first.
+ */
 export async function listWorkspaceDomains(workspaceId: string): Promise<WorkspaceDomain[]> {
-  const { data, error } = await supabase
-    .from('workspace_domains')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.rpc('list_workspace_domains', {
+    p_workspace_id: workspaceId,
+  });
   if (error) throw error;
   return (data ?? []) as WorkspaceDomain[];
 }

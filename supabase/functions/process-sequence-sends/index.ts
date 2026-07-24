@@ -11,6 +11,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
+import { notifyUser } from "../_shared/notify.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -175,6 +176,23 @@ serve(async (req) => {
       const patch: Record<string, unknown> = { items_done: done, items_failed: failedC, updated_at: new Date().toISOString() };
       if (inFlight === 0) { patch.status = "completed"; patch.completed_at = new Date().toISOString(); }
       await admin.from("email_sequence_runs").update(patch).eq("id", rid);
+
+      // Tell the owner their sequence finished — this is a cron-driven pipeline,
+      // so nobody is watching a screen when it lands. Only on the transition to
+      // completed, so it fires once per run.
+      const run = runMap.get(rid);
+      if (inFlight === 0 && run?.owner_id && run.status !== "completed") {
+        const campaignId = (run.sequence_config?.campaignId as string) || null;
+        await notifyUser(admin, {
+          userId: run.owner_id,
+          type:   failedC > 0 ? "warning" : "success",
+          title:  failedC > 0
+            ? `Sequence finished with ${failedC} failed send${failedC === 1 ? "" : "s"}`
+            : "Sequence finished sending",
+          message: `${done} email${done === 1 ? "" : "s"} sent${failedC > 0 ? `, ${failedC} failed` : ""}.`,
+          link:   campaignId ? `/portal/campaigns/${campaignId}` : "/portal/campaigns",
+        });
+      }
     }
 
     return json({ sent, failed, considered: due.length }, 200, cors);

@@ -15,6 +15,8 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
+import { notifyUser } from "../_shared/notify.ts";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -80,6 +82,14 @@ serve(async (req) => {
     .maybeSingle();
   if (!membership) return jsonResponse({ error: "Forbidden" }, 403, corsHeaders);
 
+  // The token is encrypted at rest (migration 20260819130000) — decrypt before
+  // comparing it to what DNS actually serves, and before echoing it back as the
+  // expected TXT value.
+  const expectedToken = await decryptToken(admin, row.verification_token);
+  if (!expectedToken) {
+    return jsonResponse({ error: "Verification token unavailable" }, 500, corsHeaders);
+  }
+
   // ── Run the two DNS checks in parallel ──
   const txtName = `_scaliyo-verify.${row.domain}`;
   const [txtResult, cnameResult] = await Promise.allSettled([
@@ -92,7 +102,7 @@ serve(async (req) => {
   let txtSeen: string[] = [];
   if (txtResult.status === "fulfilled" && txtResult.value.Answer) {
     txtSeen = txtResult.value.Answer.filter((a) => a.type === 16).map((a) => stripQuotes(a.data));
-    txtMatched = txtSeen.includes(row.verification_token);
+    txtMatched = txtSeen.includes(expectedToken);
   }
 
   // CNAME proof
@@ -107,6 +117,14 @@ serve(async (req) => {
 
   if (txtMatched || cnameMatched) {
     await admin.rpc("mark_domain_verified", { p_domain_id: domain_id });
+    await notifyUser(admin, {
+      userId:      userId,
+      workspaceId: row.workspace_id,
+      type:        "success",
+      title:       `${row.domain} verified`,
+      message:     "Certificate issuance starts automatically; the domain goes live once it completes.",
+      link:        "/portal/branding",
+    });
     return jsonResponse({
       verified: true,
       method:   txtMatched ? "txt" : "cname",
@@ -125,7 +143,7 @@ serve(async (req) => {
   return jsonResponse({
     verified: false,
     error:    why,
-    expected_txt:   { name: txtName,    value: row.verification_token },
+    expected_txt:   { name: txtName,    value: expectedToken },
     expected_cname: { name: row.domain, value: APEX_TARGETS[0] },
   }, 200, corsHeaders);
 });

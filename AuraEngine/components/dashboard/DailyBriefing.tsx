@@ -65,7 +65,7 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
         todayStart.setHours(0, 0, 0, 0);
 
         // Parallel queries
-        const [leadsRes, hotLeadsRes, allLeadsRes, socialRes] = await Promise.all([
+        const [leadsRes, hotLeadsRes, allLeadsRes, socialRes, contentRes, tasksRes] = await Promise.all([
           supabase
             .from('leads')
             .select('*', { count: 'exact', head: true })
@@ -87,6 +87,19 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
             .select('status')
             .eq('user_id', user.id)
             .in('status', ['scheduled', 'completed']),
+          // Content created today — images generated today. Was a Math.random()
+          // placeholder shown to the user as if it were real.
+          supabase
+            .from('image_gen_generated_images')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('created_at', todayStart.toISOString()),
+          // Pending tasks — was hotLeads.length + 2, i.e. invented.
+          supabase
+            .from('tasks')
+            .select('id', { count: 'exact', head: true })
+            .eq('assigned_to', user.id)
+            .eq('status', 'open'),
         ]);
 
         const totalToday = leadsRes.count || 0;
@@ -118,9 +131,9 @@ const DailyBriefing: React.FC<DailyBriefingProps> = ({ user, open, onClose }) =>
           hotLeads,
           totalLeadsToday: totalToday,
           totalHotLeads: totalHot,
-          contentCreated: Math.floor(Math.random() * 8) + 2, // Simulated
+          contentCreated: contentRes.count || 0,
           conversionRate: convRate,
-          pendingTasks: hotLeads.length > 0 ? hotLeads.length + 2 : 3,
+          pendingTasks: tasksRes.count || 0,
           socialScheduled,
           socialPublished,
           recommendations: recs.slice(0, 4),

@@ -14,6 +14,7 @@ import { GoogleGenAI } from "https://esm.sh/@google/genai@1.0.0";
 import { getCorsHeaders, handleCors } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/auth.ts";
 import { AI_MODELS } from "../_shared/aiModels.ts";
+import { notifyUser } from "../_shared/notify.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_MODEL = AI_MODELS.text;
@@ -180,10 +181,26 @@ serve(async (req) => {
         .eq("id", leadId).eq("client_id", user.id);
       await admin.from("lead_enrichment_jobs")
         .update({ status: "done", finished_at: new Date().toISOString() }).eq("id", jobId);
+      // This job deliberately survives the user navigating away, so the result
+      // often lands with nobody looking at the lead.
+      await notifyUser(admin, {
+        userId: user.id,
+        type:   "success",
+        title:  "Lead research finished",
+        message: newInsights ? newInsights.slice(0, 140) : null,
+        link:   `/portal/leads/${leadId}`,
+      });
     } catch (e) {
       const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300);
       await admin.from("lead_enrichment_jobs")
         .update({ status: "error", error: msg, finished_at: new Date().toISOString() }).eq("id", jobId);
+      await notifyUser(admin, {
+        userId: user.id,
+        type:   "error",
+        title:  "Lead research failed",
+        message: msg.slice(0, 140),
+        link:   `/portal/leads/${leadId}`,
+      });
     }
   })();
 
