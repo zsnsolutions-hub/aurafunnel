@@ -188,7 +188,53 @@ begin
       or (api_key   is not null and api_key   <> '' and api_key   not like 'v1:%');
   if v_cnt > 0 then raise exception 'FAIL 9c: % plaintext sender secrets on disk', v_cnt; end if;
 
-  raise notice '✅ ALL SECURITY TESTS PASSED (9/9)';
+  ---------------------------------------------------------------------------
+  -- 10. the DNS ownership token is not readable raw, and not plaintext on disk
+  ---------------------------------------------------------------------------
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    perform verification_token from public.workspace_domains limit 1;
+  exception when insufficient_privilege then v_denied := true;
+    when others then if sqlstate='42501' then v_denied := true; else raise; end if;
+  end;
+  reset role;
+  if not v_denied then raise exception 'FAIL 10a: authenticated could read workspace_domains.verification_token'; end if;
+
+  select count(*) into v_cnt from public.workspace_domains
+   where verification_token is not null and verification_token not like 'v1:%';
+  if v_cnt > 0 then raise exception 'FAIL 10b: % plaintext domain tokens on disk', v_cnt; end if;
+
+  ---------------------------------------------------------------------------
+  -- 11. the notification bell cannot be spoofed from the browser.
+  --     Both routes: the service_role writer, and a direct insert (the table
+  --     deliberately has SELECT+UPDATE policies only, no INSERT).
+  ---------------------------------------------------------------------------
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    perform public.notify_user(v_nonadmin, 'success', 'spoofed');
+  exception when insufficient_privilege then v_denied := true;
+    when others then if sqlstate='42501' then v_denied := true; else raise; end if;
+  end;
+  reset role;
+  if not v_denied then raise exception 'FAIL 11a: authenticated could call notify_user'; end if;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_nonadmin, 'role','authenticated')::text, true);
+  v_denied := false;
+  begin
+    insert into public.notifications (workspace_id, user_id, type, title, is_read)
+    values (v_nonadmin, v_nonadmin, 'success', 'direct spoof', false);
+  exception when others then v_denied := true;
+  end;
+  reset role;
+  select count(*) into v_cnt from public.notifications where title = 'direct spoof';
+  if not v_denied or v_cnt > 0 then raise exception 'FAIL 11b: authenticated inserted a notification directly'; end if;
+
+  raise notice '✅ ALL SECURITY TESTS PASSED (11/11)';
 end $$;
 
 rollback;
